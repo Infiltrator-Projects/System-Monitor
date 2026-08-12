@@ -165,31 +165,42 @@ static void check_source_manifest(const StringList *listed)
     }
 }
 
-static void check_top_level_markdown(void)
+static void check_markdown_tree(const char *directory_path_value)
 {
-    static const char *const allowed[] = {"README.md", "CHANGELOG.md"};
-    DIR *directory = opendir(".");
+    DIR *directory = opendir(directory_path_value);
     if (!directory) {
-        report_error(".: unable to open: %s", strerror(errno));
+        report_error("%s: unable to open: %s", directory_path_value,
+                     strerror(errno));
         return;
     }
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (!ends_with(entry->d_name, ".md")) continue;
-        bool known = false;
-        for (size_t index = 0U; index < sizeof(allowed) / sizeof(allowed[0]); index++)
-            if (strcmp(entry->d_name, allowed[index]) == 0) {
-                known = true;
-                break;
-            }
-        if (!known)
-            report_error("%s: unexpected top-level Markdown document", entry->d_name);
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0 ||
+            strcmp(entry->d_name, ".git") == 0 ||
+            strcmp(entry->d_name, "build") == 0 ||
+            strncmp(entry->d_name, "build-", 6U) == 0)
+            continue;
+
+        char path[LSM_CHECK_PATH_LEN];
+        if (!join_path(path, sizeof(path), directory_path_value, entry->d_name))
+            continue;
+        if (directory_path(path)) {
+            check_markdown_tree(path);
+        } else if (ends_with(entry->d_name, ".md") &&
+                   strcmp(path, "./README.md") != 0) {
+            report_error("%s: README.md is the sole maintained Markdown file",
+                         path);
+        }
     }
     closedir(directory);
+}
 
-    for (size_t index = 0U; index < sizeof(allowed) / sizeof(allowed[0]); index++)
-        if (!regular_file(allowed[index]))
-            report_error("%s: required maintained documentation is missing", allowed[index]);
+static void check_markdown_policy(void)
+{
+    check_markdown_tree(".");
+    if (!regular_file("README.md"))
+        report_error("README.md: required maintained documentation is missing");
 }
 
 static char *read_file(const char *path, size_t *size_out)
@@ -629,7 +640,6 @@ static void check_licensing_contract(void)
         require_file_prefix(hash_header_files[index], LSM_SPDX_HASH);
 
     require_file_prefix("README.md", LSM_SPDX_MARKDOWN);
-    require_file_prefix("CHANGELOG.md", LSM_SPDX_MARKDOWN);
     require_file_prefix(
         "install.sh",
         "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
@@ -676,8 +686,8 @@ static void check_licensing_contract(void)
 static void check_engineering_documentation(void)
 {
     static const char *const required_files[] = {
-        "README.md", "CHANGELOG.md", "Doxyfile", "LICENSE",
-        "THIRD_PARTY_NOTICES", "packaging/copyright"
+        "README.md", "Doxyfile", "LICENSE", "THIRD_PARTY_NOTICES",
+        "packaging/copyright"
     };
     for (size_t index = 0U; index < sizeof(required_files) / sizeof(required_files[0]);
          index++) {
@@ -692,25 +702,17 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
-            "## Product contract: GUI only",
-            "## Engineering architecture",
-            "## Performance model",
-            "## Portability contract",
+            "## Download",
+            "## Capabilities",
+            "## Design",
+            "## Build from source",
             "shared/infiltratr-common",
-            "## Coding and documentation standard",
-            "## Verification and release gates",
+            "## Verification",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };
         for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++)
             require_text_marker("README.md", readme, markers[index]);
         free(readme);
-    }
-
-
-    char *changelog = read_file("CHANGELOG.md", &size);
-    if (changelog) {
-        check_unit_label_policy("CHANGELOG.md", changelog);
-        free(changelog);
     }
 }
 
@@ -786,7 +788,7 @@ int main(void)
     StringList sources = {0};
     read_manifest("sources.txt", "src", &sources);
     check_source_manifest(&sources);
-    check_top_level_markdown();
+    check_markdown_policy();
     check_pkgbuild();
     check_engineering_documentation();
     check_licensing_contract();

@@ -374,6 +374,33 @@ static void write_staged(const char *relative, mode_t mode, const char *text)
     write_text(destination, mode, text);
 }
 
+static void install_release_changelog(const char *version)
+{
+    static const char relative[] =
+        "usr/share/doc/linux-system-monitor/changelog";
+    char text[1024];
+    const int written = snprintf(
+        text, sizeof(text),
+        "Linux System Monitor %s\n\n"
+        "Release notes:\n"
+        "https://github.com/The-First-Infiltrator/System-Monitor/"
+        "releases/tag/v%s\n",
+        version, version);
+    if (written < 0 || (size_t)written >= sizeof(text))
+        fail("release changelog is too long");
+
+    write_staged(relative, 0644, text);
+
+    char source[PATH_MAX];
+    char destination[PATH_MAX];
+    stage_path(source, sizeof(source), relative);
+    stage_path(destination, sizeof(destination),
+               "usr/share/doc/linux-system-monitor/changelog.gz");
+    gzip_changelog(source, destination);
+    if (unlink(source) != 0)
+        fail("remove temporary changelog: %s", strerror(errno));
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 4) {
@@ -441,10 +468,7 @@ int main(int argc, char **argv)
         copy_staged("build/BUILD-INFO",
                     "usr/share/doc/linux-system-monitor/BUILD-INFO", 0644);
 
-    char changelog[PATH_MAX];
-    stage_path(changelog, sizeof(changelog),
-               "usr/share/doc/linux-system-monitor/changelog.gz");
-    gzip_changelog("CHANGELOG.md", changelog);
+    install_release_changelog(version);
 
     const char desktop[] =
         "# SPDX-License-Identifier: GPL-3.0-or-later\n"

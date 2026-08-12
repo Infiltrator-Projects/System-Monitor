@@ -278,9 +278,7 @@ clang-doc-check: | $(BUILD_DIR)
 
 docs-check: style-check clang-doc-check
 	@test -f Doxyfile
-	@grep -q '## Engineering architecture' README.md
-	@grep -q '## Coding and documentation standard' README.md
-	@echo "Consolidated documentation and source contracts passed."
+	@echo "Single-manual documentation and source contracts passed."
 
 docs: docs-check
 	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
