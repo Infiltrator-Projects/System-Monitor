@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.16)
 
 set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.1.1")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.2.0")
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     message(FATAL_ERROR
         "Infiltratr Common is missing. Clone with --recurse-submodules or run 'make common-bootstrap'.")
@@ -131,6 +131,7 @@ set(LSM_MONITOR_BACKEND_SOURCES
 # the component's own Makefile can also produce a conventional shared object.
 add_library(infiltratr-common STATIC
     "${INFILTRATR_COMMON_DIR}/src/core.c"
+    "${INFILTRATR_COMMON_DIR}/src/format.c"
     "${INFILTRATR_COMMON_DIR}/src/posix.c")
 target_include_directories(infiltratr-common PUBLIC
     "${INFILTRATR_COMMON_DIR}/include")

@@ -15,18 +15,21 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.1.1
-INFILTRATR_COMMON_COMMIT := 8e482639980f9b4ecd49313e3fc788ed36aee381
-INFILTRATR_COMMON_VERSION := 1.1.1
+INFILTRATR_COMMON_TAG := v1.2.0
+INFILTRATR_COMMON_COMMIT := b90cf49521bb8ecf85e46a39f67f1c0d0a0509b2
+INFILTRATR_COMMON_VERSION := 1.2.0
 INFILTRATR_COMMON_SOURCES := \
 	$(INFILTRATR_COMMON_DIR)/src/core.c \
+	$(INFILTRATR_COMMON_DIR)/src/format.c \
 	$(INFILTRATR_COMMON_DIR)/src/posix.c
 INFILTRATR_COMMON_HEADERS := \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/compiler.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/core.h \
+	$(INFILTRATR_COMMON_DIR)/include/infiltratr/format.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/posix.h
 INFILTRATR_COMMON_OBJECTS := \
 	$(BUILD_DIR)/infiltratr-common/core.o \
+	$(BUILD_DIR)/infiltratr-common/format.o \
 	$(BUILD_DIR)/infiltratr-common/posix.o
 INFILTRATR_COMMON_ARCHIVE := $(BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -257,7 +260,8 @@ COMMON_LINK_TARGETS := \
 	system-sources-smoke battery-smoke wifi-metadata-smoke hidpp-smoke \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
-	cpu-accounting-smoke system-snapshot-smoke process-export-smoke
+	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
+	quality-policy-smoke
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
 
@@ -394,7 +398,8 @@ memory-accounting-smoke: | $(BUILD_DIR)
 
 quality-policy-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/quality_policy_smoke.c \
-		src/metric_format.c src/refresh_policy.c -lm -o $(BUILD_DIR)/quality-policy-smoke
+		src/metric_format.c src/refresh_policy.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/quality-policy-smoke
 	./$(BUILD_DIR)/quality-policy-smoke
 
 ui-update-smoke: | $(BUILD_DIR)
