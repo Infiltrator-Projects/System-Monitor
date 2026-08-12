@@ -14,7 +14,10 @@ BUILD_PROFILE ?= generic
 
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
-INFILTRATR_COMMON_VERSION := $(shell tr -d '[:space:]' < $(INFILTRATR_COMMON_DIR)/VERSION)
+INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
+INFILTRATR_COMMON_TAG := v1.1.1
+INFILTRATR_COMMON_COMMIT := 8e482639980f9b4ecd49313e3fc788ed36aee381
+INFILTRATR_COMMON_VERSION := 1.1.1
 INFILTRATR_COMMON_SOURCES := \
 	$(INFILTRATR_COMMON_DIR)/src/core.c \
 	$(INFILTRATR_COMMON_DIR)/src/posix.c
@@ -138,7 +141,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all clean run install install-built uninstall check build-check check-deps strict-check style-check FORCE \
+.PHONY: all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE \
 	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
@@ -148,10 +151,36 @@ LDLIBS += $(GTK_LIBS) -lm -ldl
 	process-gpu-smoke disk-accounting-smoke cpu-accounting-smoke \
 system-snapshot-smoke process-export-smoke preferences-smoke glibc-abi-smoke coverage-check release
 
-all: $(TARGET)
+all: common-check $(TARGET)
 
+common-bootstrap:
+	@if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
+		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
+		else \
+			git clone --depth 1 --branch "$(INFILTRATR_COMMON_TAG)" \
+				"$(INFILTRATR_COMMON_URL)" "$(INFILTRATR_COMMON_DIR)"; \
+		fi; \
+	fi
+	@$(MAKE) --no-print-directory common-check
 
-check-deps:
+common-check:
+	@test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
+		echo "Infiltratr Common is missing; clone with --recurse-submodules or run 'make common-bootstrap'." >&2; \
+		exit 1; \
+	}
+	@test "$$(tr -d '[:space:]' < "$(INFILTRATR_COMMON_DIR)/VERSION")" = \
+		"$(INFILTRATR_COMMON_VERSION)" || { \
+		echo "Infiltratr Common $(INFILTRATR_COMMON_VERSION) is required." >&2; \
+		exit 1; \
+	}
+	@actual_commit=$$(git -C "$(INFILTRATR_COMMON_DIR)" rev-parse HEAD 2>/dev/null || true); \
+		if test -n "$$actual_commit" && test "$$actual_commit" != "$(INFILTRATR_COMMON_COMMIT)"; then \
+			echo "Infiltratr Common must be pinned to $(INFILTRATR_COMMON_COMMIT)." >&2; \
+			exit 1; \
+		fi
+
+check-deps: common-check
 	@for source in $(PLATFORM_BACKEND_NAMES); do \
 		test -f "src/$$source" || { \
 			echo "Unsupported platform backend: $(LSM_PLATFORM) (missing src/$$source)" >&2; \
@@ -194,7 +223,7 @@ $(BUILD_DIR)/infiltratr-common/%.o: $(INFILTRATR_COMMON_DIR)/src/%.c \
 	mkdir -p "$(BUILD_DIR)/infiltratr-common"
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(INFILTRATR_COMMON_ARCHIVE): $(INFILTRATR_COMMON_OBJECTS)
+$(INFILTRATR_COMMON_ARCHIVE): $(INFILTRATR_COMMON_OBJECTS) | common-check
 	$(AR) rcsD $@ $(INFILTRATR_COMMON_OBJECTS)
 
 $(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
@@ -597,7 +626,7 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) $(NATIVE_I
 	@! grep -Eq '(^|[;&|][[:space:]]*)(sudo|doas|apt(-get)?|dpkg|pacman|dnf|yum|zypper|udevadm)([[:space:]]|$$)' install.sh
 	@echo "Native installer passed source, package and fixed-privilege-boundary checks."
 
-native-installer: $(NATIVE_INSTALLER_BUILDER)
+native-installer: common-check $(NATIVE_INSTALLER_BUILDER)
 	./$(NATIVE_INSTALLER_BUILDER)
 
 native-command-audit:
@@ -797,7 +826,7 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO)
 clean:
 	rm -rf $(BUILD_DIR)
 
-dist: clean
+dist: common-check clean
 	@command -v zip >/dev/null 2>&1 || { \
 		echo "zip is required to create the standard source release." >&2; exit 1; \
 	}

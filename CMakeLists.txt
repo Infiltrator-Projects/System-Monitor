@@ -3,10 +3,24 @@
 # Author and maintainer: Shannon Smith
 cmake_minimum_required(VERSION 3.16)
 
+set(INFILTRATR_COMMON_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.1.1")
+if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
+    message(FATAL_ERROR
+        "Infiltratr Common is missing. Clone with --recurse-submodules or run 'make common-bootstrap'.")
+endif()
+file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
+string(STRIP "${INFILTRATR_COMMON_VERSION}" INFILTRATR_COMMON_VERSION)
+if(NOT INFILTRATR_COMMON_VERSION STREQUAL INFILTRATR_COMMON_EXPECTED_VERSION)
+    message(FATAL_ERROR
+        "Infiltratr Common ${INFILTRATR_COMMON_EXPECTED_VERSION} is required; found ${INFILTRATR_COMMON_VERSION}.")
+endif()
+
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/VERSION"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common/VERSION")
+    "${INFILTRATR_COMMON_DIR}/VERSION")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LSM_PROJECT_VERSION)
 string(STRIP "${LSM_PROJECT_VERSION}" LSM_PROJECT_VERSION)
 project(LinuxSystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C)
@@ -116,10 +130,10 @@ set(LSM_MONITOR_BACKEND_SOURCES
 # application links it privately so Debian packages remain self-contained;
 # the component's own Makefile can also produce a conventional shared object.
 add_library(infiltratr-common STATIC
-    src/infiltratr-common/src/core.c
-    src/infiltratr-common/src/posix.c)
+    "${INFILTRATR_COMMON_DIR}/src/core.c"
+    "${INFILTRATR_COMMON_DIR}/src/posix.c")
 target_include_directories(infiltratr-common PUBLIC
-    src/infiltratr-common/include)
+    "${INFILTRATR_COMMON_DIR}/include")
 target_compile_features(infiltratr-common PUBLIC c_std_11)
 target_compile_options(infiltratr-common PRIVATE
     -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2
@@ -188,7 +202,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_libraries(lsm-developer-smoke-policy INTERFACE
         lsm-developer-tool-policy infiltratr-common)
     target_include_directories(lsm-developer-smoke-policy INTERFACE
-        src src/infiltratr-common/include)
+        src "${INFILTRATR_COMMON_DIR}/include")
     target_compile_definitions(lsm-developer-smoke-policy INTERFACE
         LSM_VERSION="${PROJECT_VERSION}" LSM_BUILD_PROFILE="cmake"
         _GNU_SOURCE _FILE_OFFSET_BITS=64)
@@ -213,7 +227,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-intel-gpu-smoke support/tests/intel_gpu_smoke.c
         src/intel_gpu.c src/common.c)
     add_executable(lsm-infiltratr-common-smoke
-        src/infiltratr-common/tests/core_smoke.c)
+        "${INFILTRATR_COMMON_DIR}/tests/core_smoke.c")
     add_executable(lsm-project-info-smoke
         support/tests/project_info_smoke.c src/project_info.c)
     add_executable(lsm-npu-telemetry-smoke support/tests/npu_telemetry_smoke.c

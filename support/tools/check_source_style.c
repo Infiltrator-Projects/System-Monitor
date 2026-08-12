@@ -185,6 +185,7 @@ static void check_markdown_tree(const char *directory_path_value)
         char path[LSM_CHECK_PATH_LEN];
         if (!join_path(path, sizeof(path), directory_path_value, entry->d_name))
             continue;
+        if (strcmp(path, "./src/infiltratr-common") == 0) continue;
         if (directory_path(path)) {
             check_markdown_tree(path);
         } else if (ends_with(entry->d_name, ".md") &&
@@ -602,6 +603,7 @@ static void scan_source_tree(const char *directory_path_value)
             report_error("%s/%s: path is too long", directory_path_value, entry->d_name);
             continue;
         }
+        if (strcmp(path, "src/infiltratr-common") == 0) continue;
         if (directory_path(path)) {
             scan_source_tree(path);
         } else if (ends_with(path, ".c") || ends_with(path, ".h")) {
@@ -649,7 +651,7 @@ static void require_file_marker(const char *path, const char *marker)
 static void check_licensing_contract(void)
 {
     static const char *const hash_header_files[] = {
-        ".clang-format", ".editorconfig", "CMakeLists.txt", "support/Doxyfile",
+        ".clang-format", ".editorconfig", ".gitmodules", "CMakeLists.txt", "support/Doxyfile",
         "Makefile", "support/sources.txt", "src/infiltratr-common/Makefile"
     };
     for (size_t index = 0U;

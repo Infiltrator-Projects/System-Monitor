@@ -62,9 +62,11 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is the versioned C foundation shared with other
-Shannon Smith projects. It is linked into this application, so the installed
-package has no runtime dependency on another project.
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.1.1 in
+the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
+repository. It is linked statically into this application, so the source has
+one canonical owner while the installed package has no cross-project runtime
+dependency.
 
 Storage, memory and network quantities use 1024-based scaling with traditional
 labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB.
@@ -78,9 +80,15 @@ On Debian, Ubuntu or Linux Mint:
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev
+git clone --recurse-submodules https://github.com/The-First-Infiltrator/System-Monitor.git
+cd System-Monitor
 make
 ./build/linux-system-monitor
 ```
+
+GitHub's automatic source archives preserve the pinned dependency reference
+but do not expand submodules. After extracting one, run `make common-bootstrap`
+once before building.
 
 Useful build targets:
 
@@ -97,7 +105,8 @@ package or native installer.
 
 ## Source layout
 
-- `src/` — application code, Linux providers and the reusable C foundation.
+- `src/` — application code, Linux providers and the pinned Infiltratr Common
+  submodule.
 - `support/` — tests, release tools, resources, packaging and developer
   configuration kept away from the repository landing page.
 
