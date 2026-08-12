@@ -667,9 +667,9 @@ int main(int argc, char **argv)
 
     char text[LSM_BUILDER_TEXT_LEN];
     char common_version[64];
-    if (!read_source_line(source_root, "shared/infiltratr-common/VERSION",
+    if (!read_source_line(source_root, "src/infiltratr-common/VERSION",
                           common_version, sizeof(common_version)))
-        fail("shared/infiltratr-common/VERSION is missing or invalid");
+        fail("src/infiltratr-common/VERSION is missing or invalid");
     char compiler_line[1024];
     command_first_line(compiler, "--version", compiler_line,
                        sizeof(compiler_line));

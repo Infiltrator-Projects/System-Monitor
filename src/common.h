@@ -4,7 +4,7 @@
  * @brief Stable application facade over the shared Infiltratr Common library.
  *
  * This compatibility surface preserves established `lsm_` call sites while
- * the reusable implementation lives in `shared/infiltratr-common`. That keeps
+ * the reusable implementation lives in `src/infiltratr-common`. That keeps
  * collectors stable and lets Calendar Plus and future C programs consume the
  * same tested code without adopting Linux System Monitor naming.
  *

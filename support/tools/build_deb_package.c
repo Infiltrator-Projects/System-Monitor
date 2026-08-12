@@ -453,16 +453,16 @@ int main(int argc, char **argv)
              "baseline GLIBC_%u.%u", staged_application, required_glibc_major,
              required_glibc_minor, LSM_GLIBC_BASELINE_MAJOR,
              LSM_GLIBC_BASELINE_MINOR);
-    copy_staged("icons/linux-system-monitor.png",
+    copy_staged("support/resources/icons/linux-system-monitor.png",
                 "usr/share/icons/hicolor/96x96/apps/linux-system-monitor.png",
                 0644);
     copy_staged("LICENSE", "usr/share/doc/linux-system-monitor/LICENSE", 0644);
-    copy_staged("THIRD_PARTY_NOTICES",
+    copy_staged("support/legal/THIRD_PARTY_NOTICES",
                 "usr/share/doc/linux-system-monitor/THIRD_PARTY_NOTICES", 0644);
-    copy_staged("packaging/copyright",
+    copy_staged("support/packaging/copyright",
                 "usr/share/doc/linux-system-monitor/copyright", 0644);
     copy_staged("README.md", "usr/share/doc/linux-system-monitor/README.md", 0644);
-    copy_staged("data/PCI_IDS_LICENSE",
+    copy_staged("support/resources/data/PCI_IDS_LICENSE",
                 "usr/share/doc/linux-system-monitor/PCI_IDS_LICENSE", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",

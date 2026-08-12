@@ -150,7 +150,7 @@ static void check_source_manifest(const StringList *listed)
     while ((entry = readdir(directory))) {
         if (!ends_with(entry->d_name, ".c")) continue;
         if (!list_contains(listed, entry->d_name))
-            report_error("sources.txt: unlisted application source %s", entry->d_name);
+            report_error("support/sources.txt: unlisted application source %s", entry->d_name);
     }
     closedir(directory);
 
@@ -160,7 +160,7 @@ static void check_source_manifest(const StringList *listed)
             !regular_file(path))
             continue;
         if (!ends_with(listed->items[index], ".c"))
-            report_error("sources.txt: unexpected application source %s",
+            report_error("support/sources.txt: unexpected application source %s",
                          listed->items[index]);
     }
 }
@@ -201,6 +201,24 @@ static void check_markdown_policy(void)
     check_markdown_tree(".");
     if (!regular_file("README.md"))
         report_error("README.md: required maintained documentation is missing");
+}
+
+static void check_root_layout(void)
+{
+    static const char *const retired_root_entries[] = {
+        "CHANGELOG.md", "Doxyfile", "NATIVE_INSTALLER_EDITION",
+        "THIRD_PARTY_NOTICES", "data", "icons", "packaging", "shared",
+        "sources.txt", "tests", "tools"
+    };
+    for (size_t index = 0U;
+         index < sizeof(retired_root_entries) /
+                     sizeof(retired_root_entries[0]);
+         index++) {
+        const char *entry = retired_root_entries[index];
+        if (regular_file(entry) || directory_path(entry))
+            report_error("%s: internal project material must remain under "
+                         "src/ or support/", entry);
+    }
 }
 
 static char *read_file(const char *path, size_t *size_out)
@@ -631,8 +649,8 @@ static void require_file_marker(const char *path, const char *marker)
 static void check_licensing_contract(void)
 {
     static const char *const hash_header_files[] = {
-        ".clang-format", ".editorconfig", "CMakeLists.txt", "Doxyfile",
-        "Makefile", "sources.txt", "shared/infiltratr-common/Makefile"
+        ".clang-format", ".editorconfig", "CMakeLists.txt", "support/Doxyfile",
+        "Makefile", "support/sources.txt", "src/infiltratr-common/Makefile"
     };
     for (size_t index = 0U;
          index < sizeof(hash_header_files) / sizeof(hash_header_files[0]);
@@ -645,10 +663,12 @@ static void check_licensing_contract(void)
         "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
 
     static const char *const required_legal_files[] = {
-        "LICENSE", "shared/infiltratr-common/LICENSE", "THIRD_PARTY_NOTICES",
-        "icons/linux-system-monitor.png.license",
-        "data/pci-names.tsv.license", "data/PCI_IDS_LICENSE",
-        "packaging/copyright"
+        "LICENSE", "src/infiltratr-common/LICENSE",
+        "support/legal/THIRD_PARTY_NOTICES",
+        "support/resources/icons/linux-system-monitor.png.license",
+        "support/resources/data/pci-names.tsv.license",
+        "support/resources/data/PCI_IDS_LICENSE",
+        "support/packaging/copyright"
     };
     for (size_t index = 0U;
          index < sizeof(required_legal_files) / sizeof(required_legal_files[0]);
@@ -659,35 +679,37 @@ static void check_licensing_contract(void)
 
     require_file_marker("LICENSE", "GNU GENERAL PUBLIC LICENSE");
     require_file_marker("LICENSE", "Version 3, 29 June 2007");
-    require_file_marker("shared/infiltratr-common/LICENSE",
+    require_file_marker("src/infiltratr-common/LICENSE",
                         "GNU GENERAL PUBLIC LICENSE");
     require_file_marker("README.md", "GPL-3.0-or-later");
-    require_file_marker("THIRD_PARTY_NOTICES", "Copyright (c) 2020, Neeraj Kumar");
-    require_file_marker("THIRD_PARTY_NOTICES",
+    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
+                        "Copyright (c) 2020, Neeraj Kumar");
+    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
                         "Copyright (c) 1997-2026 Martin Mares");
-    require_file_marker("THIRD_PARTY_NOTICES",
+    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
                         "Copyright (c) 2015-2026 Albert Pool");
-    require_file_marker("icons/linux-system-monitor.png.license",
+    require_file_marker("support/resources/icons/linux-system-monitor.png.license",
                         "SPDX-License-Identifier: BSD-3-Clause");
-    require_file_marker("data/pci-names.tsv.license",
+    require_file_marker("support/resources/data/pci-names.tsv.license",
                         "SPDX-License-Identifier: BSD-3-Clause");
-    require_file_marker("packaging/copyright", "License: GPL-3+");
-    require_file_marker("packaging/copyright", "License: BSD-3-clause");
+    require_file_marker("support/packaging/copyright", "License: GPL-3+");
+    require_file_marker("support/packaging/copyright", "License: BSD-3-clause");
     require_file_marker("src/project_info.c",
                         ".license_id = \"GPL-3.0-or-later\"");
     require_file_marker(
         "src/project_info.c",
         "https://github.com/The-First-Infiltrator/System-Monitor");
     require_file_marker(
-        "tools/build_deb_package.c",
+        "support/tools/build_deb_package.c",
         "https://github.com/The-First-Infiltrator/System-Monitor");
 }
 
 static void check_engineering_documentation(void)
 {
     static const char *const required_files[] = {
-        "README.md", "Doxyfile", "LICENSE", "THIRD_PARTY_NOTICES",
-        "packaging/copyright"
+        "README.md", "support/Doxyfile", "LICENSE",
+        "support/legal/THIRD_PARTY_NOTICES",
+        "support/packaging/copyright"
     };
     for (size_t index = 0U; index < sizeof(required_files) / sizeof(required_files[0]);
          index++) {
@@ -706,7 +728,7 @@ static void check_engineering_documentation(void)
             "## Capabilities",
             "## Design",
             "## Build from source",
-            "shared/infiltratr-common",
+            "src/infiltratr-common",
             "## Verification",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };
@@ -757,46 +779,26 @@ static void check_shell_boundary(void)
     }
     if (size > 4096U)
         report_error("install.sh: bootstrap exceeds the 4096-byte shell boundary");
-    if (!strstr(text, "tools/native_installer.c") ||
+    if (!strstr(text, "support/tools/native_installer.c") ||
         !strstr(text, "exec \"$builder\""))
         report_error("install.sh: must compile and hand off to the C native installer");
     free(text);
     check_shell_boundary_tree(".");
 }
 
-static void check_pkgbuild(void)
-{
-    if (!regular_file("packaging/PKGBUILD")) {
-        if (!regular_file("NATIVE_INSTALLER_EDITION"))
-            report_error("packaging/PKGBUILD: missing Arch package recipe");
-        return;
-    }
-    size_t size = 0U;
-    char *text = read_file("packaging/PKGBUILD", &size);
-    (void)size;
-    if (!text) {
-        report_error("packaging/PKGBUILD: unable to read");
-        return;
-    }
-    if (!strstr(text, "VERSION") || !strstr(text, "pkgver=$("))
-        report_error("packaging/PKGBUILD: pkgver must be derived from VERSION");
-    free(text);
-}
-
 int main(void)
 {
     StringList sources = {0};
-    read_manifest("sources.txt", "src", &sources);
+    read_manifest("support/sources.txt", "src", &sources);
     check_source_manifest(&sources);
+    check_root_layout();
     check_markdown_policy();
-    check_pkgbuild();
     check_engineering_documentation();
     check_licensing_contract();
     check_shell_boundary();
     scan_source_tree("src");
-    scan_source_tree("shared");
-    scan_source_tree("tests");
-    scan_source_tree("tools");
+    scan_source_tree("support/tests");
+    scan_source_tree("support/tools");
     list_destroy(&sources);
 
     if (error_count != 0U) return 1;

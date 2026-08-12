@@ -13,7 +13,7 @@ ENABLE_LTO ?= 1
 BUILD_PROFILE ?= generic
 
 BUILD_DIR := build
-INFILTRATR_COMMON_DIR := shared/infiltratr-common
+INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_VERSION := $(shell tr -d '[:space:]' < $(INFILTRATR_COMMON_DIR)/VERSION)
 INFILTRATR_COMMON_SOURCES := \
 	$(INFILTRATR_COMMON_DIR)/src/core.c \
@@ -42,7 +42,7 @@ DIST_SOURCE_DATE_EPOCH ?= 315532800
 BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
 BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
 LSM_PLATFORM ?= linux
-ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' sources.txt)
+ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' support/sources.txt)
 PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c
 SOURCE_NAMES := $(filter-out monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
@@ -232,28 +232,28 @@ COMMON_LINK_TARGETS := \
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
 
-$(STYLE_CHECKER): tools/check_source_style.c | $(BUILD_DIR)
+$(STYLE_CHECKER): support/tools/check_source_style.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
 
-$(PORTABILITY_CHECKER): tools/check_portability.c | $(BUILD_DIR)
+$(PORTABILITY_CHECKER): support/tools/check_portability.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
 
-$(NATIVE_SAFETY_CHECKER): tests/native_installer_safety.c | $(BUILD_DIR)
+$(NATIVE_SAFETY_CHECKER): support/tests/native_installer_safety.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
 
-$(NATIVE_INSTALLER_BUILDER): tools/build_native_installer.c | $(BUILD_DIR)
+$(NATIVE_INSTALLER_BUILDER): support/tools/build_native_installer.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
 
-$(NATIVE_INSTALLER): tools/native_installer.c | $(BUILD_DIR)
+$(NATIVE_INSTALLER): support/tools/native_installer.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
 
-$(DEB_PACKAGE_BUILDER): tools/build_deb_package.c tools/glibc_abi.c tools/glibc_abi.h | $(BUILD_DIR)
-	$(CC) -Isrc -Itools -std=c17 $(STRICT_WARNINGS) \
-		tools/build_deb_package.c tools/glibc_abi.c -o $@
+$(DEB_PACKAGE_BUILDER): support/tools/build_deb_package.c support/tools/glibc_abi.c support/tools/glibc_abi.h | $(BUILD_DIR)
+	$(CC) -Isrc -Isupport/tools -std=c17 $(STRICT_WARNINGS) \
+		support/tools/build_deb_package.c support/tools/glibc_abi.c -o $@
 
-$(GLIBC_ABI_SMOKE): tests/glibc_abi_smoke.c tools/glibc_abi.c tools/glibc_abi.h | $(BUILD_DIR)
-	$(CC) -Itools -std=c17 $(STRICT_WARNINGS) \
-		tests/glibc_abi_smoke.c tools/glibc_abi.c -o $@
+$(GLIBC_ABI_SMOKE): support/tests/glibc_abi_smoke.c support/tools/glibc_abi.c support/tools/glibc_abi.h | $(BUILD_DIR)
+	$(CC) -Isupport/tools -std=c17 $(STRICT_WARNINGS) \
+		support/tests/glibc_abi_smoke.c support/tools/glibc_abi.c -o $@
 
 glibc-abi-smoke: $(GLIBC_ABI_SMOKE)
 	./$(GLIBC_ABI_SMOKE)
@@ -269,7 +269,7 @@ clang-doc-check: | $(BUILD_DIR)
 			-Werror -Wdocumentation-pedantic - >/dev/null 2>&1 && \
 			doc_flags="$$doc_flags -Wdocumentation-pedantic"; \
 		rm -f $$tmp; \
-		$(CLANG) $(CPPFLAGS) -Itests/compat -std=c17 -Wall -Wextra \
+		$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
 			-Wpedantic -Werror $$doc_flags -fsyntax-only $(SOURCES); \
 		echo "Clang documentation syntax pass completed."; \
 	else \
@@ -277,7 +277,7 @@ clang-doc-check: | $(BUILD_DIR)
 	fi
 
 docs-check: style-check clang-doc-check
-	@test -f Doxyfile
+	@test -f support/Doxyfile
 	@echo "Single-manual documentation and source contracts passed."
 
 docs: docs-check
@@ -285,19 +285,19 @@ docs: docs-check
 		echo "Doxygen is required only to generate the optional HTML reference."; \
 		exit 1; \
 	}
-	$(DOXYGEN) Doxyfile
+	$(DOXYGEN) support/Doxyfile
 	@echo "Documentation generated in build/docs/html/index.html"
 
 # Compile every translation unit under the project's strongest portable GCC
 # warning policy. The compact GTK compatibility header is syntax-check only.
 strict-check: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat \
 		-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(SOURCES) \
 		$(INFILTRATR_COMMON_SOURCES)
 
 analyzer-check: | $(BUILD_DIR)
 	@if [ -n "$(ANALYZER_FLAG)" ]; then \
-		$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
+		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
 			-fsyntax-only src/common.c src/process_backend_linux.c src/refresh_policy.c \
 			$(INFILTRATR_COMMON_SOURCES) \
 			src/process_gpu.c src/metric_format.c src/cpu_accounting.c \
@@ -325,32 +325,32 @@ infiltratr-common-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 project-info-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/project_info_smoke.c src/project_info.c \
+		support/tests/project_info_smoke.c src/project_info.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/project-info-smoke
 	./$(BUILD_DIR)/project-info-smoke
 
 common-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/common_smoke.c src/common.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/common_smoke.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/common-smoke
 	./$(BUILD_DIR)/common-smoke
 
 
 cpu-direct-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/cpu_direct_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/cpu_direct_smoke.c \
 		src/cpu_direct.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/cpu-direct-smoke
 	./$(BUILD_DIR)/cpu-direct-smoke
 
 
 intel-gpu-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/intel_gpu_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/intel_gpu_smoke.c \
 		src/intel_gpu.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/intel-gpu-smoke
 	./$(BUILD_DIR)/intel-gpu-smoke
 
 
 npu-telemetry-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/npu_telemetry_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/npu_telemetry_smoke.c \
 		src/npu_telemetry.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/npu-telemetry-smoke
 	./$(BUILD_DIR)/npu-telemetry-smoke
@@ -358,19 +358,19 @@ npu-telemetry-smoke: | $(BUILD_DIR)
 
 memory-accounting-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c \
+		support/tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/memory-accounting-smoke
 	./$(BUILD_DIR)/memory-accounting-smoke
 
 
 quality-policy-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/quality_policy_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/quality_policy_smoke.c \
 		src/metric_format.c src/refresh_policy.c -lm -o $(BUILD_DIR)/quality-policy-smoke
 	./$(BUILD_DIR)/quality-policy-smoke
 
 ui-update-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections tests/ui_update_smoke.c src/ui_helpers.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections support/tests/ui_update_smoke.c src/ui_helpers.c \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 \
 		-l:libpango-1.0.so.0 -l:libcairo.so.2 -o $(BUILD_DIR)/ui-update-smoke
@@ -378,94 +378,94 @@ ui-update-smoke: | $(BUILD_DIR)
 
 performance-navigation-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/performance_navigation_smoke.c src/performance_selection.c \
+		support/tests/performance_navigation_smoke.c src/performance_selection.c \
 		-o $(BUILD_DIR)/performance-navigation-smoke
 	./$(BUILD_DIR)/performance-navigation-smoke
 
 gpu-metrics-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/gpu_metrics_smoke.c src/gpu_metrics.c -lm \
+		support/tests/gpu_metrics_smoke.c src/gpu_metrics.c -lm \
 		-o $(BUILD_DIR)/gpu-metrics-smoke
 	./$(BUILD_DIR)/gpu-metrics-smoke
 
 hardware-topology-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/hardware_topology_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/hardware_topology_smoke.c \
 		src/hardware_topology.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/hardware-topology-smoke
 	./$(BUILD_DIR)/hardware-topology-smoke
 
 sample-history-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/sample_history_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/sample_history_smoke.c \
 		src/sample_history.c -o $(BUILD_DIR)/sample-history-smoke
 	./$(BUILD_DIR)/sample-history-smoke
 
 monitor-platform-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/monitor_platform_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/monitor_platform_smoke.c \
 		src/monitor.c -o $(BUILD_DIR)/monitor-platform-smoke
 	./$(BUILD_DIR)/monitor-platform-smoke
 
 backend-smoke: backend-check
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) \
-		tests/backend_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
+		support/tests/backend_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
 		-o $(BUILD_DIR)/backend-smoke
 	./$(BUILD_DIR)/backend-smoke
 
 process-model-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/process_model_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/process_model_smoke.c \
 		src/process_model.c -o $(BUILD_DIR)/process-model-smoke
 	./$(BUILD_DIR)/process-model-smoke
 
 process-management-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/process_management_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/process_management_smoke.c \
 		$(PROCESS_SOURCES) src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-management-smoke
 	./$(BUILD_DIR)/process-management-smoke
 
 
 process-inspection-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/process_inspection_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/process_inspection_smoke.c \
 		src/process_inspection.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) \
 		-o $(BUILD_DIR)/process-inspection-smoke
 	./$(BUILD_DIR)/process-inspection-smoke
 
 filesystem-inventory-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/filesystem_inventory_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/filesystem_inventory_smoke.c \
 		src/filesystem_inventory.c src/mountinfo.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -o $(BUILD_DIR)/filesystem-inventory-smoke
 	./$(BUILD_DIR)/filesystem-inventory-smoke
 
 efficiency-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/efficiency_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/efficiency_smoke.c \
 		$(PROCESS_SOURCES) src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/efficiency-smoke
 	./$(BUILD_DIR)/efficiency-smoke
 
 mountinfo-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/mountinfo_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/mountinfo_smoke.c \
 		src/mountinfo.c -o $(BUILD_DIR)/mountinfo-smoke
 	./$(BUILD_DIR)/mountinfo-smoke
 
 storage-metadata-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/storage_metadata_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/storage_metadata_smoke.c \
 		src/storage_metadata.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) \
 		-o $(BUILD_DIR)/storage-metadata-smoke
 	./$(BUILD_DIR)/storage-metadata-smoke
 
 system-sources-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/system_sources_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/system_sources_smoke.c \
 		src/mountinfo.c src/storage_metadata.c src/system_sources.c src/pci_names.c src/pci_names_data.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/system-sources-smoke
 	./$(BUILD_DIR)/system-sources-smoke
 
 smbios-memory-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/smbios_memory_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/smbios_memory_smoke.c \
 		src/smbios_memory.c -o $(BUILD_DIR)/smbios-memory-smoke
 	./$(BUILD_DIR)/smbios-memory-smoke
 
 battery-smoke: backend-check
-	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) tests/battery_smoke.c \
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/battery_smoke.c \
 		$(HARDWARE_MONITOR_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
 		-o $(BUILD_DIR)/battery-smoke
@@ -473,14 +473,14 @@ battery-smoke: backend-check
 
 bluetooth-battery-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/bluetooth_battery_smoke.c src/bluetooth_battery.c \
+		support/tests/bluetooth_battery_smoke.c src/bluetooth_battery.c \
 		$(GTK_LIBS) -pthread -o $(BUILD_DIR)/bluetooth-battery-smoke
 	./$(BUILD_DIR)/bluetooth-battery-smoke
 
 
 wifi-metadata-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/wifi_metadata_smoke.c src/wifi_metadata.c src/common.c \
+		support/tests/wifi_metadata_smoke.c src/wifi_metadata.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/wifi-metadata-smoke
 	./$(BUILD_DIR)/wifi-metadata-smoke
 
@@ -489,17 +489,17 @@ portability-check: $(PORTABILITY_CHECKER)
 
 hidpp-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/logitech_hidpp_smoke.c src/logitech_hidpp.c \
+		support/tests/logitech_hidpp_smoke.c src/logitech_hidpp.c \
 		src/logitech_hidpp_protocol.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
 		-o $(BUILD_DIR)/logitech-hidpp-smoke
 	./$(BUILD_DIR)/logitech-hidpp-smoke
 
 nvml-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -shared -fPIC -std=c17 $(STRICT_WARNINGS) tests/mock_nvml.c \
+	$(CC) $(CPPFLAGS) -shared -fPIC -std=c17 $(STRICT_WARNINGS) support/tests/mock_nvml.c \
 		-o $(BUILD_DIR)/libnvidia-ml-test.so
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/nvml_smoke.c src/nvml.c src/common.c \
+		support/tests/nvml_smoke.c src/nvml.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -ldl -o $(BUILD_DIR)/nvml-smoke
 	LSM_NVML_LIBRARY=$(CURDIR)/$(BUILD_DIR)/libnvidia-ml-test.so \
 		./$(BUILD_DIR)/nvml-smoke
@@ -508,14 +508,14 @@ nvml-smoke: | $(BUILD_DIR)
 
 runtime-stability-smoke: backend-check
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
+		support/tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
 		-o $(BUILD_DIR)/runtime-stability-smoke
 	./$(BUILD_DIR)/runtime-stability-smoke
 
 process-scan-benchmark: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/process_scan_benchmark.c $(PROCESS_SOURCES) src/common.c \
+		support/tests/process_scan_benchmark.c $(PROCESS_SOURCES) src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-scan-benchmark
 	./$(BUILD_DIR)/process-scan-benchmark
 
@@ -527,7 +527,7 @@ benchmark: runtime-stability-smoke process-scan-benchmark
 sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
+		support/tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
 		$(INFILTRATR_COMMON_SOURCES) \
 		$(GTK_LIBS) -pthread -lm -ldl -o $(BUILD_DIR)/runtime-stability-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
@@ -535,21 +535,21 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		./$(BUILD_DIR)/runtime-stability-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/process_grouping_smoke.c src/process_grouping.c -lm \
+		support/tests/process_grouping_smoke.c src/process_grouping.c -lm \
 		-o $(BUILD_DIR)/process-grouping-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/process-grouping-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/process_gpu_smoke.c src/process_gpu.c -lm \
+		support/tests/process_gpu_smoke.c src/process_gpu.c -lm \
 		-o $(BUILD_DIR)/process-gpu-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/process-gpu-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
+		support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_SOURCES) -lm \
 		-o $(BUILD_DIR)/disk-accounting-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
@@ -557,7 +557,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		./$(BUILD_DIR)/disk-accounting-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
+		support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_SOURCES) -lm \
 		-o $(BUILD_DIR)/cpu-accounting-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
@@ -565,22 +565,22 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		./$(BUILD_DIR)/cpu-accounting-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/smbios_memory_smoke.c src/smbios_memory.c \
+		support/tests/smbios_memory_smoke.c src/smbios_memory.c \
 		-o $(BUILD_DIR)/smbios-memory-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/smbios-memory-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c \
+		support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c \
 		$(INFILTRATR_COMMON_SOURCES) \
 		-o $(BUILD_DIR)/storage-metadata-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/storage-metadata-sanitized
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 -O1 -g \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		tests/application_catalog_smoke.c src/application_catalog.c \
+		support/tests/application_catalog_smoke.c src/application_catalog.c \
 		-l:libglib-2.0.so.0 -o $(BUILD_DIR)/application-catalog-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -630,16 +630,16 @@ native-command-audit:
 	@echo "Native command, dependency and executable-boundary audit passed."
 
 startup-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections tests/startup_smoke.c src/ui_helpers.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections support/tests/startup_smoke.c src/ui_helpers.c \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 \
 		-l:libpango-1.0.so.0 -l:libcairo.so.2 -o $(BUILD_DIR)/startup-smoke
 	./$(BUILD_DIR)/startup-smoke
 
 dbus-models-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections tests/dbus_models_smoke.c src/ui_helpers.c src/common.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections support/tests/dbus_models_smoke.c src/ui_helpers.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libgio-2.0.so.0 -l:libgobject-2.0.so.0 -l:libglib-2.0.so.0 \
@@ -648,62 +648,62 @@ dbus-models-smoke: | $(BUILD_DIR)
 	./$(BUILD_DIR)/dbus-models-smoke
 
 bundled-pci-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) tests/bundled_pci_smoke.c \
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/bundled_pci_smoke.c \
 		src/pci_names.c src/pci_names_data.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) \
 		-o $(BUILD_DIR)/bundled-pci-smoke
 	./$(BUILD_DIR)/bundled-pci-smoke
 
 application-catalog-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		tests/application_catalog_smoke.c src/application_catalog.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		support/tests/application_catalog_smoke.c src/application_catalog.c \
 		-l:libglib-2.0.so.0 -o $(BUILD_DIR)/application-catalog-smoke
 	./$(BUILD_DIR)/application-catalog-smoke
 
 process-grouping-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/process_grouping_smoke.c src/process_grouping.c src/process_model.c \
+		support/tests/process_grouping_smoke.c src/process_grouping.c src/process_model.c \
 		-lm -o $(BUILD_DIR)/process-grouping-smoke
 	./$(BUILD_DIR)/process-grouping-smoke
 
 process-gpu-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/process_gpu_smoke.c src/process_gpu.c -lm \
+		support/tests/process_gpu_smoke.c src/process_gpu.c -lm \
 		-o $(BUILD_DIR)/process-gpu-smoke
 	./$(BUILD_DIR)/process-gpu-smoke
 
 disk-accounting-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
+		support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/disk-accounting-smoke
 	./$(BUILD_DIR)/disk-accounting-smoke
 
 cpu-accounting-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
+		support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/cpu-accounting-smoke
 	./$(BUILD_DIR)/cpu-accounting-smoke
 
 system-snapshot-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c \
 		src/common.c src/metric_format.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/system-snapshot-smoke
 	./$(BUILD_DIR)/system-snapshot-smoke
 
 process-export-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections tests/process_export_smoke.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections support/tests/process_export_smoke.c \
 		src/process_export.c src/process_model.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -Wl,--gc-sections -lm \
 		-o $(BUILD_DIR)/process-export-smoke
 	./$(BUILD_DIR)/process-export-smoke
 
 preferences-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Itests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections tests/preferences_smoke.c \
+	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections support/tests/preferences_smoke.c \
 		src/preferences.c -Wl,--gc-sections -l:libglib-2.0.so.0 -lm \
 		-o $(BUILD_DIR)/preferences-smoke
 	./$(BUILD_DIR)/preferences-smoke
@@ -722,27 +722,27 @@ coverage-check: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c \
 		$(INFILTRATR_COMMON_DIR)/src/posix.c -o $(COVERAGE_DIR)/infiltratr-posix.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_accounting.c -o $(COVERAGE_DIR)/cpu_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/cpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/cpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/disk_accounting.c -o $(COVERAGE_DIR)/disk_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/disk-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/disk-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_gpu.c -o $(COVERAGE_DIR)/process_gpu.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o -lm -o $(COVERAGE_DIR)/process-gpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o -lm -o $(COVERAGE_DIR)/process-gpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/storage_metadata.c -o $(COVERAGE_DIR)/storage_metadata.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/smbios_memory.c -o $(COVERAGE_DIR)/smbios_memory.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/smbios_memory_smoke.c $(COVERAGE_DIR)/smbios_memory.o -o $(COVERAGE_DIR)/smbios-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/smbios_memory_smoke.c $(COVERAGE_DIR)/smbios_memory.o -o $(COVERAGE_DIR)/smbios-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/memory_accounting.c -o $(COVERAGE_DIR)/memory_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/sample_history.c -o $(COVERAGE_DIR)/sample_history.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/sample_history_smoke.c $(COVERAGE_DIR)/sample_history.o -o $(COVERAGE_DIR)/sample-history-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/sample_history_smoke.c $(COVERAGE_DIR)/sample_history.o -o $(COVERAGE_DIR)/sample-history-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/gpu_metrics.c -o $(COVERAGE_DIR)/gpu_metrics.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/gpu_metrics_smoke.c $(COVERAGE_DIR)/gpu_metrics.o -lm -o $(COVERAGE_DIR)/gpu-metrics-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/gpu_metrics_smoke.c $(COVERAGE_DIR)/gpu_metrics.o -lm -o $(COVERAGE_DIR)/gpu-metrics-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/performance_selection.c -o $(COVERAGE_DIR)/performance_selection.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/performance_navigation_smoke.c $(COVERAGE_DIR)/performance_selection.o -o $(COVERAGE_DIR)/performance-selection-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/performance_navigation_smoke.c $(COVERAGE_DIR)/performance_selection.o -o $(COVERAGE_DIR)/performance-selection-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_grouping.c -o $(COVERAGE_DIR)/process_grouping.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c -lm -o $(COVERAGE_DIR)/process-grouping-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c -lm -o $(COVERAGE_DIR)/process-grouping-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o -o $(COVERAGE_DIR)/mountinfo-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o -o $(COVERAGE_DIR)/mountinfo-smoke
 	$(COVERAGE_DIR)/cpu-smoke
 	$(COVERAGE_DIR)/disk-smoke
 	$(COVERAGE_DIR)/process-gpu-smoke
@@ -760,7 +760,7 @@ coverage-check: | $(BUILD_DIR)
 
 task-manager-layout-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		tests/task_manager_layout_smoke.c \
+		support/tests/task_manager_layout_smoke.c \
 		-o $(BUILD_DIR)/task-manager-layout-smoke
 	./$(BUILD_DIR)/task-manager-layout-smoke
 

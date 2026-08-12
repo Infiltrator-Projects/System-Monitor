@@ -215,9 +215,9 @@ static int compile_source(const char *compiler, const char *root,
     char include_common_argument[LSM_PORTABILITY_PATH_LEN + 3U];
 
     if (!join_path(include_source, sizeof(include_source), root, "src") ||
-        !join_path(include_compat, sizeof(include_compat), root, "tests/compat") ||
+        !join_path(include_compat, sizeof(include_compat), root, "support/tests/compat") ||
         !join_path(include_common, sizeof(include_common), root,
-                   "shared/infiltratr-common/include") ||
+                   "src/infiltratr-common/include") ||
         !join_path(compatibility_header, sizeof(compatibility_header), root,
                    "src/glibc_compat.h")) {
         fputs("Project root path is too long.\n", stderr);
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
     char version_path[LSM_PORTABILITY_PATH_LEN];
     char sources_path[LSM_PORTABILITY_PATH_LEN];
     if (!join_path(version_path, sizeof(version_path), root, "VERSION") ||
-        !join_path(sources_path, sizeof(sources_path), root, "sources.txt")) {
+        !join_path(sources_path, sizeof(sources_path), root, "support/sources.txt")) {
         fputs("Project root path is too long.\n", stderr);
         return EXIT_FAILURE;
     }

@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.16)
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/VERSION"
-    "${CMAKE_CURRENT_SOURCE_DIR}/sources.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shared/infiltratr-common/VERSION")
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common/VERSION")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LSM_PROJECT_VERSION)
 string(STRIP "${LSM_PROJECT_VERSION}" LSM_PROJECT_VERSION)
 project(LinuxSystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C)
@@ -64,7 +64,7 @@ check_c_source_compiles("int main(void) { return 0; }"
     LSM_SUPPORTS_FULL_RELRO)
 set(CMAKE_REQUIRED_LINK_OPTIONS "${LSM_SAVED_REQUIRED_LINK_OPTIONS}")
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/sources.txt" LSM_SOURCE_NAMES)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt" LSM_SOURCE_NAMES)
 list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX "^[ \t]*(#|$)")
 list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
 
@@ -116,10 +116,10 @@ set(LSM_MONITOR_BACKEND_SOURCES
 # application links it privately so Debian packages remain self-contained;
 # the component's own Makefile can also produce a conventional shared object.
 add_library(infiltratr-common STATIC
-    shared/infiltratr-common/src/core.c
-    shared/infiltratr-common/src/posix.c)
+    src/infiltratr-common/src/core.c
+    src/infiltratr-common/src/posix.c)
 target_include_directories(infiltratr-common PUBLIC
-    shared/infiltratr-common/include)
+    src/infiltratr-common/include)
 target_compile_features(infiltratr-common PUBLIC c_std_11)
 target_compile_options(infiltratr-common PRIVATE
     -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2
@@ -169,7 +169,7 @@ endif()
 
 if(DOXYGEN_FOUND)
     add_custom_target(docs
-        COMMAND "${DOXYGEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile"
+        COMMAND "${DOXYGEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/support/Doxyfile"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating API and architecture documentation")
 endif()
@@ -188,7 +188,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_libraries(lsm-developer-smoke-policy INTERFACE
         lsm-developer-tool-policy infiltratr-common)
     target_include_directories(lsm-developer-smoke-policy INTERFACE
-        src shared/infiltratr-common/include)
+        src src/infiltratr-common/include)
     target_compile_definitions(lsm-developer-smoke-policy INTERFACE
         LSM_VERSION="${PROJECT_VERSION}" LSM_BUILD_PROFILE="cmake"
         _GNU_SOURCE _FILE_OFFSET_BITS=64)
@@ -199,69 +199,69 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_compile_options(lsm-developer-smoke-policy INTERFACE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/src/glibc_compat.h")
 
-    add_executable(lsm-source-style-checker tools/check_source_style.c)
-    add_executable(lsm-portability-checker tools/check_portability.c)
-    add_executable(lsm-native-installer-builder tools/build_native_installer.c)
-    add_executable(lsm-native-installer tools/native_installer.c)
-    add_executable(lsm-native-installer-safety tests/native_installer_safety.c)
+    add_executable(lsm-source-style-checker support/tools/check_source_style.c)
+    add_executable(lsm-portability-checker support/tools/check_portability.c)
+    add_executable(lsm-native-installer-builder support/tools/build_native_installer.c)
+    add_executable(lsm-native-installer support/tools/native_installer.c)
+    add_executable(lsm-native-installer-safety support/tests/native_installer_safety.c)
     foreach(tool IN ITEMS lsm-source-style-checker lsm-portability-checker
             lsm-native-installer-builder lsm-native-installer
             lsm-native-installer-safety)
         target_link_libraries(${tool} PRIVATE lsm-developer-tool-policy)
     endforeach()
 
-    add_executable(lsm-intel-gpu-smoke tests/intel_gpu_smoke.c
+    add_executable(lsm-intel-gpu-smoke support/tests/intel_gpu_smoke.c
         src/intel_gpu.c src/common.c)
     add_executable(lsm-infiltratr-common-smoke
-        shared/infiltratr-common/tests/core_smoke.c)
+        src/infiltratr-common/tests/core_smoke.c)
     add_executable(lsm-project-info-smoke
-        tests/project_info_smoke.c src/project_info.c)
-    add_executable(lsm-npu-telemetry-smoke tests/npu_telemetry_smoke.c
+        support/tests/project_info_smoke.c src/project_info.c)
+    add_executable(lsm-npu-telemetry-smoke support/tests/npu_telemetry_smoke.c
         src/npu_telemetry.c src/common.c)
     add_executable(lsm-memory-accounting-smoke
-        tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c)
+        support/tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c)
     add_executable(lsm-performance-navigation-smoke
-        tests/performance_navigation_smoke.c src/performance_selection.c)
+        support/tests/performance_navigation_smoke.c src/performance_selection.c)
     add_executable(lsm-monitor-platform-smoke
-        tests/monitor_platform_smoke.c src/monitor.c)
+        support/tests/monitor_platform_smoke.c src/monitor.c)
     add_executable(lsm-gpu-metrics-smoke
-        tests/gpu_metrics_smoke.c src/gpu_metrics.c)
+        support/tests/gpu_metrics_smoke.c src/gpu_metrics.c)
     add_executable(lsm-application-catalog-smoke
-        tests/application_catalog_smoke.c src/application_catalog.c)
+        support/tests/application_catalog_smoke.c src/application_catalog.c)
     add_executable(lsm-process-model-smoke
-        tests/process_model_smoke.c src/process_model.c)
+        support/tests/process_model_smoke.c src/process_model.c)
     add_executable(lsm-process-grouping-smoke
-        tests/process_grouping_smoke.c src/process_grouping.c
+        support/tests/process_grouping_smoke.c src/process_grouping.c
         src/process_model.c)
     add_executable(lsm-process-gpu-smoke
-        tests/process_gpu_smoke.c src/process_gpu.c)
+        support/tests/process_gpu_smoke.c src/process_gpu.c)
     add_executable(lsm-disk-accounting-smoke
-        tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c)
+        support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c)
     add_executable(lsm-cpu-accounting-smoke
-        tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c)
+        support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c)
     add_executable(lsm-smbios-memory-smoke
-        tests/smbios_memory_smoke.c src/smbios_memory.c)
+        support/tests/smbios_memory_smoke.c src/smbios_memory.c)
     add_executable(lsm-storage-metadata-smoke
-        tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c)
+        support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c)
     add_executable(lsm-system-sources-smoke
-        tests/system_sources_smoke.c src/system_sources.c src/storage_metadata.c
+        support/tests/system_sources_smoke.c src/system_sources.c src/storage_metadata.c
         src/mountinfo.c src/pci_names.c src/pci_names_data.c src/common.c)
     add_executable(lsm-system-snapshot-smoke
-        tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
+        support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
         src/common.c)
     add_executable(lsm-process-export-smoke
-        tests/process_export_smoke.c src/process_export.c src/process_model.c
+        support/tests/process_export_smoke.c src/process_export.c src/process_model.c
         src/common.c src/ui_helpers.c)
     add_executable(lsm-task-manager-layout-smoke
-        tests/task_manager_layout_smoke.c)
-    add_executable(lsm-process-inspection-smoke tests/process_inspection_smoke.c
+        support/tests/task_manager_layout_smoke.c)
+    add_executable(lsm-process-inspection-smoke support/tests/process_inspection_smoke.c
         src/process_inspection.c src/common.c)
     add_executable(lsm-filesystem-inventory-smoke
-        tests/filesystem_inventory_smoke.c src/filesystem_inventory.c
+        support/tests/filesystem_inventory_smoke.c src/filesystem_inventory.c
         src/mountinfo.c src/common.c)
-    add_executable(lsm-process-scan-benchmark tests/process_scan_benchmark.c
+    add_executable(lsm-process-scan-benchmark support/tests/process_scan_benchmark.c
         ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
-    add_executable(lsm-runtime-stability-smoke tests/runtime_stability_smoke.c
+    add_executable(lsm-runtime-stability-smoke support/tests/runtime_stability_smoke.c
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
 

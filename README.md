@@ -62,7 +62,7 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`shared/infiltratr-common` is the versioned C foundation shared with other
+`src/infiltratr-common` is the versioned C foundation shared with other
 Shannon Smith projects. It is linked into this application, so the installed
 package has no runtime dependency on another project.
 
@@ -97,12 +97,9 @@ package or native installer.
 
 ## Source layout
 
-- `src/` — application, presentation, neutral contracts and Linux providers.
-- `shared/infiltratr-common/` — reusable C foundation.
-- `tests/` — parser, policy, hardware-fixture and lifecycle tests.
-- `tools/` — release, packaging, portability and source-quality builders.
-- `data/`, `icons/` and `packaging/` — passive resources and required legal
-  metadata.
+- `src/` — application code, Linux providers and the reusable C foundation.
+- `support/` — tests, release tools, resources, packaging and developer
+  configuration kept away from the repository landing page.
 
 ## Verification
 
@@ -127,4 +124,5 @@ Public License version 3 or, at your option, any later version
 
 The retained SysMonTask icon and bundled PCI-name data remain under compatible
 BSD 3-Clause terms. Their authorship and complete notices are preserved in
-`THIRD_PARTY_NOTICES` and the corresponding file-specific licence records.
+`support/legal/THIRD_PARTY_NOTICES` and the corresponding file-specific licence
+records.

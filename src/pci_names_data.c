@@ -3,11 +3,11 @@
  * @file pci_names_data.c
  * @brief Generated embedded PCI vendor and device name database.
  *
- * The compact table is derived from data/pci-names.tsv. It is compiled into
+ * The compact table is derived from support/resources/data/pci-names.tsv. It is compiled into
  * the executable so normal runtime identity lookup needs no separate data file.
  * Chunks remain below the ISO C translation-limit minimum for string literals.
  * The generated C wrapper is GPL-3.0-or-later; the embedded PCI names retain
- * the upstream BSD 3-Clause notice recorded in data/PCI_IDS_LICENSE and
+ * the upstream BSD 3-Clause notice recorded in support/resources/data/PCI_IDS_LICENSE and
  * THIRD_PARTY_NOTICES.
  *
  * @author Shannon Smith

@@ -58,7 +58,7 @@ builder="$temporary/native-installer"
     -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
     -Wstrict-prototypes -Wmissing-prototypes -Wcast-qual -Wwrite-strings \
     -Wswitch-enum -Wnull-dereference \
-    "$ROOT/tools/native_installer.c" -o "$builder"
+    "$ROOT/support/tools/native_installer.c" -o "$builder"
 
 export LSM_SOURCE_ROOT="$ROOT"
 export LSM_BOOTSTRAP_CC="$compiler"

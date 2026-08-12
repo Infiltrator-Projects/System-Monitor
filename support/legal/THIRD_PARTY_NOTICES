@@ -8,7 +8,7 @@ materials retain their own compatible licences and copyright notices.
 1. SysMonTask project and retained application icon
 ---------------------------------------------------
 
-File: icons/linux-system-monitor.png
+File: support/resources/icons/linux-system-monitor.png
 Source: https://github.com/KrispyCamel4u/SysMonTask
 
 The project preserves this notice for the retained icon, the application's
@@ -45,7 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 2. PCI name database
 --------------------
 
-Files: data/pci-names.tsv and its generated compiled representation in
+Files: support/resources/data/pci-names.tsv and its generated compiled representation in
        src/pci_names_data.c
 Source: https://pci-ids.ucw.cz/
 
