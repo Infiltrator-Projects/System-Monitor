@@ -62,7 +62,7 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.1.1 in
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.2.0 in
 the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
 repository. It is linked statically into this application, so the source has
 one canonical owner while the installed package has no cross-project runtime
@@ -73,13 +73,13 @@ labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB.
 
 ## Build from source
 
-Required development tools are a C17 compiler, Make, pkg-config and GTK 3.22 or
+Required development tools are a C17 compiler, Make, Git, pkg-config and GTK 3.22 or
 newer development files.
 
 On Debian, Ubuntu or Linux Mint:
 
 ```bash
-sudo apt install build-essential pkg-config libgtk-3-dev
+sudo apt install build-essential git pkg-config libgtk-3-dev
 git clone --recurse-submodules https://github.com/The-First-Infiltrator/System-Monitor.git
 cd System-Monitor
 make
@@ -87,8 +87,9 @@ make
 ```
 
 GitHub's automatic source archives preserve the pinned dependency reference
-but do not expand submodules. After extracting one, run `make common-bootstrap`
-once before building.
+but do not expand submodules. After extraction, an ordinary `make` automatically
+retrieves the exact pinned Infiltratr Common release into `src/infiltratr-common`;
+no separate shared-library setup is required.
 
 Useful build targets:
 

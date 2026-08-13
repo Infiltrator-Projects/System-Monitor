@@ -144,7 +144,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE \
+.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE \
 	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
@@ -154,22 +154,30 @@ LDLIBS += $(GTK_LIBS) -lm -ldl
 	process-gpu-smoke disk-accounting-smoke cpu-accounting-smoke \
 system-snapshot-smoke process-export-smoke preferences-smoke glibc-abi-smoke coverage-check release
 
-all: common-check $(TARGET)
+all: common-check
+	@$(MAKE) --no-print-directory build-all
 
-common-bootstrap:
+build-all: $(TARGET)
+
+common-bootstrap: common-check
+	@:
+
+common-check:
 	@if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
+		command -v git >/dev/null 2>&1 || { \
+			echo "git is required to retrieve the pinned shared source." >&2; \
+			exit 1; \
+		}; \
 		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
 		else \
+			mkdir -p "$(dir $(INFILTRATR_COMMON_DIR))"; \
 			git clone --depth 1 --branch "$(INFILTRATR_COMMON_TAG)" \
 				"$(INFILTRATR_COMMON_URL)" "$(INFILTRATR_COMMON_DIR)"; \
 		fi; \
 	fi
-	@$(MAKE) --no-print-directory common-check
-
-common-check:
 	@test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
-		echo "Infiltratr Common is missing; clone with --recurse-submodules or run 'make common-bootstrap'." >&2; \
+		echo "Unable to retrieve Infiltratr Common $(INFILTRATR_COMMON_VERSION)." >&2; \
 		exit 1; \
 	}
 	@test "$$(tr -d '[:space:]' < "$(INFILTRATR_COMMON_DIR)/VERSION")" = \
@@ -182,7 +190,6 @@ common-check:
 			echo "Infiltratr Common must be pinned to $(INFILTRATR_COMMON_COMMIT)." >&2; \
 			exit 1; \
 		fi
-
 check-deps: common-check
 	@for source in $(PLATFORM_BACKEND_NAMES); do \
 		test -f "src/$$source" || { \

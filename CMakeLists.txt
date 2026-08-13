@@ -5,16 +5,53 @@ cmake_minimum_required(VERSION 3.16)
 
 set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
+set(INFILTRATR_COMMON_URL
+    "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
+set(INFILTRATR_COMMON_TAG "v1.2.0")
 set(INFILTRATR_COMMON_EXPECTED_VERSION "1.2.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT
+    "b90cf49521bb8ecf85e46a39f67f1c0d0a0509b2")
+
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
-    message(FATAL_ERROR
-        "Infiltratr Common is missing. Clone with --recurse-submodules or run 'make common-bootstrap'.")
+    find_program(LSM_GIT_EXECUTABLE git REQUIRED)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+        execute_process(
+            COMMAND "${LSM_GIT_EXECUTABLE}" submodule update --init --depth 1 --
+                    src/infiltratr-common
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+    else()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        execute_process(
+            COMMAND "${LSM_GIT_EXECUTABLE}" clone --depth 1 --branch
+                    "${INFILTRATR_COMMON_TAG}" "${INFILTRATR_COMMON_URL}"
+                    "${INFILTRATR_COMMON_DIR}"
+            RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+    endif()
+    if(NOT LSM_COMMON_FETCH_RESULT EQUAL 0 OR
+       NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
+        message(FATAL_ERROR
+            "Unable to retrieve Infiltratr Common ${INFILTRATR_COMMON_EXPECTED_VERSION}.")
+    endif()
 endif()
+
 file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
 string(STRIP "${INFILTRATR_COMMON_VERSION}" INFILTRATR_COMMON_VERSION)
 if(NOT INFILTRATR_COMMON_VERSION STREQUAL INFILTRATR_COMMON_EXPECTED_VERSION)
     message(FATAL_ERROR
         "Infiltratr Common ${INFILTRATR_COMMON_EXPECTED_VERSION} is required; found ${INFILTRATR_COMMON_VERSION}.")
+endif()
+find_program(LSM_GIT_EXECUTABLE git REQUIRED)
+execute_process(
+    COMMAND "${LSM_GIT_EXECUTABLE}" -C "${INFILTRATR_COMMON_DIR}" rev-parse HEAD
+    OUTPUT_VARIABLE INFILTRATR_COMMON_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE LSM_COMMON_COMMIT_RESULT)
+if(LSM_COMMON_COMMIT_RESULT EQUAL 0 AND
+   NOT INFILTRATR_COMMON_COMMIT STREQUAL INFILTRATR_COMMON_EXPECTED_COMMIT)
+    message(FATAL_ERROR
+        "Infiltratr Common must be pinned to ${INFILTRATR_COMMON_EXPECTED_COMMIT}; found ${INFILTRATR_COMMON_COMMIT}.")
 endif()
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -263,7 +300,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/mountinfo.c src/pci_names.c src/pci_names_data.c src/common.c)
     add_executable(lsm-system-snapshot-smoke
         support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
-        src/common.c)
+        src/common.c src/metric_format.c)
     add_executable(lsm-process-export-smoke
         support/tests/process_export_smoke.c src/process_export.c src/process_model.c
         src/common.c src/ui_helpers.c)
