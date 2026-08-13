@@ -308,13 +308,6 @@ void lsm_process_gpu_normalise(LsmProcessGpuSnapshot *current,
     }
 }
 
-bool lsm_process_gpu_calculate(const LsmProcessGpuSnapshot *current,
-                               const LsmProcessGpuSnapshot *previous,
-                               double elapsed_seconds, double *percent)
-{
-    return lsm_process_gpu_calculate_engine(
-        current, previous, elapsed_seconds, percent, NULL, 0U);
-}
 
 bool lsm_process_gpu_calculate_engine(
     const LsmProcessGpuSnapshot *current,

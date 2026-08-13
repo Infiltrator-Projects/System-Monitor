@@ -51,7 +51,7 @@ static void read_os_name(char *buffer, size_t size)
     while (fgets(line, sizeof(line), file)) {
         if (strncmp(line, "PRETTY_NAME=", 12U) != 0) continue;
         char *value = line + 12U;
-        value[strcspn(value, "\r\n")] = '\0';
+        lsm_trim_line_end(value);
         const size_t length = strlen(value);
         if (length >= 2U && value[0] == '"' && value[length - 1U] == '"') {
             value[length - 1U] = '\0';

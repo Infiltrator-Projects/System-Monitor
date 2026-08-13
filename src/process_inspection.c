@@ -246,7 +246,7 @@ static void read_thread_state(const char *path, char *state, size_t state_size)
         if (strncmp(line, "State:", 6U) != 0) continue;
         char *value = line + 6U;
         while (*value == ' ' || *value == '\t') value++;
-        value[strcspn(value, "\r\n")] = '\0';
+        lsm_trim_line_end(value);
         lsm_copy_string(state, state_size, value);
         break;
     }
@@ -325,7 +325,7 @@ static bool canonical_descriptor_target(const char *target, char *resolved,
     char *deleted = strstr(candidate, " (deleted)");
     if (deleted && deleted[10] == '\0') *deleted = '\0';
     char real[PATH_MAX];
-    if (!realpath(candidate, real)) return false;
+    if (!lsm_realpath_copy(candidate, real, sizeof(real))) return false;
     lsm_copy_string(resolved, resolved_size, real);
     return true;
 }
@@ -349,7 +349,7 @@ size_t lsm_process_inspection_find_file_users(const char *path,
     }
     *out_items = NULL;
     char requested[PATH_MAX];
-    if (!realpath(path, requested)) return 0U;
+    if (!lsm_realpath_copy(path, requested, sizeof(requested))) return 0U;
 
     DIR *proc = opendir(procfs_root());
     if (!proc) return 0U;

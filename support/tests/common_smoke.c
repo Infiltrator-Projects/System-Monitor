@@ -38,10 +38,6 @@ int main(void)
     assert(lsm_parse_u64("0xff", 0U, &parsed));
     assert(parsed == 255U);
     assert(!lsm_parse_u64("-1", 10U, &parsed));
-    double parsed_double = 0.0;
-    assert(lsm_parse_double(" 12.5 ", &parsed_double));
-    assert(parsed_double == 12.5);
-    assert(!lsm_parse_double("nan", &parsed_double));
     assert(lsm_clamp_double(-1.0, 0.0, 100.0) == 0.0);
     assert(lsm_clamp_double(101.0, 0.0, 100.0) == 100.0);
 

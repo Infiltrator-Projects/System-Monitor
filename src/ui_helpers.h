@@ -35,28 +35,6 @@ gboolean lsm_ui_text_needs_update(const char *current, const char *next);
 gboolean lsm_ui_set_label_text(GtkWidget *label, const char *format, ...)
     G_GNUC_PRINTF(2, 3);
 /**
- * Construct a standard title/subtitle header used by application pages.
- *
- * @param [in] title Primary heading text.
- * @param [in] subtitle Secondary descriptive text.
- * @param [out] title_out Optional receiver for the title GtkLabel.
- * @param [out] subtitle_out Optional receiver for the subtitle GtkLabel.
- * @return Newly created GTK container owned by its eventual parent.
- */
-GtkWidget *lsm_ui_make_page_header(const char *title, const char *subtitle,
-                                   GtkWidget **title_out,
-                                   GtkWidget **subtitle_out);
-/**
- * Construct a standard caption/value grid and return value-label handles.
- *
- * @param [in] names Ordered caption strings.
- * @param [in] count Number of captions and output labels.
- * @param [out] values_out Array receiving @p count GtkLabel pointers.
- * @return Newly created GTK grid owned by its eventual parent.
- */
-GtkWidget *lsm_ui_make_value_grid(const char *const *names, size_t count,
-                                  GtkWidget **values_out);
-/**
  * Present a modal, formatted error message through the GUI.
  *
  * @param [in] parent Optional transient parent window.

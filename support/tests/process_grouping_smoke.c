@@ -16,8 +16,7 @@
 
 int main(void)
 {
-    LsmProcessGroupMetrics metrics;
-    lsm_process_group_metrics_init(&metrics);
+    LsmProcessGroupMetrics metrics = {0};
     LsmProcessInfo first = {
         .cpu_percent = 12.5,
         .rss_bytes = 28ULL * 1024ULL * 1024ULL * 1024ULL,

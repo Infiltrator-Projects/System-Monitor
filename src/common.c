@@ -51,10 +51,6 @@ bool lsm_parse_u64(const char *text, unsigned int base, uint64_t *value)
     return infiltratr_parse_u64(text, base, value);
 }
 
-bool lsm_parse_double(const char *text, double *value)
-{
-    return infiltratr_parse_double(text, value);
-}
 
 double lsm_clamp_double(double value, double lower, double upper)
 {
@@ -97,11 +93,6 @@ double lsm_read_double_or_nan(const char *path)
     return infiltratr_read_double_or_nan(path);
 }
 
-bool lsm_read_first_u64(const char *base, const char *const *suffixes,
-                        size_t suffix_count, uint64_t *value)
-{
-    return infiltratr_read_first_u64(base, suffixes, suffix_count, value);
-}
 
 uint64_t lsm_u64_add_saturating(uint64_t left, uint64_t right)
 {

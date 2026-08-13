@@ -20,11 +20,6 @@ static double positive_finite_sum(double total, double value)
     return value <= DBL_MAX - total ? total + value : DBL_MAX;
 }
 
-void lsm_process_group_metrics_init(LsmProcessGroupMetrics *metrics)
-{
-    if (!metrics) return;
-    memset(metrics, 0, sizeof(*metrics));
-}
 
 void lsm_process_group_metrics_add(LsmProcessGroupMetrics *metrics,
                                    const LsmProcessInfo *process)

@@ -91,14 +91,6 @@ bool lsm_string_ends_with(const char *text, const char *suffix);
  */
 bool lsm_parse_u64(const char *text, unsigned int base, uint64_t *value);
 
-/**
- * Parse a complete finite floating-point value.
- *
- * @param text Text to parse.
- * @param value Receives the parsed finite value on success.
- * @return true when the complete input is a finite double.
- */
-bool lsm_parse_double(const char *text, double *value);
 
 /**
  * Clamp a floating-point value to inclusive bounds.
@@ -186,17 +178,6 @@ bool lsm_read_double_file(const char *path, double *value);
  */
 double lsm_read_double_or_nan(const char *path);
 
-/**
- * Read the first available unsigned attribute beneath a common base path.
- *
- * @param base Common path prefix.
- * @param suffixes Ordered candidate suffixes.
- * @param suffix_count Number of entries in @p suffixes.
- * @param value Receives the first successfully parsed value.
- * @return true when any candidate was read successfully.
- */
-bool lsm_read_first_u64(const char *base, const char *const *suffixes,
-                        size_t suffix_count, uint64_t *value);
 
 /**
  * Add two unsigned quantities without allowing wraparound.

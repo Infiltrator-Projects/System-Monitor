@@ -14,13 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void set_bold(GtkWidget *label)
-{
-    PangoAttrList *attributes = pango_attr_list_new();
-    pango_attr_list_insert(attributes, pango_attr_weight_new(PANGO_WEIGHT_BOLD));
-    gtk_label_set_attributes(GTK_LABEL(label), attributes);
-    pango_attr_list_unref(attributes);
-}
 
 gboolean lsm_ui_text_needs_update(const char *current, const char *next)
 {
@@ -65,54 +58,6 @@ gboolean lsm_ui_set_label_text(GtkWidget *label, const char *format, ...)
     return changed;
 }
 
-GtkWidget *lsm_ui_make_page_header(const char *title, const char *subtitle,
-                                   GtkWidget **title_out,
-                                   GtkWidget **subtitle_out)
-{
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
-    GtkWidget *title_label = gtk_label_new(NULL);
-    char *markup = g_markup_printf_escaped(
-        "<span size='18000' weight='bold'>%s</span>", title ? title : "");
-    gtk_label_set_markup(GTK_LABEL(title_label), markup);
-    g_free(markup);
-    gtk_widget_set_halign(title_label, GTK_ALIGN_START);
-
-    GtkWidget *subtitle_label = gtk_label_new(subtitle ? subtitle : "");
-    gtk_widget_set_halign(subtitle_label, GTK_ALIGN_START);
-    gtk_label_set_ellipsize(GTK_LABEL(subtitle_label), PANGO_ELLIPSIZE_END);
-
-    gtk_box_pack_start(GTK_BOX(box), title_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), subtitle_label, FALSE, FALSE, 0);
-
-    if (title_out) *title_out = title_label;
-    if (subtitle_out) *subtitle_out = subtitle_label;
-    return box;
-}
-
-GtkWidget *lsm_ui_make_value_grid(const char *const *names, size_t count,
-                                  GtkWidget **values_out)
-{
-    GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 6);
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 24);
-    gtk_widget_set_halign(grid, GTK_ALIGN_START);
-
-    for (size_t index = 0; index < count; index++) {
-        GtkWidget *name = gtk_label_new(names[index] ? names[index] : "");
-        gtk_widget_set_halign(name, GTK_ALIGN_START);
-
-        GtkWidget *value = gtk_label_new("N/A");
-        gtk_widget_set_halign(value, GTK_ALIGN_START);
-        set_bold(value);
-
-        const int column_group = (int)(index / 6);
-        const int row = (int)(index % 6);
-        gtk_grid_attach(GTK_GRID(grid), name, column_group * 2, row, 1, 1);
-        gtk_grid_attach(GTK_GRID(grid), value, column_group * 2 + 1, row, 1, 1);
-        if (values_out) values_out[index] = value;
-    }
-    return grid;
-}
 
 void lsm_ui_show_error(GtkWindow *parent, const char *title,
                        const char *format, ...)

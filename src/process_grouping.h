@@ -26,12 +26,6 @@ typedef struct {
     bool all_efficient;       /**< True when every row has efficiency priority. */
 } LsmProcessGroupMetrics;
 
-/**
- * Reset group metrics to an empty identity value.
- *
- * @param [out] metrics Aggregate to initialise; NULL is ignored.
- */
-void lsm_process_group_metrics_init(LsmProcessGroupMetrics *metrics);
 
 /**
  * Incorporate one process into an aggregate using saturating arithmetic.

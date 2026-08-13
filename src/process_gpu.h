@@ -60,22 +60,6 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
 void lsm_process_gpu_normalise(LsmProcessGpuSnapshot *current,
                                const LsmProcessGpuSnapshot *previous);
 
-/**
- * Convert two cumulative engine snapshots into peak-engine utilisation.
- *
- * Engine classes are aggregated across a process's DRM clients before their
- * deltas are compared. The reported value follows Task Manager's peak-engine
- * model and is clamped to the inclusive 0..100 percent range.
- *
- * @param [in] current Current cumulative snapshot.
- * @param [in] previous Prior snapshot for the same process instance.
- * @param [in] elapsed_seconds Monotonic time separating the snapshots.
- * @param [out] percent Calculated peak-engine utilisation.
- * @return true when at least one matching monotonic engine counter existed.
- */
-bool lsm_process_gpu_calculate(const LsmProcessGpuSnapshot *current,
-                               const LsmProcessGpuSnapshot *previous,
-                               double elapsed_seconds, double *percent);
 
 /**
  * Convert cumulative counters into peak utilisation and its engine name.
