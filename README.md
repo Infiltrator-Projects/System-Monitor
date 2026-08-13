@@ -108,8 +108,9 @@ package or native installer.
 
 - `src/` — application code, Linux providers and the pinned Infiltratr Common
   submodule.
-- `support/` — tests, release tools, resources, packaging and developer
-  configuration kept away from the repository landing page.
+- `support/` — tests, release tools, resources, packaging, version metadata,
+  installer internals and developer configuration kept away from the
+  repository landing page.
 
 ## Verification
 

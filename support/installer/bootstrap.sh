@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Minimal pre-compilation bootstrap for the hardware-native installer.
 set -Eeuo pipefail
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 
 for argument in "$@"; do
     case "$argument" in
         -h|--help)
             cat <<'USAGE'
 Linux System Monitor hardware-native installer
-Usage: ./install.sh [options]
+Usage: ./support/installer/bootstrap.sh [options]
   --profile native|aggressive|portable
   --compiler PATH
   --jobs NUMBER
@@ -114,7 +114,7 @@ if ((${#missing[@]})); then
     printf '\nInstalling missing build requirements...\n'
     "$sudo_path" -- "$apt_get" install -y "${packages[@]}"
     export LSM_BOOTSTRAP_PASS=1
-    exec "$ROOT/install.sh" "$@"
+    exec "$ROOT/support/installer/bootstrap.sh" "$@"
 fi
 
 compiler=$(find_compiler)

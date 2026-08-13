@@ -52,8 +52,9 @@ static const char installer_header[] =
     "source_root=\"$work/source\"\n"
     "mkdir -p -- \"$source_root\"\n"
     "tail -n +\"$payload_line\" \"$0\" | tar -xz -C \"$source_root\"\n"
-    "[[ -x \"$source_root/install.sh\" ]] || { echo 'Extracted installer was not found.' >&2; exit 1; }\n"
-    "\"$source_root/install.sh\" \"${forward[@]}\"\n"
+    "bootstrap=\"$source_root/support/installer/bootstrap.sh\"\n"
+    "[[ -x \"$bootstrap\" ]] || { echo 'Extracted installer was not found.' >&2; exit 1; }\n"
+    "\"$bootstrap\" \"${forward[@]}\"\n"
     "exit $?\n"
     "__LSM_NATIVE_PAYLOAD_BELOW__\n";
 
@@ -86,7 +87,7 @@ static char *trim(char *text)
 static char *read_version(const char *root)
 {
     char path[LSM_INSTALLER_PATH_LEN];
-    if (!join_path(path, sizeof(path), root, "VERSION")) {
+    if (!join_path(path, sizeof(path), root, "support/VERSION")) {
         fputs("Project root path is too long.\n", stderr);
         exit(EXIT_FAILURE);
     }
@@ -215,7 +216,7 @@ int main(int argc, char **argv)
     char fallback_epoch[32];
     char version_path[LSM_INSTALLER_PATH_LEN];
     struct stat version_status;
-    if (!join_path(version_path, sizeof(version_path), root, "VERSION") ||
+    if (!join_path(version_path, sizeof(version_path), root, "support/VERSION") ||
         stat(version_path, &version_status) != 0) {
         free(version);
         rmdir(temporary);
@@ -230,7 +231,7 @@ int main(int argc, char **argv)
             (size_t)epoch_length >= sizeof(fallback_epoch)) {
             free(version);
             rmdir(temporary);
-            fputs("VERSION timestamp is out of range.\n", stderr);
+            fputs("support/VERSION timestamp is out of range.\n", stderr);
             return EXIT_FAILURE;
         }
         source_epoch = fallback_epoch;

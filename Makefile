@@ -7,8 +7,9 @@ AR ?= ar
 PKG_CONFIG ?= pkg-config
 DOXYGEN ?= doxygen
 CLANG ?= clang
-VERSION_FILE := VERSION
+VERSION_FILE := support/VERSION
 VERSION := $(shell tr -d '[:space:]' < $(VERSION_FILE))
+INSTALL_BOOTSTRAP := support/installer/bootstrap.sh
 ENABLE_LTO ?= 1
 BUILD_PROFILE ?= generic
 
@@ -628,19 +629,19 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		./$(BUILD_DIR)/application-catalog-sanitized
 
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) $(NATIVE_INSTALLER)
-	bash -n install.sh
-	./install.sh --help >/dev/null
+	bash -n $(INSTALL_BOOTSTRAP)
+	./$(INSTALL_BOOTSTRAP) --help >/dev/null
 	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER)
 	./$(NATIVE_INSTALLER_BUILDER) $(BUILD_DIR)/native-installer-smoke.run >/dev/null
 	./$(BUILD_DIR)/native-installer-smoke.run --help >/dev/null
 	rm -f $(BUILD_DIR)/native-installer-smoke.run
-	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/([[:space:]]|$$)' install.sh
-	@grep -Fq 'apt-get' install.sh
-	@grep -Fq 'libgtk-3-dev' install.sh
-	@grep -Fq 'build-essential' install.sh
-	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' install.sh
-	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' install.sh
-	@! grep -Eq '(^|[;&|][[:space:]]*)(doas|pacman|dnf|yum|zypper|udevadm|update-desktop-database|gtk-update-icon-cache)([[:space:]]|$$)' install.sh
+	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/([[:space:]]|$$)' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'apt-get' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'libgtk-3-dev' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'build-essential' $(INSTALL_BOOTSTRAP)
+	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' $(INSTALL_BOOTSTRAP)
+	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' $(INSTALL_BOOTSTRAP)
+	@! grep -Eq '(^|[;&|][[:space:]]*)(doas|pacman|dnf|yum|zypper|udevadm|update-desktop-database|gtk-update-icon-cache)([[:space:]]|$$)' $(INSTALL_BOOTSTRAP)
 	@echo "Native installer passed source, package and fixed-privilege-boundary checks."
 
 native-installer: common-check $(NATIVE_INSTALLER_BUILDER)

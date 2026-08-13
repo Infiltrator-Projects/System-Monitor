@@ -207,8 +207,9 @@ static void check_markdown_policy(void)
 static void check_root_layout(void)
 {
     static const char *const retired_root_entries[] = {
-        "CHANGELOG.md", "Doxyfile", "NATIVE_INSTALLER_EDITION",
-        "THIRD_PARTY_NOTICES", "data", "icons", "packaging", "shared",
+        ".clang-format", ".editorconfig", "CHANGELOG.md", "Doxyfile",
+        "NATIVE_INSTALLER_EDITION", "THIRD_PARTY_NOTICES", "VERSION",
+        "data", "icons", "install.sh", "packaging", "shared",
         "sources.txt", "tests", "tools"
     };
     for (size_t index = 0U;
@@ -651,8 +652,9 @@ static void require_file_marker(const char *path, const char *marker)
 static void check_licensing_contract(void)
 {
     static const char *const hash_header_files[] = {
-        ".clang-format", ".editorconfig", ".gitmodules", "CMakeLists.txt", "support/Doxyfile",
-        "Makefile", "support/sources.txt", "src/infiltratr-common/Makefile"
+        ".gitmodules", "CMakeLists.txt", "support/Doxyfile", "Makefile",
+        "src/.clang-format", "support/sources.txt",
+        "src/infiltratr-common/Makefile"
     };
     for (size_t index = 0U;
          index < sizeof(hash_header_files) / sizeof(hash_header_files[0]);
@@ -661,7 +663,7 @@ static void check_licensing_contract(void)
 
     require_file_prefix("README.md", LSM_SPDX_MARKDOWN);
     require_file_prefix(
-        "install.sh",
+        "support/installer/bootstrap.sh",
         "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
 
     static const char *const required_legal_files[] = {
@@ -759,7 +761,8 @@ static void check_shell_boundary_tree(const char *directory_path_value)
             continue;
         if (directory_path(path)) {
             check_shell_boundary_tree(path);
-        } else if (ends_with(path, ".sh") && strcmp(path, "./install.sh") != 0) {
+        } else if (ends_with(path, ".sh") &&
+                   strcmp(path, "./support/installer/bootstrap.sh") != 0) {
             report_error("%s: unexpected shell source; reusable project logic must be C",
                          path);
         }
@@ -769,21 +772,24 @@ static void check_shell_boundary_tree(const char *directory_path_value)
 
 static void check_shell_boundary(void)
 {
-    if (!regular_file("install.sh")) {
-        report_error("install.sh: missing pre-compilation bootstrap");
+    static const char bootstrap_path[] = "support/installer/bootstrap.sh";
+    if (!regular_file(bootstrap_path)) {
+        report_error("%s: missing pre-compilation bootstrap", bootstrap_path);
         return;
     }
     size_t size = 0U;
-    char *text = read_file("install.sh", &size);
+    char *text = read_file(bootstrap_path, &size);
     if (!text) {
-        report_error("install.sh: unable to read");
+        report_error("%s: unable to read", bootstrap_path);
         return;
     }
     if (size > 4096U)
-        report_error("install.sh: bootstrap exceeds the 4096-byte shell boundary");
+        report_error("%s: bootstrap exceeds the 4096-byte shell boundary",
+                     bootstrap_path);
     if (!strstr(text, "support/tools/native_installer.c") ||
         !strstr(text, "exec \"$builder\""))
-        report_error("install.sh: must compile and hand off to the C native installer");
+        report_error("%s: must compile and hand off to the C native installer",
+                     bootstrap_path);
     free(text);
     check_shell_boundary_tree(".");
 }

@@ -367,7 +367,8 @@ static void command_first_line(const char *command, const char *argument,
 static void usage(const char *version)
 {
     printf("Linux System Monitor %s hardware-native installer\n\n", version);
-    puts("Usage: ./install.sh [options]\n");
+    printf("Usage: linux-system-monitor-%s-native-installer.run [options]\n\n",
+           version);
     puts("Options:");
     puts("  --profile native|aggressive|portable");
     puts("  --compiler PATH");
@@ -468,8 +469,8 @@ int main(int argc, char **argv)
     }
 
     char version[64];
-    if (!read_source_line(source_root, "VERSION", version, sizeof(version)))
-        fail("cannot read VERSION from %s", source_root);
+    if (!read_source_line(source_root, "support/VERSION", version, sizeof(version)))
+        fail("cannot read support/VERSION from %s", source_root);
 
     const char *profile = "native";
     const char *compiler_option = NULL;

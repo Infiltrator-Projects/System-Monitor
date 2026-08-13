@@ -284,7 +284,7 @@ int main(int argc, char **argv)
 
     char version_path[LSM_PORTABILITY_PATH_LEN];
     char sources_path[LSM_PORTABILITY_PATH_LEN];
-    if (!join_path(version_path, sizeof(version_path), root, "VERSION") ||
+    if (!join_path(version_path, sizeof(version_path), root, "support/VERSION") ||
         !join_path(sources_path, sizeof(sources_path), root, "support/sources.txt")) {
         fputs("Project root path is too long.\n", stderr);
         return EXIT_FAILURE;
