@@ -74,10 +74,8 @@ static void write_memory_modules(FILE *file, const LsmMemoryInfo *memory)
         const LsmMemoryModuleInfo *module = &memory->modules[index];
         char size[64], speed[32];
         lsm_format_bytes(module->size_bytes, size, sizeof(size));
-        if (module->speed_mhz > 0U)
-            (void)snprintf(speed, sizeof(speed), "%u MHz", module->speed_mhz);
-        else
-            (void)snprintf(speed, sizeof(speed), "N/A");
+        lsm_metric_format_mhz(module->speed_mhz > 0U,
+                              (double)module->speed_mhz, speed, sizeof(speed));
         fprintf(file, "  %zu. %s | %s | %s | %s | %s | %s | S/N %s\n",
                 index + 1U, module->locator, size, module->memory_type, speed,
                 module->manufacturer,
@@ -239,16 +237,12 @@ bool lsm_system_snapshot_write(const LsmApp *app, const char *path,
                      sizeof(memory_used));
     lsm_format_bytes(monitor->memory.total_bytes, memory_total,
                      sizeof(memory_total));
-    if (monitor->cpu.frequency_ghz > 0.0)
-        (void)snprintf(cpu_speed, sizeof(cpu_speed), "%.2f GHz",
-                       monitor->cpu.frequency_ghz);
-    else
-        (void)snprintf(cpu_speed, sizeof(cpu_speed), "N/A");
-    if (monitor->memory.speed_mhz > 0U)
-        (void)snprintf(memory_speed, sizeof(memory_speed), "%u MHz",
-                       monitor->memory.speed_mhz);
-    else
-        (void)snprintf(memory_speed, sizeof(memory_speed), "N/A");
+    lsm_metric_format_ghz(monitor->cpu.frequency_ghz > 0.0,
+                          monitor->cpu.frequency_ghz, cpu_speed,
+                          sizeof(cpu_speed));
+    lsm_metric_format_mhz(monitor->memory.speed_mhz > 0U,
+                          (double)monitor->memory.speed_mhz, memory_speed,
+                          sizeof(memory_speed));
     if (monitor->memory.slots_total > 0U)
         (void)snprintf(slots, sizeof(slots), "%u of %u",
                        monitor->memory.slots_used,

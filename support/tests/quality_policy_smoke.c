@@ -96,6 +96,13 @@ int main(void)
                "S:0.3 R:6.1 Mb/s") != 0)
         return 26;
 
+    if (strcmp(lsm_metric_format_ghz(true, 2.2, text, sizeof(text)),
+               "2.20 GHz") != 0)
+        return 27;
+    if (strcmp(lsm_metric_format_ghz(false, 0.0, text, sizeof(text)),
+               "N/A") != 0)
+        return 28;
+
     puts("Quality cadence, presentation and optional-metric policy passed.");
     return 0;
 }

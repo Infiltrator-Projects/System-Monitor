@@ -105,6 +105,17 @@ char *lsm_metric_format_percent(bool available, double value,
 char *lsm_metric_format_mhz(bool available, double value,
                             char *buffer, size_t size);
 /**
+ * Format an optional frequency in gigahertz with two decimal places.
+ *
+ * @param [in] available Whether @p value is a valid current sample.
+ * @param [in] value Frequency in GHz.
+ * @param [out] buffer Caller-owned output buffer.
+ * @param [in] size Capacity of @p buffer in bytes.
+ * @return @p buffer containing a frequency or "N/A".
+ */
+char *lsm_metric_format_ghz(bool available, double value,
+                            char *buffer, size_t size);
+/**
  * Format an optional Celsius temperature.
  *
  * @param [in] available Whether @p value is a valid current sample.
