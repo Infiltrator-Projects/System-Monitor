@@ -466,14 +466,14 @@ process-management-smoke: | $(BUILD_DIR)
 
 process-inspection-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/process_inspection_smoke.c \
-		src/process_inspection.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) \
+		src/process_inspection.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-inspection-smoke
 	./$(BUILD_DIR)/process-inspection-smoke
 
 filesystem-inventory-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/filesystem_inventory_smoke.c \
 		src/filesystem_inventory.c src/mountinfo.c src/common.c \
-		$(INFILTRATR_COMMON_ARCHIVE) -o $(BUILD_DIR)/filesystem-inventory-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/filesystem-inventory-smoke
 	./$(BUILD_DIR)/filesystem-inventory-smoke
 
 efficiency-smoke: | $(BUILD_DIR)
@@ -489,7 +489,7 @@ mountinfo-smoke: | $(BUILD_DIR)
 
 storage-metadata-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/storage_metadata_smoke.c \
-		src/storage_metadata.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) \
+		src/storage_metadata.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/storage-metadata-smoke
 	./$(BUILD_DIR)/storage-metadata-smoke
 
@@ -541,7 +541,7 @@ nvml-smoke: | $(BUILD_DIR)
 		-o $(BUILD_DIR)/libnvidia-ml-test.so
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/nvml_smoke.c src/nvml.c src/common.c \
-		$(INFILTRATR_COMMON_ARCHIVE) -ldl -o $(BUILD_DIR)/nvml-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -ldl -lm -o $(BUILD_DIR)/nvml-smoke
 	LSM_NVML_LIBRARY=$(CURDIR)/$(BUILD_DIR)/libnvidia-ml-test.so \
 		./$(BUILD_DIR)/nvml-smoke
 
@@ -614,7 +614,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c \
-		$(INFILTRATR_COMMON_SOURCES) \
+		$(INFILTRATR_COMMON_SOURCES) -lm \
 		-o $(BUILD_DIR)/storage-metadata-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -635,7 +635,12 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) $(NATIVE_I
 	./$(BUILD_DIR)/native-installer-smoke.run --help >/dev/null
 	rm -f $(BUILD_DIR)/native-installer-smoke.run
 	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/([[:space:]]|$$)' install.sh
-	@! grep -Eq '(^|[;&|][[:space:]]*)(sudo|doas|apt(-get)?|dpkg|pacman|dnf|yum|zypper|udevadm)([[:space:]]|$$)' install.sh
+	@grep -Fq 'apt-get' install.sh
+	@grep -Fq 'libgtk-3-dev' install.sh
+	@grep -Fq 'build-essential' install.sh
+	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' install.sh
+	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' install.sh
+	@! grep -Eq '(^|[;&|][[:space:]]*)(doas|pacman|dnf|yum|zypper|udevadm|update-desktop-database|gtk-update-icon-cache)([[:space:]]|$$)' install.sh
 	@echo "Native installer passed source, package and fixed-privilege-boundary checks."
 
 native-installer: common-check $(NATIVE_INSTALLER_BUILDER)
@@ -691,7 +696,7 @@ dbus-models-smoke: | $(BUILD_DIR)
 bundled-pci-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/bundled_pci_smoke.c \
 		src/pci_names.c src/pci_names_data.c src/common.c \
-		$(INFILTRATR_COMMON_ARCHIVE) \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/bundled-pci-smoke
 	./$(BUILD_DIR)/bundled-pci-smoke
 

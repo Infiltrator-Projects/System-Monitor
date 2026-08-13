@@ -3,10 +3,11 @@
  * @file native_installer.c
  * @brief Hardware-native build and Debian-package installation engine.
  *
- * The shell bootstrap compiles this program before any other project code
- * exists. From that point onward dependency checks, CPU-flag probes, Make
- * orchestration and package creation are performed unprivileged. Only the final
- * installation of the verified local Debian package is delegated to sudo.
+ * The shell bootstrap can install missing Debian-family build prerequisites
+ * before compiling this program. From that point onward dependency checks,
+ * CPU-flag probes, Make orchestration and package creation are unprivileged.
+ * Administrator rights are used only for missing prerequisites and for final
+ * installation of the verified local Debian package.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -639,7 +640,7 @@ int main(int argc, char **argv)
     printf("  Profile:      %s\n", profile);
     printf("  Jobs:         %d\n", jobs);
     puts("  Installation: replaces the linux-system-monitor Debian package");
-    puts("  Privileges:   requested only after compilation and package creation");
+    puts("  Privileges:   missing prerequisites and final package installation only");
     if (dry_run) return EXIT_SUCCESS;
 
     const char *const clean_arguments[] = {make_path, "clean", NULL};

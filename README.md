@@ -25,7 +25,7 @@ Install the Debian package through the desktop package installer or with:
 sudo apt install ./linux-system-monitor_VERSION_amd64.deb
 ```
 
-The native installer compiles for the current machine before installing:
+The native installer checks its build requirements, offers to install any missing Debian-family prerequisites automatically, then compiles for the current machine before installing:
 
 ```bash
 chmod +x linux-system-monitor-VERSION-native-installer.run
