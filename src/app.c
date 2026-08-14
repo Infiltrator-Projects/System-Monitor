@@ -326,24 +326,27 @@ static void on_about(GtkMenuItem *item, gpointer user_data)
     LsmApp *app = user_data;
     const InfiltratrProjectInfo *info = lsm_project_info();
     const char *authors[] = {
-        "Shannon Smith — author and project maintainer",
+        "Shannon Smith — Author and project maintainer",
         NULL
     };
     gtk_show_about_dialog(GTK_WINDOW(app->shell.window),
         "program-name", info->program_name,
         "version", info->version,
         "comments", info->comments,
-        "copyright", info->copyright_text,
-        "license-type", GTK_LICENSE_CUSTOM,
-        "license", "GNU General Public License version 3 or later "
-                   "(GPL-3.0-or-later)",
-        "wrap-license", TRUE,
         "authors", authors,
         "website", info->website,
+        "website-label", "Website",
+        "copyright", info->copyright_text,
+        "license-type", GTK_LICENSE_CUSTOM,
+        "license",
+        "Linux System Monitor is free software licensed under the GNU General "
+        "Public License version 3 or, at your option, any later version "
+        "(GPL-3.0-or-later).\n\n"
+        "See LICENSE in the source package for the complete licence text.",
+        "wrap-license", TRUE,
         "logo-icon-name", info->icon_name,
         NULL);
 }
-
 static GtkWidget *menu_item(const char *label, GCallback callback, gpointer data)
 {
     GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
