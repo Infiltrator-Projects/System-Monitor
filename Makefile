@@ -163,7 +163,17 @@ build-all: $(TARGET)
 common-bootstrap: common-check
 	@:
 
+# Make drives releases, so reject any shared-source pin drift in CMake.
 common-check:
+	@cmake_tag=$$(sed -n 's/^set(INFILTRATR_COMMON_TAG "\(.*\)")$$/\1/p' CMakeLists.txt); \
+		cmake_version=$$(sed -n 's/^set(INFILTRATR_COMMON_EXPECTED_VERSION "\(.*\)")$$/\1/p' CMakeLists.txt); \
+		cmake_commit=$$(sed -n 's/^set(INFILTRATR_COMMON_EXPECTED_COMMIT "\(.*\)")$$/\1/p' CMakeLists.txt); \
+		if test "$$cmake_tag" != "$(INFILTRATR_COMMON_TAG)" || \
+		   test "$$cmake_version" != "$(INFILTRATR_COMMON_VERSION)" || \
+		   test "$$cmake_commit" != "$(INFILTRATR_COMMON_COMMIT)"; then \
+			echo "CMake Infiltratr Common metadata is not synchronized with Makefile." >&2; \
+			exit 1; \
+		fi
 	@if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
 		command -v git >/dev/null 2>&1 || { \
 			echo "git is required to retrieve the pinned shared source." >&2; \
