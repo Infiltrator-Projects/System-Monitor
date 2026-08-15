@@ -67,7 +67,7 @@ jobs:
           test -f "$deb"
           test -x "$installer"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
-          "$installer" --help >/dev/null
+          ./"$installer" --help >/dev/null
 
           if gh release view "$tag" >/dev/null 2>&1; then
             printf 'Release %s already exists; nothing to replace.\n' "$tag"
