@@ -273,6 +273,32 @@ static bool find_executable(const char *name, char *destination, size_t size)
     return found;
 }
 
+static bool find_trusted_system_executable(const char *name,
+                                           char *destination, size_t size)
+{
+    static const char *directories[] = {
+        "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin",
+        "/sbin", "/bin"
+    };
+    if (!name || !name[0] || strchr(name, '/')) return false;
+    for (size_t index = 0U;
+         index < sizeof(directories) / sizeof(directories[0]); index++) {
+        char candidate[PATH_MAX];
+        char resolved[PATH_MAX];
+        struct stat status;
+        if (!join_path(candidate, sizeof(candidate), directories[index], name) ||
+            !realpath(candidate, resolved) ||
+            stat(resolved, &status) != 0 ||
+            !S_ISREG(status.st_mode) || status.st_uid != 0U ||
+            (status.st_mode & (S_IWGRP | S_IWOTH)) != 0U ||
+            access(resolved, X_OK) != 0 || strlen(resolved) >= size)
+            continue;
+        memcpy(destination, resolved, strlen(resolved) + 1U);
+        return true;
+    }
+    return false;
+}
+
 static int run_process(const char *program, char *const arguments[],
                        int standard_output)
 {
@@ -526,7 +552,8 @@ int main(int argc, char **argv)
     normalise_tree_timestamps(stage_root, epoch);
 
     char dpkg_deb[PATH_MAX];
-    if (!find_executable("dpkg-deb", dpkg_deb, sizeof(dpkg_deb)))
+    if (!find_trusted_system_executable(
+            "dpkg-deb", dpkg_deb, sizeof(dpkg_deb)))
         fail("dpkg-deb is required to build the Debian package");
     char output_absolute[PATH_MAX];
     if (output[0] == '/') {

@@ -29,11 +29,21 @@ static void set_error(char *error, size_t size, const char *message)
     (void)snprintf(error, size, "%s", message ? message : "Unknown error");
 }
 
-static bool pid_selected(const LsmApp *app, LsmProcessId pid)
+static bool process_selected(const LsmApp *app,
+                             const LsmProcessInfo *process)
 {
-    if (app->process.selected_group_count == 0U) return pid == app->process.selected_pid;
+    if (!app || !process) return false;
+    if (app->process.selected_group_count == 0U)
+        return process->pid == app->process.selected_pid &&
+            process->instance_id == app->process.selected_instance_id;
+    if (!app->process.selected_group_pids ||
+        !app->process.selected_group_instance_ids)
+        return false;
     for (size_t index = 0U; index < app->process.selected_group_count; index++)
-        if (app->process.selected_group_pids[index] == pid) return true;
+        if (app->process.selected_group_pids[index] == process->pid &&
+            app->process.selected_group_instance_ids[index] ==
+                process->instance_id)
+            return true;
     return false;
 }
 
@@ -42,7 +52,8 @@ static size_t selected_count(const LsmApp *app)
     if (!app || app->process.selected_pid <= 0) return 0U;
     size_t count = 0U;
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
-        if (pid_selected(app, app->process.process_snapshot[index].pid)) count++;
+        if (process_selected(app, &app->process.process_snapshot[index]))
+            count++;
     return count;
 }
 
@@ -101,7 +112,7 @@ static bool write_process_export(FILE *file, const void *user_data)
           file);
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
         const LsmProcessInfo *process = &app->process.process_snapshot[index];
-        if (pid_selected(app, process->pid)) csv_row(file, process);
+        if (process_selected(app, process)) csv_row(file, process);
     }
     return ferror(file) == 0;
 }
@@ -133,7 +144,7 @@ void lsm_process_export_copy_selected(const LsmApp *app)
         "Name\tPID\tUser\tCPU\tMemory\tGPU\tGPU engine\tCommand\n");
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
         const LsmProcessInfo *process = &app->process.process_snapshot[index];
-        if (!pid_selected(app, process->pid)) continue;
+        if (!process_selected(app, process)) continue;
         char memory[64], gpu[32];
         lsm_format_bytes(process->rss_bytes, memory, sizeof(memory));
         if (process->gpu_available)

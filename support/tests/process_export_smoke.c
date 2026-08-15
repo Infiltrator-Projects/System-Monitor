@@ -29,20 +29,26 @@ int main(void)
     LsmProcessInfo processes[3];
     memset(processes, 0, sizeof(processes));
     processes[0].pid = 10;
+    processes[0].instance_id = 100U;
     strcpy(processes[0].name, "one, process");
     strcpy(processes[0].user, "tester");
     strcpy(processes[0].gpu_engine, "render");
     strcpy(processes[0].command, "one \"quoted\" command");
     processes[1].pid = 11;
+    processes[1].instance_id = 101U;
     strcpy(processes[1].name, "two");
     strcpy(processes[1].command, "line\nbreak");
     processes[2].pid = 12;
+    processes[2].instance_id = 102U;
     strcpy(processes[2].name, "not selected");
     app.process.process_snapshot = processes;
     app.process.process_snapshot_count = 3U;
     app.process.selected_pid = 10;
+    app.process.selected_instance_id = 100U;
     LsmProcessId group[] = {10, 11};
+    LsmProcessInstanceId group_instances[] = {100U, 101U};
     app.process.selected_group_pids = group;
+    app.process.selected_group_instance_ids = group_instances;
     app.process.selected_group_count = 2U;
 
     char path[] = "/tmp/lsm-process-export-XXXXXX";
@@ -66,7 +72,19 @@ int main(void)
     assert(strstr(contents, "\"two\",11"));
     assert(!strstr(contents, "not selected"));
     assert(!strstr(contents, "K" "iB"));
+
     unlink(path);
-    puts("Selected process CSV group export and escaping passed.");
+    group_instances[1] = 999U;
+    assert(lsm_process_export_selected_csv(&app, path, error, sizeof(error)));
+    file = fopen(path, "r");
+    assert(file);
+    const size_t stale_length = fread(
+        contents, 1U, sizeof(contents) - 1U, file);
+    contents[stale_length] = '\0';
+    fclose(file);
+    assert(strstr(contents, "\"one, process\""));
+    assert(!strstr(contents, "\"two\",11"));
+    unlink(path);
+    puts("Selected process CSV identity, group export and escaping passed.");
     return 0;
 }

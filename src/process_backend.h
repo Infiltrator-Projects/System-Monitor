@@ -62,12 +62,25 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                         unsigned scan_flags);
 
 /**
+ * Verify that a process identifier still denotes the expected instance.
+ *
+ * @param pid Process identifier captured in a process snapshot.
+ * @param instance_id Opaque instance token captured with @p pid.
+ * @return true only while both values still identify the same process.
+ */
+bool lsm_process_identity_matches(LsmProcessId pid,
+                                  LsmProcessInstanceId instance_id);
+
+/**
  * Populate expensive optional fields for one existing process row.
+ *
+ * The row's PID and opaque instance token are checked before and after the
+ * optional reads so PID recycling cannot attach another process's details.
  *
  * @param pid Process identifier represented by @p process.
  * @param process Row to enrich in place.
  * @param scan_flags Bitwise OR of supported LSM_PROCESS_SCAN_* enrichment flags.
- * @return true while the process still exists or is merely inaccessible.
+ * @return true only when the same process instance survives the enrichment.
  */
 bool lsm_process_enrich(LsmProcessId pid, LsmProcessInfo *process,
                         unsigned scan_flags);
@@ -76,41 +89,51 @@ bool lsm_process_enrich(LsmProcessId pid, LsmProcessInfo *process,
  * Set a user-facing scheduler priority.
  *
  * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
  * @param priority Platform-neutral priority requested by the user.
  * @return true when the native scheduler accepted the translated priority.
  */
-bool lsm_process_set_priority(LsmProcessId pid, LsmProcessPriority priority);
+bool lsm_process_set_priority(LsmProcessId pid,
+                              LsmProcessInstanceId instance_id,
+                              LsmProcessPriority priority);
 
 /**
  * Apply or remove the application's efficiency scheduling policy.
  *
  * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
  * @param enabled true to enable the lower-resource policy; false for defaults.
  * @return true when at least one supported native efficiency control succeeded.
  */
-bool lsm_process_set_efficiency(LsmProcessId pid, bool enabled);
+bool lsm_process_set_efficiency(LsmProcessId pid,
+                                LsmProcessInstanceId instance_id,
+                                bool enabled);
 
 /**
  * Read the process CPU-affinity mask into a caller-owned boolean array.
  *
  * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
  * @param enabled Receives one boolean per reported processor.
  * @param capacity Number of elements available in @p enabled.
  * @return Number of populated entries; zero on invalid input or backend failure.
  */
-size_t lsm_process_affinity_get(LsmProcessId pid, bool *enabled,
-                                size_t capacity);
+size_t lsm_process_affinity_get(LsmProcessId pid,
+                                LsmProcessInstanceId instance_id,
+                                bool *enabled, size_t capacity);
 
 /**
  * Replace the process CPU-affinity mask from a boolean array.
  *
  * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
  * @param enabled Desired per-processor membership mask.
  * @param count Number of entries in @p enabled.
  * @return true when the active platform accepted the affinity mask.
  */
-bool lsm_process_affinity_set(LsmProcessId pid, const bool *enabled,
-                              size_t count);
+bool lsm_process_affinity_set(LsmProcessId pid,
+                              LsmProcessInstanceId instance_id,
+                              const bool *enabled, size_t count);
 
 /**
  * Apply a control action to a process and its current descendants.
@@ -119,27 +142,25 @@ bool lsm_process_affinity_set(LsmProcessId pid, const bool *enabled,
  * that relationship, reducing parent respawn races during tree termination.
  *
  * @param root_pid Root process identifier.
+ * @param root_instance_id Opaque instance token captured with @p root_pid.
  * @param action Platform-neutral control action.
  * @return true when every extant target accepted the requested action.
  */
-bool lsm_process_control_tree(LsmProcessId root_pid, LsmProcessControl action);
+bool lsm_process_control_tree(LsmProcessId root_pid,
+                              LsmProcessInstanceId root_instance_id,
+                              LsmProcessControl action);
 
 /**
  * Apply one control action to a process.
  *
  * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
  * @param action Platform-neutral control action.
  * @return true when the active platform accepted the requested action.
  */
-bool lsm_process_control(LsmProcessId pid, LsmProcessControl action);
-
-/**
- * Check whether a process identifier still denotes a live or inaccessible process.
- *
- * @param pid Process identifier to probe.
- * @return true when the process exists, including permission-denied cases.
- */
-bool lsm_process_exists(LsmProcessId pid);
+bool lsm_process_control(LsmProcessId pid,
+                         LsmProcessInstanceId instance_id,
+                         LsmProcessControl action);
 
 /**
  * Format the native failure from the immediately preceding process operation.

@@ -55,6 +55,28 @@ static bool wait_for_stopped(pid_t pid)
     return false;
 }
 
+static bool capture_identity(pid_t pid, LsmProcessInstanceId *instance_id)
+{
+    if (!instance_id) return false;
+    LsmProcessBackend *backend = lsm_process_backend_create();
+    if (!backend) return false;
+    LsmProcessInfo *processes = NULL;
+    const size_t count = lsm_process_scan(
+        backend, &processes, LSM_PROCESS_SCAN_NONE);
+    bool found = false;
+    for (size_t index = 0U; index < count; index++) {
+        if (processes[index].pid == (LsmProcessId)pid &&
+            processes[index].instance_id != 0U) {
+            *instance_id = processes[index].instance_id;
+            found = true;
+            break;
+        }
+    }
+    lsm_process_list_free(processes);
+    lsm_process_backend_destroy(backend);
+    return found;
+}
+
 static bool exercise_process_tree_control(void)
 {
     int pipe_fds[2];
@@ -93,13 +115,31 @@ static bool exercise_process_tree_control(void)
     }
 
     usleep(50000U);
+    LsmProcessInstanceId child_instance_id = 0U;
+    if (!capture_identity(child, &child_instance_id)) {
+        (void)kill(child, SIGKILL);
+        (void)kill(grandchild, SIGKILL);
+        (void)waitpid(child, NULL, 0);
+        return false;
+    }
+    errno = 0;
+    if (lsm_process_control_tree(
+            (LsmProcessId)child, child_instance_id + 1U,
+            LSM_PROCESS_CONTROL_SUSPEND) || errno != ESRCH) {
+        (void)kill(child, SIGKILL);
+        (void)kill(grandchild, SIGKILL);
+        (void)waitpid(child, NULL, 0);
+        return false;
+    }
     const bool signalled = lsm_process_control_tree(
-        (LsmProcessId)child, LSM_PROCESS_CONTROL_SUSPEND);
+        (LsmProcessId)child, child_instance_id,
+        LSM_PROCESS_CONTROL_SUSPEND);
     const bool child_stopped = signalled && wait_for_stopped(child);
     const bool grandchild_stopped = signalled && wait_for_stopped(grandchild);
 
     (void)lsm_process_control_tree(
-        (LsmProcessId)child, LSM_PROCESS_CONTROL_FORCE_TERMINATE);
+        (LsmProcessId)child, child_instance_id,
+        LSM_PROCESS_CONTROL_FORCE_TERMINATE);
     (void)kill(grandchild, SIGKILL);
     (void)waitpid(child, NULL, 0);
     return child_stopped && grandchild_stopped;
@@ -141,9 +181,16 @@ int main(void)
         fputs("current process details were incomplete\n", stderr);
         return 1;
     }
+    if (!lsm_process_identity_matches(found->pid, found->instance_id) ||
+        lsm_process_identity_matches(found->pid, found->instance_id + 1U)) {
+        fputs("process instance validation failed\n", stderr);
+        return 1;
+    }
 
     bool cpus[LSM_PROCESS_MAX_CPUS] = {0};
-    size_t cpu_count = lsm_process_affinity_get((LsmProcessId)self, cpus, LSM_PROCESS_MAX_CPUS);
+    size_t cpu_count = lsm_process_affinity_get(
+        (LsmProcessId)self, found->instance_id,
+        cpus, LSM_PROCESS_MAX_CPUS);
     if (!cpu_count) {
         fputs("affinity query failed\n", stderr);
         return 1;

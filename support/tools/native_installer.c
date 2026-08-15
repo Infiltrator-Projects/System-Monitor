@@ -201,6 +201,40 @@ static bool find_executable(const char *name, char *destination,
     return found;
 }
 
+/* Programs that cross the privilege boundary must come from an administrator-
+ * owned system directory and must not be writable by an ordinary group or
+ * user. Build tools remain user-selectable because they run without elevated
+ * rights. The test build substitutes its isolated command fixture only; that
+ * compile-time path is never present in a distributed installer. */
+static bool trusted_system_executable(const char *name, char *destination,
+                                      size_t destination_size)
+{
+#ifdef LSM_INSTALLER_TEST_PATH
+    return find_executable(name, destination, destination_size);
+#else
+    static const char *directories[] = {
+        "/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin",
+        "/sbin", "/bin"
+    };
+    if (!name || !name[0] || strchr(name, '/')) return false;
+    for (size_t index = 0U;
+         index < sizeof(directories) / sizeof(directories[0]); index++) {
+        char candidate[LSM_BUILDER_PATH_LEN];
+        char resolved[LSM_BUILDER_PATH_LEN];
+        struct stat status;
+        if (!join_path(candidate, sizeof(candidate), directories[index], name) ||
+            !realpath(candidate, resolved) ||
+            stat(resolved, &status) != 0 ||
+            !S_ISREG(status.st_mode) || status.st_uid != 0U ||
+            (status.st_mode & (S_IWGRP | S_IWOTH)) != 0U ||
+            access(resolved, X_OK) != 0)
+            continue;
+        return copy_text(destination, destination_size, resolved);
+    }
+    return false;
+#endif
+}
+
 static int run_process(const char *working_directory,
                        const char *const arguments[], bool quiet)
 {
@@ -439,7 +473,10 @@ static void run_make(const char *make_path, const char *source_root,
 int main(int argc, char **argv)
 {
     if (atexit(cleanup_paths) != 0) fail("cannot register cleanup handler");
-    if (geteuid() == 0) fail("do not run this builder with sudo or as root");
+    const bool help_only = argc == 2 &&
+        (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0);
+    if (geteuid() == 0 && !help_only)
+        fail("do not run this builder with sudo or as root");
 
     /* Build outputs must not inherit a group-writable login umask. The unified
      * GUI executable and passive resources must have predictable permissions.
@@ -539,10 +576,12 @@ int main(int argc, char **argv)
                                            sizeof(pkg_config)) ||
                            find_executable("pkgconf", pkg_config,
                                            sizeof(pkg_config));
-    const bool dpkg_deb_found = find_executable("dpkg-deb", dpkg_deb,
-                                                sizeof(dpkg_deb));
-    const bool dpkg_found = find_executable("dpkg", dpkg, sizeof(dpkg));
-    const bool sudo_found = find_executable("sudo", sudo_path, sizeof(sudo_path));
+    const bool dpkg_deb_found = trusted_system_executable(
+        "dpkg-deb", dpkg_deb, sizeof(dpkg_deb));
+    const bool dpkg_found = trusted_system_executable(
+        "dpkg", dpkg, sizeof(dpkg));
+    const bool sudo_found = trusted_system_executable(
+        "sudo", sudo_path, sizeof(sudo_path));
     bool gtk_found = false;
     if (pkg_found) {
         const char *const arguments[] = {pkg_config, "--exists", "gtk+-3.0 >= 3.22", NULL};

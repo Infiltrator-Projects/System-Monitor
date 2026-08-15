@@ -91,8 +91,10 @@ if ((${#missing[@]})); then
         exit 1
     fi
 
-    sudo_path=$(command -v sudo 2>/dev/null || true)
-    apt_get=$(command -v apt-get 2>/dev/null || true)
+    sudo_path=/usr/bin/sudo
+    apt_get=/usr/bin/apt-get
+    [[ -x "$sudo_path" ]] || sudo_path=
+    [[ -x "$apt_get" ]] || apt_get=
     if [[ -z "$sudo_path" || -z "$apt_get" ]]; then
         printf '\nAutomatic prerequisite installation requires sudo and apt-get.\n' >&2
         printf 'Nothing was installed or changed.\n' >&2

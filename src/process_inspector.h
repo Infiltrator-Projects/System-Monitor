@@ -21,8 +21,10 @@
  *
  * @param [in,out] app Owning GUI application, used only on the GTK main thread.
  * @param [in] pid Process selected by the user.
+ * @param [in] instance_id Opaque identity captured with the selected process.
  */
-void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid);
+void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
+                                LsmProcessInstanceId instance_id);
 
 /**
  * Open a graphical file chooser and show processes using the selected file.

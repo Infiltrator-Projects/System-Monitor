@@ -80,6 +80,7 @@ typedef struct {
 typedef struct {
     pid_t pid;
     pid_t ppid;
+    LsmProcessInstanceId instance_id;
     unsigned depth;
 } PidParent;
 
@@ -326,6 +327,35 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     return true;
 }
 
+static bool process_identity_pid(LsmProcessId process_id,
+                                 LsmProcessInstanceId instance_id,
+                                 pid_t *pid)
+{
+    if (!native_pid(process_id, pid) || instance_id == 0U) {
+        errno = EINVAL;
+        return false;
+    }
+    LsmProcessInfo process = { .pid = process_id };
+    LinuxProcessStat native_stat = {0};
+    errno = 0;
+    if (!read_process_stat(*pid, &process, &native_stat)) {
+        if (errno == 0 || errno == ENOENT) errno = ESRCH;
+        return false;
+    }
+    if (native_stat.start_ticks != instance_id) {
+        errno = ESRCH;
+        return false;
+    }
+    return true;
+}
+
+bool lsm_process_identity_matches(LsmProcessId process_id,
+                                  LsmProcessInstanceId instance_id)
+{
+    pid_t pid = 0;
+    return process_identity_pid(process_id, instance_id, &pid);
+}
+
 static void resolve_process_user(LsmProcessBackend *backend, uid_t uid,
                                  LsmProcessInfo *process)
 {
@@ -490,12 +520,20 @@ static unsigned count_process_fds(pid_t pid)
 bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process, unsigned scan_flags)
 {
     pid_t pid = 0;
-    if (!process || !native_pid(process_id, &pid)) return false;
+    if (!process || process->pid != process_id ||
+        !process_identity_pid(process_id, process->instance_id, &pid))
+        return false;
     if (scan_flags & LSM_PROCESS_SCAN_EXECUTABLE)
         read_process_executable(pid, process);
     if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT)
         process->handle_count = count_process_fds(pid);
-    return kill(pid, 0) == 0 || errno == EPERM;
+    if (process_identity_pid(process_id, process->instance_id, &pid))
+        return true;
+    if (scan_flags & LSM_PROCESS_SCAN_EXECUTABLE)
+        process->executable[0] = '\0';
+    if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT)
+        process->handle_count = 0U;
+    return false;
 }
 
 static uint64_t read_total_cpu_ticks(void)
@@ -598,7 +636,10 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         if (pid <= 0) continue;
 
         if (count == capacity) {
-            capacity *= 2;
+            if (capacity > SIZE_MAX / 2U ||
+                capacity * 2U > SIZE_MAX / sizeof(*processes))
+                break;
+            capacity *= 2U;
             LsmProcessInfo *grown = realloc(processes, capacity * sizeof(*grown));
             if (!grown) break;
             processes = grown;
@@ -709,10 +750,12 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
 }
 
 bool lsm_process_set_priority(LsmProcessId process_id,
+                              LsmProcessInstanceId instance_id,
                               LsmProcessPriority priority)
 {
     pid_t pid = 0;
-    if (!native_pid(process_id, &pid) || pid <= 1) {
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1) {
         errno = EINVAL;
         return false;
     }
@@ -720,10 +763,13 @@ bool lsm_process_set_priority(LsmProcessId process_id,
     return setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
 }
 
-bool lsm_process_set_efficiency(LsmProcessId process_id, bool enabled)
+bool lsm_process_set_efficiency(LsmProcessId process_id,
+                                LsmProcessInstanceId instance_id,
+                                bool enabled)
 {
     pid_t pid = 0;
-    if (!native_pid(process_id, &pid) || pid <= 1) {
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1) {
         errno = EINVAL;
         return false;
     }
@@ -757,13 +803,16 @@ bool lsm_process_set_efficiency(LsmProcessId process_id, bool enabled)
     return false;
 }
 
-size_t lsm_process_affinity_get(LsmProcessId process_id, bool *enabled, size_t capacity)
+size_t lsm_process_affinity_get(LsmProcessId process_id,
+                                LsmProcessInstanceId instance_id,
+                                bool *enabled, size_t capacity)
 {
     pid_t pid = 0;
-    if (!enabled || capacity == 0 || !native_pid(process_id, &pid)) {
+    if (!enabled || capacity == 0U) {
         errno = EINVAL;
-        return 0;
+        return 0U;
     }
+    if (!process_identity_pid(process_id, instance_id, &pid)) return 0U;
     cpu_set_t set;
     CPU_ZERO(&set);
     if (sched_getaffinity(pid, sizeof(set), &set) != 0) return 0;
@@ -776,10 +825,17 @@ size_t lsm_process_affinity_get(LsmProcessId process_id, bool *enabled, size_t c
     return count;
 }
 
-bool lsm_process_affinity_set(LsmProcessId process_id, const bool *enabled, size_t count)
+bool lsm_process_affinity_set(LsmProcessId process_id,
+                              LsmProcessInstanceId instance_id,
+                              const bool *enabled, size_t count)
 {
     pid_t pid = 0;
-    if (!native_pid(process_id, &pid) || pid <= 1 || !enabled || count == 0 || count > CPU_SETSIZE) {
+    if (!enabled || count == 0U || count > CPU_SETSIZE) {
+        errno = EINVAL;
+        return false;
+    }
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1) {
         errno = EINVAL;
         return false;
     }
@@ -799,12 +855,17 @@ bool lsm_process_affinity_set(LsmProcessId process_id, const bool *enabled, size
     return sched_setaffinity(pid, sizeof(set), &set) == 0;
 }
 
-static bool read_pid_parent(pid_t pid, pid_t *ppid)
+static bool read_pid_parent(pid_t pid, PidParent *item)
 {
+    if (!item) return false;
     LsmProcessInfo process = { .pid = (LsmProcessId)pid };
     LinuxProcessStat native_stat = {0};
     if (!read_process_stat(pid, &process, &native_stat)) return false;
-    *ppid = process.ppid <= (LsmProcessId)INT_MAX ? (pid_t)process.ppid : 0;
+    item->pid = pid;
+    item->ppid = process.ppid <= (LsmProcessId)INT_MAX
+        ? (pid_t)process.ppid : 0;
+    item->instance_id = native_stat.start_ticks;
+    item->depth = 0U;
     return true;
 }
 
@@ -856,11 +917,14 @@ static int compare_depth_descending(const void *left, const void *right)
     return a->pid > b->pid ? -1 : a->pid < b->pid ? 1 : 0;
 }
 
-bool lsm_process_control_tree(LsmProcessId root_id, LsmProcessControl action)
+bool lsm_process_control_tree(LsmProcessId root_id,
+                              LsmProcessInstanceId root_instance_id,
+                              LsmProcessControl action)
 {
     pid_t root_pid = 0;
     const int signal_number = signal_from_control(action);
-    if (!native_pid(root_id, &root_pid) || root_pid <= 1 || signal_number <= 0) {
+    if (!process_identity_pid(root_id, root_instance_id, &root_pid)) return false;
+    if (root_pid <= 1 || signal_number <= 0) {
         errno = EINVAL;
         return false;
     }
@@ -877,17 +941,25 @@ bool lsm_process_control_tree(LsmProcessId root_id, LsmProcessControl action)
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         if (!numeric_name(entry->d_name)) continue;
-        pid_t pid = (pid_t)atoi(entry->d_name), ppid = 0;
-        if (pid <= 1 || !read_pid_parent(pid, &ppid)) continue;
+        const pid_t pid = (pid_t)atoi(entry->d_name);
+        PidParent item = {0};
+        if (pid <= 1 || !read_pid_parent(pid, &item)) continue;
         if (count == capacity) {
-            capacity *= 2;
+            if (capacity > SIZE_MAX / 2U ||
+                capacity * 2U > SIZE_MAX / sizeof(*items))
+                break;
+            capacity *= 2U;
             PidParent *grown = realloc(items, capacity * sizeof(*grown));
             if (!grown) break;
             items = grown;
         }
-        items[count++] = (PidParent){ .pid = pid, .ppid = ppid, .depth = 0 };
+        items[count++] = item;
     }
     closedir(directory);
+    if (!process_identity_pid(root_id, root_instance_id, &root_pid)) {
+        free(items);
+        return false;
+    }
     if (count > 1U)
         qsort(items, count, sizeof(*items), compare_pid_parent_pid);
 
@@ -909,12 +981,14 @@ bool lsm_process_control_tree(LsmProcessId root_id, LsmProcessControl action)
     bool success = true;
     int saved_errno = 0;
     for (size_t i = 0; i < descendants; i++) {
-        if (kill(descendant_items[i].pid, signal_number) != 0 && errno != ESRCH) {
+        if (!lsm_process_control((LsmProcessId)descendant_items[i].pid,
+                                 descendant_items[i].instance_id, action) &&
+            errno != ESRCH) {
             if (!saved_errno) saved_errno = errno;
             success = false;
         }
     }
-    if (kill(root_pid, signal_number) != 0 && errno != ESRCH) {
+    if (!lsm_process_control(root_id, root_instance_id, action) && errno != ESRCH) {
         if (!saved_errno) saved_errno = errno;
         success = false;
     }
@@ -960,23 +1034,18 @@ void lsm_process_backend_destroy(LsmProcessBackend *backend)
     free(backend);
 }
 
-bool lsm_process_control(LsmProcessId process_id, LsmProcessControl action)
+bool lsm_process_control(LsmProcessId process_id,
+                         LsmProcessInstanceId instance_id,
+                         LsmProcessControl action)
 {
     pid_t pid = 0;
     const int signal_number = signal_from_control(action);
-    if (!native_pid(process_id, &pid) || pid <= 1 || signal_number <= 0) {
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1 || signal_number <= 0) {
         errno = EINVAL;
         return false;
     }
     return kill(pid, signal_number) == 0;
-}
-
-bool lsm_process_exists(LsmProcessId process_id)
-{
-    pid_t pid = 0;
-    if (!native_pid(process_id, &pid)) return false;
-    if (kill(pid, 0) == 0) return true;
-    return errno == EPERM;
 }
 
 void lsm_process_error_message(char *buffer, size_t size)

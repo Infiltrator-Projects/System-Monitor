@@ -42,21 +42,41 @@ typedef enum {
     ACTION_OPEN_DIRECTORY
 } ProcessAction;
 
-static const LsmProcessInfo *action_snapshot_process(const LsmApp *app,
-                                                      LsmProcessId pid)
+static const LsmProcessInfo *action_snapshot_process(
+    const LsmApp *app, LsmProcessId pid, LsmProcessInstanceId instance_id)
 {
     if (!app) return NULL;
-    for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
-        if (app->process.process_snapshot[index].pid == pid)
-            return &app->process.process_snapshot[index];
+    for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+        if (process->pid == pid && process->instance_id == instance_id)
+            return process;
+    }
     return NULL;
+}
+
+void lsm_process_selection_set(LsmApp *app, guint64 pid)
+{
+    if (!app) return;
+    app->process.selected_pid = pid > 0U ? (LsmProcessId)pid : 0U;
+    app->process.selected_instance_id = 0U;
+    for (size_t index = 0U;
+         app->process.selected_pid > 0U &&
+         index < app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+        if (process->pid == app->process.selected_pid) {
+            app->process.selected_instance_id = process->instance_id;
+            break;
+        }
+    }
 }
 
 void lsm_process_group_selection_clear(LsmApp *app)
 {
     if (!app) return;
     free(app->process.selected_group_pids);
+    free(app->process.selected_group_instance_ids);
     app->process.selected_group_pids = NULL;
+    app->process.selected_group_instance_ids = NULL;
     app->process.selected_group_count = 0U;
     app->process.selected_group_name[0] = '\0';
 }
@@ -69,6 +89,7 @@ static void close_record_file(LsmApp *app)
         app->process.record_file = NULL;
     }
     app->process.recording_pid = 0;
+    app->process.recording_instance_id = 0U;
 }
 
 void lsm_process_record_stop(LsmApp *app)
@@ -85,7 +106,8 @@ void lsm_process_record_stop(LsmApp *app)
 
 static gchar *selected_process_name(LsmApp *app)
 {
-    const LsmProcessInfo *process = action_snapshot_process(app, app->process.selected_pid);
+    const LsmProcessInfo *process = action_snapshot_process(
+        app, app->process.selected_pid, app->process.selected_instance_id);
     return process ? g_strdup(process->name) : NULL;
 }
 
@@ -99,7 +121,8 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
                                     "Record selected process");
         return;
     }
-    if (app->process.selected_pid <= 1) {
+    if (app->process.selected_pid <= 1 ||
+        app->process.selected_instance_id == 0U) {
         if (app->details.process_record_menu_item)
             gtk_check_menu_item_set_active(
                 GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item), FALSE);
@@ -145,6 +168,7 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
         "timestamp,pid,cpu_percent,memory_percent,rss_bytes,read_bytes,write_bytes,threads\n");
     fflush(app->process.record_file);
     app->process.recording_pid = app->process.selected_pid;
+    app->process.recording_instance_id = app->process.selected_instance_id;
     char label[96];
     snprintf(label, sizeof(label), "Stop recording PID %llu",
              (unsigned long long)app->process.recording_pid);
@@ -236,8 +260,11 @@ static void copy_text(const char *text)
 
 static void show_affinity_dialog(LsmApp *app)
 {
+    const LsmProcessId pid = app->process.selected_pid;
+    const LsmProcessInstanceId instance_id = app->process.selected_instance_id;
     bool enabled[LSM_MAX_CPUS] = {0};
-    size_t count = lsm_process_affinity_get(app->process.selected_pid, enabled, LSM_MAX_CPUS);
+    size_t count = lsm_process_affinity_get(
+        pid, instance_id, enabled, LSM_MAX_CPUS);
     if (!count) {
         show_process_backend_error(app, "Unable to read CPU affinity");
         return;
@@ -278,7 +305,7 @@ static void show_affinity_dialog(LsmApp *app)
             any = any || enabled[i];
         }
         if (!any) lsm_ui_show_error(GTK_WINDOW(app->shell.window), "Unable to set CPU affinity", "At least one CPU must be selected.");
-        else if (!lsm_process_affinity_set(app->process.selected_pid, enabled, count))
+        else if (!lsm_process_affinity_set(pid, instance_id, enabled, count))
             show_process_backend_error(app, "Unable to set CPU affinity");
     }
     g_free(checks);
@@ -328,10 +355,13 @@ static gboolean confirm_end(LsmApp *app, gboolean tree)
 
 static void open_executable_directory(LsmApp *app)
 {
-    const LsmProcessInfo *snapshot = action_snapshot_process(app, app->process.selected_pid);
+    const LsmProcessInfo *snapshot = action_snapshot_process(
+        app, app->process.selected_pid, app->process.selected_instance_id);
     if (!snapshot) return;
     LsmProcessInfo process = *snapshot;
-    (void)lsm_process_enrich(process.pid, &process, LSM_PROCESS_SCAN_EXECUTABLE);
+    if (!lsm_process_enrich(
+            process.pid, &process, LSM_PROCESS_SCAN_EXECUTABLE))
+        return;
     if (!process.executable[0]) {
         lsm_ui_show_error(GTK_WINDOW(app->shell.window),
                           "Executable path is unavailable",
@@ -361,33 +391,38 @@ static void show_process_backend_error(LsmApp *app, const char *title)
 static void process_action_activate(GtkMenuItem *item, gpointer user_data)
 {
     LsmApp *app = user_data;
+    const LsmProcessId pid = app->process.selected_pid;
+    const LsmProcessInstanceId instance_id = app->process.selected_instance_id;
     ProcessAction action = (ProcessAction)GPOINTER_TO_INT(
         g_object_get_data(G_OBJECT(item), "lsm-action"));
-    const LsmProcessInfo *process = action_snapshot_process(app, app->process.selected_pid);
+    const LsmProcessInfo *process = action_snapshot_process(
+        app, pid, instance_id);
     if (!process) return;
 
     switch (action) {
-        case ACTION_DETAILS: lsm_process_inspector_show(app, app->process.selected_pid); break;
+        case ACTION_DETAILS:
+            lsm_process_inspector_show(app, pid, instance_id);
+            break;
         case ACTION_END: lsm_processes_end_selected(app); break;
         case ACTION_END_TREE:
-            if (app->process.selected_pid > 1 && confirm_end(app, TRUE) &&
-                !lsm_process_control_tree(app->process.selected_pid,
+            if (pid > 1 && confirm_end(app, TRUE) &&
+                !lsm_process_control_tree(pid, instance_id,
                                           LSM_PROCESS_CONTROL_TERMINATE))
                 show_process_backend_error(app, "Unable to end the process tree");
             break;
         case ACTION_SUSPEND:
-            if (!lsm_process_control(app->process.selected_pid,
+            if (!lsm_process_control(pid, instance_id,
                                      LSM_PROCESS_CONTROL_SUSPEND))
                 show_process_backend_error(app, "Unable to suspend the process");
             break;
         case ACTION_RESUME:
-            if (!lsm_process_control(app->process.selected_pid,
+            if (!lsm_process_control(pid, instance_id,
                                      LSM_PROCESS_CONTROL_RESUME))
                 show_process_backend_error(app, "Unable to resume the process");
             break;
         case ACTION_EFFICIENCY: {
             const gboolean enable = !process->efficiency_mode;
-            if (!lsm_process_set_efficiency(app->process.selected_pid, enable))
+            if (!lsm_process_set_efficiency(pid, instance_id, enable))
                 show_process_backend_error(app, enable ? "Unable to enable Efficiency mode"
                                                 : "Unable to disable Efficiency mode");
             else
@@ -404,16 +439,17 @@ static void process_action_activate(GtkMenuItem *item, gpointer user_data)
                 lsm_process_record_set(app, app->process.record_file == NULL);
             break;
         case ACTION_COPY_PID: {
-            char pid[32];
-            snprintf(pid, sizeof(pid), "%llu",
+            char pid_text[32];
+            snprintf(pid_text, sizeof(pid_text), "%llu",
                      (unsigned long long)process->pid);
-            copy_text(pid);
+            copy_text(pid_text);
             break;
         }
         case ACTION_COPY_PATH: {
             LsmProcessInfo enriched = *process;
-            (void)lsm_process_enrich(process->pid, &enriched, LSM_PROCESS_SCAN_EXECUTABLE);
-            copy_text(enriched.executable);
+            if (lsm_process_enrich(
+                    process->pid, &enriched, LSM_PROCESS_SCAN_EXECUTABLE))
+                copy_text(enriched.executable);
             break;
         }
         case ACTION_COPY_COMMAND: copy_text(process->command); break;
@@ -426,7 +462,9 @@ static void priority_activate(GtkMenuItem *item, gpointer user_data)
     LsmApp *app = user_data;
     const LsmProcessPriority priority = (LsmProcessPriority)GPOINTER_TO_INT(
         g_object_get_data(G_OBJECT(item), "lsm-priority"));
-    if (!lsm_process_set_priority(app->process.selected_pid, priority)) {
+    if (!lsm_process_set_priority(app->process.selected_pid,
+                                  app->process.selected_instance_id,
+                                  priority)) {
         char error[160];
         lsm_process_error_message(error, sizeof(error));
         lsm_ui_show_error(GTK_WINDOW(app->shell.window),
@@ -457,7 +495,8 @@ static void show_columns_from_menu(GtkMenuItem *item, gpointer user_data)
 /* Context-menu construction shares the same action dispatcher as buttons. */
 GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns)
 {
-    const LsmProcessInfo *process = action_snapshot_process(app, app->process.selected_pid);
+    const LsmProcessInfo *process = action_snapshot_process(
+        app, app->process.selected_pid, app->process.selected_instance_id);
     const gboolean grouped = app->process.selected_group_count > 1U;
     GtkWidget *menu = gtk_menu_new();
     GtkWidget *details =
@@ -545,19 +584,56 @@ GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns)
 
 void lsm_processes_end_selected(LsmApp *app)
 {
-    if (!app || app->process.selected_pid <= 1 || !confirm_end(app, FALSE)) return;
-    if (app->process.selected_group_count > 1U) {
+    if (!app || app->process.selected_pid <= 1 ||
+        app->process.selected_instance_id == 0U)
+        return;
+
+    const LsmProcessId selected_pid = app->process.selected_pid;
+    const LsmProcessInstanceId selected_instance_id =
+        app->process.selected_instance_id;
+    const size_t group_count = app->process.selected_group_count;
+    LsmProcessId *group_pids = NULL;
+    LsmProcessInstanceId *group_instance_ids = NULL;
+    if (group_count > 1U) {
+        if (!app->process.selected_group_pids ||
+            !app->process.selected_group_instance_ids ||
+            group_count > SIZE_MAX / sizeof(*group_pids) ||
+            group_count > SIZE_MAX / sizeof(*group_instance_ids))
+            return;
+        group_pids = malloc(group_count * sizeof(*group_pids));
+        group_instance_ids = malloc(
+            group_count * sizeof(*group_instance_ids));
+        if (!group_pids || !group_instance_ids) {
+            free(group_pids);
+            free(group_instance_ids);
+            return;
+        }
+        memcpy(group_pids, app->process.selected_group_pids,
+               group_count * sizeof(*group_pids));
+        memcpy(group_instance_ids, app->process.selected_group_instance_ids,
+               group_count * sizeof(*group_instance_ids));
+    }
+
+    if (!confirm_end(app, FALSE)) {
+        free(group_pids);
+        free(group_instance_ids);
+        return;
+    }
+    if (group_count > 1U) {
         size_t failures = 0U;
         char last_error[160] = "Unknown process backend error";
-        for (size_t index = 0U; index < app->process.selected_group_count; index++) {
-            const LsmProcessId pid = app->process.selected_group_pids[index];
+        for (size_t index = 0U; index < group_count; index++) {
+            const LsmProcessId pid = group_pids[index];
             if (pid <= 1U) continue;
-            if (!lsm_process_control(pid, LSM_PROCESS_CONTROL_TERMINATE) &&
-                lsm_process_exists(pid)) {
+            if (!lsm_process_control(
+                    pid, group_instance_ids[index],
+                    LSM_PROCESS_CONTROL_TERMINATE) && errno != ESRCH) {
                 failures++;
                 lsm_process_error_message(last_error, sizeof(last_error));
             }
         }
+        free(group_pids);
+        free(group_instance_ids);
         if (failures > 0U)
             lsm_ui_show_error(GTK_WINDOW(app->shell.window),
                 "Unable to end every process in the task",
@@ -565,12 +641,14 @@ void lsm_processes_end_selected(LsmApp *app)
                 failures == 1U ? "" : "es", last_error);
         return;
     }
-    if (!lsm_process_control(app->process.selected_pid, LSM_PROCESS_CONTROL_TERMINATE))
+    if (!lsm_process_control(selected_pid, selected_instance_id,
+                             LSM_PROCESS_CONTROL_TERMINATE))
         show_process_backend_error(app, "Unable to end the process");
 }
 
 void lsm_processes_show_selected_details(LsmApp *app)
 {
     if (app && app->process.selected_pid > 0)
-        lsm_process_inspector_show(app, app->process.selected_pid);
+        lsm_process_inspector_show(app, app->process.selected_pid,
+                                   app->process.selected_instance_id);
 }

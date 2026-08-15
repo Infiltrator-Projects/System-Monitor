@@ -352,10 +352,13 @@ typedef struct {
     LsmProcessInfo *process_snapshot;
     size_t process_snapshot_count;
     LsmProcessId selected_pid;
+    LsmProcessInstanceId selected_instance_id;
     LsmProcessId *selected_group_pids;
+    LsmProcessInstanceId *selected_group_instance_ids;
     size_t selected_group_count;
     char selected_group_name[LSM_NAME_LEN];
     LsmProcessId recording_pid;
+    LsmProcessInstanceId recording_instance_id;
     FILE *record_file;
     char record_path[LSM_PATH_LEN];
 } LsmProcessWorkspaceState;

@@ -40,6 +40,7 @@ PORTABILITY_CHECKER := $(BUILD_DIR)/check-portability
 NATIVE_SAFETY_CHECKER := $(BUILD_DIR)/native-installer-safety
 NATIVE_INSTALLER_BUILDER := $(BUILD_DIR)/build-native-installer
 NATIVE_INSTALLER := $(BUILD_DIR)/native-installer
+NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
 GLIBC_ABI_SMOKE := $(BUILD_DIR)/glibc-abi-smoke
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
@@ -310,6 +311,9 @@ $(NATIVE_INSTALLER_BUILDER): support/tools/build_native_installer.c | $(BUILD_DI
 
 $(NATIVE_INSTALLER): support/tools/native_installer.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
+
+$(NATIVE_INSTALLER_TEST): support/tools/native_installer.c | $(BUILD_DIR)
+	$(CC) -DLSM_INSTALLER_TEST_PATH=1 -std=c17 $(STRICT_WARNINGS) $< -o $@
 
 $(DEB_PACKAGE_BUILDER): support/tools/build_deb_package.c support/tools/glibc_abi.c support/tools/glibc_abi.h | $(BUILD_DIR)
 	$(CC) -Isrc -Isupport/tools -std=c17 $(STRICT_WARNINGS) \
@@ -652,24 +656,37 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/application-catalog-sanitized
 
-installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) $(NATIVE_INSTALLER)
+installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
+	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
 	bash -n $(INSTALL_BOOTSTRAP)
 	./$(INSTALL_BOOTSTRAP) --help >/dev/null
-	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER)
-	./$(NATIVE_INSTALLER_BUILDER) $(BUILD_DIR)/native-installer-smoke.run >/dev/null
-	./$(BUILD_DIR)/native-installer-smoke.run --help >/dev/null
-	rm -f $(BUILD_DIR)/native-installer-smoke.run
+	./$(NATIVE_INSTALLER) --help >/dev/null
+	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER_TEST)
+	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER) \
+		$(BUILD_DIR)/native-installer-smoke-a.run >/dev/null
+	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER) \
+		$(BUILD_DIR)/native-installer-smoke-b.run >/dev/null
+	cmp -s $(BUILD_DIR)/native-installer-smoke-a.run \
+		$(BUILD_DIR)/native-installer-smoke-b.run
+	./$(BUILD_DIR)/native-installer-smoke-a.run --help >/dev/null
+	rm -f $(BUILD_DIR)/native-installer-smoke-a.run \
+		$(BUILD_DIR)/native-installer-smoke-b.run
 	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/([[:space:]]|$$)' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'apt-get' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'sudo_path=/usr/bin/sudo' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'apt_get=/usr/bin/apt-get' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'libgtk-3-dev' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'build-essential' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'trusted_system_executable(' support/tools/native_installer.c
+	@grep -Fq 'find_trusted_system_executable(' \
+		support/tools/build_deb_package.c
 	@! grep -Eq '(^|[;&|][[:space:]]*)(doas|pacman|dnf|yum|zypper|udevadm|update-desktop-database|gtk-update-icon-cache)([[:space:]]|$$)' $(INSTALL_BOOTSTRAP)
 	@echo "Native installer passed source, package and fixed-privilege-boundary checks."
 
 native-installer: common-check $(NATIVE_INSTALLER_BUILDER)
-	./$(NATIVE_INSTALLER_BUILDER)
+	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER)
 
 native-command-audit:
 	@matches=$$(grep -REn --include='*.c' \

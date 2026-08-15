@@ -27,6 +27,7 @@
 #define LSM_INSTALLER_PATH_LEN 4096U
 #define LSM_INSTALLER_LINE_LEN 512U
 #define LSM_INSTALLER_ARGUMENTS 32U
+#define LSM_INSTALLER_DEFAULT_EPOCH "315532800"
 
 static const char installer_header[] =
     "#!/usr/bin/env bash\n"
@@ -213,29 +214,9 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    char fallback_epoch[32];
-    char version_path[LSM_INSTALLER_PATH_LEN];
-    struct stat version_status;
-    if (!join_path(version_path, sizeof(version_path), root, "support/VERSION") ||
-        stat(version_path, &version_status) != 0) {
-        free(version);
-        rmdir(temporary);
-        fail_errno("Unable to inspect", version_path);
-    }
     const char *source_epoch = getenv("SOURCE_DATE_EPOCH");
-    if (!valid_source_epoch(source_epoch)) {
-        const int epoch_length = snprintf(
-            fallback_epoch, sizeof(fallback_epoch), "%lld",
-            (long long)version_status.st_mtime);
-        if (epoch_length < 0 ||
-            (size_t)epoch_length >= sizeof(fallback_epoch)) {
-            free(version);
-            rmdir(temporary);
-            fputs("support/VERSION timestamp is out of range.\n", stderr);
-            return EXIT_FAILURE;
-        }
-        source_epoch = fallback_epoch;
-    }
+    if (!valid_source_epoch(source_epoch))
+        source_epoch = LSM_INSTALLER_DEFAULT_EPOCH;
     char mtime_argument[64];
     const int mtime_length = snprintf(
         mtime_argument, sizeof(mtime_argument), "--mtime=@%s", source_epoch);

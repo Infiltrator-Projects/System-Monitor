@@ -58,6 +58,13 @@ void lsm_details_show_columns(LsmApp *app);
  */
 GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns);
 /**
+ * Retain a selected PID together with its current instance token.
+ *
+ * @param [in,out] app Application whose shared selection is updated.
+ * @param [in] pid Process identifier from a visible model row, or zero.
+ */
+void lsm_process_selection_set(LsmApp *app, guint64 pid);
+/**
  * Clear an application-group selection and retain no stale group PIDs.
  *
  * @param [in,out] app Application whose shared process selection is reset.

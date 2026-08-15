@@ -7,7 +7,6 @@ on:
       - main
     paths:
       - support/VERSION
-      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
@@ -20,6 +19,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Check out the tagged source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -33,7 +33,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake git libgtk-3-dev pkg-config zip
+            build-essential cmake git jq libgtk-3-dev pkg-config zip
 
       - name: Verify with CMake and CTest
         run: |
@@ -69,19 +69,88 @@ jobs:
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           ./"$installer" --help >/dev/null
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            printf 'Release %s already exists; nothing to replace.\n' "$tag"
-            exit 0
-          fi
-
           notes=$(git log -1 --format=%b -- support/VERSION)
           if [[ -z "$notes" ]]; then
             notes="Verified Linux System Monitor ${version} release."
           fi
 
-          gh release create "$tag" \
-            "$deb" \
-            "$installer" \
-            --target "$GITHUB_SHA" \
-            --title "Linux System Monitor ${version}" \
-            --notes "$notes"
+          tag_commit=$(git rev-list -n 1 "$tag" 2>/dev/null || true)
+          if [[ -n "$tag_commit" && "$tag_commit" != "$GITHUB_SHA" ]]; then
+            printf 'Tag %s points to %s, not %s.\n' \
+              "$tag" "$tag_commit" "$GITHUB_SHA" >&2
+            exit 1
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if [[ -z "$tag_commit" ]]; then
+              printf 'Release %s exists without a fetched tag.\n' "$tag" >&2
+              exit 1
+            fi
+            gh release edit "$tag" \
+              --title "Linux System Monitor ${version}" \
+              --notes "$notes" \
+              --draft=false \
+              --prerelease=false \
+              --latest
+          elif [[ -n "$tag_commit" ]]; then
+            gh release create "$tag" \
+              --verify-tag \
+              --title "Linux System Monitor ${version}" \
+              --notes "$notes" \
+              --latest
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "Linux System Monitor ${version}" \
+              --notes "$notes" \
+              --latest
+          fi
+
+          while IFS= read -r asset; do
+            case "$asset" in
+              "$deb"|"$installer") ;;
+              *) gh release delete-asset "$tag" "$asset" --yes ;;
+            esac
+          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+
+          gh release upload "$tag" "$deb" "$installer" --clobber
+
+          expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
+          published_assets=$(gh release view "$tag" --json assets \
+            --jq '.assets[].name' | sort)
+          if [[ "$published_assets" != "$expected_assets" ]]; then
+            printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
+            printf 'Expected:\n%s\nPublished:\n%s\n' \
+              "$expected_assets" "$published_assets" >&2
+            exit 1
+          fi
+
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")
+          for asset in "$deb" "$installer"; do
+            local_size=$(stat -c '%s' "$asset")
+            remote_size=$(jq -r --arg name "$asset" \
+              '[.assets[] | select(.name == $name) | .size][0] // 0' \
+              <<<"$release_json")
+            if [[ "$remote_size" != "$local_size" ]]; then
+              printf 'Release asset %s has size %s; expected %s.\n' \
+                "$asset" "$remote_size" "$local_size" >&2
+              exit 1
+            fi
+
+            local_digest="sha256:$(sha256sum "$asset" | awk '{print $1}')"
+            remote_digest=$(jq -r --arg name "$asset" \
+              '[.assets[] | select(.name == $name) | .digest][0] // ""' \
+              <<<"$release_json")
+            if [[ -n "$remote_digest" && "$remote_digest" != "$local_digest" ]]; then
+              printf 'Release asset %s digest mismatch.\n' "$asset" >&2
+              exit 1
+            fi
+          done
+
+          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
+          published_commit=$(git rev-list -n 1 "$tag")
+          if [[ "$published_commit" != "$GITHUB_SHA" ]]; then
+            printf 'Published tag %s points to %s, not %s.\n' \
+              "$tag" "$published_commit" "$GITHUB_SHA" >&2
+            exit 1
+          fi

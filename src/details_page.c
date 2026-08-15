@@ -575,11 +575,13 @@ static void select_sorted_path(LsmApp *app, GtkTreeIter *child_iter, gboolean ex
     gtk_tree_path_free(child_path);
 }
 
-/* Rebuild the GTK model while preserving expansion and selection by PID. */
+/* Rebuild while preserving selection by process identity and expansion by PID. */
 static void rebuild_details_model(LsmApp *app)
 {
     size_t count = app->process.process_snapshot_count;
     LsmProcessId desired_pid = app->process.selected_pid;
+    const LsmProcessInstanceId desired_instance_id =
+        app->process.selected_instance_id;
     GHashTable *expanded = g_hash_table_new(g_direct_hash, g_direct_equal);
     if (app->details.details_tree_mode && app->details.details_tree_initialized)
         gtk_tree_view_map_expanded_rows(GTK_TREE_VIEW(app->details.details_tree),
@@ -636,7 +638,10 @@ static void rebuild_details_model(LsmApp *app)
     gboolean searching = active_search && *active_search;
     for (size_t i = 0; i < count; i++) {
         if (!inserted[i]) continue;
-        if (desired_pid > 0 && app->process.process_snapshot[i].pid == desired_pid)
+        if (desired_pid > 0 &&
+            app->process.process_snapshot[i].pid == desired_pid &&
+            app->process.process_snapshot[i].instance_id ==
+                desired_instance_id)
             select_sorted_path(app, &iters[i], FALSE);
         if (app->details.details_tree_mode &&
             (searching ||
@@ -700,7 +705,7 @@ static void selected_process_changed(GtkTreeSelection *selection, gpointer user_
     if (gtk_tree_selection_get_selected(selection, &model, &iter)) {
         guint64 pid = 0U;
         gtk_tree_model_get(model, &iter, PROC_COL_PID, &pid, -1);
-        app->process.selected_pid = (LsmProcessId)pid;
+        lsm_process_selection_set(app, pid);
         gboolean valid = pid > 1;
         gtk_widget_set_sensitive(app->details.details_end_button, valid);
         gtk_widget_set_sensitive(app->details.details_inspect_button, pid > 0);
@@ -708,7 +713,7 @@ static void selected_process_changed(GtkTreeSelection *selection, gpointer user_
             gtk_widget_set_sensitive(app->details.process_record_menu_item,
                                      valid || app->process.record_file != NULL);
     } else {
-        app->process.selected_pid = 0;
+        lsm_process_selection_set(app, 0U);
         gtk_widget_set_sensitive(app->details.details_end_button, FALSE);
         gtk_widget_set_sensitive(app->details.details_inspect_button, FALSE);
         if (!app->process.record_file && app->details.process_record_menu_item)
@@ -736,7 +741,9 @@ static void process_row_activated(GtkTreeView *tree, GtkTreePath *path,
                                   GtkTreeViewColumn *column, gpointer user_data)
 {
     (void)tree; (void)path; (void)column;
-    lsm_process_inspector_show(user_data, ((LsmApp *)user_data)->process.selected_pid);
+    LsmApp *app = user_data;
+    lsm_process_inspector_show(app, app->process.selected_pid,
+                               app->process.selected_instance_id);
 }
 
 static void kill_selected_process(GtkButton *button, gpointer user_data)
@@ -847,10 +854,16 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
 
 static void append_record_if_needed(LsmApp *app, const LsmProcessInfo *processes, size_t count)
 {
-    if (!app->process.record_file || app->process.recording_pid <= 1) return;
+    if (!app->process.record_file || app->process.recording_pid <= 1 ||
+        app->process.recording_instance_id == 0U)
+        return;
     const LsmProcessInfo *found = NULL;
     for (size_t i = 0; i < count; i++)
-        if (processes[i].pid == app->process.recording_pid) { found = &processes[i]; break; }
+        if (processes[i].pid == app->process.recording_pid &&
+            processes[i].instance_id == app->process.recording_instance_id) {
+            found = &processes[i];
+            break;
+        }
     if (!found) {
         lsm_process_record_stop(app);
         return;

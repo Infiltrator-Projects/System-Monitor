@@ -363,13 +363,18 @@ static void refresh_inventories(ProcessInspector *inspector)
     }
     const LsmProcessInfo *snapshot = snapshot_process(inspector->app,
         inspector->pid, inspector->instance_id);
+    inspector->executable[0] = '\0';
+    inspector->descriptor_count = 0U;
     if (snapshot) {
         LsmProcessInfo details = *snapshot;
-        (void)lsm_process_enrich(details.pid, &details,
-            LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT);
-        lsm_copy_string(inspector->executable, sizeof(inspector->executable),
-                        details.executable);
-        inspector->descriptor_count = details.handle_count;
+        if (lsm_process_enrich(details.pid, &details,
+                LSM_PROCESS_SCAN_EXECUTABLE |
+                LSM_PROCESS_SCAN_HANDLE_COUNT)) {
+            lsm_copy_string(
+                inspector->executable, sizeof(inspector->executable),
+                details.executable);
+            inspector->descriptor_count = details.handle_count;
+        }
     }
     populate_open_files(inspector);
     populate_maps(inspector);
@@ -497,7 +502,8 @@ static void apply_priority(GtkButton *button, gpointer user_data)
     if (selected < (int)LSM_PROCESS_PRIORITY_HIGH ||
         selected > (int)LSM_PROCESS_PRIORITY_LOW) return;
     if (!lsm_process_set_priority(
-            inspector->pid, (LsmProcessPriority)selected)) {
+            inspector->pid, inspector->instance_id,
+            (LsmProcessPriority)selected)) {
         char error[160];
         lsm_process_error_message(error, sizeof(error));
         lsm_ui_show_error(GTK_WINDOW(inspector->window),
@@ -510,8 +516,8 @@ static void affinity_apply(ProcessInspector *inspector)
     if (!require_current_identity(inspector, "Unable to read CPU affinity"))
         return;
     bool enabled[LSM_MAX_CPUS] = {0};
-    const size_t count = lsm_process_affinity_get(inspector->pid, enabled,
-                                                  LSM_MAX_CPUS);
+    const size_t count = lsm_process_affinity_get(
+        inspector->pid, inspector->instance_id, enabled, LSM_MAX_CPUS);
     if (!count) {
         char error[160];
         lsm_process_error_message(error, sizeof(error));
@@ -562,7 +568,9 @@ static void affinity_apply(ProcessInspector *inspector)
         else if (!require_current_identity(inspector,
                      "Unable to set CPU affinity")) {
             /* The error dialog is displayed by require_current_identity(). */
-        } else if (!lsm_process_affinity_set(inspector->pid, enabled, count))
+        } else if (!lsm_process_affinity_set(
+                       inspector->pid, inspector->instance_id,
+                       enabled, count))
             {
             char error[160];
             lsm_process_error_message(error, sizeof(error));
@@ -597,7 +605,7 @@ static void end_process_clicked(GtkButton *button, gpointer user_data)
     if (response == GTK_RESPONSE_ACCEPT) {
         if (!require_current_identity(inspector, "Unable to end process"))
             return;
-        if (!lsm_process_control(inspector->pid,
+        if (!lsm_process_control(inspector->pid, inspector->instance_id,
                                  LSM_PROCESS_CONTROL_TERMINATE)) {
             char error[160];
             lsm_process_error_message(error, sizeof(error));
@@ -640,12 +648,14 @@ static GtkWidget *build_control_bar(ProcessInspector *inspector)
     return bar;
 }
 
-void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid)
+void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
+                                LsmProcessInstanceId instance_id)
 {
-    if (!app || pid < 1) return;
+    if (!app || pid < 1 || instance_id == 0U) return;
     const LsmProcessInfo *process = NULL;
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
-        if (app->process.process_snapshot[index].pid == pid) {
+        if (app->process.process_snapshot[index].pid == pid &&
+            app->process.process_snapshot[index].instance_id == instance_id) {
             process = &app->process.process_snapshot[index];
             break;
         }
@@ -654,7 +664,7 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid)
     ProcessInspector *inspector = g_new0(ProcessInspector, 1U);
     inspector->app = app;
     inspector->pid = pid;
-    inspector->instance_id = process->instance_id;
+    inspector->instance_id = instance_id;
     inspector->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     char title[256];
     snprintf(title, sizeof(title), "%s — Process Inspector", process->name);
