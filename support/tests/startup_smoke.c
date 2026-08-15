@@ -13,6 +13,7 @@
 #endif
 #include <assert.h>
 #include <limits.h>
+#include <sys/stat.h>
 
 int main(void)
 {
@@ -43,6 +44,9 @@ int main(void)
     assert(error == NULL);
     char target[PATH_MAX];
     snprintf(target, sizeof(target), "%s/autostart/backup.desktop", root);
+    struct stat status;
+    assert(stat(target, &status) == 0);
+    assert((status.st_mode & 0777) == 0600);
     char *contents = NULL;
     assert(g_file_get_contents(target, &contents, NULL, NULL));
     assert(strstr(contents, "Hidden=true") != NULL);

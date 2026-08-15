@@ -12,6 +12,8 @@
  * @license GPL-3.0-or-later
  */
 #include "details_page.h"
+#include "atomic_file.h"
+#include "duration_format.h"
 #include "refresh_policy.h"
 #include "monitor.h"
 #include "app.h"
@@ -111,19 +113,6 @@ static gboolean process_directly_visible(const LsmApp *app, const LsmProcessInfo
     }
     return visible;
 }
-
-static void format_duration(uint64_t seconds, char *buffer, size_t size)
-{
-    uint64_t days = seconds / 86400ULL;
-    seconds %= 86400ULL;
-    unsigned hours = (unsigned)(seconds / 3600ULL);
-    unsigned minutes = (unsigned)((seconds % 3600ULL) / 60ULL);
-    unsigned secs = (unsigned)(seconds % 60ULL);
-    if (days) snprintf(buffer, size, "%llud %02u:%02u:%02u",
-                       (unsigned long long)days, hours, minutes, secs);
-    else snprintf(buffer, size, "%02u:%02u:%02u", hours, minutes, secs);
-}
-
 
 static void apply_resource_heatmap(LsmApp *app, GtkCellRenderer *renderer,
                                    int column, double value)
@@ -233,7 +222,7 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_DURATION: {
             guint64 seconds = 0;
             gtk_tree_model_get(model, iter, column, &seconds, -1);
-            format_duration(seconds, text, sizeof(text));
+            lsm_duration_format_clock(seconds, text, sizeof(text));
             break;
         }
     }
@@ -303,7 +292,9 @@ void lsm_details_save_layout(const LsmApp *app)
             sort_column,
             sort_order == GTK_SORT_DESCENDING ? "descending" : "ascending");
     }
-    g_file_set_contents(app->paths.column_path, text->str, -1, NULL);
+    (void)lsm_atomic_file_write_bytes(app->paths.column_path,
+                                      LSM_ATOMIC_FILE_PRIVATE,
+                                      text->str, text->len);
     g_string_free(text, TRUE);
 }
 

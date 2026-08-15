@@ -13,6 +13,7 @@
  */
 #include "details_page.h"
 #include "app.h"
+#include "atomic_file.h"
 #include "process_backend.h"
 #include "process_inspector.h"
 #include "processes_ui.h"
@@ -107,7 +108,7 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
 
     char directory[LSM_PATH_LEN];
     snprintf(directory, sizeof(directory), "%s/%s", g_get_home_dir(), LSM_LOG_DIRECTORY);
-    if (g_mkdir_with_parents(directory, 0755) != 0) {
+    if (g_mkdir_with_parents(directory, 0700) != 0) {
         lsm_ui_show_error(GTK_WINDOW(app->shell.window), "Unable to create the log directory", "%s", g_strerror(errno));
         if (app->details.process_record_menu_item)
             gtk_check_menu_item_set_active(
@@ -203,14 +204,25 @@ void lsm_process_filters_dialog(LsmApp *app)
         GtkTextIter start, end;
         gtk_text_buffer_get_bounds(buffer, &start, &end);
         gchar *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
-        if (g_mkdir_with_parents(app->paths.config_dir, 0755) == 0)
-            g_file_set_contents(app->paths.filter_path, text, -1, NULL);
+        int failure = 0;
+        if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0)
+            failure = errno;
+        else
+            failure = lsm_atomic_file_write_bytes(
+                app->paths.filter_path, LSM_ATOMIC_FILE_PRIVATE,
+                text, strlen(text));
         g_free(text);
-        lsm_process_filters_load(app);
-        app->processes.processes_model_dirty = TRUE;
-        app->details.details_model_dirty = TRUE;
-        lsm_details_present_snapshot(app);
-        lsm_processes_present_snapshot(app);
+        if (failure != 0) {
+            lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                              "Unable to save process filters", "%s",
+                              g_strerror(failure));
+        } else {
+            lsm_process_filters_load(app);
+            app->processes.processes_model_dirty = TRUE;
+            app->details.details_model_dirty = TRUE;
+            lsm_details_present_snapshot(app);
+            lsm_processes_present_snapshot(app);
+        }
     }
     gtk_widget_destroy(dialog);
 }
@@ -562,4 +574,3 @@ void lsm_processes_show_selected_details(LsmApp *app)
     if (app && app->process.selected_pid > 0)
         lsm_process_inspector_show(app, app->process.selected_pid);
 }
-

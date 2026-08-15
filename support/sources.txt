@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 main.c
 app.c
+atomic_file_posix.c
 project_info.c
 preferences.c
 summary_bar.c
@@ -21,6 +22,7 @@ performance_pages_core.c
 performance_pages_devices.c
 performance_present.c
 details_page.c
+duration_format.c
 process_actions.c
 processes_ui.c
 process_export.c

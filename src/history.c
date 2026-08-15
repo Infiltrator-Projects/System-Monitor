@@ -18,7 +18,9 @@
  */
 #include "history.h"
 #include "app.h"
+#include "atomic_file.h"
 #include "common.h"
+#include "duration_format.h"
 #include "ui_helpers.h"
 
 #include <math.h>
@@ -79,21 +81,6 @@ static void history_sample_free(gpointer data)
     g_free(data);
 }
 
-static void format_duration(double seconds, char *buffer, size_t size)
-{
-    uint64_t value = seconds > 0.0 ? (uint64_t)llround(seconds) : 0;
-    uint64_t days = value / 86400ULL;
-    value %= 86400ULL;
-    unsigned hours = (unsigned)(value / 3600ULL);
-    unsigned minutes = (unsigned)((value % 3600ULL) / 60ULL);
-    unsigned secs = (unsigned)(value % 60ULL);
-    if (days)
-        snprintf(buffer, size, "%llud %02u:%02u:%02u",
-                 (unsigned long long)days, hours, minutes, secs);
-    else
-        snprintf(buffer, size, "%02u:%02u:%02u", hours, minutes, secs);
-}
-
 static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
                               GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
@@ -103,7 +90,9 @@ static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *render
     if (field == HIST_COL_CPU_SECONDS || field == HIST_COL_ACTIVE_SECONDS) {
         double seconds = 0.0;
         gtk_tree_model_get(model, iter, field, &seconds, -1);
-        format_duration(seconds, text, sizeof(text));
+        const uint64_t rounded = seconds > 0.0 ?
+            (uint64_t)llround(seconds) : 0U;
+        lsm_duration_format_clock(rounded, text, sizeof(text));
     } else if (field == HIST_COL_READ_BYTES || field == HIST_COL_WRITE_BYTES ||
                field == HIST_COL_PEAK_RSS) {
         guint64 bytes = 0;
@@ -194,7 +183,7 @@ static void history_load(LsmApp *app)
 void lsm_history_save(LsmApp *app)
 {
     if (!app || !app->history.app_history) return;
-    if (g_mkdir_with_parents(app->paths.config_dir, 0755) != 0) return;
+    if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0) return;
 
     GString *output = g_string_new("# Linux-System-Monitor App History v1\n");
     GHashTableIter iterator;
@@ -221,10 +210,9 @@ void lsm_history_save(LsmApp *app)
         g_free(safe_identity);
     }
 
-    char *temporary = g_strdup_printf("%s.tmp", app->history.history_path);
-    if (g_file_set_contents(temporary, output->str, (gssize)output->len, NULL))
-        (void)rename(temporary, app->history.history_path);
-    g_free(temporary);
+    (void)lsm_atomic_file_write_bytes(app->history.history_path,
+                                      LSM_ATOMIC_FILE_PRIVATE,
+                                      output->str, output->len);
     g_string_free(output, TRUE);
 }
 

@@ -230,7 +230,7 @@ static void on_open_logs(GtkMenuItem *item, gpointer user_data)
     (void)item;
     LsmApp *app = user_data;
     char *path = g_build_filename(g_get_home_dir(), LSM_LOG_DIRECTORY, NULL);
-    g_mkdir_with_parents(path, 0755);
+    g_mkdir_with_parents(path, 0700);
     char *uri = g_filename_to_uri(path, NULL, NULL);
     if (uri) {
         GError *error = NULL;

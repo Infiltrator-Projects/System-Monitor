@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int main(void)
@@ -65,6 +66,9 @@ int main(void)
     unlink(path);
     char error[256];
     assert(lsm_system_snapshot_write(&app, path, error, sizeof(error)));
+    struct stat status;
+    assert(stat(path, &status) == 0);
+    assert((status.st_mode & 0777) == 0600);
 
     FILE *file = fopen(path, "r");
     assert(file);

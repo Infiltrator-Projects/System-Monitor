@@ -50,8 +50,9 @@ BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
 BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
 LSM_PLATFORM ?= linux
 ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' support/sources.txt)
-PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c
-SOURCE_NAMES := $(filter-out monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
+ATOMIC_FILE_PROVIDER_NAME := $(if $(filter linux,$(LSM_PLATFORM)),atomic_file_posix.c,atomic_file_$(LSM_PLATFORM).c)
+PLATFORM_BACKEND_NAMES := $(ATOMIC_FILE_PROVIDER_NAME) monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c
+SOURCE_NAMES := $(filter-out atomic_file_%.c monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
 SOURCES := $(addprefix src/,$(SOURCE_NAMES))
 OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
@@ -145,7 +146,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE \
+.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
 	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
@@ -259,7 +260,7 @@ run: $(TARGET)
 check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
-build-check: check-deps strict-check infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
+build-check: check-deps strict-check atomic-file-smoke duration-format-smoke infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
 	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
 	smbios-memory-smoke battery-smoke bluetooth-battery-smoke wifi-metadata-smoke \
 	hidpp-smoke nvml-smoke native-command-audit bundled-pci-smoke startup-smoke \
@@ -280,6 +281,18 @@ COMMON_LINK_TARGETS := \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
 	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
 	quality-policy-smoke
+
+atomic-file-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/atomic_file_smoke.c src/atomic_file_posix.c \
+		-o $(BUILD_DIR)/atomic-file-smoke
+	./$(BUILD_DIR)/atomic-file-smoke
+
+duration-format-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/duration_format_smoke.c src/duration_format.c \
+		-o $(BUILD_DIR)/duration-format-smoke
+	./$(BUILD_DIR)/duration-format-smoke
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
 
@@ -349,7 +362,8 @@ strict-check: | $(BUILD_DIR)
 analyzer-check: | $(BUILD_DIR)
 	@if [ -n "$(ANALYZER_FLAG)" ]; then \
 		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
-			-fsyntax-only src/common.c src/process_backend_linux.c src/refresh_policy.c \
+			-fsyntax-only src/atomic_file_posix.c src/common.c \
+			src/duration_format.c src/process_backend_linux.c src/refresh_policy.c \
 			$(INFILTRATR_COMMON_SOURCES) \
 			src/process_gpu.c src/metric_format.c src/cpu_accounting.c \
 			src/memory_accounting.c \
@@ -688,7 +702,8 @@ native-command-audit:
 
 startup-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		-ffunction-sections -fdata-sections support/tests/startup_smoke.c src/ui_helpers.c \
+		-ffunction-sections -fdata-sections support/tests/startup_smoke.c \
+		src/atomic_file_posix.c src/ui_helpers.c \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 \
 		-l:libpango-1.0.so.0 -l:libcairo.so.2 -o $(BUILD_DIR)/startup-smoke
@@ -746,14 +761,15 @@ cpu-accounting-smoke: | $(BUILD_DIR)
 system-snapshot-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c \
-		src/common.c src/metric_format.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		src/atomic_file_posix.c src/common.c src/metric_format.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/system-snapshot-smoke
 	./$(BUILD_DIR)/system-snapshot-smoke
 
 process-export-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/process_export_smoke.c \
-		src/process_export.c src/process_model.c src/common.c \
+		src/process_export.c src/atomic_file_posix.c src/process_model.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -Wl,--gc-sections -lm \
 		-o $(BUILD_DIR)/process-export-smoke
 	./$(BUILD_DIR)/process-export-smoke
@@ -761,7 +777,8 @@ process-export-smoke: | $(BUILD_DIR)
 preferences-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/preferences_smoke.c \
-		src/preferences.c -Wl,--gc-sections -l:libglib-2.0.so.0 -lm \
+		src/preferences.c src/atomic_file_posix.c \
+		-Wl,--gc-sections -l:libglib-2.0.so.0 -lm \
 		-o $(BUILD_DIR)/preferences-smoke
 	./$(BUILD_DIR)/preferences-smoke
 

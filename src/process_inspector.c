@@ -17,6 +17,7 @@
 #include "process_inspector.h"
 
 #include "common.h"
+#include "duration_format.h"
 #include "graph.h"
 #include "process_backend.h"
 #include "process_inspection.h"
@@ -97,20 +98,6 @@ static double displayed_cpu(const LsmApp *app, double total_percent)
     const unsigned cores = app->monitor.cpu.logical_cores ?
         app->monitor.cpu.logical_cores : 1U;
     return total_percent * (double)cores;
-}
-
-static void format_duration(uint64_t seconds, char *buffer, size_t size)
-{
-    const uint64_t days = seconds / 86400ULL;
-    seconds %= 86400ULL;
-    const unsigned hours = (unsigned)(seconds / 3600ULL);
-    const unsigned minutes = (unsigned)((seconds % 3600ULL) / 60ULL);
-    const unsigned secs = (unsigned)(seconds % 60ULL);
-    if (days)
-        snprintf(buffer, size, "%llud %02u:%02u:%02u",
-                 (unsigned long long)days, hours, minutes, secs);
-    else
-        snprintf(buffer, size, "%02u:%02u:%02u", hours, minutes, secs);
 }
 
 static GtkWidget *detail_value(void)
@@ -429,12 +416,14 @@ static gboolean inspector_update(gpointer user_data)
     } else {
         snprintf(started, sizeof(started), "N/A");
     }
-    format_duration(process.elapsed_seconds, elapsed, sizeof(elapsed));
+    lsm_duration_format_clock(process.elapsed_seconds, elapsed,
+                              sizeof(elapsed));
     snprintf(threads, sizeof(threads), "%u", process.threads);
     snprintf(handles, sizeof(handles), "%u", process.handle_count);
     snprintf(priority, sizeof(priority), "%s",
              lsm_process_priority_name(process.priority));
-    format_duration(process.cpu_time_seconds, cpu_time, sizeof(cpu_time));
+    lsm_duration_format_clock(process.cpu_time_seconds, cpu_time,
+                              sizeof(cpu_time));
     if (process.gpu_available)
         snprintf(gpu, sizeof(gpu), "%.1f%%", process.gpu_percent);
     else

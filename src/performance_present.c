@@ -14,6 +14,7 @@
 #include "performance_present.h"
 
 #include "common.h"
+#include "duration_format.h"
 #include "metric_format.h"
 #include "ui_helpers.h"
 
@@ -85,22 +86,6 @@ static void format_battery_charge(const LsmBatteryInfo *battery,
 
 
 
-/* Snapshot-to-widget rendering. These functions perform no hardware I/O. */
-static void format_uptime(uint64_t seconds, char *buffer, size_t size)
-{
-    const uint64_t days = seconds / 86400U;
-    seconds %= 86400U;
-    const unsigned hours = (unsigned)(seconds / 3600U);
-    const unsigned minutes = (unsigned)((seconds % 3600U) / 60U);
-    const unsigned remaining = (unsigned)(seconds % 60U);
-    if (days > 0U)
-        snprintf(buffer, size, "%llud %02u:%02u:%02u",
-                 (unsigned long long)days, hours, minutes, remaining);
-    else
-        snprintf(buffer, size, "%02u:%02u:%02u",
-                 hours, minutes, remaining);
-}
-
 /* Each updater consumes only the retained snapshot. It may format, graph and
  * hide unavailable fields, but it must never perform hardware discovery. */
 static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
@@ -131,7 +116,7 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(widgets->threads, "%u", cpu->thread_count);
     lsm_ui_set_label_text(widgets->handles, "%llu",
                           (unsigned long long)cpu->file_handle_count);
-    format_uptime(cpu->uptime_seconds, metric, sizeof(metric));
+    lsm_duration_format_clock(cpu->uptime_seconds, metric, sizeof(metric));
     lsm_ui_set_label_text(widgets->uptime, "%s", metric);
     lsm_ui_set_label_text(widgets->temperature, "%s",
         lsm_metric_format_celsius(isfinite(cpu->temperature_c),
@@ -632,24 +617,6 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
 
 /* Battery pages share one widget set for system batteries and peripherals;
  * helper accessors keep the type-specific caption/value mapping explicit. */
-static void format_remaining_time(uint64_t seconds, char *buffer, size_t size)
-{
-    if (seconds == 0) {
-        snprintf(buffer, size, "N/A");
-        return;
-    }
-    uint64_t days = seconds / 86400ULL;
-    seconds %= 86400ULL;
-    unsigned hours = (unsigned)(seconds / 3600ULL);
-    unsigned minutes = (unsigned)((seconds % 3600ULL) / 60ULL);
-    if (days)
-        snprintf(buffer, size, "%llud %02uh %02um", (unsigned long long)days, hours, minutes);
-    else if (hours)
-        snprintf(buffer, size, "%uh %02um", hours, minutes);
-    else
-        snprintf(buffer, size, "%um", minutes);
-}
-
 static GtkWidget *battery_detail_value(LsmBatteryPageWidgets *widgets,
                                        size_t index)
 {
@@ -812,7 +779,8 @@ static void update_battery_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(page->scale_label, "%s",
                           exact_capacity ? "100%" :
                           coarse_capacity ? "Coarse level" : "N/A");
-    format_remaining_time(battery->seconds_remaining, text, sizeof(text));
+    lsm_duration_format_remaining(battery->seconds_remaining, text,
+                                  sizeof(text));
     lsm_ui_set_label_text(widgets->remaining, "%s", text);
     lsm_ui_set_label_text(widgets->power, "%s",
         lsm_metric_format_watts(isfinite(battery->power_watts),

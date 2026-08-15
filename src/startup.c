@@ -16,6 +16,7 @@
 #include "startup.h"
 #include "app.h"
 #include "app_config.h"
+#include "atomic_file.h"
 #include "ui_helpers.h"
 
 #include <dirent.h>
@@ -228,7 +229,12 @@ static gboolean write_startup_override(const char *source_path, const char *desk
     }
 
     char *target = g_build_filename(directory, desktop_id, NULL);
-    gboolean result = g_file_set_contents(target, data, (gssize)length, error);
+    const int failure = lsm_atomic_file_write_bytes(
+        target, LSM_ATOMIC_FILE_USER_DOCUMENT, data, length);
+    gboolean result = failure == 0;
+    if (!result)
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(failure),
+                    "Unable to write %s: %s", target, g_strerror(failure));
     g_free(target);
     g_free(data);
     return result;

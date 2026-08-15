@@ -12,6 +12,7 @@
 #include "system_snapshot.h"
 
 #include "app.h"
+#include "atomic_file.h"
 #include "common.h"
 #include "metric_format.h"
 #include "project_info.h"
@@ -195,27 +196,9 @@ static void write_processes(FILE *file, const LsmApp *app)
     }
 }
 
-bool lsm_system_snapshot_write(const LsmApp *app, const char *path,
-                               char *error, size_t error_size)
+static bool write_snapshot(FILE *file, const void *user_data)
 {
-    if (error && error_size > 0U) error[0] = '\0';
-    if (!app || !path || !*path) {
-        set_error(error, error_size, "No destination file was selected.");
-        return false;
-    }
-    char temporary[LSM_PATH_LEN + 64U];
-    const int written = snprintf(temporary, sizeof(temporary), "%s.tmp-%ld",
-                                 path, (long)getpid());
-    if (written < 0 || (size_t)written >= sizeof(temporary)) {
-        set_error(error, error_size, "The selected path is too long.");
-        return false;
-    }
-    FILE *file = fopen(temporary, "w");
-    if (!file) {
-        set_error(error, error_size, strerror(errno));
-        return false;
-    }
-
+    const LsmApp *app = user_data;
     time_t now = time(NULL);
     struct tm local;
     char generated[64] = "N/A";
@@ -272,15 +255,20 @@ bool lsm_system_snapshot_write(const LsmApp *app, const char *path,
     write_networks(file, monitor);
     write_graphics(file, monitor);
     write_processes(file, app);
+    return ferror(file) == 0;
+}
 
-    int failure = ferror(file) == 0 ? 0 : EIO;
-    if (fflush(file) != 0 && failure == 0) failure = errno;
-    if (failure == 0 && fsync(fileno(file)) != 0) failure = errno;
-    if (fclose(file) != 0 && failure == 0) failure = errno;
-    if (failure == 0 && rename(temporary, path) == 0) return true;
-    if (failure == 0) failure = errno;
-    (void)unlink(temporary);
-    set_error(error, error_size,
-              failure ? strerror(failure) : "Unable to write snapshot.");
+bool lsm_system_snapshot_write(const LsmApp *app, const char *path,
+                               char *error, size_t error_size)
+{
+    if (error && error_size > 0U) error[0] = '\0';
+    if (!app || !path || !*path) {
+        set_error(error, error_size, "No destination file was selected.");
+        return false;
+    }
+    const int failure = lsm_atomic_file_write(
+        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_snapshot, app);
+    if (failure == 0) return true;
+    set_error(error, error_size, strerror(failure));
     return false;
 }

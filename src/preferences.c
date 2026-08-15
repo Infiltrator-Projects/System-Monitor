@@ -5,8 +5,8 @@
  *
  * Preferences use a deliberately simple key=value file. The parser recognises
  * only project-owned keys, bounds every numeric value and keeps safe defaults
- * when input is malformed. Saving uses a temporary file plus rename(2), so a
- * power loss cannot leave a partially written configuration.
+ * when input is malformed. Saving uses the application's durable atomic-file
+ * provider, so a power loss cannot leave a partially written configuration.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -16,6 +16,7 @@
 
 #include "preferences.h"
 
+#include "atomic_file.h"
 #include "filesystems.h"
 #include "performance.h"
 #include "details_page.h"
@@ -27,7 +28,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <unistd.h>
 
 static gboolean parse_boolean(const char *value, gboolean fallback)
 {
@@ -155,16 +155,9 @@ void lsm_preferences_load(LsmApp *app)
         app->runtime.last_tab, tab_layout_version);
 }
 
-void lsm_preferences_save(const LsmApp *app)
+static bool write_preferences(FILE *file, const void *user_data)
 {
-    if (!app || !app->paths.preferences_path[0]) return;
-    if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0) return;
-    char temporary[LSM_PATH_LEN];
-    const int written = snprintf(temporary, sizeof(temporary), "%s.tmp",
-                                 app->paths.preferences_path);
-    if (written < 0 || (size_t)written >= sizeof(temporary)) return;
-    FILE *file = fopen(temporary, "w");
-    if (!file) return;
+    const LsmApp *app = user_data;
     int result = fprintf(file,
         "# Linux System Monitor graphical preferences\n"
         "update_interval_ms=%u\n"
@@ -198,11 +191,16 @@ void lsm_preferences_save(const LsmApp *app)
             app->runtime.selected_performance_page[0]
                 ? app->runtime.selected_performance_page : "cpu") < 0)
         okay = false;
-    if (fflush(file) != 0) okay = false;
-    if (fsync(fileno(file)) != 0) okay = false;
-    if (fclose(file) != 0) okay = false;
-    if (!okay || rename(temporary, app->paths.preferences_path) != 0)
-        (void)unlink(temporary);
+    return okay && ferror(file) == 0;
+}
+
+void lsm_preferences_save(const LsmApp *app)
+{
+    if (!app || !app->paths.preferences_path[0]) return;
+    if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0) return;
+    (void)lsm_atomic_file_write(app->paths.preferences_path,
+                                LSM_ATOMIC_FILE_PRIVATE,
+                                write_preferences, app);
 }
 
 static void attach_preference(GtkGrid *grid, int row, const char *name,

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int main(void)
@@ -45,6 +46,9 @@ int main(void)
     saved->runtime.page_scroll[LSM_TAB_DETAILS] = 456.25;
     strcpy(saved->runtime.selected_performance_page, "disk-nvme0n1");
     lsm_preferences_save(saved);
+    struct stat status;
+    assert(stat(saved->paths.preferences_path, &status) == 0);
+    assert((status.st_mode & 0777) == 0600);
 
     loaded->runtime.update_interval_ms = 1000U;
     loaded->runtime.newer_on_right = true;

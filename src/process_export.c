@@ -15,13 +15,13 @@
 #include "process_export.h"
 
 #include "app.h"
+#include "atomic_file.h"
 #include "common.h"
 #include "ui_helpers.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 static void set_error(char *error, size_t size, const char *message)
 {
@@ -91,30 +91,9 @@ static void csv_row(FILE *file, const LsmProcessInfo *process)
     fputc('\n', file);
 }
 
-bool lsm_process_export_selected_csv(const LsmApp *app, const char *path,
-                                     char *error, size_t error_size)
+static bool write_process_export(FILE *file, const void *user_data)
 {
-    if (error && error_size > 0U) error[0] = '\0';
-    if (!app || !path || !*path) {
-        set_error(error, error_size, "No destination file was selected.");
-        return false;
-    }
-    if (selected_count(app) == 0U) {
-        set_error(error, error_size, "Select a process or application group first.");
-        return false;
-    }
-    char temporary[LSM_PATH_LEN + 64U];
-    const int written = snprintf(temporary, sizeof(temporary), "%s.tmp-%ld",
-                                 path, (long)getpid());
-    if (written < 0 || (size_t)written >= sizeof(temporary)) {
-        set_error(error, error_size, "The selected path is too long.");
-        return false;
-    }
-    FILE *file = fopen(temporary, "w");
-    if (!file) {
-        set_error(error, error_size, strerror(errno));
-        return false;
-    }
+    const LsmApp *app = user_data;
     fputs("Name,PID,Parent PID,User,Status,CPU (%),CPU time (ns),"
           "Memory (bytes),Threads,Read (bytes/s),Write (bytes/s),GPU (%),"
           "GPU engine,GPU memory (bytes),Read total (bytes),Write total (bytes),"
@@ -124,15 +103,26 @@ bool lsm_process_export_selected_csv(const LsmApp *app, const char *path,
         const LsmProcessInfo *process = &app->process.process_snapshot[index];
         if (pid_selected(app, process->pid)) csv_row(file, process);
     }
-    int failure = ferror(file) == 0 ? 0 : EIO;
-    if (fflush(file) != 0 && failure == 0) failure = errno;
-    if (failure == 0 && fsync(fileno(file)) != 0) failure = errno;
-    if (fclose(file) != 0 && failure == 0) failure = errno;
-    if (failure == 0 && rename(temporary, path) == 0) return true;
-    if (failure == 0) failure = errno;
-    (void)unlink(temporary);
-    set_error(error, error_size,
-              failure ? strerror(failure) : "Unable to export rows.");
+    return ferror(file) == 0;
+}
+
+bool lsm_process_export_selected_csv(const LsmApp *app, const char *path,
+                                     char *error, size_t error_size)
+{
+    if (error && error_size > 0U) error[0] = '\0';
+    if (!app || !path || !*path) {
+        set_error(error, error_size, "No destination file was selected.");
+        return false;
+    }
+    if (selected_count(app) == 0U) {
+        set_error(error, error_size,
+                  "Select a process or application group first.");
+        return false;
+    }
+    const int failure = lsm_atomic_file_write(
+        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_process_export, app);
+    if (failure == 0) return true;
+    set_error(error, error_size, strerror(failure));
     return false;
 }
 

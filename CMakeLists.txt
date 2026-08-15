@@ -124,13 +124,15 @@ list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
 # operating-system providers merely because they coexist in the source tree.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LSM_PLATFORM_NAME "linux")
+    set(LSM_ATOMIC_FILE_PROVIDER "posix")
 else()
     message(FATAL_ERROR
         "No native monitor/process backend is implemented for ${CMAKE_SYSTEM_NAME}")
 endif()
 list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX
-    "src/(monitor_backend|process_backend)_[^/]+\\.c$")
+    "src/(atomic_file|monitor_backend|process_backend)_[^/]+\\.c$")
 list(APPEND LSM_SOURCE_NAMES
+    "src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c"
     "src/monitor_backend_${LSM_PLATFORM_NAME}.c"
     "src/process_backend_${LSM_PLATFORM_NAME}.c")
 
@@ -140,11 +142,7 @@ set(LSM_MONITOR_CORE_SOURCES
 # Exactly one native monitor backend implements monitor_platform.h.  The Linux
 # build selects the implementation below; another OS can provide its own source
 # list without changing the public monitor lifecycle or presentation modules.
-set(LSM_MONITOR_PLATFORM_SOURCES
-    src/monitor_backend_linux.c src/refresh_policy.c src/monitor_cpu_memory.c
-    src/cpu_accounting.c src/memory_accounting.c src/cpu_direct.c
-    src/monitor_storage_network.c
-    src/disk_accounting.c src/wifi_metadata.c
+set(LSM_HARDWARE_MONITOR_SOURCES
     src/monitor_hardware.c
     src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
     src/monitor_battery.c src/bluetooth_battery.c src/logitech_hidpp.c
@@ -152,6 +150,13 @@ set(LSM_MONITOR_PLATFORM_SOURCES
     src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c
     src/system_sources.c
     src/pci_names.c src/pci_names_data.c)
+
+set(LSM_MONITOR_PLATFORM_SOURCES
+    src/monitor_backend_linux.c src/refresh_policy.c src/monitor_cpu_memory.c
+    src/cpu_accounting.c src/memory_accounting.c src/cpu_direct.c
+    src/monitor_storage_network.c
+    src/disk_accounting.c src/wifi_metadata.c
+    ${LSM_HARDWARE_MONITOR_SOURCES})
 
 set(LSM_PROCESS_CORE_SOURCES
     src/process_model.c)
@@ -162,7 +167,7 @@ set(LSM_PROCESS_PLATFORM_SOURCES
 set(LSM_MONITOR_BACKEND_SOURCES
     ${LSM_MONITOR_CORE_SOURCES} ${LSM_MONITOR_PLATFORM_SOURCES})
 
-# Both maintained programs consume this same versioned source component. The
+# Maintained applications consume this same versioned source component. The
 # application links it privately so Debian packages remain self-contained;
 # the component's own Makefile can also produce a conventional shared object.
 add_library(infiltratr-common STATIC
@@ -261,6 +266,58 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         target_link_libraries(${tool} PRIVATE lsm-developer-tool-policy)
     endforeach()
 
+    add_executable(lsm-atomic-file-smoke support/tests/atomic_file_smoke.c
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c)
+    add_executable(lsm-backend-smoke support/tests/backend_smoke.c
+        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
+        ${LSM_PROCESS_PLATFORM_SOURCES})
+    add_executable(lsm-battery-smoke support/tests/battery_smoke.c
+        ${LSM_HARDWARE_MONITOR_SOURCES})
+    add_executable(lsm-bluetooth-battery-smoke
+        support/tests/bluetooth_battery_smoke.c src/bluetooth_battery.c)
+    add_executable(lsm-bundled-pci-smoke support/tests/bundled_pci_smoke.c
+        src/pci_names.c src/pci_names_data.c src/common.c)
+    add_executable(lsm-common-smoke support/tests/common_smoke.c src/common.c)
+    add_executable(lsm-cpu-direct-smoke support/tests/cpu_direct_smoke.c
+        src/cpu_direct.c src/common.c)
+    add_executable(lsm-dbus-models-smoke support/tests/dbus_models_smoke.c
+        src/ui_helpers.c src/common.c)
+    add_executable(lsm-duration-format-smoke
+        support/tests/duration_format_smoke.c src/duration_format.c)
+    add_executable(lsm-efficiency-smoke support/tests/efficiency_smoke.c
+        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+    add_executable(lsm-glibc-abi-smoke support/tests/glibc_abi_smoke.c
+        support/tools/glibc_abi.c)
+    target_include_directories(lsm-glibc-abi-smoke PRIVATE support/tools)
+    add_executable(lsm-hardware-topology-smoke
+        support/tests/hardware_topology_smoke.c src/hardware_topology.c
+        src/common.c)
+    add_executable(lsm-logitech-hidpp-smoke
+        support/tests/logitech_hidpp_smoke.c src/logitech_hidpp.c
+        src/logitech_hidpp_protocol.c src/common.c)
+    add_executable(lsm-mountinfo-smoke support/tests/mountinfo_smoke.c
+        src/mountinfo.c)
+    add_library(lsm-mock-nvml SHARED support/tests/mock_nvml.c)
+    set_target_properties(lsm-mock-nvml PROPERTIES OUTPUT_NAME "nvidia-ml-test")
+    target_link_libraries(lsm-mock-nvml PRIVATE lsm-developer-tool-policy)
+    add_executable(lsm-nvml-smoke support/tests/nvml_smoke.c
+        src/nvml.c src/common.c)
+    add_dependencies(lsm-nvml-smoke lsm-mock-nvml)
+    add_executable(lsm-preferences-smoke support/tests/preferences_smoke.c
+        src/preferences.c src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c)
+    add_executable(lsm-process-management-smoke
+        support/tests/process_management_smoke.c ${LSM_PROCESS_CORE_SOURCES}
+        ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+    add_executable(lsm-quality-policy-smoke support/tests/quality_policy_smoke.c
+        src/metric_format.c src/refresh_policy.c)
+    add_executable(lsm-sample-history-smoke support/tests/sample_history_smoke.c
+        src/sample_history.c)
+    add_executable(lsm-startup-smoke support/tests/startup_smoke.c
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/ui_helpers.c)
+    add_executable(lsm-ui-update-smoke support/tests/ui_update_smoke.c
+        src/ui_helpers.c)
+    add_executable(lsm-wifi-metadata-smoke support/tests/wifi_metadata_smoke.c
+        src/wifi_metadata.c src/common.c)
     add_executable(lsm-intel-gpu-smoke support/tests/intel_gpu_smoke.c
         src/intel_gpu.c src/common.c)
     add_executable(lsm-infiltratr-common-smoke
@@ -299,10 +356,11 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/mountinfo.c src/pci_names.c src/pci_names_data.c src/common.c)
     add_executable(lsm-system-snapshot-smoke
         support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
-        src/common.c src/metric_format.c)
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c
+        src/metric_format.c)
     add_executable(lsm-process-export-smoke
         support/tests/process_export_smoke.c src/process_export.c src/process_model.c
-        src/common.c src/ui_helpers.c)
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c src/ui_helpers.c)
     add_executable(lsm-task-manager-layout-smoke
         support/tests/task_manager_layout_smoke.c)
     add_executable(lsm-process-inspection-smoke support/tests/process_inspection_smoke.c
@@ -318,17 +376,36 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
 
     set(LSM_DEVELOPER_SMOKE_TARGETS
         lsm-infiltratr-common-smoke
+        lsm-atomic-file-smoke
+        lsm-backend-smoke
+        lsm-battery-smoke
+        lsm-bluetooth-battery-smoke
+        lsm-bundled-pci-smoke
+        lsm-common-smoke
+        lsm-cpu-direct-smoke
+        lsm-dbus-models-smoke
+        lsm-duration-format-smoke
+        lsm-efficiency-smoke
+        lsm-glibc-abi-smoke
+        lsm-hardware-topology-smoke
         lsm-project-info-smoke
         lsm-intel-gpu-smoke
+        lsm-logitech-hidpp-smoke
         lsm-npu-telemetry-smoke
         lsm-memory-accounting-smoke
+        lsm-mountinfo-smoke
+        lsm-nvml-smoke
         lsm-performance-navigation-smoke
+        lsm-preferences-smoke
         lsm-monitor-platform-smoke
         lsm-gpu-metrics-smoke
         lsm-application-catalog-smoke
+        lsm-process-management-smoke
         lsm-process-model-smoke
         lsm-process-grouping-smoke
         lsm-process-gpu-smoke
+        lsm-quality-policy-smoke
+        lsm-sample-history-smoke
         lsm-disk-accounting-smoke
         lsm-cpu-accounting-smoke
         lsm-smbios-memory-smoke
@@ -336,16 +413,68 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         lsm-system-sources-smoke
         lsm-system-snapshot-smoke
         lsm-process-export-smoke
+        lsm-startup-smoke
         lsm-task-manager-layout-smoke
+        lsm-ui-update-smoke
+        lsm-wifi-metadata-smoke
         lsm-process-inspection-smoke
         lsm-filesystem-inventory-smoke
         lsm-process-scan-benchmark
         lsm-runtime-stability-smoke)
+
+    # A configure-time manifest check keeps every project smoke source attached
+    # to a CMake target. This prevents the Make and CTest suites from drifting
+    # silently when a new regression fixture is added.
+    file(GLOB LSM_ALL_SMOKE_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/support/tests/*_smoke.c")
+    set(LSM_REGISTERED_SMOKE_SOURCES)
+    foreach(test_target IN LISTS LSM_DEVELOPER_SMOKE_TARGETS)
+        get_target_property(LSM_TARGET_SOURCES ${test_target} SOURCES)
+        foreach(source IN LISTS LSM_TARGET_SOURCES)
+            get_filename_component(LSM_SOURCE_PATH "${source}" ABSOLUTE
+                BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+            if(LSM_SOURCE_PATH MATCHES "/support/tests/[^/]+_smoke\\.c$")
+                list(APPEND LSM_REGISTERED_SMOKE_SOURCES "${LSM_SOURCE_PATH}")
+            endif()
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES LSM_REGISTERED_SMOKE_SOURCES)
+    list(SORT LSM_REGISTERED_SMOKE_SOURCES)
+    list(SORT LSM_ALL_SMOKE_SOURCES)
+    set(LSM_MISSING_SMOKE_SOURCES ${LSM_ALL_SMOKE_SOURCES})
+    list(REMOVE_ITEM LSM_MISSING_SMOKE_SOURCES
+        ${LSM_REGISTERED_SMOKE_SOURCES})
+    set(LSM_UNKNOWN_SMOKE_SOURCES ${LSM_REGISTERED_SMOKE_SOURCES})
+    list(REMOVE_ITEM LSM_UNKNOWN_SMOKE_SOURCES ${LSM_ALL_SMOKE_SOURCES})
+    if(LSM_MISSING_SMOKE_SOURCES OR LSM_UNKNOWN_SMOKE_SOURCES)
+        message(FATAL_ERROR
+            "CMake smoke coverage drift. Missing: ${LSM_MISSING_SMOKE_SOURCES}; unknown: ${LSM_UNKNOWN_SMOKE_SOURCES}")
+    endif()
     foreach(test_target IN LISTS LSM_DEVELOPER_SMOKE_TARGETS)
         target_link_libraries(${test_target} PRIVATE lsm-developer-smoke-policy)
     endforeach()
 
+    target_compile_definitions(lsm-backend-smoke PRIVATE _DEFAULT_SOURCE)
+    foreach(section_target IN ITEMS lsm-dbus-models-smoke lsm-preferences-smoke
+            lsm-startup-smoke lsm-ui-update-smoke)
+        target_compile_options(${section_target} PRIVATE
+            -ffunction-sections -fdata-sections)
+        target_link_options(${section_target} PRIVATE -Wl,--gc-sections)
+    endforeach()
+    target_link_libraries(lsm-backend-smoke PRIVATE
+        PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
+    target_link_libraries(lsm-battery-smoke PRIVATE
+        PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
+    target_link_libraries(lsm-bluetooth-battery-smoke PRIVATE
+        PkgConfig::GTK3 Threads::Threads)
+    target_link_libraries(lsm-bundled-pci-smoke PRIVATE m)
+    target_link_libraries(lsm-common-smoke PRIVATE m)
+    target_link_libraries(lsm-cpu-direct-smoke PRIVATE m)
+    target_link_libraries(lsm-dbus-models-smoke PRIVATE PkgConfig::GTK3 m)
+    target_link_libraries(lsm-efficiency-smoke PRIVATE m)
+    target_link_libraries(lsm-hardware-topology-smoke PRIVATE m)
     target_link_libraries(lsm-intel-gpu-smoke PRIVATE m)
+    target_link_libraries(lsm-logitech-hidpp-smoke PRIVATE Threads::Threads m)
     target_link_libraries(lsm-gpu-metrics-smoke PRIVATE m)
     target_link_libraries(lsm-npu-telemetry-smoke PRIVATE m)
     target_link_libraries(lsm-memory-accounting-smoke PRIVATE m)
@@ -357,6 +486,13 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_libraries(lsm-system-sources-smoke PRIVATE m)
     target_link_libraries(lsm-system-snapshot-smoke PRIVATE PkgConfig::GTK3 m)
     target_link_libraries(lsm-process-export-smoke PRIVATE PkgConfig::GTK3 m)
+    target_link_libraries(lsm-nvml-smoke PRIVATE m ${CMAKE_DL_LIBS})
+    target_link_libraries(lsm-preferences-smoke PRIVATE PkgConfig::GTK3 m)
+    target_link_libraries(lsm-process-management-smoke PRIVATE m)
+    target_link_libraries(lsm-quality-policy-smoke PRIVATE m)
+    target_link_libraries(lsm-startup-smoke PRIVATE PkgConfig::GTK3)
+    target_link_libraries(lsm-ui-update-smoke PRIVATE PkgConfig::GTK3)
+    target_link_libraries(lsm-wifi-metadata-smoke PRIVATE m)
     target_link_libraries(lsm-process-scan-benchmark PRIVATE m)
     target_link_libraries(lsm-runtime-stability-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
@@ -368,7 +504,14 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     if(BUILD_TESTING)
         foreach(test_target IN LISTS LSM_DEVELOPER_SMOKE_TARGETS)
             if(NOT test_target STREQUAL "lsm-process-scan-benchmark")
-                add_test(NAME ${test_target} COMMAND ${test_target})
+                if(test_target STREQUAL "lsm-nvml-smoke")
+                    add_test(NAME ${test_target}
+                        COMMAND "${CMAKE_COMMAND}" -E env
+                        "LSM_NVML_LIBRARY=$<TARGET_FILE:lsm-mock-nvml>"
+                        "$<TARGET_FILE:${test_target}>")
+                else()
+                    add_test(NAME ${test_target} COMMAND ${test_target})
+                endif()
                 set_tests_properties(${test_target} PROPERTIES LABELS "smoke")
             endif()
         endforeach()
