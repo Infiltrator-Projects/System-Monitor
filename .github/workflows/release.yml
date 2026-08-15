@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Publish release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - support/VERSION
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake git libgtk-3-dev pkg-config zip
+
+      - name: Verify with CMake and CTest
+        run: |
+          cmake -S . -B cmake-build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cmake-build --parallel 2
+          ctest --test-dir cmake-build --output-on-failure --parallel 2
+
+      - name: Verify with Make
+        run: make -j2 check
+
+      - name: Build release packages
+        run: make -j2 release
+
+      - name: Publish the tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version=$(tr -d '[:space:]' < support/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Invalid release version: %s\n' "$version" >&2
+            exit 1
+          fi
+
+          tag="v${version}"
+          deb="linux-system-monitor_${version}_amd64.deb"
+          installer="linux-system-monitor-${version}-native-installer.run"
+
+          test -f "$deb"
+          test -x "$installer"
+          test "$(dpkg-deb -f "$deb" Version)" = "$version"
+          "$installer" --help >/dev/null
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            printf 'Release %s already exists; nothing to replace.\n' "$tag"
+            exit 0
+          fi
+
+          notes=$(git log -1 --format=%b -- support/VERSION)
+          if [[ -z "$notes" ]]; then
+            notes="Verified Linux System Monitor ${version} release."
+          fi
+
+          gh release create "$tag" \
+            "$deb" \
+            "$installer" \
+            --target "$GITHUB_SHA" \
+            --title "Linux System Monitor ${version}" \
+            --notes "$notes"
