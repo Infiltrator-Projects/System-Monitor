@@ -37,12 +37,12 @@ jobs:
 
       - name: Verify with CMake and CTest
         run: |
-          cmake -S . -B cmake-build -DCMAKE_BUILD_TYPE=Release
-          cmake --build cmake-build --parallel 2
-          ctest --test-dir cmake-build --output-on-failure --parallel 2
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --parallel 2
+          ctest --test-dir build-cmake --output-on-failure --parallel 2
 
       - name: Verify with Make
-        run: make -j2 check
+        run: make check
 
       - name: Build release packages
         run: make -j2 release
