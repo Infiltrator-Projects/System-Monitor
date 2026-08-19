@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Migrate System Monitor to Common 1.8
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/common-1.8-dynlib]
+    paths:
+      - .github/workflows/migrate-common-1.8.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feature/common-1.8-dynlib
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake git libgtk-3-dev pkg-config zip
+
+      - name: Apply Common 1.8 pin and source footprint
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: {label}: expected 1 match, found {count}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "Makefile",
+              "INFILTRATR_COMMON_TAG := v1.7.0\nINFILTRATR_COMMON_COMMIT := 462e383d0326c2e8c81d9cbfccaecd344f145d26\nINFILTRATR_COMMON_VERSION := 1.7.0",
+              "INFILTRATR_COMMON_TAG := v1.8.0\nINFILTRATR_COMMON_COMMIT := 318b1babc7343403ae5e222ea01235a0fc84d752\nINFILTRATR_COMMON_VERSION := 1.8.0",
+              "Make Common pin")
+          replace_once(
+              "Makefile",
+              "\t$(INFILTRATR_COMMON_DIR)/src/format.c \\\n\t$(INFILTRATR_COMMON_DIR)/src/posix.c",
+              "\t$(INFILTRATR_COMMON_DIR)/src/format.c \\\n\t$(INFILTRATR_COMMON_DIR)/src/dynlib.c \\\n\t$(INFILTRATR_COMMON_DIR)/src/posix.c",
+              "Make Common sources")
+          replace_once(
+              "Makefile",
+              "\t$(INFILTRATR_COMMON_DIR)/include/infiltratr/format.h \\\n\t$(INFILTRATR_COMMON_DIR)/include/infiltratr/posix.h",
+              "\t$(INFILTRATR_COMMON_DIR)/include/infiltratr/format.h \\\n\t$(INFILTRATR_COMMON_DIR)/include/infiltratr/dynlib.h \\\n\t$(INFILTRATR_COMMON_DIR)/include/infiltratr/posix.h",
+              "Make Common headers")
+          replace_once(
+              "Makefile",
+              "\t$(BUILD_DIR)/infiltratr-common/format.o \\\n\t$(BUILD_DIR)/infiltratr-common/posix.o",
+              "\t$(BUILD_DIR)/infiltratr-common/format.o \\\n\t$(BUILD_DIR)/infiltratr-common/dynlib.o \\\n\t$(BUILD_DIR)/infiltratr-common/posix.o",
+              "Make Common objects")
+
+          replace_once(
+              "CMakeLists.txt",
+              'set(INFILTRATR_COMMON_TAG "v1.7.0")\nset(INFILTRATR_COMMON_EXPECTED_VERSION "1.7.0")\nset(INFILTRATR_COMMON_EXPECTED_COMMIT "462e383d0326c2e8c81d9cbfccaecd344f145d26")',
+              'set(INFILTRATR_COMMON_TAG "v1.8.0")\nset(INFILTRATR_COMMON_EXPECTED_VERSION "1.8.0")\nset(INFILTRATR_COMMON_EXPECTED_COMMIT "318b1babc7343403ae5e222ea01235a0fc84d752")',
+              "CMake Common pin")
+          replace_once(
+              "CMakeLists.txt",
+              '    "${INFILTRATR_COMMON_DIR}/src/format.c"\n    "${INFILTRATR_COMMON_DIR}/src/posix.c")',
+              '    "${INFILTRATR_COMMON_DIR}/src/format.c"\n    "${INFILTRATR_COMMON_DIR}/src/dynlib.c"\n    "${INFILTRATR_COMMON_DIR}/src/posix.c")',
+              "CMake Common sources")
+
+          readme = Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+          text = text.replace("Infiltratr Common 1.7.0", "Infiltratr Common 1.8.0")
+          readme.write_text(text, encoding="utf-8")
+          PY
+
+          git -C src/infiltratr-common fetch origin \
+            318b1babc7343403ae5e222ea01235a0fc84d752
+          git -C src/infiltratr-common checkout --detach \
+            318b1babc7343403ae5e222ea01235a0fc84d752
+          test "$(cat src/infiltratr-common/VERSION)" = "1.8.0"
+          git diff --check
+
+      - name: Verify with CMake and CTest
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --parallel 2
+          ctest --test-dir build-cmake --output-on-failure --parallel 2
+
+      - name: Verify with Make and sanitizers
+        run: |
+          make check
+          make sanitizer-check
+
+      - name: Verify release packaging
+        run: make -j2 release
+
+      - name: Commit verified migration and remove helper workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/migrate-common-1.8.yml
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Adopt Common 1.8 dynamic loader for NVML"
+          git push origin HEAD:feature/common-1.8-dynlib
