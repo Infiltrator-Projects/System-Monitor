@@ -35,7 +35,7 @@
 
 LsmApp *lsm_app_create(void)
 {
-    return g_new0(LsmApp, 1);
+    return g_try_new0(LsmApp, 1);
 }
 
 void lsm_app_free(LsmApp *app)
