@@ -8,7 +8,6 @@
  * @license GPL-3.0-or-later
  */
 #include "application_catalog.h"
-#include "app_internal.h"
 
 #include <gtk/gtk.h>
 

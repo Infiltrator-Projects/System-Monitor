@@ -194,8 +194,9 @@ common-check:
 			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
 		else \
 			mkdir -p "$(dir $(INFILTRATR_COMMON_DIR))"; \
-			git clone --depth 1 --branch "$(INFILTRATR_COMMON_TAG)" \
-				"$(INFILTRATR_COMMON_URL)" "$(INFILTRATR_COMMON_DIR)"; \
+			git clone "$(INFILTRATR_COMMON_URL)" "$(INFILTRATR_COMMON_DIR)"; \
+			git -C "$(INFILTRATR_COMMON_DIR)" checkout --detach \
+				"$(INFILTRATR_COMMON_COMMIT)"; \
 		fi; \
 	fi
 	@test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \

@@ -10,7 +10,6 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "application_catalog.h"
-#include "app_internal.h"
 
 #include <dirent.h>
 #include <errno.h>

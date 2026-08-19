@@ -224,7 +224,7 @@ typedef union {
 } LsmPerformancePageWidgets;
 
 /** Widgets and graph state associated with one side-pane device entry. */
-typedef struct {
+typedef struct LsmDevicePage {
     LsmPageType type;
     size_t index;
     char stack_name[96];

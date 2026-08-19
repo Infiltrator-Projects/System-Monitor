@@ -12,6 +12,7 @@
  */
 #include "app.h"
 #include "app_internal.h"
+#include "app_menu.h"
 #include "app_runtime.h"
 #include "app_shell.h"
 
@@ -35,12 +36,12 @@
 
 LsmApp *lsm_app_create(void)
 {
-    return g_try_new0(LsmApp, 1);
+    return calloc(1U, sizeof(LsmApp));
 }
 
 void lsm_app_free(LsmApp *app)
 {
-    g_free(app);
+    free(app);
 }
 
 /* Application construction establishes ownership before starting timers. */
@@ -107,7 +108,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(app->shell.window), main_box);
-    gtk_box_pack_start(GTK_BOX(main_box), lsm_app_shell_build_menu(app), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), lsm_app_menu_build(app), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), lsm_summary_bar_build(app),
                        FALSE, FALSE, 0);
     app->shell.pause_indicator = gtk_label_new(NULL);

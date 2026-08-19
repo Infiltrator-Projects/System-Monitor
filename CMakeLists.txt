@@ -22,10 +22,15 @@ if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     else()
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
         execute_process(
-            COMMAND "${LSM_GIT_EXECUTABLE}" clone --depth 1 --branch
-                    "${INFILTRATR_COMMON_TAG}" "${INFILTRATR_COMMON_URL}"
+            COMMAND "${LSM_GIT_EXECUTABLE}" clone "${INFILTRATR_COMMON_URL}"
                     "${INFILTRATR_COMMON_DIR}"
             RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+        if(LSM_COMMON_FETCH_RESULT EQUAL 0)
+            execute_process(
+                COMMAND "${LSM_GIT_EXECUTABLE}" -C "${INFILTRATR_COMMON_DIR}"
+                        checkout --detach "${INFILTRATR_COMMON_EXPECTED_COMMIT}"
+                RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+        endif()
     endif()
     if(NOT LSM_COMMON_FETCH_RESULT EQUAL 0 OR
        NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")

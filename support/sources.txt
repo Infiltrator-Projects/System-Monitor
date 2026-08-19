@@ -2,6 +2,7 @@
 main.c
 app.c
 app_runtime.c
+app_menu.c
 app_shell.c
 atomic_file_posix.c
 project_info.c

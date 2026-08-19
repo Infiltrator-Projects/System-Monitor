@@ -12,14 +12,6 @@
 
 #include "app.h"
 
-/**
- * Build the global menu bar and bind application actions.
- *
- * @param [in,out] app Active application context receiving menu widget handles.
- * @return Newly created GTK menu bar owned by the receiving widget hierarchy.
- */
-GtkWidget *lsm_app_shell_build_menu(LsmApp *app);
-
 /** Install the application CSS provider on the default screen. */
 void lsm_app_shell_apply_css(void);
 

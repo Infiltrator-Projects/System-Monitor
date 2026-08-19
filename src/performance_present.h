@@ -10,7 +10,9 @@
 #ifndef LINUX_SYSTEM_MONITOR_PERFORMANCE_PRESENT_H
 #define LINUX_SYSTEM_MONITOR_PERFORMANCE_PRESENT_H
 
-#include "app_internal.h"
+#include "app.h"
+
+typedef struct LsmDevicePage LsmDevicePage;
 
 /**
  * Project one immutable monitor snapshot onto an existing device page.
