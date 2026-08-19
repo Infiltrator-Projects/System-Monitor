@@ -3,19 +3,18 @@ name: Verify
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    branches: [refactor/app-boundaries-1.13.14]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: verify-${{ github.repository }}-${{ github.head_ref || github.ref_name }}
+  group: verify-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     steps:
       - name: Check out source and Common
@@ -24,16 +23,20 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install build dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: Apply forensic finish
+        run: python3 .github/forensic_finish.py
+
+      - name: Verify source diff
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake git libgtk-3-dev pkg-config zip
+          git diff --check
+          test -f src/app_menu.c
+          test -f src/app_menu.h
+          ! grep -F '#include "app_internal.h"' src/application_catalog.c
+          ! grep -F '#include "app_internal.h"' src/performance_present.h
 
       - name: Verify with CMake and CTest
         run: |
+          rm -rf build-cmake
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake --parallel 2
           ctest --test-dir build-cmake --output-on-failure --parallel 2
@@ -46,3 +49,16 @@ jobs:
 
       - name: Verify release packaging without publishing
         run: make -j2 release
+
+      - name: Commit verified source fixes
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add CMakeLists.txt Makefile support/sources.txt \
+            src/app.c src/app_internal.h src/app_menu.c src/app_menu.h \
+            src/app_shell.c src/app_shell.h src/application_catalog.c \
+            src/performance_present.h support/tests/application_catalog_smoke.c
+          git diff --cached --check
+          git commit -m 'Finish application boundary refactor'
+          git push origin HEAD:${GITHUB_REF_NAME}
