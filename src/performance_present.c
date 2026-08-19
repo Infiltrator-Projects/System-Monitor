@@ -20,6 +20,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -85,6 +86,47 @@ static void format_battery_charge(const LsmBatteryInfo *battery,
 }
 
 
+
+static uint64_t signature_mix_byte(uint64_t hash, unsigned char value)
+{
+    hash ^= (uint64_t)value;
+    return hash * UINT64_C(1099511628211);
+}
+
+static uint64_t signature_mix_text(uint64_t hash, const char *text)
+{
+    const unsigned char *cursor =
+        (const unsigned char *)(text ? text : "");
+    while (*cursor) hash = signature_mix_byte(hash, *cursor++);
+    return signature_mix_byte(hash, 0U);
+}
+
+static uint64_t signature_mix_u64(uint64_t hash, uint64_t value)
+{
+    for (unsigned shift = 0U; shift < 64U; shift += 8U)
+        hash = signature_mix_byte(
+            hash, (unsigned char)((value >> shift) & UINT64_C(0xff)));
+    return hash;
+}
+
+static uint64_t partition_store_signature(const LsmDiskInfo *disk)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+    if (!disk) return hash;
+    hash = signature_mix_u64(hash, (uint64_t)disk->partition_count);
+    for (size_t index = 0U; index < disk->partition_count; index++) {
+        const LsmPartitionInfo *partition = &disk->partitions[index];
+        hash = signature_mix_text(hash, partition->device);
+        hash = signature_mix_text(hash, partition->mount_point);
+        hash = signature_mix_text(hash, partition->filesystem);
+        hash = signature_mix_u64(hash, partition->total_bytes);
+        hash = signature_mix_u64(hash, partition->used_bytes);
+        hash = signature_mix_u64(hash, partition->used_percent);
+        hash = signature_mix_u64(hash,
+            partition->usage_known ? UINT64_C(1) : UINT64_C(0));
+    }
+    return hash;
+}
 
 /* Each updater consumes only the retained snapshot. It may format, graph and
  * hide unavailable fields, but it must never perform hardware discovery. */
@@ -277,27 +319,34 @@ static void update_disk_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(page->subtitle, "%s — %s", disk->name, capacity);
 
     if (page->partition_store) {
-        gtk_list_store_clear(page->partition_store);
-        for (size_t i = 0; i < disk->partition_count; i++) {
-            const LsmPartitionInfo *partition = &disk->partitions[i];
-            GtkTreeIter iterator;
-            gtk_list_store_append(page->partition_store, &iterator);
-            lsm_format_bytes(partition->total_bytes, total, sizeof(total));
-            if (partition->usage_known) {
-                char used_size[64];
-                lsm_format_bytes(partition->used_bytes, used_size, sizeof(used_size));
-                snprintf(used, sizeof(used), "%s (%u%%)", used_size,
-                         partition->used_percent);
-            } else {
-                snprintf(used, sizeof(used), "N/A");
+        const uint64_t signature = partition_store_signature(disk);
+        if (!page->partition_store_signature_valid ||
+            page->partition_store_signature != signature) {
+            gtk_list_store_clear(page->partition_store);
+            for (size_t i = 0; i < disk->partition_count; i++) {
+                const LsmPartitionInfo *partition = &disk->partitions[i];
+                GtkTreeIter iterator;
+                gtk_list_store_append(page->partition_store, &iterator);
+                lsm_format_bytes(partition->total_bytes, total, sizeof(total));
+                if (partition->usage_known) {
+                    char used_size[64];
+                    lsm_format_bytes(partition->used_bytes, used_size,
+                                     sizeof(used_size));
+                    snprintf(used, sizeof(used), "%s (%u%%)", used_size,
+                             partition->used_percent);
+                } else {
+                    snprintf(used, sizeof(used), "N/A");
+                }
+                gtk_list_store_set(page->partition_store, &iterator,
+                    0, partition->device,
+                    1, partition->mount_point,
+                    2, partition->filesystem,
+                    3, total,
+                    4, used,
+                    -1);
             }
-            gtk_list_store_set(page->partition_store, &iterator,
-                0, partition->device,
-                1, partition->mount_point,
-                2, partition->filesystem,
-                3, total,
-                4, used,
-                -1);
+            page->partition_store_signature = signature;
+            page->partition_store_signature_valid = TRUE;
         }
     }
 }
