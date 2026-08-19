@@ -3,14 +3,14 @@
  * @file nvml.c
  * @brief Runtime-loaded NVIDIA Management Library metrics backend.
  *
- * NVIDIA's proprietary driver normally supplies libnvidia-ml.so.1.  Loading
+ * NVIDIA's proprietary driver normally supplies libnvidia-ml.so.1. Loading
  * that native API directly avoids launching and parsing nvidia-smi once per
- * refresh.  The adapter is entirely optional: systems without NVML continue
+ * refresh. The adapter is entirely optional: systems without NVML continue
  * using DRM/sysfs metrics and gain no new package dependency.
  *
- * Only stable, documented NVML entry points are declared here.  Required
- * symbols are validated before initialisation; optional metrics are queried
- * independently so unsupported engines do not discard the rest of a sample.
+ * Infiltratr Common owns cross-platform module lifetime and symbol transfer.
+ * This module retains only NVML-specific discovery, required/optional symbol
+ * policy and metrics semantics.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -20,7 +20,7 @@
 #include "nvml.h"
 #include "common.h"
 
-#include <dlfcn.h>
+#include <infiltratr/dynlib.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,7 +56,7 @@ typedef struct {
 } nvmlPciInfo_t;
 
 typedef struct {
-    void *handle;
+    InfiltratrDynlib library;
     bool attempted;
     bool initialised;
     nvmlReturn_t (*init_v2)(void);
@@ -78,10 +78,13 @@ typedef struct {
 
 static LsmNvmlApi api;
 
-static bool load_symbol(void **destination, const char *name, bool required)
+static bool load_symbol(void *destination, size_t destination_size,
+                        const char *name, bool required)
 {
-    *destination = dlsym(api.handle, name);
-    return *destination != NULL || !required;
+    const bool found = infiltratr_dynlib_symbol(&api.library, name,
+                                                destination,
+                                                destination_size);
+    return found || !required;
 }
 
 static bool initialise(void)
@@ -90,14 +93,15 @@ static bool initialise(void)
     api.attempted = true;
 
     const char *override = getenv("LSM_NVML_LIBRARY");
-    api.handle = dlopen(override && *override ? override : "libnvidia-ml.so.1",
-                        RTLD_LAZY | RTLD_LOCAL);
-    if (!api.handle) return false;
+    if (!infiltratr_dynlib_open(
+            &api.library,
+            override && *override ? override : "libnvidia-ml.so.1"))
+        return false;
 
 #define LOAD_REQUIRED(field, symbol) \
-    if (!load_symbol((void **)&api.field, symbol, true)) goto fail
+    if (!load_symbol(&api.field, sizeof api.field, symbol, true)) goto fail
 #define LOAD_OPTIONAL(field, symbol) \
-    (void)load_symbol((void **)&api.field, symbol, false)
+    (void)load_symbol(&api.field, sizeof api.field, symbol, false)
 
     LOAD_REQUIRED(init_v2, "nvmlInit_v2");
     LOAD_REQUIRED(shutdown, "nvmlShutdown");
@@ -122,7 +126,7 @@ static bool initialise(void)
     return true;
 
 fail:
-    dlclose(api.handle);
+    infiltratr_dynlib_close(&api.library);
     memset(&api, 0, sizeof(api));
     api.attempted = true;
     return false;
@@ -194,7 +198,7 @@ static LsmGpuInfo *gpu_for_nvml_device(LsmMonitor *monitor, unsigned int index,
         }
     }
 
-    /* Older NVML libraries may not expose a usable PCI identity.  Retain the
+    /* Older NVML libraries may not expose a usable PCI identity. Retain the
      * NVIDIA-only ordinal fallback rather than dropping otherwise valid data. */
     unsigned int current = 0;
     for (size_t gpu_index = 0; gpu_index < monitor->gpu_count; gpu_index++) {
@@ -262,8 +266,7 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
             if (api.device_get_memory_info(device, &memory) == NVML_SUCCESS) {
                 gpu->memory_used_bytes = memory.used;
                 gpu->memory_total_bytes = memory.total;
-                gpu->memory_percent = lsm_percent_u64(
-                    memory.used, memory.total);
+                gpu->memory_percent = lsm_percent_u64(memory.used, memory.total);
             }
         }
 
@@ -306,6 +309,6 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
 void lsm_nvml_shutdown(void)
 {
     if (api.initialised && api.shutdown) (void)api.shutdown();
-    if (api.handle) dlclose(api.handle);
+    infiltratr_dynlib_close(&api.library);
     memset(&api, 0, sizeof(api));
 }

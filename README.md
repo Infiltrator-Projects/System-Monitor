@@ -62,11 +62,12 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.7.0 in
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.8.0 in
 the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
 repository. It is linked statically into this application, so the source has
 one canonical owner while the installed package has no cross-project runtime
-dependency.
+dependency. Common also owns the portable runtime-library loader used by the
+optional NVML backend; NVIDIA-specific discovery and metric policy stay local.
 
 Storage, memory and network quantities use 1024-based scaling with traditional
 labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB.

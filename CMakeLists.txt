@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.7.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.7.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "462e383d0326c2e8c81d9cbfccaecd344f145d26")
+set(INFILTRATR_COMMON_TAG "v1.8.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.8.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "318b1babc7343403ae5e222ea01235a0fc84d752")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -181,6 +181,7 @@ add_library(infiltratr-common STATIC
     "${INFILTRATR_COMMON_DIR}/src/config.c"
     "${INFILTRATR_COMMON_DIR}/src/timing.c"
     "${INFILTRATR_COMMON_DIR}/src/format.c"
+    "${INFILTRATR_COMMON_DIR}/src/dynlib.c"
     "${INFILTRATR_COMMON_DIR}/src/posix.c")
 target_include_directories(infiltratr-common PUBLIC
     "${INFILTRATR_COMMON_DIR}/include")
