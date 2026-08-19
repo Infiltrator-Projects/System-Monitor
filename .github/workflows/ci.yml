@@ -21,7 +21,13 @@ jobs:
           submodules: recursive
 
       - name: Apply forensic finish
-        run: python3 .github/forensic_finish.py
+        run: |
+          python3 .github/forensic_finish.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/app_menu.c')
+          path.write_text(path.read_text().rstrip() + '\n')
+          PY
 
       - name: Verify source diff
         run: |
