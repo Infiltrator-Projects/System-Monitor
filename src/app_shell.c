@@ -112,7 +112,7 @@ static void on_pause_toggled(GtkCheckMenuItem *item, gpointer user_data)
                                app->runtime.paused && !app->runtime.compact_summary);
 }
 
-void lsm_app_shell_lsm_app_shell_apply_compact_summary(LsmApp *app)
+void lsm_app_shell_apply_compact_summary(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
     if (app->shell.notebook)
@@ -490,7 +490,7 @@ static gboolean on_delete_event(GtkWidget *widget, GdkEvent *event, gpointer use
     return TRUE;
 }
 
-void lsm_app_shell_lsm_app_shell_save_page_scroll(LsmApp *app, gint page)
+void lsm_app_shell_save_page_scroll(LsmApp *app, gint page)
 {
     if (!app || page < 0 || page >= LSM_TAB_COUNT ||
         !app->runtime.page_scrollers[page]) return;
