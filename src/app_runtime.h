@@ -29,6 +29,13 @@ gboolean lsm_app_refresh_processes_if_due(LsmApp *app, gboolean force);
 void lsm_app_refresh_all(LsmApp *app);
 
 /**
+ * Recreate presentation timers after refresh preferences change.
+ *
+ * @param [in,out] app Active application context whose cadence changed.
+ */
+void lsm_app_preferences_changed(LsmApp *app);
+
+/**
  * Start application-owned recurring refresh sources.
  *
  * @param [in,out] app Active application context receiving source identifiers.
