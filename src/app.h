@@ -52,11 +52,4 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data);
  */
 void lsm_app_shutdown(LsmApp *app);
 
-/**
- * Recreate presentation timers after refresh preferences change.
- *
- * @param [in,out] app Active application context whose cadence changed.
- */
-void lsm_app_preferences_changed(LsmApp *app);
-
 #endif
