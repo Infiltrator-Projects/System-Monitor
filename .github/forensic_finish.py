@@ -119,6 +119,11 @@ source = path.read_text()
 source = replace_once(source, '#include "app_internal.h"\n',
                       '#include "app_internal.h"\n#include "app_menu.h"\n',
                       str(path))
+source = replace_once(source, 'return g_try_new0(LsmApp, 1);',
+                      'return calloc(1U, sizeof(LsmApp));', str(path))
+source = replace_once(source, 'void lsm_app_free(LsmApp *app)\n{\n    g_free(app);\n}',
+                      'void lsm_app_free(LsmApp *app)\n{\n    free(app);\n}',
+                      str(path))
 source = replace_once(source, 'lsm_app_shell_build_menu(app)',
                       'lsm_app_menu_build(app)', str(path))
 path.write_text(source)
