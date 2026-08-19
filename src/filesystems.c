@@ -13,6 +13,7 @@
  * @license GPL-3.0-or-later
  */
 #include "filesystems.h"
+#include "app_internal.h"
 
 #include "common.h"
 #include "filesystem_inventory.h"

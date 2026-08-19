@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.6.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.6.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "7dc1195efd3f066e84c57520b44b2aa448847b90")
+set(INFILTRATR_COMMON_TAG "v1.7.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.7.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "462e383d0326c2e8c81d9cbfccaecd344f145d26")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -22,10 +22,15 @@ if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     else()
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src")
         execute_process(
-            COMMAND "${LSM_GIT_EXECUTABLE}" clone --depth 1 --branch
-                    "${INFILTRATR_COMMON_TAG}" "${INFILTRATR_COMMON_URL}"
+            COMMAND "${LSM_GIT_EXECUTABLE}" clone "${INFILTRATR_COMMON_URL}"
                     "${INFILTRATR_COMMON_DIR}"
             RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+        if(LSM_COMMON_FETCH_RESULT EQUAL 0)
+            execute_process(
+                COMMAND "${LSM_GIT_EXECUTABLE}" -C "${INFILTRATR_COMMON_DIR}"
+                        checkout --detach "${INFILTRATR_COMMON_EXPECTED_COMMIT}"
+                RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
+        endif()
     endif()
     if(NOT LSM_COMMON_FETCH_RESULT EQUAL 0 OR
        NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
@@ -173,6 +178,8 @@ set(LSM_MONITOR_BACKEND_SOURCES
 add_library(infiltratr-common STATIC
     "${INFILTRATR_COMMON_DIR}/src/core.c"
     "${INFILTRATR_COMMON_DIR}/src/arithmetic.c"
+    "${INFILTRATR_COMMON_DIR}/src/config.c"
+    "${INFILTRATR_COMMON_DIR}/src/timing.c"
     "${INFILTRATR_COMMON_DIR}/src/format.c"
     "${INFILTRATR_COMMON_DIR}/src/posix.c")
 target_include_directories(infiltratr-common PUBLIC

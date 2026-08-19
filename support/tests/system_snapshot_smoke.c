@@ -9,7 +9,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
-#include "app.h"
+#include "app_internal.h"
 #include "system_snapshot.h"
 
 #ifdef NDEBUG

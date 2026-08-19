@@ -12,6 +12,8 @@
 
 #include "app.h"
 
+typedef struct LsmDevicePage LsmDevicePage;
+
 /**
  * Project one immutable monitor snapshot onto an existing device page.
  *

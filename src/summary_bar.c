@@ -9,7 +9,7 @@
  */
 #include "summary_bar.h"
 
-#include "app.h"
+#include "app_internal.h"
 #include "metric_format.h"
 #include "ui_helpers.h"
 

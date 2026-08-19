@@ -10,7 +10,7 @@
 #ifndef LINUX_SYSTEM_MONITOR_PERFORMANCE_INTERNAL_H
 #define LINUX_SYSTEM_MONITOR_PERFORMANCE_INTERNAL_H
 
-#include "app.h"
+#include "app_internal.h"
 
 enum {
     LSM_PRIMARY_GRAPH_MIN_HEIGHT = 120,
@@ -64,5 +64,15 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_gpu_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_npu_page(LsmApp *app, size_t index);
+
+/**
+ * Rebuild one GPU graph selector from metrics supplied by the current backend.
+ *
+ * @param [in,out] slot GPU graph slot whose selector mapping is refreshed.
+ * @param [in] gpu Current GPU snapshot used to derive selectable metrics.
+ * @param [in] preferred Preferred metric when it is supported.
+ */
+void lsm_performance_populate_gpu_metric_selector(
+    LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
 
 #endif

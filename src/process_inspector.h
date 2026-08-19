@@ -11,6 +11,7 @@
 #define LINUX_SYSTEM_MONITOR_PROCESS_INSPECTOR_H
 
 #include "app.h"
+#include "process_model.h"
 
 /**
  * Open a non-modal Process Inspector window for one process identity.

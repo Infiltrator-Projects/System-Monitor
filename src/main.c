@@ -17,7 +17,8 @@ int main(int argc, char **argv)
     setlocale(LC_ALL, "");
 
 
-    LsmApp *app = g_new0(LsmApp, 1);
+    LsmApp *app = lsm_app_create();
+    if (!app) return EXIT_FAILURE;
 #if GLIB_CHECK_VERSION(2, 74, 0)
     const GApplicationFlags application_flags = G_APPLICATION_DEFAULT_FLAGS;
 #else
@@ -29,6 +30,6 @@ int main(int argc, char **argv)
     int status = g_application_run(G_APPLICATION(application), argc, argv);
     lsm_app_shutdown(app);
     g_object_unref(application);
-    g_free(app);
+    lsm_app_free(app);
     return status;
 }

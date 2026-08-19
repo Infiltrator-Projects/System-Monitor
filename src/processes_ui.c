@@ -13,7 +13,7 @@
  */
 #include "processes_ui.h"
 
-#include "app.h"
+#include "app_internal.h"
 #include "application_catalog.h"
 #include "common.h"
 #include "details_page.h"

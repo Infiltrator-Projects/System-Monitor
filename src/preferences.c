@@ -15,41 +15,33 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "preferences.h"
+#include "app_internal.h"
+#include "app_runtime.h"
 
 #include "atomic_file.h"
+#include "details_page.h"
 #include "filesystems.h"
 #include "performance.h"
-#include "details_page.h"
 #include "processes_ui.h"
 
-#include <errno.h>
-#include <math.h>
+#include <infiltratr/config.h>
+#include <infiltratr/core.h>
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 static gboolean parse_boolean(const char *value, gboolean fallback)
 {
-    if (!value) return fallback;
-    if (strcmp(value, "1") == 0 || strcasecmp(value, "true") == 0 ||
-        strcasecmp(value, "yes") == 0)
-        return TRUE;
-    if (strcmp(value, "0") == 0 || strcasecmp(value, "false") == 0 ||
-        strcasecmp(value, "no") == 0)
-        return FALSE;
-    return fallback;
+    bool parsed = false;
+    return infiltratr_config_parse_bool(value, &parsed)
+        ? (parsed ? TRUE : FALSE) : fallback;
 }
 
 static guint validated_interval(const char *value, guint fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const unsigned long parsed = strtoul(value, &end, 10);
-    if (errno || end == value || *end ||
-        (parsed != 500UL && parsed != 1000UL && parsed != 2000UL &&
-         parsed != 5000UL))
+    int64_t parsed = 0;
+    if (!infiltratr_parse_i64_range(value, 10U, 0, INT64_MAX, &parsed) ||
+        (parsed != 500 && parsed != 1000 && parsed != 2000 && parsed != 5000))
         return fallback;
     return (guint)parsed;
 }
@@ -57,11 +49,8 @@ static guint validated_interval(const char *value, guint fallback)
 static gint validated_integer(const char *value, gint minimum, gint maximum,
                               gint fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const long parsed = strtol(value, &end, 10);
-    if (errno || end == value || *end || parsed < minimum || parsed > maximum)
+    int64_t parsed = 0;
+    if (!infiltratr_parse_i64_range(value, 10U, minimum, maximum, &parsed))
         return fallback;
     return (gint)parsed;
 }
@@ -69,14 +58,9 @@ static gint validated_integer(const char *value, gint minimum, gint maximum,
 static double validated_double(const char *value, double minimum,
                                double maximum, double fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const double parsed = strtod(value, &end);
-    if (errno || end == value || *end || !isfinite(parsed) ||
-        parsed < minimum || parsed > maximum)
-        return fallback;
-    return parsed;
+    double parsed = 0.0;
+    return infiltratr_parse_double_range(value, minimum, maximum, &parsed)
+        ? parsed : fallback;
 }
 
 static gboolean valid_stack_name(const char *value)
@@ -100,54 +84,61 @@ void lsm_preferences_load(LsmApp *app)
     gint tab_layout_version = 0;
     char line[512];
     while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = '\0';
-        char *equals = strchr(line, '=');
-        if (!equals) continue;
-        *equals++ = '\0';
-        if (strcmp(line, "update_interval_ms") == 0)
-            app->runtime.update_interval_ms = validated_interval(equals,
-                                                         app->runtime.update_interval_ms);
-        else if (strcmp(line, "newer_on_right") == 0)
-            app->runtime.newer_on_right = parse_boolean(equals, app->runtime.newer_on_right);
-        else if (strcmp(line, "network_use_bits") == 0)
-            app->runtime.network_use_bits = parse_boolean(equals, app->runtime.network_use_bits);
-        else if (strcmp(line, "process_cpu_per_core") == 0)
-            app->runtime.process_cpu_per_core = parse_boolean(equals,
-                                                      app->runtime.process_cpu_per_core);
-        else if (strcmp(line, "show_all_filesystems") == 0)
-            app->runtime.show_all_filesystems = parse_boolean(equals,
-                                                      app->runtime.show_all_filesystems);
-        else if (strcmp(line, "process_heatmap") == 0)
-            app->details.process_heatmap = parse_boolean(equals, app->details.process_heatmap);
-        else if (strcmp(line, "always_on_top") == 0)
-            app->runtime.always_on_top = parse_boolean(equals, app->runtime.always_on_top);
-        else if (strcmp(line, "compact_summary") == 0)
-            app->runtime.compact_summary = parse_boolean(equals, app->runtime.compact_summary);
-        else if (strcmp(line, "window_width") == 0)
+        char *key = NULL;
+        char *value = NULL;
+        if (infiltratr_config_parse_line(line, &key, &value) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            continue;
+        if (strcmp(key, "update_interval_ms") == 0)
+            app->runtime.update_interval_ms = validated_interval(
+                value, app->runtime.update_interval_ms);
+        else if (strcmp(key, "newer_on_right") == 0)
+            app->runtime.newer_on_right = parse_boolean(
+                value, app->runtime.newer_on_right);
+        else if (strcmp(key, "network_use_bits") == 0)
+            app->runtime.network_use_bits = parse_boolean(
+                value, app->runtime.network_use_bits);
+        else if (strcmp(key, "process_cpu_per_core") == 0)
+            app->runtime.process_cpu_per_core = parse_boolean(
+                value, app->runtime.process_cpu_per_core);
+        else if (strcmp(key, "show_all_filesystems") == 0)
+            app->runtime.show_all_filesystems = parse_boolean(
+                value, app->runtime.show_all_filesystems);
+        else if (strcmp(key, "process_heatmap") == 0)
+            app->details.process_heatmap = parse_boolean(
+                value, app->details.process_heatmap);
+        else if (strcmp(key, "always_on_top") == 0)
+            app->runtime.always_on_top = parse_boolean(
+                value, app->runtime.always_on_top);
+        else if (strcmp(key, "compact_summary") == 0)
+            app->runtime.compact_summary = parse_boolean(
+                value, app->runtime.compact_summary);
+        else if (strcmp(key, "window_width") == 0)
             app->runtime.window_width = validated_integer(
-                equals, 320, 7680, app->runtime.window_width);
-        else if (strcmp(line, "window_height") == 0)
+                value, 320, 7680, app->runtime.window_width);
+        else if (strcmp(key, "window_height") == 0)
             app->runtime.window_height = validated_integer(
-                equals, 240, 4320, app->runtime.window_height);
-        else if (strcmp(line, "window_maximized") == 0)
+                value, 240, 4320, app->runtime.window_height);
+        else if (strcmp(key, "window_maximized") == 0)
             app->runtime.window_maximized = parse_boolean(
-                equals, app->runtime.window_maximized);
-        else if (strcmp(line, "last_tab") == 0)
+                value, app->runtime.window_maximized);
+        else if (strcmp(key, "last_tab") == 0)
             app->runtime.last_tab = validated_integer(
-                equals, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
-        else if (strcmp(line, "tab_layout_version") == 0)
+                value, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
+        else if (strcmp(key, "tab_layout_version") == 0)
             tab_layout_version = validated_integer(
-                equals, 0, LSM_TAB_LAYOUT_VERSION, 0);
-        else if (strcmp(line, "performance_page") == 0 &&
-                 valid_stack_name(equals))
-            g_strlcpy(app->runtime.selected_performance_page, equals,
+                value, 0, LSM_TAB_LAYOUT_VERSION, 0);
+        else if (strcmp(key, "performance_page") == 0 &&
+                 valid_stack_name(value))
+            g_strlcpy(app->runtime.selected_performance_page, value,
                       sizeof(app->runtime.selected_performance_page));
-        else if (strncmp(line, "page_scroll_", 12U) == 0 &&
-                 line[12] >= '0' && line[12] <= '7' && line[13] == '\0') {
-            const size_t index = (size_t)(line[12] - '0');
+        else if (strncmp(key, "page_scroll_", 12U) == 0 &&
+                 key[12] >= '0' && key[12] <= '7' && key[13] == '\0') {
+            const size_t index = (size_t)(key[12] - '0');
             if (index < LSM_TAB_COUNT)
                 app->runtime.page_scroll[index] = validated_double(
-                    equals, 0.0, 1000000000.0, app->runtime.page_scroll[index]);
+                    value, 0.0, 1000000000.0,
+                    app->runtime.page_scroll[index]);
         }
     }
     fclose(file);
@@ -181,7 +172,8 @@ static bool write_preferences(FILE *file, const void *user_data)
         app->runtime.always_on_top ? 1 : 0,
         app->runtime.compact_summary ? 1 : 0,
         app->runtime.window_width, app->runtime.window_height,
-        app->runtime.window_maximized ? 1 : 0, LSM_TAB_LAYOUT_VERSION, app->runtime.last_tab);
+        app->runtime.window_maximized ? 1 : 0, LSM_TAB_LAYOUT_VERSION,
+        app->runtime.last_tab);
     bool okay = result >= 0;
     for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++)
         if (fprintf(file, "page_scroll_%zu=%.3f\n", index,
@@ -227,15 +219,16 @@ static int interval_index(guint interval)
 static guint interval_from_index(int index)
 {
     static const guint intervals[] = {500U, 1000U, 2000U, 5000U};
-    return index >= 0 && (size_t)index < G_N_ELEMENTS(intervals) ?
-        intervals[index] : 1000U;
+    return index >= 0 && (size_t)index < G_N_ELEMENTS(intervals)
+        ? intervals[index] : 1000U;
 }
 
 void lsm_preferences_show(LsmApp *app)
 {
     if (!app) return;
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Preferences",
-        GTK_WINDOW(app->shell.window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "Preferences", GTK_WINDOW(app->shell.window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 620, 430);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -251,17 +244,25 @@ void lsm_preferences_show(LsmApp *app)
     gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 14);
 
     GtkWidget *speed = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed), "Fast — 0.5 seconds");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed), "Normal — 1 second");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed), "Low — 2 seconds");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed), "Very low — 5 seconds");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(speed), interval_index(app->runtime.update_interval_ms));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
+                                   "Fast — 0.5 seconds");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
+                                   "Normal — 1 second");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
+                                   "Low — 2 seconds");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
+                                   "Very low — 5 seconds");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(speed),
+                             interval_index(app->runtime.update_interval_ms));
     attach_preference(GTK_GRID(grid), 0, "Performance refresh speed", speed);
 
     GtkWidget *network = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network), "Bytes per second — KB/s, MB/s");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network), "Bits per second — Kb/s, Mb/s");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(network), app->runtime.network_use_bits ? 1 : 0);
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network),
+                                   "Bytes per second — KB/s, MB/s");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network),
+                                   "Bits per second — Kb/s, Mb/s");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(network),
+                             app->runtime.network_use_bits ? 1 : 0);
     attach_preference(GTK_GRID(grid), 1, "Network units", network);
 
     GtkWidget *cpu_mode = gtk_combo_box_text_new();
@@ -269,13 +270,17 @@ void lsm_preferences_show(LsmApp *app)
         "Total computer capacity — process maximum 100%");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(cpu_mode),
         "Per-core capacity — multi-threaded processes may exceed 100%");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(cpu_mode), app->runtime.process_cpu_per_core ? 1 : 0);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(cpu_mode),
+                             app->runtime.process_cpu_per_core ? 1 : 0);
     attach_preference(GTK_GRID(grid), 2, "Process CPU scale", cpu_mode);
 
     GtkWidget *direction = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction), "New values on the right");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction), "New values on the left");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(direction), app->runtime.newer_on_right ? 0 : 1);
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction),
+                                   "New values on the right");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction),
+                                   "New values on the left");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(direction),
+                             app->runtime.newer_on_right ? 0 : 1);
     attach_preference(GTK_GRID(grid), 3, "Graph direction", direction);
 
     GtkWidget *show_all = gtk_check_button_new_with_label(
@@ -285,7 +290,8 @@ void lsm_preferences_show(LsmApp *app)
     gtk_grid_attach(GTK_GRID(grid), show_all, 0, 4, 2, 1);
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Shade busy resource cells in Processes and Details");
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap), app->details.process_heatmap);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap),
+                                 app->details.process_heatmap);
     gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 5, 2, 1);
     GtkWidget *always_on_top = gtk_check_button_new_with_label(
         "Keep the monitor above other windows");
@@ -308,11 +314,16 @@ void lsm_preferences_show(LsmApp *app)
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         app->runtime.update_interval_ms = interval_from_index(
             gtk_combo_box_get_active(GTK_COMBO_BOX(speed)));
-        app->runtime.network_use_bits = gtk_combo_box_get_active(GTK_COMBO_BOX(network)) == 1;
-        app->runtime.process_cpu_per_core = gtk_combo_box_get_active(GTK_COMBO_BOX(cpu_mode)) == 1;
-        app->runtime.newer_on_right = gtk_combo_box_get_active(GTK_COMBO_BOX(direction)) == 0;
-        app->runtime.show_all_filesystems = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(show_all));
-        app->details.process_heatmap = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(heatmap));
+        app->runtime.network_use_bits =
+            gtk_combo_box_get_active(GTK_COMBO_BOX(network)) == 1;
+        app->runtime.process_cpu_per_core =
+            gtk_combo_box_get_active(GTK_COMBO_BOX(cpu_mode)) == 1;
+        app->runtime.newer_on_right =
+            gtk_combo_box_get_active(GTK_COMBO_BOX(direction)) == 0;
+        app->runtime.show_all_filesystems =
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(show_all));
+        app->details.process_heatmap =
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(heatmap));
         app->runtime.always_on_top = gtk_toggle_button_get_active(
             GTK_TOGGLE_BUTTON(always_on_top));
         app->runtime.compact_summary = gtk_toggle_button_get_active(
@@ -326,8 +337,9 @@ void lsm_preferences_show(LsmApp *app)
                 GTK_CHECK_MENU_ITEM(app->shell.compact_summary_menu_item),
                 app->runtime.compact_summary);
         if (app->filesystem.filesystem_show_all)
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->filesystem.filesystem_show_all),
-                                         app->runtime.show_all_filesystems);
+            gtk_toggle_button_set_active(
+                GTK_TOGGLE_BUTTON(app->filesystem.filesystem_show_all),
+                app->runtime.show_all_filesystems);
         lsm_preferences_save(app);
         lsm_app_preferences_changed(app);
         app->processes.processes_model_dirty = TRUE;

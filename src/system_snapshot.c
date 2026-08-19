@@ -11,7 +11,7 @@
 
 #include "system_snapshot.h"
 
-#include "app.h"
+#include "app_internal.h"
 #include "atomic_file.h"
 #include "common.h"
 #include "metric_format.h"

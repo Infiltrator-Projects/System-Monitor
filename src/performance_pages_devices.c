@@ -8,6 +8,7 @@
  * @license GPL-3.0-or-later
  */
 #include "performance_internal.h"
+#include "app_internal.h"
 #include "gpu_metrics.h"
 #include "ui_helpers.h"
 

@@ -14,7 +14,7 @@
  * @license GPL-3.0-or-later
  */
 #include "users.h"
-#include "app.h"
+#include "app_internal.h"
 #include "app_config.h"
 #include "common.h"
 #include "ui_helpers.h"
