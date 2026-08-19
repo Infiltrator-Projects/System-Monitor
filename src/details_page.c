@@ -16,7 +16,7 @@
 #include "duration_format.h"
 #include "refresh_policy.h"
 #include "monitor.h"
-#include "app.h"
+#include "app_internal.h"
 #include "common.h"
 #include "history.h"
 #include "process_backend.h"

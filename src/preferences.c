@@ -15,12 +15,16 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "preferences.h"
+#include "app_internal.h"
 
 #include "atomic_file.h"
 #include "filesystems.h"
 #include "performance.h"
 #include "details_page.h"
 #include "processes_ui.h"
+
+#include <infiltratr/config.h>
+#include <infiltratr/core.h>
 
 #include <errno.h>
 #include <math.h>
@@ -31,25 +35,16 @@
 
 static gboolean parse_boolean(const char *value, gboolean fallback)
 {
-    if (!value) return fallback;
-    if (strcmp(value, "1") == 0 || strcasecmp(value, "true") == 0 ||
-        strcasecmp(value, "yes") == 0)
-        return TRUE;
-    if (strcmp(value, "0") == 0 || strcasecmp(value, "false") == 0 ||
-        strcasecmp(value, "no") == 0)
-        return FALSE;
-    return fallback;
+    bool parsed = false;
+    return infiltratr_config_parse_bool(value, &parsed)
+        ? (parsed ? TRUE : FALSE) : fallback;
 }
 
 static guint validated_interval(const char *value, guint fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const unsigned long parsed = strtoul(value, &end, 10);
-    if (errno || end == value || *end ||
-        (parsed != 500UL && parsed != 1000UL && parsed != 2000UL &&
-         parsed != 5000UL))
+    int64_t parsed = 0;
+    if (!infiltratr_parse_i64_range(value, 10U, 0, INT64_MAX, &parsed) ||
+        (parsed != 500 && parsed != 1000 && parsed != 2000 && parsed != 5000))
         return fallback;
     return (guint)parsed;
 }
@@ -57,11 +52,8 @@ static guint validated_interval(const char *value, guint fallback)
 static gint validated_integer(const char *value, gint minimum, gint maximum,
                               gint fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const long parsed = strtol(value, &end, 10);
-    if (errno || end == value || *end || parsed < minimum || parsed > maximum)
+    int64_t parsed = 0;
+    if (!infiltratr_parse_i64_range(value, 10U, minimum, maximum, &parsed))
         return fallback;
     return (gint)parsed;
 }
@@ -69,14 +61,9 @@ static gint validated_integer(const char *value, gint minimum, gint maximum,
 static double validated_double(const char *value, double minimum,
                                double maximum, double fallback)
 {
-    if (!value) return fallback;
-    char *end = NULL;
-    errno = 0;
-    const double parsed = strtod(value, &end);
-    if (errno || end == value || *end || !isfinite(parsed) ||
-        parsed < minimum || parsed > maximum)
-        return fallback;
-    return parsed;
+    double parsed = 0.0;
+    return infiltratr_parse_double_range(value, minimum, maximum, &parsed)
+        ? parsed : fallback;
 }
 
 static gboolean valid_stack_name(const char *value)
@@ -100,54 +87,55 @@ void lsm_preferences_load(LsmApp *app)
     gint tab_layout_version = 0;
     char line[512];
     while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = '\0';
-        char *equals = strchr(line, '=');
-        if (!equals) continue;
-        *equals++ = '\0';
-        if (strcmp(line, "update_interval_ms") == 0)
-            app->runtime.update_interval_ms = validated_interval(equals,
+        char *key = NULL;
+        char *value = NULL;
+        if (infiltratr_config_parse_line(line, &key, &value) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            continue;
+        if (strcmp(key, "update_interval_ms") == 0)
+            app->runtime.update_interval_ms = validated_interval(value,
                                                          app->runtime.update_interval_ms);
-        else if (strcmp(line, "newer_on_right") == 0)
-            app->runtime.newer_on_right = parse_boolean(equals, app->runtime.newer_on_right);
-        else if (strcmp(line, "network_use_bits") == 0)
-            app->runtime.network_use_bits = parse_boolean(equals, app->runtime.network_use_bits);
-        else if (strcmp(line, "process_cpu_per_core") == 0)
-            app->runtime.process_cpu_per_core = parse_boolean(equals,
+        else if (strcmp(key, "newer_on_right") == 0)
+            app->runtime.newer_on_right = parse_boolean(value, app->runtime.newer_on_right);
+        else if (strcmp(key, "network_use_bits") == 0)
+            app->runtime.network_use_bits = parse_boolean(value, app->runtime.network_use_bits);
+        else if (strcmp(key, "process_cpu_per_core") == 0)
+            app->runtime.process_cpu_per_core = parse_boolean(value,
                                                       app->runtime.process_cpu_per_core);
-        else if (strcmp(line, "show_all_filesystems") == 0)
-            app->runtime.show_all_filesystems = parse_boolean(equals,
+        else if (strcmp(key, "show_all_filesystems") == 0)
+            app->runtime.show_all_filesystems = parse_boolean(value,
                                                       app->runtime.show_all_filesystems);
-        else if (strcmp(line, "process_heatmap") == 0)
-            app->details.process_heatmap = parse_boolean(equals, app->details.process_heatmap);
-        else if (strcmp(line, "always_on_top") == 0)
-            app->runtime.always_on_top = parse_boolean(equals, app->runtime.always_on_top);
-        else if (strcmp(line, "compact_summary") == 0)
-            app->runtime.compact_summary = parse_boolean(equals, app->runtime.compact_summary);
-        else if (strcmp(line, "window_width") == 0)
+        else if (strcmp(key, "process_heatmap") == 0)
+            app->details.process_heatmap = parse_boolean(value, app->details.process_heatmap);
+        else if (strcmp(key, "always_on_top") == 0)
+            app->runtime.always_on_top = parse_boolean(value, app->runtime.always_on_top);
+        else if (strcmp(key, "compact_summary") == 0)
+            app->runtime.compact_summary = parse_boolean(value, app->runtime.compact_summary);
+        else if (strcmp(key, "window_width") == 0)
             app->runtime.window_width = validated_integer(
-                equals, 320, 7680, app->runtime.window_width);
-        else if (strcmp(line, "window_height") == 0)
+                value, 320, 7680, app->runtime.window_width);
+        else if (strcmp(key, "window_height") == 0)
             app->runtime.window_height = validated_integer(
-                equals, 240, 4320, app->runtime.window_height);
-        else if (strcmp(line, "window_maximized") == 0)
+                value, 240, 4320, app->runtime.window_height);
+        else if (strcmp(key, "window_maximized") == 0)
             app->runtime.window_maximized = parse_boolean(
-                equals, app->runtime.window_maximized);
-        else if (strcmp(line, "last_tab") == 0)
+                value, app->runtime.window_maximized);
+        else if (strcmp(key, "last_tab") == 0)
             app->runtime.last_tab = validated_integer(
-                equals, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
-        else if (strcmp(line, "tab_layout_version") == 0)
+                value, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
+        else if (strcmp(key, "tab_layout_version") == 0)
             tab_layout_version = validated_integer(
-                equals, 0, LSM_TAB_LAYOUT_VERSION, 0);
-        else if (strcmp(line, "performance_page") == 0 &&
-                 valid_stack_name(equals))
-            g_strlcpy(app->runtime.selected_performance_page, equals,
+                value, 0, LSM_TAB_LAYOUT_VERSION, 0);
+        else if (strcmp(key, "performance_page") == 0 &&
+                 valid_stack_name(value))
+            g_strlcpy(app->runtime.selected_performance_page, value,
                       sizeof(app->runtime.selected_performance_page));
-        else if (strncmp(line, "page_scroll_", 12U) == 0 &&
-                 line[12] >= '0' && line[12] <= '7' && line[13] == '\0') {
-            const size_t index = (size_t)(line[12] - '0');
+        else if (strncmp(key, "page_scroll_", 12U) == 0 &&
+                 key[12] >= '0' && key[12] <= '7' && key[13] == '\0') {
+            const size_t index = (size_t)(key[12] - '0');
             if (index < LSM_TAB_COUNT)
                 app->runtime.page_scroll[index] = validated_double(
-                    equals, 0.0, 1000000000.0, app->runtime.page_scroll[index]);
+                    value, 0.0, 1000000000.0, app->runtime.page_scroll[index]);
         }
     }
     fclose(file);

@@ -9,7 +9,7 @@
  */
 #include "task_launcher.h"
 
-#include "app.h"
+#include "app_internal.h"
 #include "ui_helpers.h"
 
 #include <gtk/gtk.h>

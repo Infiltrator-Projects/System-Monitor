@@ -12,6 +12,7 @@
  * @license GPL-3.0-or-later
  */
 #include "help.h"
+#include "app_internal.h"
 
 #include "ui_helpers.h"
 

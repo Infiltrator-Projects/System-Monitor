@@ -16,23 +16,29 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.6.0
-INFILTRATR_COMMON_COMMIT := 7dc1195efd3f066e84c57520b44b2aa448847b90
-INFILTRATR_COMMON_VERSION := 1.6.0
+INFILTRATR_COMMON_TAG := v1.7.0
+INFILTRATR_COMMON_COMMIT := f7cc14f074d30f0374ea8b05cd4bd507ecc40427
+INFILTRATR_COMMON_VERSION := 1.7.0
 INFILTRATR_COMMON_SOURCES := \
 	$(INFILTRATR_COMMON_DIR)/src/core.c \
 	$(INFILTRATR_COMMON_DIR)/src/arithmetic.c \
+	$(INFILTRATR_COMMON_DIR)/src/config.c \
+	$(INFILTRATR_COMMON_DIR)/src/timing.c \
 	$(INFILTRATR_COMMON_DIR)/src/format.c \
 	$(INFILTRATR_COMMON_DIR)/src/posix.c
 INFILTRATR_COMMON_HEADERS := \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/compiler.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/core.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/arithmetic.h \
+	$(INFILTRATR_COMMON_DIR)/include/infiltratr/config.h \
+	$(INFILTRATR_COMMON_DIR)/include/infiltratr/timing.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/format.h \
 	$(INFILTRATR_COMMON_DIR)/include/infiltratr/posix.h
 INFILTRATR_COMMON_OBJECTS := \
 	$(BUILD_DIR)/infiltratr-common/core.o \
 	$(BUILD_DIR)/infiltratr-common/arithmetic.o \
+	$(BUILD_DIR)/infiltratr-common/config.o \
+	$(BUILD_DIR)/infiltratr-common/timing.o \
 	$(BUILD_DIR)/infiltratr-common/format.o \
 	$(BUILD_DIR)/infiltratr-common/posix.o
 INFILTRATR_COMMON_ARCHIVE := $(BUILD_DIR)/libinfiltratr-common.a

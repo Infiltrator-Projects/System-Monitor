@@ -12,7 +12,7 @@
  * @license GPL-3.0-or-later
  */
 #include "details_page.h"
-#include "app.h"
+#include "app_internal.h"
 #include "atomic_file.h"
 #include "process_backend.h"
 #include "process_inspector.h"

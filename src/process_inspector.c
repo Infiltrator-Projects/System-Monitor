@@ -15,6 +15,7 @@
  * @license GPL-3.0-or-later
  */
 #include "process_inspector.h"
+#include "app_internal.h"
 
 #include "common.h"
 #include "duration_format.h"

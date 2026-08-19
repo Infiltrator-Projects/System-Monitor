@@ -17,7 +17,7 @@
  * @license GPL-3.0-or-later
  */
 #include "history.h"
-#include "app.h"
+#include "app_internal.h"
 #include "atomic_file.h"
 #include "common.h"
 #include "duration_format.h"

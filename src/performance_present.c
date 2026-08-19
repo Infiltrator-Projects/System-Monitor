@@ -12,6 +12,8 @@
  * @license GPL-3.0-or-later
  */
 #include "performance_present.h"
+#include "performance_internal.h"
+#include "app_internal.h"
 
 #include "common.h"
 #include "duration_format.h"

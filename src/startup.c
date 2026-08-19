@@ -14,7 +14,7 @@
  * @license GPL-3.0-or-later
  */
 #include "startup.h"
-#include "app.h"
+#include "app_internal.h"
 #include "app_config.h"
 #include "atomic_file.h"
 #include "ui_helpers.h"

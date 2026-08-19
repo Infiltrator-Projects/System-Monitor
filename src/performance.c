@@ -18,7 +18,7 @@
 #include "performance_internal.h"
 #include "metric_format.h"
 #include "performance_present.h"
-#include "app.h"
+#include "app_internal.h"
 #include "common.h"
 #include "monitor.h"
 #include "summary_bar.h"
