@@ -10,7 +10,7 @@
 #ifndef LINUX_SYSTEM_MONITOR_PERFORMANCE_PRESENT_H
 #define LINUX_SYSTEM_MONITOR_PERFORMANCE_PRESENT_H
 
-#include "app.h"
+#include "app_internal.h"
 
 /**
  * Project one immutable monitor snapshot onto an existing device page.
