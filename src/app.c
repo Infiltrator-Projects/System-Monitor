@@ -16,7 +16,9 @@
  */
 #include "app.h"
 #include "application_catalog.h"
+#include "common.h"
 #include "history.h"
+#include "refresh_policy.h"
 #include "filesystems.h"
 #include "help.h"
 #include "monitor.h"
@@ -90,13 +92,59 @@ static void on_export_selected(GtkMenuItem *item, gpointer user_data)
     lsm_process_export_selected_dialog(user_data);
 }
 
+static guint process_refresh_interval(const LsmApp *app)
+{
+    return app->runtime.update_interval_ms < 1000U
+        ? 1000U : app->runtime.update_interval_ms;
+}
+
+static gboolean process_pages_active(const LsmApp *app)
+{
+    return app->runtime.active_tab == LSM_TAB_PROCESSES ||
+           app->runtime.active_tab == LSM_TAB_DETAILS;
+}
+
+static guint effective_process_refresh_interval(const LsmApp *app)
+{
+    const guint foreground = process_refresh_interval(app);
+    if (process_pages_active(app) || app->process.record_file)
+        return foreground;
+    return foreground < LSM_PROCESS_UPDATE_INTERVAL_MS
+        ? LSM_PROCESS_UPDATE_INTERVAL_MS : foreground;
+}
+
+static gboolean refresh_processes_if_due(LsmApp *app, gboolean force)
+{
+    if (!app || (app->runtime.paused && !force))
+        return G_SOURCE_CONTINUE;
+
+    const double now = lsm_monotonic_seconds();
+    const double interval =
+        (double)effective_process_refresh_interval(app) / 1000.0;
+    if (!force && !lsm_refresh_interval_due(
+                      now,
+                      app->runtime.last_process_refresh_monotonic,
+                      interval))
+        return G_SOURCE_CONTINUE;
+
+    const gboolean result = lsm_processes_update(app);
+    if (now > 0.0)
+        app->runtime.last_process_refresh_monotonic = now;
+    return result;
+}
+
+static gboolean process_timer_update(gpointer user_data)
+{
+    return refresh_processes_if_due(user_data, FALSE);
+}
+
 static void on_refresh(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     LsmApp *app = user_data;
     const gboolean was_paused = app->runtime.paused;
     app->runtime.paused = FALSE;
-    lsm_processes_update(app);
+    (void)refresh_processes_if_due(app, TRUE);
     lsm_performance_refresh(app);
     lsm_history_refresh(app);
     lsm_filesystems_refresh(app);
@@ -106,21 +154,18 @@ static void on_refresh(GtkMenuItem *item, gpointer user_data)
     app->runtime.paused = was_paused;
 }
 
-static guint process_refresh_interval(const LsmApp *app)
-{
-    return app->runtime.update_interval_ms < 1000U ? 1000U : app->runtime.update_interval_ms;
-}
-
 void lsm_app_preferences_changed(LsmApp *app)
 {
     if (!app || !app->shell.window ||
         (!app->runtime.performance_timer && !app->runtime.process_timer)) return;
-    if (app->runtime.performance_timer) g_source_remove(app->runtime.performance_timer);
-    if (app->runtime.process_timer) g_source_remove(app->runtime.process_timer);
-    app->runtime.performance_timer = g_timeout_add(app->runtime.update_interval_ms,
-                                            lsm_performance_update, app);
-    app->runtime.process_timer = g_timeout_add(process_refresh_interval(app),
-                                       lsm_processes_update, app);
+    if (app->runtime.performance_timer)
+        g_source_remove(app->runtime.performance_timer);
+    if (app->runtime.process_timer)
+        g_source_remove(app->runtime.process_timer);
+    app->runtime.performance_timer = g_timeout_add(
+        app->runtime.update_interval_ms, lsm_performance_update, app);
+    app->runtime.process_timer = g_timeout_add(
+        process_refresh_interval(app), process_timer_update, app);
 }
 
 static void on_speed_selected(GtkCheckMenuItem *item, gpointer user_data)
@@ -567,9 +612,11 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             lsm_users_refresh(app);
             break;
         case LSM_TAB_PROCESSES:
+            (void)refresh_processes_if_due(app, FALSE);
             lsm_processes_present_snapshot(app);
             break;
         case LSM_TAB_DETAILS:
+            (void)refresh_processes_if_due(app, FALSE);
             lsm_details_present_snapshot(app);
             break;
         case LSM_TAB_PERFORMANCE:
@@ -869,11 +916,11 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 #ifdef LSM_TEST_LOGICAL
     gtk_stack_set_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack), "logical");
 #endif
-    lsm_processes_update(app);
+    (void)refresh_processes_if_due(app, TRUE);
     lsm_performance_refresh(app);
     lsm_filesystems_refresh(app);
     app->runtime.performance_timer = g_timeout_add(app->runtime.update_interval_ms, lsm_performance_update, app);
-    app->runtime.process_timer = g_timeout_add(process_refresh_interval(app), lsm_processes_update, app);
+    app->runtime.process_timer = g_timeout_add(process_refresh_interval(app), process_timer_update, app);
     app->runtime.services_timer = g_timeout_add_seconds(
         LSM_SERVICE_UPDATE_INTERVAL_SECONDS, lsm_services_update, app);
     app->runtime.users_timer = g_timeout_add_seconds(

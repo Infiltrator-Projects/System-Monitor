@@ -22,6 +22,7 @@
 #include "ui_helpers.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,8 +106,31 @@ static ssize_t snapshot_index_for_pid(const LsmApp *app, LsmProcessId pid)
     return -1;
 }
 
+static GHashTable *build_snapshot_pid_index(const LsmApp *app)
+{
+    GHashTable *index = g_hash_table_new(g_direct_hash, g_direct_equal);
+    if (!index) return NULL;
+    for (size_t item = 0U; item < app->process.process_snapshot_count; item++) {
+        const LsmProcessId pid = app->process.process_snapshot[item].pid;
+        if (pid == 0U || pid > (LsmProcessId)UINT_MAX || item >= UINT_MAX)
+            continue;
+        g_hash_table_insert(index, GUINT_TO_POINTER((guint)pid),
+                            GUINT_TO_POINTER((guint)item + 1U));
+    }
+    return index;
+}
+
+static ssize_t indexed_snapshot_index_for_pid(GHashTable *index,
+                                              LsmProcessId pid)
+{
+    if (!index || pid == 0U || pid > (LsmProcessId)UINT_MAX) return -1;
+    gpointer value = g_hash_table_lookup(
+        index, GUINT_TO_POINTER((guint)pid));
+    return value ? (ssize_t)(GPOINTER_TO_UINT(value) - 1U) : -1;
+}
+
 static const LsmApplicationEntry *application_for_process(
-    const LsmApp *app, size_t process_index)
+    const LsmApp *app, size_t process_index, GHashTable *pid_index)
 {
     const LsmProcessInfo *process = &app->process.process_snapshot[process_index];
     const LsmApplicationEntry *entry = lsm_application_catalog_lookup(
@@ -115,7 +139,8 @@ static const LsmApplicationEntry *application_for_process(
     for (size_t guard = 0U;
          !entry && parent > 1 && guard < app->process.process_snapshot_count;
          guard++) {
-        const ssize_t parent_index = snapshot_index_for_pid(app, parent);
+        const ssize_t parent_index = indexed_snapshot_index_for_pid(
+            pid_index, parent);
         if (parent_index < 0) break;
         const LsmProcessInfo *ancestor =
             &app->process.process_snapshot[(size_t)parent_index];
@@ -141,29 +166,42 @@ static gboolean process_excluded(const LsmApp *app,
     return FALSE;
 }
 
+static gboolean text_matches_folded(const char *text,
+                                       const char *folded_needle)
+{
+    if (!folded_needle || !*folded_needle) return TRUE;
+    if (!text) return FALSE;
+    char *folded_text = g_utf8_casefold(text, -1);
+    const gboolean matches = folded_text &&
+        strstr(folded_text, folded_needle) != NULL;
+    g_free(folded_text);
+    return matches;
+}
+
 static gboolean process_matches_search(const LsmProcessInfo *process,
                                        const char *group_name,
-                                       const char *search)
+                                       const char *folded_search)
 {
-    if (!search || !*search) return TRUE;
+    if (!folded_search || !*folded_search) return TRUE;
     char pid[32];
     snprintf(pid, sizeof(pid), "%llu",
              (unsigned long long)process->pid);
-    return lsm_ui_text_matches(group_name, search) ||
-           lsm_ui_text_matches(process->name, search) ||
-           lsm_ui_text_matches(process->user, search) ||
-           lsm_ui_text_matches(process->command, search) ||
-           lsm_ui_text_matches(pid, search);
+    return text_matches_folded(group_name, folded_search) ||
+           text_matches_folded(process->name, folded_search) ||
+           text_matches_folded(process->user, folded_search) ||
+           text_matches_folded(process->command, folded_search) ||
+           strstr(pid, folded_search) != NULL;
 }
 
 static void process_identity(const LsmApp *app, size_t process_index,
+                             GHashTable *pid_index,
                              ProcessCategory *category, char *key,
                              size_t key_size, char *name, size_t name_size,
                              char *icon, size_t icon_size)
 {
     const LsmProcessInfo *process = &app->process.process_snapshot[process_index];
     const LsmApplicationEntry *entry =
-        application_for_process(app, process_index);
+        application_for_process(app, process_index, pid_index);
     if (entry) {
         *category = PROCESS_CATEGORY_APPLICATION;
         snprintf(key, key_size, "app:%s", entry->id);
@@ -175,7 +213,8 @@ static void process_identity(const LsmApp *app, size_t process_index,
     *category = process->owned_by_current_user
         ? PROCESS_CATEGORY_BACKGROUND : PROCESS_CATEGORY_SYSTEM;
     snprintf(key, key_size, "%s:%s",
-             *category == PROCESS_CATEGORY_BACKGROUND ? "background" : "system",
+             *category == PROCESS_CATEGORY_BACKGROUND
+                 ? "background" : "system",
              process->name);
     g_strlcpy(name, process->name, name_size);
     g_strlcpy(icon, category_icon(*category), icon_size);
@@ -187,15 +226,6 @@ static void group_destroy(gpointer data)
     if (!group) return;
     free(group->indices);
     free(group);
-}
-
-static ProcessGroup *find_group(GPtrArray *groups, const char *key)
-{
-    for (guint index = 0U; index < groups->len; index++) {
-        ProcessGroup *group = g_ptr_array_index(groups, index);
-        if (strcmp(group->key, key) == 0) return group;
-    }
-    return NULL;
 }
 
 static gboolean group_append(ProcessGroup *group, size_t process_index,
@@ -224,10 +254,28 @@ static gint compare_groups(gconstpointer left, gconstpointer right)
 
 static GPtrArray *collect_groups(LsmApp *app)
 {
-    GPtrArray *groups =
-        g_ptr_array_new_with_free_func(group_destroy);
+    GPtrArray *groups = g_ptr_array_new_with_free_func(group_destroy);
     if (!groups) return NULL;
-    const char *search = gtk_entry_get_text(GTK_ENTRY(app->processes.processes_search));
+
+    GHashTable *pid_index = build_snapshot_pid_index(app);
+    GHashTable *group_index = g_hash_table_new(g_str_hash, g_str_equal);
+    if (!pid_index || !group_index) {
+        if (pid_index) g_hash_table_destroy(pid_index);
+        if (group_index) g_hash_table_destroy(group_index);
+        g_ptr_array_free(groups, TRUE);
+        return NULL;
+    }
+
+    const char *search = gtk_entry_get_text(
+        GTK_ENTRY(app->processes.processes_search));
+    char *folded_search = search && *search
+        ? g_utf8_casefold(search, -1) : NULL;
+    if (search && *search && !folded_search) {
+        g_hash_table_destroy(group_index);
+        g_hash_table_destroy(pid_index);
+        g_ptr_array_free(groups, TRUE);
+        return NULL;
+    }
 
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
         const LsmProcessInfo *process = &app->process.process_snapshot[index];
@@ -236,25 +284,33 @@ static GPtrArray *collect_groups(LsmApp *app)
         char key[LSM_NAME_LEN * 2U];
         char name[LSM_NAME_LEN];
         char icon[LSM_NAME_LEN];
-        process_identity(app, index, &category, key, sizeof(key),
-                         name, sizeof(name), icon, sizeof(icon));
-        if (!process_matches_search(process, name, search)) continue;
+        process_identity(app, index, pid_index, &category, key,
+                         sizeof(key), name, sizeof(name),
+                         icon, sizeof(icon));
+        if (!process_matches_search(process, name, folded_search)) continue;
 
-        ProcessGroup *group = find_group(groups, key);
-        gboolean new_group = FALSE;
+        ProcessGroup *group = g_hash_table_lookup(group_index, key);
         if (!group) {
             group = calloc(1U, sizeof(*group));
             if (!group) continue;
-            new_group = TRUE;
             group->category = category;
             g_strlcpy(group->key, key, sizeof(group->key));
             g_strlcpy(group->name, name, sizeof(group->name));
             g_strlcpy(group->icon, icon, sizeof(group->icon));
+            if (!group_append(group, index, process)) {
+                group_destroy(group);
+                continue;
+            }
             g_ptr_array_add(groups, group);
+            g_hash_table_insert(group_index, group->key, group);
+        } else {
+            (void)group_append(group, index, process);
         }
-        if (!group_append(group, index, process) && new_group)
-            g_ptr_array_set_size(groups, (gint)groups->len - 1);
     }
+
+    g_free(folded_search);
+    g_hash_table_destroy(group_index);
+    g_hash_table_destroy(pid_index);
     g_ptr_array_sort(groups, compare_groups);
     return groups;
 }

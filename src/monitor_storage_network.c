@@ -423,7 +423,8 @@ static void update_network_link_details(LsmNetInfo *net)
     }
 }
 
-static void update_networks(LsmMonitor *monitor, double elapsed)
+static void update_networks(LsmMonitor *monitor, double elapsed,
+                            bool refresh_link_metadata)
 {
     LsmNetworkCounterRecord counters[LSM_MAX_NETS] = {0};
     const size_t counter_count = lsm_sources_read_network_counters(
@@ -454,7 +455,8 @@ static void update_networks(LsmMonitor *monitor, double elapsed)
             state->previous_tx = tx;
             state->initialized = true;
         }
-        update_network_link_details(net);
+        if (refresh_link_metadata || !net->connection_state[0])
+            update_network_link_details(net);
         LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
         if (backend && backend->wifi_metadata)
             lsm_wifi_metadata_refresh(backend->wifi_metadata, net);
@@ -498,5 +500,5 @@ void lsm_storage_update(LsmMonitor *monitor, double elapsed,
         }
     }
     update_disks(monitor, elapsed);
-    update_networks(monitor, elapsed);
+    update_networks(monitor, elapsed, refresh_topology);
 }

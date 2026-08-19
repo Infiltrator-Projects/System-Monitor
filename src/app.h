@@ -237,6 +237,8 @@ typedef struct {
     GtkWidget *scale_label;
     GtkWidget *optional_note;
     GtkListStore *partition_store;
+    uint64_t partition_store_signature;
+    gboolean partition_store_signature_valid;
     LsmGraph *graph;
     LsmGraph *secondary_graph;
     LsmGraph *side_graph;
@@ -299,6 +301,7 @@ typedef struct {
     guint users_timer;
     guint filesystem_timer;
     guint update_interval_ms;
+    double last_process_refresh_monotonic;
     gboolean paused;
     gboolean newer_on_right;
     gboolean network_use_bits;
