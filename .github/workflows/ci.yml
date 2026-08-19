@@ -4,15 +4,9 @@ name: Verify
 on:
   push:
     branches: [refactor/app-boundaries-1.13.14]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: write
-
-concurrency:
-  group: verify-${{ github.repository }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
 
 jobs:
   test:
@@ -53,7 +47,6 @@ jobs:
         run: make -j2 release
 
       - name: Commit verified source fixes
-        if: github.event_name == 'push'
         run: |
           set -euo pipefail
           git config user.name github-actions[bot]
