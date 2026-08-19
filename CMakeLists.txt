@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.5.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.5.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb")
+set(INFILTRATR_COMMON_TAG "v1.6.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.6.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "7dc1195efd3f066e84c57520b44b2aa448847b90")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -172,6 +172,7 @@ set(LSM_MONITOR_BACKEND_SOURCES
 # the component's own Makefile can also produce a conventional shared object.
 add_library(infiltratr-common STATIC
     "${INFILTRATR_COMMON_DIR}/src/core.c"
+    "${INFILTRATR_COMMON_DIR}/src/arithmetic.c"
     "${INFILTRATR_COMMON_DIR}/src/format.c"
     "${INFILTRATR_COMMON_DIR}/src/posix.c")
 target_include_directories(infiltratr-common PUBLIC

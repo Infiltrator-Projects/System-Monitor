@@ -62,7 +62,7 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.5.0 in
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.6.0 in
 the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
 repository. It is linked statically into this application, so the source has
 one canonical owner while the installed package has no cross-project runtime
