@@ -290,7 +290,7 @@ COMMON_LINK_TARGETS := \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
 	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
-	quality-policy-smoke
+	quality-policy-smoke preferences-smoke
 
 atomic-file-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
@@ -804,6 +804,7 @@ preferences-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/preferences_smoke.c \
 		src/preferences.c src/atomic_file_posix.c \
+		$(INFILTRATR_COMMON_ARCHIVE) \
 		-Wl,--gc-sections -l:libglib-2.0.so.0 -lm \
 		-o $(BUILD_DIR)/preferences-smoke
 	./$(BUILD_DIR)/preferences-smoke
