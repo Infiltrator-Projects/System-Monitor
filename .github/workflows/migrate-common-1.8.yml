@@ -110,7 +110,8 @@ jobs:
           rm .github/workflows/migrate-common-1.8.yml
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
-          git add -A
+          git add Makefile CMakeLists.txt README.md src/infiltratr-common
+          git add -u .github/workflows/migrate-common-1.8.yml
           git diff --cached --check
           git commit -m "Adopt Common 1.8 dynamic loader for NVML"
           git push origin HEAD:feature/common-1.8-dynlib
