@@ -31,6 +31,7 @@
 #include "users.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 LsmApp *lsm_app_create(void)
 {
