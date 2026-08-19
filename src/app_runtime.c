@@ -14,6 +14,7 @@
 #include "app_internal.h"
 
 #include "common.h"
+#include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
 #include "performance.h"
