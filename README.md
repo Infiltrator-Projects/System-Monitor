@@ -149,11 +149,14 @@ index preserves the source identity even if a release page becomes unavailable.
 | 1.13.12 | `e1110329ef9ee27a3705b7539652cb24f250f1c6` |
 | 1.13.13 | `d98412f9c1a813f634a3f53240d6a602da59cde2` |
 | 1.13.14 | `9b687a8b1f8bc0936120bf3adb30518372481706` |
+| 1.13.15 | `12927f1f4414c34129907bc19513612f3b52aee3` |
 
 The v1.13.2 through v1.13.11 release pages and tags were removed during
 repository maintenance in August 2026. Their published commit identities are
-retained above for audit and reconstruction. Versions v1.13.15 and later are
-published only by the immutable release workflow after verification on `main`.
+retained above for audit and reconstruction. Version 1.13.15 is pinned to its
+verified release commit. `main` now carries 1.13.16 as the next unreleased
+development line; future releases are published only from pre-existing,
+immutable version tags after verification.
 ## Licence
 
 Copyright © 2026 Shannon Smith.
