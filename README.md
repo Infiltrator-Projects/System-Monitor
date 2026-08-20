@@ -121,11 +121,39 @@ coverage floors, lifecycle stability, package boundaries and installer safety.
 The Debian builder also checks the executable's declared glibc 2.34 ceiling and
 requires a byte-reproducible package.
 
-This README is the sole maintained project manual. Release history belongs on
-GitHub Releases, and API detail belongs in the source's Doxygen contracts. The
+This README is the sole maintained project manual. Detailed release notes belong
+on GitHub Releases, while the permanent version-to-commit index below preserves
+release provenance. API detail belongs in the source's Doxygen contracts. The
 licence and attribution files remain separate because they are legal records,
 not additional project manuals.
 
+## Release provenance
+
+Published tags and uploaded release assets are immutable. Every changed source
+tree merged to `main` must use a version that has not already been assigned to
+another commit. Detailed release notes remain on GitHub Releases; this permanent
+index preserves the source identity even if a release page becomes unavailable.
+
+| Version | Published commit |
+| --- | --- |
+| 1.13.2 | `a2562d6509e263d00e9aacdec623a6560207ba7e` |
+| 1.13.3 | `f30df5a8d7722286a96d8ba5b2ef6d8f94492bdb` |
+| 1.13.4 | `a4b7de1a382b9709accf191d846ea1113d49e48e` |
+| 1.13.5 | `e2c87dc0cb1f2074308307a8a0d82a6f0a264950` |
+| 1.13.6 | `86cad6d00da617e42632127bf3bc5cd0494a66fd` |
+| 1.13.7 | `99fb4a5264f014d84acfb9430536a915f6741fcf` |
+| 1.13.8 | `a46b47007fa899b7af46cded183faab7c43b1dfd` |
+| 1.13.9 | `66f7be218da025f6c38c89008493c04eb88cf90d` |
+| 1.13.10 | `84ddd343cdf6fe73bc303ec406a48bb90e9fb755` |
+| 1.13.11 | `5a3b63653ed8e551176bce9ee09e798d985a78c8` |
+| 1.13.12 | `e1110329ef9ee27a3705b7539652cb24f250f1c6` |
+| 1.13.13 | `d98412f9c1a813f634a3f53240d6a602da59cde2` |
+| 1.13.14 | `9b687a8b1f8bc0936120bf3adb30518372481706` |
+
+The v1.13.2 through v1.13.11 release pages and tags were removed during
+repository maintenance in August 2026. Their published commit identities are
+retained above for audit and reconstruction. Versions v1.13.15 and later are
+published only by the immutable release workflow after verification on `main`.
 ## Licence
 
 Copyright © 2026 Shannon Smith.
