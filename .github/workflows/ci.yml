@@ -24,6 +24,38 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Reject destructive repository automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          force_push='git[[:space:]]+push[^#]*--'force
+          delete_ref='git[[:space:]]+push[^#]*--'delete
+          release_delete='gh[[:space:]]+relea''se[[:space:]]+dele''te([[:space:]-]|$)'
+          api_delete='gh[[:space:]]+api[^#]*(--method|-X)[[:space:]]+DEL''ETE'
+          http_delete='(curl|wget)[^#]*-X[[:space:]]+DEL''ETE'
+          if grep -REn --include='*.yml' --include='*.yaml' \
+            -e "$force_push" -e "$delete_ref" -e "$release_delete" \
+            -e "$api_delete" -e "$http_delete" .github/workflows; then
+            echo "Destructive repository automation is forbidden." >&2
+            exit 1
+          fi
+
+      - name: Enforce immutable version identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Invalid release version: %s\n' "$version" >&2
+            exit 1
+          fi
+          tag_commit=$(git rev-list -n 1 "v${version}" 2>/dev/null || true)
+          if [[ -n "$tag_commit" && "$tag_commit" != "$GITHUB_SHA" ]]; then
+            printf 'Version %s is already assigned to commit %s.\n' \
+              "$version" "$tag_commit" >&2
+            printf 'Increment support/VERSION before changing the source tree.\n' >&2
+            exit 1
+          fi
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive

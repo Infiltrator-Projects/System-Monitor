@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.repository }}-${{ github.ref }}
@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
   publish:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -74,6 +76,12 @@ jobs:
             notes="Verified Linux System Monitor ${version} release."
           fi
 
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            printf 'Releases may only be published from main, not %s.\n' \
+              "$GITHUB_REF" >&2
+            exit 1
+          fi
+
           tag_commit=$(git rev-list -n 1 "$tag" 2>/dev/null || true)
           if [[ -n "$tag_commit" && "$tag_commit" != "$GITHUB_SHA" ]]; then
             printf 'Tag %s points to %s, not %s.\n' \
@@ -81,17 +89,13 @@ jobs:
             exit 1
           fi
 
+          release_exists=false
           if gh release view "$tag" >/dev/null 2>&1; then
+            release_exists=true
             if [[ -z "$tag_commit" ]]; then
               printf 'Release %s exists without a fetched tag.\n' "$tag" >&2
               exit 1
             fi
-            gh release edit "$tag" \
-              --title "Linux System Monitor ${version}" \
-              --notes "$notes" \
-              --draft=false \
-              --prerelease=false \
-              --latest
           elif [[ -n "$tag_commit" ]]; then
             gh release create "$tag" \
               --verify-tag \
@@ -106,14 +110,9 @@ jobs:
               --latest
           fi
 
-          while IFS= read -r asset; do
-            case "$asset" in
-              "$deb"|"$installer") ;;
-              *) gh release delete-asset "$tag" "$asset" --yes ;;
-            esac
-          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
-
-          gh release upload "$tag" "$deb" "$installer" --clobber
+          if [[ "$release_exists" == false ]]; then
+            gh release upload "$tag" "$deb" "$installer"
+          fi
 
           expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
           published_assets=$(gh release view "$tag" --json assets \
@@ -153,4 +152,8 @@ jobs:
             printf 'Published tag %s points to %s, not %s.\n' \
               "$tag" "$published_commit" "$GITHUB_SHA" >&2
             exit 1
+          fi
+
+          if [[ "$release_exists" == true ]]; then
+            printf 'Existing release %s is immutable and verified.\n' "$tag"
           fi
