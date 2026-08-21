@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-time hot-plug history repair
+
+on:
+  push:
+    branches:
+      - repair/hotplug-history-1.13.16
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    steps:
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply generic hot-plug and battery-history repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected block not found in {path}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/sample_history.h",
+              """typedef struct {\n    double values[LSM_HISTORY_LENGTH];\n    size_t count;\n    size_t head;\n} LsmSampleHistory;\n""",
+              """typedef struct {\n    double values[LSM_HISTORY_LENGTH];\n    bool valid[LSM_HISTORY_LENGTH];\n    size_t count;\n    size_t head;\n} LsmSampleHistory;\n""",
+          )
+          replace_once(
+              "src/sample_history.h",
+              """double lsm_sample_history_get(const LsmSampleHistory *history,\n                              size_t logical_index);\n\n#endif\n""",
+              """double lsm_sample_history_get(const LsmSampleHistory *history,\n                              size_t logical_index);\n/**\n * Report whether a logical history slot contains a real sample.\n *\n * Invalid slots represent elapsed time for which no metric was available;\n * callers must not reinterpret them as numeric zero.\n */\nbool lsm_sample_history_is_valid(const LsmSampleHistory *history,\n                                 size_t logical_index);\n\n#endif\n""",
+          )
+
+          replace_once(
+              "src/sample_history.c",
+              """#include \"sample_history.h\"\n\n#include <string.h>\n""",
+              """#include \"sample_history.h\"\n\n#include <math.h>\n#include <string.h>\n""",
+          )
+          replace_once(
+              "src/sample_history.c",
+              """void lsm_sample_history_push(LsmSampleHistory *history, double value,\n                             bool newer_on_right)\n{\n    if (!history) return;\n\n    if (history->count < LSM_HISTORY_LENGTH) {\n        if (newer_on_right) {\n            const size_t index =\n                (history->head + history->count) % LSM_HISTORY_LENGTH;\n            history->values[index] = value;\n        } else {\n            history->head =\n                (history->head + LSM_HISTORY_LENGTH - 1) % LSM_HISTORY_LENGTH;\n            history->values[history->head] = value;\n        }\n        history->count++;\n        return;\n    }\n\n    if (newer_on_right) {\n        history->values[history->head] = value;\n        history->head = (history->head + 1) % LSM_HISTORY_LENGTH;\n    } else {\n        history->head =\n            (history->head + LSM_HISTORY_LENGTH - 1) % LSM_HISTORY_LENGTH;\n        history->values[history->head] = value;\n    }\n}\n\ndouble lsm_sample_history_get(const LsmSampleHistory *history,\n                              size_t logical_index)\n{\n    if (!history || logical_index >= history->count) return 0.0;\n    return history->values[(history->head + logical_index) % LSM_HISTORY_LENGTH];\n}\n""",
+              """void lsm_sample_history_push(LsmSampleHistory *history, double value,\n                             bool newer_on_right)\n{\n    if (!history) return;\n\n    size_t index;\n    if (history->count < LSM_HISTORY_LENGTH) {\n        if (newer_on_right) {\n            index = (history->head + history->count) % LSM_HISTORY_LENGTH;\n        } else {\n            history->head =\n                (history->head + LSM_HISTORY_LENGTH - 1) % LSM_HISTORY_LENGTH;\n            index = history->head;\n        }\n        history->count++;\n    } else if (newer_on_right) {\n        index = history->head;\n        history->head = (history->head + 1) % LSM_HISTORY_LENGTH;\n    } else {\n        history->head =\n            (history->head + LSM_HISTORY_LENGTH - 1) % LSM_HISTORY_LENGTH;\n        index = history->head;\n    }\n\n    history->values[index] = isfinite(value) ? value : 0.0;\n    history->valid[index] = isfinite(value);\n}\n\ndouble lsm_sample_history_get(const LsmSampleHistory *history,\n                              size_t logical_index)\n{\n    if (!history || logical_index >= history->count) return 0.0;\n    return history->values[(history->head + logical_index) % LSM_HISTORY_LENGTH];\n}\n\nbool lsm_sample_history_is_valid(const LsmSampleHistory *history,\n                                 size_t logical_index)\n{\n    if (!history || logical_index >= history->count) return false;\n    return history->valid[\n        (history->head + logical_index) % LSM_HISTORY_LENGTH];\n}\n""",
+          )
+
+          replace_once(
+              "src/graph.c",
+              """    for (size_t i = 0; i < graph->primary.count; i++)\n        maximum = fmax(maximum, lsm_sample_history_get(&graph->primary, i));\n    if (graph->has_secondary) {\n        for (size_t i = 0; i < graph->secondary.count; i++)\n            maximum = fmax(maximum, lsm_sample_history_get(&graph->secondary, i));\n    }\n""",
+              """    for (size_t i = 0; i < graph->primary.count; i++) {\n        if (lsm_sample_history_is_valid(&graph->primary, i))\n            maximum = fmax(maximum,\n                           lsm_sample_history_get(&graph->primary, i));\n    }\n    if (graph->has_secondary) {\n        for (size_t i = 0; i < graph->secondary.count; i++) {\n            if (lsm_sample_history_is_valid(&graph->secondary, i))\n                maximum = fmax(maximum,\n                               lsm_sample_history_get(&graph->secondary, i));\n        }\n    }\n""",
+          )
+          replace_once(
+              "src/graph.c",
+              """static void make_series_path(cairo_t *cr, const LsmSampleHistory *history,\n                             double maximum, double width, double height)\n{\n    for (size_t i = 0; i < history->count; i++) {\n        const double x = history->count > 1\n            ? width * (double)i / (double)(history->count - 1) : 0.0;\n        const double value = fmax(0.0, lsm_sample_history_get(history, i));\n        const double y = height - fmin(height, height * value / maximum);\n        if (i == 0) cairo_move_to(cr, x, y);\n        else cairo_line_to(cr, x, y);\n    }\n}\n\nstatic void draw_series(cairo_t *cr, const LsmSampleHistory *history,\n                        const GdkRGBA *colour, double maximum,\n                        double width, double height, gboolean fill,\n                        gboolean dashed, gboolean compact)\n{\n    if (history->count < 2 || maximum <= 0.0) return;\n\n    if (dashed) {\n        const double dashes[] = {3.0, 3.0};\n        cairo_set_dash(cr, dashes, 2, 0.0);\n    } else {\n        cairo_set_dash(cr, NULL, 0, 0.0);\n    }\n\n    make_series_path(cr, history, maximum, width, height);\n    if (fill) {\n        cairo_line_to(cr, width, height);\n        cairo_line_to(cr, 0.0, height);\n        cairo_close_path(cr);\n        cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,\n                              compact ? 0.22 : 0.25);\n        cairo_fill(cr);\n        cairo_new_path(cr);\n        make_series_path(cr, history, maximum, width, height);\n    }\n\n    cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);\n    cairo_set_line_width(cr, compact ? 1.45 : 1.65);\n    cairo_stroke(cr);\n    cairo_set_dash(cr, NULL, 0, 0.0);\n}\n""",
+              """static bool make_series_path(cairo_t *cr,\n                             const LsmSampleHistory *history,\n                             double maximum, double width, double height,\n                             bool close_to_baseline)\n{\n    bool any = false;\n    bool in_segment = false;\n    double segment_start_x = 0.0;\n    double last_x = 0.0;\n\n    for (size_t i = 0; i < history->count; i++) {\n        if (!lsm_sample_history_is_valid(history, i)) {\n            if (close_to_baseline && in_segment) {\n                cairo_line_to(cr, last_x, height);\n                cairo_line_to(cr, segment_start_x, height);\n                cairo_close_path(cr);\n            }\n            in_segment = false;\n            continue;\n        }\n\n        const double x = history->count > 1\n            ? width * (double)i / (double)(history->count - 1) : 0.0;\n        const double value = fmax(0.0, lsm_sample_history_get(history, i));\n        const double y = height - fmin(height, height * value / maximum);\n        if (!in_segment) {\n            cairo_move_to(cr, x, y);\n            segment_start_x = x;\n            in_segment = true;\n        } else {\n            cairo_line_to(cr, x, y);\n        }\n        last_x = x;\n        any = true;\n    }\n\n    if (close_to_baseline && in_segment) {\n        cairo_line_to(cr, last_x, height);\n        cairo_line_to(cr, segment_start_x, height);\n        cairo_close_path(cr);\n    }\n    return any;\n}\n\nstatic void draw_series(cairo_t *cr, const LsmSampleHistory *history,\n                        const GdkRGBA *colour, double maximum,\n                        double width, double height, gboolean fill,\n                        gboolean dashed, gboolean compact)\n{\n    if (history->count < 2 || maximum <= 0.0) return;\n\n    if (fill) {\n        cairo_new_path(cr);\n        if (make_series_path(cr, history, maximum, width, height, true)) {\n            cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,\n                                  compact ? 0.22 : 0.25);\n            cairo_fill(cr);\n        }\n    }\n\n    if (dashed) {\n        const double dashes[] = {3.0, 3.0};\n        cairo_set_dash(cr, dashes, 2, 0.0);\n    } else {\n        cairo_set_dash(cr, NULL, 0, 0.0);\n    }\n\n    cairo_new_path(cr);\n    if (make_series_path(cr, history, maximum, width, height, false)) {\n        cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);\n        cairo_set_line_width(cr, compact ? 1.45 : 1.65);\n        cairo_stroke(cr);\n    }\n    cairo_set_dash(cr, NULL, 0, 0.0);\n}\n""",
+          )
+
+          replace_once(
+              "src/performance_present.c",
+              """    if (!usable_battery_level(level)) return 0.0;\n""",
+              """    if (!usable_battery_level(level)) return NAN;\n""",
+          )
+
+          replace_once(
+              "src/monitor_battery.c",
+              """static bool same_bluetooth_address(const char *left, const char *right)\n""",
+              """static bool peripheral_supply_has_charge_telemetry(const char *base)\n{\n    if (!base || !base[0]) return false;\n\n    char path[LSM_PATH_LEN];\n    if (lsm_join_path(path, sizeof(path), base, \"/capacity\") &&\n        isfinite(lsm_read_double_or_nan(path)))\n        return true;\n\n    char level[32] = \"\";\n    if (lsm_join_path(path, sizeof(path), base, \"/capacity_level\") &&\n        lsm_read_text_file(path, level, sizeof(level)) && level[0] &&\n        strcasecmp(level, \"Unknown\") != 0)\n        return true;\n\n    uint64_t raw = 0U;\n    if (lsm_join_path(path, sizeof(path), base, \"/energy_now\") &&\n        lsm_read_u64_file(path, &raw))\n        return true;\n    if (lsm_join_path(path, sizeof(path), base, \"/charge_now\") &&\n        lsm_read_u64_file(path, &raw))\n        return true;\n    return false;\n}\n\nstatic bool same_bluetooth_address(const char *left, const char *right)\n""",
+          )
+          replace_once(
+              "src/monitor_battery.c",
+              """            battery->is_peripheral =\n                strcasecmp(battery->scope, \"Device\") == 0;\n            LsmLinuxBatteryState *battery_state = register_battery_state(\n""",
+              """            battery->is_peripheral =\n                strcasecmp(battery->scope, \"Device\") == 0;\n            if (battery->is_peripheral &&\n                !peripheral_supply_has_charge_telemetry(base)) {\n                monitor->battery_count--;\n                memset(battery, 0, sizeof(*battery));\n                continue;\n            }\n            LsmLinuxBatteryState *battery_state = register_battery_state(\n""",
+          )
+          replace_once(
+              "src/monitor_battery.c",
+              """        uint64_t seconds = 0;\n        const char *time_name = strcmp(battery->status, \"Charging\") == 0\n            ? \"time_to_full_now\" : \"time_to_empty_now\";\n        char time_suffix[64];\n        snprintf(time_suffix, sizeof(time_suffix), \"/%s\", time_name);\n        (void)lsm_join_path(path, sizeof(path), base, time_suffix);\n        if (!lsm_read_u64_file(path, &seconds) &&\n            isfinite(battery->power_watts) &&\n            battery->power_watts > 0.01) {\n            if (strcmp(battery->status, \"Charging\") == 0 &&\n                isfinite(battery->energy_full_wh) &&\n                isfinite(battery->energy_now_wh))\n                seconds = battery_seconds_from_hours(\n                    (battery->energy_full_wh - battery->energy_now_wh) /\n                    battery->power_watts);\n            else if (isfinite(battery->energy_now_wh))\n                seconds = battery_seconds_from_hours(\n                    battery->energy_now_wh / battery->power_watts);\n        }\n        battery->seconds_remaining = seconds;\n""",
+              """        uint64_t seconds = 0;\n        const bool charging =\n            strcasecmp(battery->status, \"Charging\") == 0;\n        const bool discharging =\n            strcasecmp(battery->status, \"Discharging\") == 0;\n        if (charging || discharging) {\n            const char *time_name = charging\n                ? \"time_to_full_now\" : \"time_to_empty_now\";\n            char time_suffix[64];\n            snprintf(time_suffix, sizeof(time_suffix), \"/%s\", time_name);\n            (void)lsm_join_path(path, sizeof(path), base, time_suffix);\n            if (!lsm_read_u64_file(path, &seconds) &&\n                isfinite(battery->power_watts) &&\n                battery->power_watts > 0.01) {\n                if (charging && isfinite(battery->energy_full_wh) &&\n                    isfinite(battery->energy_now_wh))\n                    seconds = battery_seconds_from_hours(\n                        (battery->energy_full_wh - battery->energy_now_wh) /\n                        battery->power_watts);\n                else if (discharging && isfinite(battery->energy_now_wh))\n                    seconds = battery_seconds_from_hours(\n                        battery->energy_now_wh / battery->power_watts);\n            }\n        }\n        battery->seconds_remaining = seconds;\n""",
+          )
+
+          old_rebuild = """static void rebuild_for_topology_change(LsmApp *app)\n{\n    const char *current = app->performance.performance_stack\n        ? gtk_stack_get_visible_child_name(GTK_STACK(app->performance.performance_stack)) : NULL;\n    char *visible = current ? g_strdup(current) : g_strdup(\"cpu\");\n    if (!stack_name_still_present(app, visible)) {\n        g_free(visible);\n        visible = g_strdup(\"cpu\");\n    }\n\n    lsm_performance_destroy(app);\n    build_performance_contents(app, visible);\n    g_free(visible);\n}\n"""
+          new_rebuild = """typedef struct {\n    gboolean present;\n    LsmSampleHistory primary;\n    LsmSampleHistory secondary;\n} LsmGraphHistorySnapshot;\n\ntypedef struct {\n    char stack_name[96];\n    LsmGraphHistorySnapshot graph;\n    LsmGraphHistorySnapshot secondary_graph;\n    LsmGraphHistorySnapshot side_graph;\n    gboolean gpu_state_present;\n    gboolean gpu_multiple_engine_graphs;\n    LsmGpuMetric gpu_single_metric;\n    LsmGpuMetric gpu_engine_metrics[LSM_GPU_GRAPH_SLOT_COUNT];\n    LsmGraphHistorySnapshot gpu_single_graph;\n    LsmGraphHistorySnapshot gpu_engine_graphs[LSM_GPU_GRAPH_SLOT_COUNT];\n    LsmGraphHistorySnapshot gpu_memory_graph;\n} LsmPageHistorySnapshot;\n\nstatic void capture_graph_history(const LsmGraph *graph,\n                                  LsmGraphHistorySnapshot *snapshot)\n{\n    if (!graph || !snapshot) return;\n    snapshot->present = TRUE;\n    snapshot->primary = graph->primary;\n    snapshot->secondary = graph->secondary;\n}\n\nstatic void restore_graph_history(LsmGraph *graph,\n                                  const LsmGraphHistorySnapshot *snapshot)\n{\n    if (!graph || !snapshot || !snapshot->present) return;\n    graph->primary = snapshot->primary;\n    graph->secondary = snapshot->secondary;\n    lsm_graph_queue_draw(graph);\n}\n\nstatic LsmPageHistorySnapshot *find_page_history(GPtrArray *snapshots,\n                                                 const char *stack_name)\n{\n    if (!snapshots || !stack_name) return NULL;\n    for (guint index = 0U; index < snapshots->len; index++) {\n        LsmPageHistorySnapshot *snapshot = g_ptr_array_index(snapshots, index);\n        if (strcmp(snapshot->stack_name, stack_name) == 0) return snapshot;\n    }\n    return NULL;\n}\n\nstatic GPtrArray *capture_page_histories(const LsmApp *app)\n{\n    GPtrArray *snapshots = g_ptr_array_new_with_free_func(g_free);\n    if (!app || !app->performance.device_pages) return snapshots;\n\n    for (guint index = 0U; index < app->performance.device_pages->len; index++) {\n        const LsmDevicePage *page =\n            g_ptr_array_index(app->performance.device_pages, index);\n        LsmPageHistorySnapshot *snapshot = g_new0(LsmPageHistorySnapshot, 1);\n        g_strlcpy(snapshot->stack_name, page->stack_name,\n                  sizeof(snapshot->stack_name));\n        capture_graph_history(page->graph, &snapshot->graph);\n        capture_graph_history(page->secondary_graph,\n                              &snapshot->secondary_graph);\n        capture_graph_history(page->side_graph, &snapshot->side_graph);\n\n        if (page->type == LSM_PAGE_GPU) {\n            const LsmGpuPageWidgets *widgets = &page->widgets.gpu;\n            snapshot->gpu_state_present = TRUE;\n            snapshot->gpu_multiple_engine_graphs =\n                widgets->multiple_engine_graphs;\n            snapshot->gpu_single_metric = widgets->single_engine_graph.metric;\n            capture_graph_history(widgets->single_engine_graph.graph,\n                                  &snapshot->gpu_single_graph);\n            for (size_t slot = 0U; slot < LSM_GPU_GRAPH_SLOT_COUNT; slot++) {\n                snapshot->gpu_engine_metrics[slot] =\n                    widgets->engine_graphs[slot].metric;\n                capture_graph_history(widgets->engine_graphs[slot].graph,\n                                      &snapshot->gpu_engine_graphs[slot]);\n            }\n            capture_graph_history(widgets->memory_graph,\n                                  &snapshot->gpu_memory_graph);\n        }\n        g_ptr_array_add(snapshots, snapshot);\n    }\n    return snapshots;\n}\n\nstatic void restore_page_histories(LsmApp *app, GPtrArray *snapshots)\n{\n    if (!app || !app->performance.device_pages || !snapshots) return;\n    for (guint index = 0U; index < app->performance.device_pages->len; index++) {\n        LsmDevicePage *page =\n            g_ptr_array_index(app->performance.device_pages, index);\n        LsmPageHistorySnapshot *snapshot =\n            find_page_history(snapshots, page->stack_name);\n        if (!snapshot) continue;\n\n        restore_graph_history(page->graph, &snapshot->graph);\n        restore_graph_history(page->secondary_graph,\n                              &snapshot->secondary_graph);\n        restore_graph_history(page->side_graph, &snapshot->side_graph);\n\n        if (page->type == LSM_PAGE_GPU && snapshot->gpu_state_present) {\n            LsmGpuPageWidgets *widgets = &page->widgets.gpu;\n            const LsmGpuInfo *gpu = &app->monitor.gpus[page->index];\n            lsm_performance_populate_gpu_metric_selector(\n                &widgets->single_engine_graph, gpu, snapshot->gpu_single_metric);\n            restore_graph_history(widgets->single_engine_graph.graph,\n                                  &snapshot->gpu_single_graph);\n            for (size_t slot = 0U; slot < LSM_GPU_GRAPH_SLOT_COUNT; slot++) {\n                lsm_performance_populate_gpu_metric_selector(\n                    &widgets->engine_graphs[slot], gpu,\n                    snapshot->gpu_engine_metrics[slot]);\n                restore_graph_history(widgets->engine_graphs[slot].graph,\n                                      &snapshot->gpu_engine_graphs[slot]);\n            }\n            restore_graph_history(widgets->memory_graph,\n                                  &snapshot->gpu_memory_graph);\n            widgets->multiple_engine_graphs =\n                snapshot->gpu_multiple_engine_graphs;\n            if (widgets->engine_graph_stack)\n                gtk_stack_set_visible_child_name(\n                    GTK_STACK(widgets->engine_graph_stack),\n                    widgets->multiple_engine_graphs ? \"multiple\" : \"single\");\n        }\n    }\n}\n\nstatic void rebuild_for_topology_change(LsmApp *app)\n{\n    const char *current = app->performance.performance_stack\n        ? gtk_stack_get_visible_child_name(\n              GTK_STACK(app->performance.performance_stack))\n        : NULL;\n    char *visible = current ? g_strdup(current) : g_strdup(\"cpu\");\n    if (!stack_name_still_present(app, visible)) {\n        g_free(visible);\n        visible = g_strdup(\"cpu\");\n    }\n\n    const char *cpu_mode = app->performance.cpu_graph_stack\n        ? gtk_stack_get_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack))\n        : NULL;\n    char *saved_cpu_mode = cpu_mode ? g_strdup(cpu_mode) : NULL;\n    GPtrArray *histories = capture_page_histories(app);\n\n    const unsigned core_count = app->monitor.cpu.logical_cores;\n    LsmSampleHistory *core_histories =\n        core_count > 0U ? g_new0(LsmSampleHistory, core_count) : NULL;\n    gboolean *core_history_present =\n        core_count > 0U ? g_new0(gboolean, core_count) : NULL;\n    for (unsigned core = 0U; core < core_count; core++) {\n        if (app->performance.cpu_core_graphs &&\n            app->performance.cpu_core_graphs[core]) {\n            core_histories[core] =\n                app->performance.cpu_core_graphs[core]->primary;\n            core_history_present[core] = TRUE;\n        }\n    }\n\n    lsm_performance_destroy(app);\n    build_performance_contents(app, visible);\n    restore_page_histories(app, histories);\n    if (saved_cpu_mode) performance_set_cpu_graph_mode(app, saved_cpu_mode);\n    for (unsigned core = 0U; core < core_count; core++) {\n        if (core_history_present[core] && app->performance.cpu_core_graphs &&\n            app->performance.cpu_core_graphs[core]) {\n            app->performance.cpu_core_graphs[core]->primary =\n                core_histories[core];\n            lsm_graph_queue_draw(app->performance.cpu_core_graphs[core]);\n        }\n    }\n\n    g_free(core_history_present);\n    g_free(core_histories);\n    g_ptr_array_free(histories, TRUE);\n    g_free(saved_cpu_mode);\n    g_free(visible);\n}\n"""
+          replace_once("src/performance.c", old_rebuild, new_rebuild)
+
+          replace_once(
+              "support/tests/sample_history_smoke.c",
+              """#include <assert.h>\n#include <stdio.h>\n""",
+              """#include <assert.h>\n#include <math.h>\n#include <stdio.h>\n""",
+          )
+          replace_once(
+              "support/tests/sample_history_smoke.c",
+              """    LsmSampleHistory right;\n    lsm_sample_history_init(&right);\n    for (size_t index = 0; index < LSM_HISTORY_LENGTH + 2; index++) {\n""",
+              """    LsmSampleHistory right;\n    lsm_sample_history_init(&right);\n    assert(!lsm_sample_history_is_valid(&right, 0U));\n    for (size_t index = 0; index < LSM_HISTORY_LENGTH + 2; index++) {\n""",
+          )
+          replace_once(
+              "support/tests/sample_history_smoke.c",
+              """    assert(lsm_sample_history_get(NULL, 0U) == 0.0);\n    lsm_sample_history_push(NULL, 1.0, true);\n""",
+              """    assert(lsm_sample_history_get(NULL, 0U) == 0.0);\n    assert(!lsm_sample_history_is_valid(NULL, 0U));\n\n    LsmSampleHistory missing;\n    lsm_sample_history_init(&missing);\n    lsm_sample_history_push(&missing, NAN, true);\n    assert(!lsm_sample_history_is_valid(\n        &missing, LSM_HISTORY_LENGTH - 1U));\n    lsm_sample_history_push(&missing, 73.0, true);\n    assert(lsm_sample_history_is_valid(\n        &missing, LSM_HISTORY_LENGTH - 1U));\n    assert(lsm_sample_history_get(\n        &missing, LSM_HISTORY_LENGTH - 1U) == 73.0);\n\n    lsm_sample_history_push(NULL, 1.0, true);\n""",
+          )
+          PY
+
+          git diff --check
+
+      - name: Verify with CMake and CTest
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --parallel 2
+          ctest --test-dir build-cmake --output-on-failure --parallel 2
+
+      - name: Verify with Make
+        run: make check
+
+      - name: Verify with sanitizers
+        run: make sanitizer-check
+
+      - name: Verify release packaging without publishing
+        run: make -j2 release
+
+      - name: Commit verified repair and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-time-hotplug-history-fix.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add src/graph.c src/sample_history.c src/sample_history.h \
+            src/performance.c src/performance_present.c src/monitor_battery.c \
+            support/tests/sample_history_smoke.c \
+            .github/workflows/one-time-hotplug-history-fix.yml
+          git commit -m 'Fix hot-plug battery graph history' -m 'Preserve surviving Performance graph histories across topology rebuilds, represent unavailable samples as gaps rather than zero, suppress telemetry-less peripheral power-supply pseudo-batteries, and reject meaningless remaining-time estimates outside charging or discharging states.'
+          git push origin HEAD:repair/hotplug-history-1.13.16
