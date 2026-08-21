@@ -20,6 +20,7 @@
 
 typedef struct {
     double values[LSM_HISTORY_LENGTH];
+    bool valid[LSM_HISTORY_LENGTH];
     size_t count;
     size_t head;
 } LsmSampleHistory;
@@ -27,17 +28,21 @@ typedef struct {
 /**
  * Reset a fixed-capacity graph history to the empty state.
  *
+ * The logical time window is retained immediately, but all slots begin as
+ * unavailable rather than as synthetic zero measurements.
+ *
  * @param [out] history History object to initialise.
  */
 void lsm_sample_history_init(LsmSampleHistory *history);
 /**
  * Append one sample while preserving the configured time direction.
  *
- * Once capacity is reached, the oldest logical sample is overwritten in O(1)
- * time; no allocation or element shifting occurs.
+ * Non-finite values advance the history clock but mark the destination slot as
+ * unavailable. Once capacity is reached, the oldest logical sample is
+ * overwritten in O(1) time; no allocation or element shifting occurs.
  *
  * @param [in,out] history Circular history receiving the sample.
- * @param [in] value Numeric sample to append.
+ * @param [in] value Numeric sample, or a non-finite value for no sample.
  * @param [in] newer_on_right true for oldest-to-newest display order.
  */
 void lsm_sample_history_push(LsmSampleHistory *history, double value,
@@ -51,5 +56,14 @@ void lsm_sample_history_push(LsmSampleHistory *history, double value,
  */
 double lsm_sample_history_get(const LsmSampleHistory *history,
                               size_t logical_index);
+/**
+ * Report whether a logical history slot contains a real sample.
+ *
+ * @param [in] history History to inspect.
+ * @param [in] logical_index Zero-based logical index.
+ * @return true when the slot contains a finite sample.
+ */
+bool lsm_sample_history_is_valid(const LsmSampleHistory *history,
+                                 size_t logical_index);
 
 #endif
