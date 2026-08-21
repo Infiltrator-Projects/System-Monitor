@@ -67,13 +67,13 @@ static bool usable_battery_level(const char *level)
 
 static double coarse_battery_graph_value(const char *level)
 {
-    if (!usable_battery_level(level)) return 0.0;
+    if (!usable_battery_level(level)) return NAN;
     if (strcasecmp(level, "Critical") == 0) return 5.0;
     if (strcasecmp(level, "Low") == 0) return 20.0;
     if (strcasecmp(level, "Normal") == 0) return 50.0;
     if (strcasecmp(level, "High") == 0) return 80.0;
     if (strcasecmp(level, "Full") == 0) return 100.0;
-    return 0.0;
+    return NAN;
 }
 
 static void format_battery_charge(const LsmBatteryInfo *battery,

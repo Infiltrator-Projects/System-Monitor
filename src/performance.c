@@ -589,18 +589,183 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
     return false;
 }
 
+typedef struct {
+    gboolean present;
+    LsmSampleHistory primary;
+    LsmSampleHistory secondary;
+} LsmGraphHistorySnapshot;
+
+typedef struct {
+    char stack_name[96];
+    LsmGraphHistorySnapshot graph;
+    LsmGraphHistorySnapshot secondary_graph;
+    LsmGraphHistorySnapshot side_graph;
+    gboolean gpu_state_present;
+    gboolean gpu_multiple_engine_graphs;
+    LsmGpuMetric gpu_single_metric;
+    LsmGpuMetric gpu_engine_metrics[LSM_GPU_GRAPH_SLOT_COUNT];
+    LsmGraphHistorySnapshot gpu_single_graph;
+    LsmGraphHistorySnapshot gpu_engine_graphs[LSM_GPU_GRAPH_SLOT_COUNT];
+    LsmGraphHistorySnapshot gpu_memory_graph;
+} LsmPageHistorySnapshot;
+
+static void capture_graph_history(const LsmGraph *graph,
+                                  LsmGraphHistorySnapshot *snapshot)
+{
+    if (!graph || !snapshot) return;
+    snapshot->present = TRUE;
+    snapshot->primary = graph->primary;
+    snapshot->secondary = graph->secondary;
+}
+
+static void restore_graph_history(LsmGraph *graph,
+                                  const LsmGraphHistorySnapshot *snapshot)
+{
+    if (!graph || !snapshot || !snapshot->present) return;
+    graph->primary = snapshot->primary;
+    graph->secondary = snapshot->secondary;
+    lsm_graph_queue_draw(graph);
+}
+
+static LsmPageHistorySnapshot *find_page_history(GPtrArray *snapshots,
+                                                 const char *stack_name)
+{
+    if (!snapshots || !stack_name) return NULL;
+    for (guint index = 0U; index < snapshots->len; index++) {
+        LsmPageHistorySnapshot *snapshot = g_ptr_array_index(snapshots, index);
+        if (strcmp(snapshot->stack_name, stack_name) == 0) return snapshot;
+    }
+    return NULL;
+}
+
+static GPtrArray *capture_page_histories(const LsmApp *app)
+{
+    GPtrArray *snapshots = g_ptr_array_new_with_free_func(g_free);
+    if (!app || !app->performance.device_pages) return snapshots;
+
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        const LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        LsmPageHistorySnapshot *snapshot = g_new0(LsmPageHistorySnapshot, 1);
+        g_strlcpy(snapshot->stack_name, page->stack_name,
+                  sizeof(snapshot->stack_name));
+        capture_graph_history(page->graph, &snapshot->graph);
+        capture_graph_history(page->secondary_graph,
+                              &snapshot->secondary_graph);
+        capture_graph_history(page->side_graph, &snapshot->side_graph);
+
+        if (page->type == LSM_PAGE_GPU) {
+            const LsmGpuPageWidgets *widgets = &page->widgets.gpu;
+            snapshot->gpu_state_present = TRUE;
+            snapshot->gpu_multiple_engine_graphs =
+                widgets->multiple_engine_graphs;
+            snapshot->gpu_single_metric = widgets->single_engine_graph.metric;
+            capture_graph_history(widgets->single_engine_graph.graph,
+                                  &snapshot->gpu_single_graph);
+            for (size_t slot = 0U; slot < LSM_GPU_GRAPH_SLOT_COUNT; slot++) {
+                snapshot->gpu_engine_metrics[slot] =
+                    widgets->engine_graphs[slot].metric;
+                capture_graph_history(widgets->engine_graphs[slot].graph,
+                                      &snapshot->gpu_engine_graphs[slot]);
+            }
+            capture_graph_history(widgets->memory_graph,
+                                  &snapshot->gpu_memory_graph);
+        }
+        g_ptr_array_add(snapshots, snapshot);
+    }
+    return snapshots;
+}
+
+static void restore_page_histories(LsmApp *app, GPtrArray *snapshots)
+{
+    if (!app || !app->performance.device_pages || !snapshots) return;
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        LsmPageHistorySnapshot *snapshot =
+            find_page_history(snapshots, page->stack_name);
+        if (!snapshot) continue;
+
+        restore_graph_history(page->graph, &snapshot->graph);
+        restore_graph_history(page->secondary_graph,
+                              &snapshot->secondary_graph);
+        restore_graph_history(page->side_graph, &snapshot->side_graph);
+
+        if (page->type == LSM_PAGE_GPU && snapshot->gpu_state_present) {
+            LsmGpuPageWidgets *widgets = &page->widgets.gpu;
+            const LsmGpuInfo *gpu = &app->monitor.gpus[page->index];
+            lsm_performance_populate_gpu_metric_selector(
+                &widgets->single_engine_graph, gpu, snapshot->gpu_single_metric);
+            restore_graph_history(widgets->single_engine_graph.graph,
+                                  &snapshot->gpu_single_graph);
+            for (size_t slot = 0U; slot < LSM_GPU_GRAPH_SLOT_COUNT; slot++) {
+                lsm_performance_populate_gpu_metric_selector(
+                    &widgets->engine_graphs[slot], gpu,
+                    snapshot->gpu_engine_metrics[slot]);
+                restore_graph_history(widgets->engine_graphs[slot].graph,
+                                      &snapshot->gpu_engine_graphs[slot]);
+            }
+            restore_graph_history(widgets->memory_graph,
+                                  &snapshot->gpu_memory_graph);
+            widgets->multiple_engine_graphs =
+                snapshot->gpu_multiple_engine_graphs;
+            if (widgets->engine_graph_stack)
+                gtk_stack_set_visible_child_name(
+                    GTK_STACK(widgets->engine_graph_stack),
+                    widgets->multiple_engine_graphs ? "multiple" : "single");
+        }
+    }
+}
+
 static void rebuild_for_topology_change(LsmApp *app)
 {
     const char *current = app->performance.performance_stack
-        ? gtk_stack_get_visible_child_name(GTK_STACK(app->performance.performance_stack)) : NULL;
+        ? gtk_stack_get_visible_child_name(
+              GTK_STACK(app->performance.performance_stack))
+        : NULL;
     char *visible = current ? g_strdup(current) : g_strdup("cpu");
     if (!stack_name_still_present(app, visible)) {
         g_free(visible);
         visible = g_strdup("cpu");
     }
 
+    const char *cpu_mode = app->performance.cpu_graph_stack
+        ? gtk_stack_get_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack))
+        : NULL;
+    char *saved_cpu_mode = cpu_mode ? g_strdup(cpu_mode) : NULL;
+    GPtrArray *histories = capture_page_histories(app);
+
+    const unsigned core_count = app->monitor.cpu.logical_cores;
+    LsmSampleHistory *core_histories =
+        core_count > 0U ? g_new0(LsmSampleHistory, core_count) : NULL;
+    gboolean *core_history_present =
+        core_count > 0U ? g_new0(gboolean, core_count) : NULL;
+    for (unsigned core = 0U; core < core_count; core++) {
+        if (app->performance.cpu_core_graphs &&
+            app->performance.cpu_core_graphs[core]) {
+            core_histories[core] =
+                app->performance.cpu_core_graphs[core]->primary;
+            core_history_present[core] = TRUE;
+        }
+    }
+
     lsm_performance_destroy(app);
     build_performance_contents(app, visible);
+    restore_page_histories(app, histories);
+    if (saved_cpu_mode) performance_set_cpu_graph_mode(app, saved_cpu_mode);
+    for (unsigned core = 0U; core < core_count; core++) {
+        if (core_history_present[core] && app->performance.cpu_core_graphs &&
+            app->performance.cpu_core_graphs[core]) {
+            app->performance.cpu_core_graphs[core]->primary =
+                core_histories[core];
+            lsm_graph_queue_draw(app->performance.cpu_core_graphs[core]);
+        }
+    }
+
+    g_free(core_history_present);
+    g_free(core_histories);
+    g_ptr_array_free(histories, TRUE);
+    g_free(saved_cpu_mode);
     g_free(visible);
 }
 
