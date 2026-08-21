@@ -21,11 +21,17 @@ static double graph_maximum(const LsmGraph *graph)
     if (graph->percentage_scale) return 100.0;
     if (graph->fixed_max > 0.0) return graph->fixed_max;
     double maximum = 1.0;
-    for (size_t i = 0; i < graph->primary.count; i++)
-        maximum = fmax(maximum, lsm_sample_history_get(&graph->primary, i));
+    for (size_t i = 0; i < graph->primary.count; i++) {
+        if (lsm_sample_history_is_valid(&graph->primary, i))
+            maximum = fmax(maximum,
+                           lsm_sample_history_get(&graph->primary, i));
+    }
     if (graph->has_secondary) {
-        for (size_t i = 0; i < graph->secondary.count; i++)
-            maximum = fmax(maximum, lsm_sample_history_get(&graph->secondary, i));
+        for (size_t i = 0; i < graph->secondary.count; i++) {
+            if (lsm_sample_history_is_valid(&graph->secondary, i))
+                maximum = fmax(maximum,
+                               lsm_sample_history_get(&graph->secondary, i));
+        }
     }
     if (graph->dynamic_step > 0.0) {
         const double rounded = ceil(maximum / graph->dynamic_step) * graph->dynamic_step;
@@ -37,17 +43,48 @@ static double graph_maximum(const LsmGraph *graph)
     return fmax(graph->minimum_max, scale);
 }
 
-static void make_series_path(cairo_t *cr, const LsmSampleHistory *history,
-                             double maximum, double width, double height)
+static bool make_series_path(cairo_t *cr,
+                             const LsmSampleHistory *history,
+                             double maximum, double width, double height,
+                             bool close_to_baseline)
 {
+    bool any = false;
+    bool in_segment = false;
+    double segment_start_x = 0.0;
+    double last_x = 0.0;
+
     for (size_t i = 0; i < history->count; i++) {
+        if (!lsm_sample_history_is_valid(history, i)) {
+            if (close_to_baseline && in_segment) {
+                cairo_line_to(cr, last_x, height);
+                cairo_line_to(cr, segment_start_x, height);
+                cairo_close_path(cr);
+            }
+            in_segment = false;
+            continue;
+        }
+
         const double x = history->count > 1
             ? width * (double)i / (double)(history->count - 1) : 0.0;
         const double value = fmax(0.0, lsm_sample_history_get(history, i));
         const double y = height - fmin(height, height * value / maximum);
-        if (i == 0) cairo_move_to(cr, x, y);
-        else cairo_line_to(cr, x, y);
+        if (!in_segment) {
+            cairo_move_to(cr, x, y);
+            segment_start_x = x;
+            in_segment = true;
+        } else {
+            cairo_line_to(cr, x, y);
+        }
+        last_x = x;
+        any = true;
     }
+
+    if (close_to_baseline && in_segment) {
+        cairo_line_to(cr, last_x, height);
+        cairo_line_to(cr, segment_start_x, height);
+        cairo_close_path(cr);
+    }
+    return any;
 }
 
 static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
@@ -57,6 +94,15 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
 {
     if (history->count < 2 || maximum <= 0.0) return;
 
+    if (fill) {
+        cairo_new_path(cr);
+        if (make_series_path(cr, history, maximum, width, height, true)) {
+            cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,
+                                  compact ? 0.22 : 0.25);
+            cairo_fill(cr);
+        }
+    }
+
     if (dashed) {
         const double dashes[] = {3.0, 3.0};
         cairo_set_dash(cr, dashes, 2, 0.0);
@@ -64,21 +110,12 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
         cairo_set_dash(cr, NULL, 0, 0.0);
     }
 
-    make_series_path(cr, history, maximum, width, height);
-    if (fill) {
-        cairo_line_to(cr, width, height);
-        cairo_line_to(cr, 0.0, height);
-        cairo_close_path(cr);
-        cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,
-                              compact ? 0.22 : 0.25);
-        cairo_fill(cr);
-        cairo_new_path(cr);
-        make_series_path(cr, history, maximum, width, height);
+    cairo_new_path(cr);
+    if (make_series_path(cr, history, maximum, width, height, false)) {
+        cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
+        cairo_set_line_width(cr, compact ? 1.45 : 1.65);
+        cairo_stroke(cr);
     }
-
-    cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
-    cairo_set_line_width(cr, compact ? 1.45 : 1.65);
-    cairo_stroke(cr);
     cairo_set_dash(cr, NULL, 0, 0.0);
 }
 
@@ -202,7 +239,6 @@ void lsm_graph_set_compact(LsmGraph *graph, gboolean compact)
         gtk_widget_set_vexpand(graph->area, FALSE);
     }
 }
-
 
 void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise)
 {

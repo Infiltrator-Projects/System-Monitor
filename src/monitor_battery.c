@@ -97,6 +97,31 @@ static void initialise_battery_measurements(LsmBatteryInfo *battery)
     battery->temperature_c = NAN;
 }
 
+static bool peripheral_supply_has_charge_telemetry(const char *base)
+{
+    if (!base || !base[0]) return false;
+
+    char path[LSM_PATH_LEN];
+    if (lsm_join_path(path, sizeof(path), base, "/capacity") &&
+        isfinite(lsm_read_double_or_nan(path)))
+        return true;
+
+    char level[32] = "";
+    if (lsm_join_path(path, sizeof(path), base, "/capacity_level") &&
+        lsm_read_text_file(path, level, sizeof(level)) && level[0] &&
+        strcasecmp(level, "Unknown") != 0)
+        return true;
+
+    uint64_t raw = 0U;
+    if (lsm_join_path(path, sizeof(path), base, "/energy_now") &&
+        lsm_read_u64_file(path, &raw))
+        return true;
+    if (lsm_join_path(path, sizeof(path), base, "/charge_now") &&
+        lsm_read_u64_file(path, &raw))
+        return true;
+    return false;
+}
+
 static bool same_bluetooth_address(const char *left, const char *right)
 {
     return left && right && left[0] && right[0] && strcasecmp(left, right) == 0;
@@ -354,6 +379,12 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
             lsm_read_text_file(path, battery->serial, sizeof(battery->serial));
             battery->is_peripheral =
                 strcasecmp(battery->scope, "Device") == 0;
+            if (battery->is_peripheral &&
+                !peripheral_supply_has_charge_telemetry(base)) {
+                monitor->battery_count--;
+                memset(battery, 0, sizeof(*battery));
+                continue;
+            }
             LsmLinuxBatteryState *battery_state = register_battery_state(
                 monitor, battery->name);
             if (battery->is_peripheral &&
@@ -460,23 +491,28 @@ void lsm_battery_update(LsmMonitor *monitor)
         battery->on_ac_power = !battery->is_peripheral && ac;
 
         uint64_t seconds = 0;
-        const char *time_name = strcmp(battery->status, "Charging") == 0
-            ? "time_to_full_now" : "time_to_empty_now";
-        char time_suffix[64];
-        snprintf(time_suffix, sizeof(time_suffix), "/%s", time_name);
-        (void)lsm_join_path(path, sizeof(path), base, time_suffix);
-        if (!lsm_read_u64_file(path, &seconds) &&
-            isfinite(battery->power_watts) &&
-            battery->power_watts > 0.01) {
-            if (strcmp(battery->status, "Charging") == 0 &&
-                isfinite(battery->energy_full_wh) &&
-                isfinite(battery->energy_now_wh))
-                seconds = battery_seconds_from_hours(
-                    (battery->energy_full_wh - battery->energy_now_wh) /
-                    battery->power_watts);
-            else if (isfinite(battery->energy_now_wh))
-                seconds = battery_seconds_from_hours(
-                    battery->energy_now_wh / battery->power_watts);
+        const bool charging =
+            strcasecmp(battery->status, "Charging") == 0;
+        const bool discharging =
+            strcasecmp(battery->status, "Discharging") == 0;
+        if (charging || discharging) {
+            const char *time_name = charging
+                ? "time_to_full_now" : "time_to_empty_now";
+            char time_suffix[64];
+            snprintf(time_suffix, sizeof(time_suffix), "/%s", time_name);
+            (void)lsm_join_path(path, sizeof(path), base, time_suffix);
+            if (!lsm_read_u64_file(path, &seconds) &&
+                isfinite(battery->power_watts) &&
+                battery->power_watts > 0.01) {
+                if (charging && isfinite(battery->energy_full_wh) &&
+                    isfinite(battery->energy_now_wh))
+                    seconds = battery_seconds_from_hours(
+                        (battery->energy_full_wh - battery->energy_now_wh) /
+                        battery->power_watts);
+                else if (discharging && isfinite(battery->energy_now_wh))
+                    seconds = battery_seconds_from_hours(
+                        battery->energy_now_wh / battery->power_watts);
+            }
         }
         battery->seconds_remaining = seconds;
         apply_hidpp_snapshot(monitor, battery);

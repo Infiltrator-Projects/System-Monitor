@@ -153,10 +153,9 @@ index preserves the source identity even if a release page becomes unavailable.
 
 The v1.13.2 through v1.13.11 release pages and tags were removed during
 repository maintenance in August 2026. Their published commit identities are
-retained above for audit and reconstruction. Version 1.13.15 is pinned to its
-verified release commit. `main` now carries 1.13.16 as the next unreleased
-development line; future releases are published only from pre-existing,
-immutable version tags after verification.
+retained above for audit and reconstruction. Published releases are cut from
+verified commits on `main` and use immutable version tags.
+
 ## Licence
 
 Copyright © 2026 Shannon Smith.
