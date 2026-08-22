@@ -316,6 +316,7 @@ int main(int argc, char **argv)
         !join_path(probe_object, sizeof(probe_object), temporary, "probe.o") ||
         !write_text_file(probe_source,
             "#include <stdint.h>\n#include <time.h>\n"
+            "int value(void);\n"
             "int value(void){return (int)(sizeof(void*) + sizeof(time_t));}\n")) {
         remove_temporary_files(temporary, 0U);
         source_list_destroy(&sources);
@@ -370,6 +371,6 @@ int main(int argc, char **argv)
 
     remove_temporary_files(temporary, sources.count);
     source_list_destroy(&sources);
-    puts("All application translation units compiled as ELF 32-bit Intel i386 objects.");
+    puts("All application translation units compiled as ELF 32-bit Intel i386 objects.\n");
     return EXIT_SUCCESS;
 }
