@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Triggered once after the temporary PR branch is created.
 name: Prepare audited repair
 
 on:
