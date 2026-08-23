@@ -49,7 +49,7 @@ static void expect_no_temporary_files(const char *directory)
     assert(stream);
     struct dirent *entry;
     while ((entry = readdir(stream)))
-        assert(strncmp(entry->d_name, ".lsm-write-", 11U) != 0);
+        assert(strncmp(entry->d_name, ".infiltratr-write-", 18U) != 0);
     assert(closedir(stream) == 0);
 }
 
