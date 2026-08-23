@@ -258,7 +258,6 @@ static bool path_has_compat_component(const char *path)
            strncmp(path, "compat/", 7U) == 0;
 }
 
-
 static bool inside_block_comment(const char *text, const char *position)
 {
     const char *last_open = NULL;
@@ -442,7 +441,6 @@ static void check_platform_path_boundary(const char *path, const char *text)
                          path, line_number_at(text, found));
     }
 
-
     if (strcmp(path, "src/performance_present.c") == 0) {
         static const char *const collector_markers[] = {
             "wifi_metadata.h", "lsm_wifi_metadata_refresh(",
@@ -477,7 +475,6 @@ static void check_platform_path_boundary(const char *path, const char *text)
         }
     }
 }
-
 
 static void check_process_platform_boundary(const char *path, const char *text)
 {
@@ -614,7 +611,6 @@ static void scan_source_tree(const char *directory_path_value)
     closedir(directory);
 }
 
-
 static void require_text_marker(const char *path, const char *text,
                                 const char *marker)
 {
@@ -728,12 +724,13 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
-            "## Download",
             "## Capabilities",
-            "## Design",
-            "## Build from source",
+            "## Architecture",
+            "## Build and test",
             "src/infiltratr-common",
-            "## Verification",
+            "## Release assets",
+            "## Repository and release policy",
+            "## Licence",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };
         for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++)
@@ -794,7 +791,6 @@ static void check_shell_boundary(void)
     check_shell_boundary_tree(".");
 }
 
-
 static void check_shared_release_contract(void)
 {
     size_t size = 0U;
@@ -833,9 +829,11 @@ static void check_shared_release_contract(void)
         require_text_marker(".github/workflows/release.yml", release,
                             "Linux-System-Monitor-${version}-source.zip");
         require_text_marker(".github/workflows/release.yml", release,
-                            "git merge-base --is-ancestor");
+                            "test \"$main_commit\" = \"$EXPECTED_SHA\"");
         require_text_marker(".github/workflows/release.yml", release,
                             "REQUIRE_I386=1 make check");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "published releases are immutable");
         free(release);
     }
 }
