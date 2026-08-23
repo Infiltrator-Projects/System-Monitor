@@ -34,10 +34,11 @@ jobs:
           main_sha=$(git rev-parse HEAD)
           test "$main_sha" = "$EXPECTED_SHA"
 
-          remote_sha=$(git ls-remote --refs origin "refs/tags/${TAG}" | awk '{print $1}')
-          if [[ -n "$remote_sha" ]]; then
-            test "$remote_sha" = "$EXPECTED_SHA"
-            printf 'Tag %s already exists at verified main %s.\n' "$TAG" "$EXPECTED_SHA"
+          if git ls-remote --exit-code --refs origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git fetch origin "refs/tags/${TAG}:refs/tags/${TAG}" --force
+            tag_commit=$(git rev-list -n 1 "$TAG")
+            test "$tag_commit" = "$EXPECTED_SHA"
+            printf 'Tag %s resolves to verified main %s.\n' "$TAG" "$EXPECTED_SHA"
           else
             git config user.name "Shannon Smith"
             git config user.email "The-First-Infiltrator@users.noreply.github.com"
