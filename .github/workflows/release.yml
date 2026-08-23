@@ -2,21 +2,13 @@
 name: Publish release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing version tag to validate and publish
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-release-${{ github.repository }}-${{ inputs.tag || github.ref_name }}
+  group: publish-release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -26,10 +18,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Check out the immutable release tag
+      - name: Check out current main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: main
           fetch-depth: 0
           submodules: recursive
 
@@ -41,6 +33,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake gcc-multilib git jq libc6-dev-i386 \
             libgtk-3-dev pkg-config unzip zip
+
+      - name: Verify exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Exact equality with origin/main is deliberately stronger than the
+          # former git merge-base --is-ancestor release provenance gate.
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          main_commit=$(git rev-parse origin/main)
+          if [[ "$head_commit" != "$main_commit" ]]; then
+            printf 'Release checkout %s is not current main %s.\n' \
+              "$head_commit" "$main_commit" >&2
+            exit 1
+          fi
 
       - name: Verify with CMake and CTest
         run: |
@@ -54,44 +61,31 @@ jobs:
       - name: Build release packages
         run: make -j2 release
 
-      - name: Publish or verify the tagged release
+      - name: Publish immutable release
         env:
           GH_TOKEN: ${{ github.token }}
-          DISPATCH_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          main_commit=$(git rev-parse origin/main)
+          test "$head_commit" = "$main_commit"
 
           version=$(tr -d '[:space:]' < support/VERSION)
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             printf 'Invalid release version: %s\n' "$version" >&2
             exit 1
           fi
+          tag="v${version}"
 
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            tag="$GITHUB_REF_NAME"
-          else
-            tag="$DISPATCH_TAG"
-          fi
-          expected_tag="v${version}"
-          if [[ "$tag" != "$expected_tag" ]]; then
-            printf 'Tag %s does not match source version %s.\n' \
-              "$tag" "$version" >&2
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            printf 'Release tag %s already exists; published releases are immutable.\n' "$tag" >&2
             exit 1
           fi
-
-          git fetch origin "refs/tags/${tag}:refs/tags/${tag}"
-          tag_commit=$(git rev-list -n 1 "$tag")
-          head_commit=$(git rev-parse HEAD)
-          if [[ "$tag_commit" != "$head_commit" ]]; then
-            printf 'Tag %s points to %s, not checked-out commit %s.\n' \
-              "$tag" "$tag_commit" "$head_commit" >&2
-            exit 1
-          fi
-
-          git fetch origin main --no-tags
-          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
-            printf 'Tag %s is not a commit on main.\n' "$tag" >&2
+          if gh release view "$tag" >/dev/null 2>&1; then
+            printf 'Release %s already exists; published releases are immutable.\n' "$tag" >&2
             exit 1
           fi
 
@@ -105,20 +99,20 @@ jobs:
           ./"$installer" --help >/dev/null
           test "$(unzip -p "$source" '*/src/infiltratr-common/VERSION' | tr -d '[:space:]')" = "1.11.0"
 
-          notes=$(git log -1 --format=%b "$tag")
+          notes=$(git log -1 --format=%b "$head_commit")
           if [[ -z "$notes" ]]; then
             notes="Verified Linux System Monitor ${version} release."
           fi
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            printf 'Existing release %s is immutable; verifying only.\n' "$tag"
-          else
-            gh release create "$tag" "$deb" "$installer" "$source" \
-              --verify-tag \
-              --title "Linux System Monitor $version" \
-              --notes "$notes" \
-              --latest
-          fi
+          git tag "$tag" "$head_commit"
+          git push origin "$tag"
+
+          gh release create "$tag" "$deb" "$installer" "$source" \
+            --verify-tag \
+            --target "$head_commit" \
+            --title "Linux System Monitor $version" \
+            --notes "$notes" \
+            --latest
 
           expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$source" | sort)
           published_assets=$(gh release view "$tag" --json assets \
