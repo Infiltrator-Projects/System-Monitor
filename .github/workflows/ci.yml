@@ -59,7 +59,7 @@ jobs:
             exit 1
           fi
 
-      - name: Validate source version format
+      - name: Validate source version and README provenance
         shell: bash
         run: |
           set -euo pipefail
@@ -67,6 +67,25 @@ jobs:
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             printf 'Invalid source version: %s\n' "$version" >&2
             exit 1
+          fi
+
+          readme_version=$(sed -nE \
+            's/^\*\*Current source version:\*\* ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' \
+            README.md)
+          if [[ "$readme_version" != "$version" ]]; then
+            printf 'README source version %s does not match support/VERSION %s.\n' \
+              "${readme_version:-missing}" "$version" >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "v${version}")
+            provenance_row="| ${version} | \`${tag_commit}\` |"
+            if ! grep -Fqx "$provenance_row" README.md; then
+              printf 'README provenance is missing %s at %s.\n' \
+                "$version" "$tag_commit" >&2
+              exit 1
+            fi
           fi
 
       - name: Install build dependencies
