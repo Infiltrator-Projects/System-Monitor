@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Bug report
+description: Report a reproducible problem in Linux System Monitor.
+title: "[Bug]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Linux System Monitor. Do not include secrets or sensitive security details here; use SECURITY.md for vulnerability reports.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release number, tag, or commit SHA.
+      placeholder: "1.0.2 or 0123abc..."
+    validations:
+      required: true
+
+  - type: input
+    id: distribution
+    attributes:
+      label: Linux distribution
+      description: Distribution and release.
+      placeholder: "Linux Mint 22.3 / Ubuntu 24.04 / Fedora ..."
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop/session
+      description: Desktop environment and display session when relevant.
+      placeholder: "Cinnamon / X11, GNOME / Wayland ..."
+
+  - type: dropdown
+    id: privilege
+    attributes:
+      label: How was the application run?
+      options:
+        - Ordinary user
+        - Deliberately elevated/root
+        - Both; behaviour differs
+        - Not applicable / build-only problem
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - CPU / memory
+        - Storage / filesystems
+        - Network / Wi-Fi
+        - GPU
+        - NPU / accelerator
+        - Battery / peripherals
+        - Processes / details / controls
+        - Startup / users / services
+        - GTK interface / layout
+        - Packaging / native installer
+        - Build / CI / release engineering
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware context
+      description: Include the relevant CPU, GPU, NPU, network, storage or peripheral model/driver when the problem is hardware-specific.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots or evidence
+      description: Include relevant output only. Remove usernames, hostnames, paths, credentials and unrelated private information where possible.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I have not included secrets or sensitive security information.
+          required: true

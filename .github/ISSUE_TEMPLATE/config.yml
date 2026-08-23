@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+blank_issues_enabled: true
+contact_links:
+  - name: Security reports
+    url: https://github.com/The-First-Infiltrator/System-Monitor/security
+    about: Please use the security policy for vulnerabilities or sensitive reports.

@@ -4,33 +4,54 @@
 
 [![Verify](https://github.com/The-First-Infiltrator/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/The-First-Infiltrator/System-Monitor/actions/workflows/ci.yml)
 
-Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting Linux hardware, process and service information directly wherever practical.
+Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.1  
-**Platform:** Linux desktop  
+**Current source version:** [1.0.2](support/VERSION)  
+**Shared foundation:** exact Infiltratr Common 1.12.0 gitlink at `src/infiltratr-common`  
+**Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
+
+## Design priorities
+
+Linux System Monitor is deliberately a native application rather than an orchestration layer. The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons, shell launchers, privileged collectors or policy changes.
+
+Collection prefers project-owned C parsers and native kernel/driver interfaces over external commands. Unsupported metrics are presented as unavailable rather than guessed or fabricated.
+
+Storage, memory and network quantities use 1024-based scaling with traditional labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB.
 
 ## Capabilities
 
 - Performance pages for CPU, memory, disks, partitions, networks, GPUs, batteries and supported NPUs.
 - Processes, Application history, Startup, Users, Details, Services and File systems pages.
 - Process inspection, termination, suspend/resume, priority, efficiency mode and CPU-affinity controls.
-- Hardware identity and telemetry from native Linux interfaces, with unsupported metrics shown as unavailable rather than guessed.
+- Native hardware identity and telemetry with explicit per-metric availability.
+- GPU engine telemetry where the active driver exposes a safe native interface.
+- Direct wireless metadata, storage inventory and system-source collection without depending on command-line providers.
 - Explicit snapshot and process-table export actions.
-
-Storage, memory and network quantities use 1024-based scaling with traditional labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB.
 
 ## Architecture
 
-The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons, shell launchers, privileged collectors or policy changes. Elevated execution is an explicit external user choice.
+```text
+GTK 3 presentation
+        ↓
+platform-neutral snapshots and process contracts
+        ↓
+Linux backend ownership and sampling policy
+        ↓
+procfs / sysfs / ioctls / D-Bus / optional in-process driver libraries
 
-Monitoring prefers project-owned C parsers over command orchestration. It does not require `lspci`, `lshw`, `lsblk`, `sensors`, `dmidecode`, `nvidia-smi`, `systemctl`, `loginctl` or `nmcli` as telemetry providers.
+Infiltratr Common 1.12.0
+        ↓
+reusable parsing / formatting / timing / durable I/O primitives
+```
 
-Plain-C snapshots and platform-neutral monitor/process contracts separate the GTK interface from Linux-specific providers. procfs/sysfs paths, ioctls and D-Bus details stay below those contracts so another operating-system backend can be added without rewriting the application model.
+Plain-C snapshots separate presentation from operating-system collection. Linux-specific paths, ioctls, D-Bus calls and driver details stay below those contracts so another native backend can be added without rewriting the application model.
 
-ISO C17 is the project language baseline. Implementation code prefers simpler C11/C99 constructs when they express the same design clearly; C23 and C++ are not required merely for convenience, preserving compatibility with older and less-common native toolchains.
+ISO C17 is the project language baseline. Simpler C11/C99 constructs are preferred when they express the same design clearly. C23 and C++ are not required merely for convenience. Resource-owning modules make ownership, lifetime and cleanup explicit in portable C.
 
-`src/infiltratr-common` is pinned to Infiltratr Common 1.12.0 and linked statically. Common owns reusable formatting, parsing, timing, durable I/O, ordered path selection and dynamic-library mechanics; hardware-specific collection policy stays in System Monitor.
+`src/infiltratr-common` is pinned to one exact Common commit and linked statically. Common owns genuinely reusable primitives; hardware-specific collection policy remains in System Monitor.
+
+See [Architecture](docs/ARCHITECTURE.md), [Portability](docs/PORTABILITY.md) and [Hardware collection](docs/HARDWARE.md) for the maintained engineering contracts.
 
 ## Build and test
 
@@ -54,18 +75,18 @@ make dist
 make release
 ```
 
-`make check` covers strict warnings, source/licence policy, static analysis where supported, parser/backend tests, hardware fixtures, process controls, coverage floors, lifecycle stability, package boundaries and installer safety. CI also runs CMake/CTest and a required 32-bit compile check.
+`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, coverage floors, lifecycle stability, package boundaries and installer safety. CI also runs CMake/CTest and a required 32-bit compile check.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 
 ## Release assets
 
-A numbered release publishes:
+A numbered release publishes exactly three primary artifacts:
 
 | File | Purpose |
 | --- | --- |
 | `linux-system-monitor_<version>_amd64.deb` | Generic amd64 Debian package. |
-| `linux-system-monitor-<version>-native-installer.run` | Hardware-native local build/install program. |
+| `linux-system-monitor-<version>-native-installer.run` | Native local build/test/install program. |
 | `Linux-System-Monitor-<version>-source.zip` | Tested standalone source archive including the exact pinned Common source. |
 
 Install the generic package with:
@@ -81,26 +102,45 @@ chmod +x linux-system-monitor-<version>-native-installer.run
 ./linux-system-monitor-<version>-native-installer.run
 ```
 
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/` | Application code, platform seams, Linux providers and the pinned Common submodule. |
+| `docs/` | Maintained architecture, portability and hardware-collection contracts. |
+| `support/tests/` | Deterministic regression and smoke tests. |
+| `support/tools/` | C-based developer, packaging and validation tools. |
+| `support/packaging/` | Debian packaging metadata. |
+| `support/installer/` | Native installer bootstrap/internals. |
+| `support/resources/` | Desktop resources, icon and bundled data. |
+| `support/legal/` | Third-party notices and retained legal material. |
+| `.github/` | CI/release workflows, contribution policy and issue forms. |
+
+The root is intentionally kept small. Internal project material belongs under `src/` or `support/`; public engineering documentation belongs under `docs/` and GitHub community policy under `.github/`.
+
 ## Repository and release policy
 
-This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on PR, feature or release branches.
+This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on feature or release branches.
 
 Every push to `main` runs the full Verify workflow. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete Verify workflow succeeds.
 
-The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and standalone source ZIP, then creates the version tag and GitHub release. Published version tags and releases are treated as immutable release identities.
+The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and source ZIP, then creates the version tag and GitHub release. Published version tags and releases are immutable release identities.
 
 Once a version tag exists, further source changes must advance `support/VERSION` before Verify will accept them. This prevents `main` from silently diverging from an already-published release while claiming the same version.
 
-Manually runnable build/test helpers, where present, are diagnostic tools only and are not release-approval mechanisms.
+## Contributing and security
 
-## Source layout
+Engineering contributions should follow [CONTRIBUTING.md](.github/CONTRIBUTING.md). Repository conduct is covered by the [Code of Conduct](.github/CODE_OF_CONDUCT.md). Security-sensitive reports should follow [SECURITY.md](.github/SECURITY.md) rather than being opened as public issues.
 
-- `src/` — application code, Linux providers and the pinned Common submodule.
-- `support/` — tests, release tooling, resources, packaging, version metadata, installer internals and legal notices.
+GitHub issue forms are provided for reproducible bugs and feature proposals so hardware, platform and version context is captured consistently.
 
-## Release identity
+## Documentation
 
-Linux System Monitor source is version **1.0.1**. A published `v1.0.1` tag identifies the verified release commit, and the GitHub release contains the three supported distribution artifacts listed above.
+- [Architecture](docs/ARCHITECTURE.md) — ownership, module boundaries and application lifecycle.
+- [Portability](docs/PORTABILITY.md) — C17 rules, platform seams and portability requirements.
+- [Hardware collection](docs/HARDWARE.md) — native telemetry sources, availability semantics and privilege behaviour.
+
+These are the maintained engineering documents. The source-style audit rejects unplanned Markdown additions so documentation remains complete without becoming fragmented.
 
 ## Licence
 

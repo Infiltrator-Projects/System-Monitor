@@ -165,6 +165,23 @@ static void check_source_manifest(const StringList *listed)
     }
 }
 
+static bool maintained_markdown_path(const char *path)
+{
+    static const char *const maintained[] = {
+        "./README.md",
+        "./docs/ARCHITECTURE.md",
+        "./docs/PORTABILITY.md",
+        "./docs/HARDWARE.md",
+        "./.github/CODE_OF_CONDUCT.md",
+        "./.github/CONTRIBUTING.md",
+        "./.github/SECURITY.md"
+    };
+    for (size_t index = 0U;
+         index < sizeof(maintained) / sizeof(maintained[0]); index++)
+        if (strcmp(path, maintained[index]) == 0) return true;
+    return false;
+}
+
 static void check_markdown_tree(const char *directory_path_value)
 {
     DIR *directory = opendir(directory_path_value);
@@ -189,9 +206,9 @@ static void check_markdown_tree(const char *directory_path_value)
         if (directory_path(path)) {
             check_markdown_tree(path);
         } else if (ends_with(entry->d_name, ".md") &&
-                   strcmp(path, "./README.md") != 0) {
-            report_error("%s: README.md is the sole maintained Markdown file",
-                         path);
+                   !maintained_markdown_path(path)) {
+            report_error("%s: unapproved maintained Markdown file; update the "
+                         "documentation allowlist deliberately", path);
         }
     }
     closedir(directory);
@@ -199,9 +216,21 @@ static void check_markdown_tree(const char *directory_path_value)
 
 static void check_markdown_policy(void)
 {
+    static const char *const required[] = {
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/PORTABILITY.md",
+        "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md",
+        ".github/CONTRIBUTING.md",
+        ".github/SECURITY.md"
+    };
     check_markdown_tree(".");
-    if (!regular_file("README.md"))
-        report_error("README.md: required maintained documentation is missing");
+    for (size_t index = 0U;
+         index < sizeof(required) / sizeof(required[0]); index++)
+        if (!regular_file(required[index]))
+            report_error("%s: required maintained documentation is missing",
+                         required[index]);
 }
 
 static void check_root_layout(void)
@@ -650,14 +679,30 @@ static void check_licensing_contract(void)
     static const char *const hash_header_files[] = {
         ".gitmodules", "CMakeLists.txt", "support/Doxyfile", "Makefile",
         "src/.clang-format", "support/sources.txt",
-        "src/infiltratr-common/Makefile"
+        "src/infiltratr-common/Makefile",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        ".github/ISSUE_TEMPLATE/config.yml"
     };
     for (size_t index = 0U;
          index < sizeof(hash_header_files) / sizeof(hash_header_files[0]);
          index++)
         require_file_prefix(hash_header_files[index], LSM_SPDX_HASH);
 
-    require_file_prefix("README.md", LSM_SPDX_MARKDOWN);
+    static const char *const markdown_header_files[] = {
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/PORTABILITY.md",
+        "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md",
+        ".github/CONTRIBUTING.md",
+        ".github/SECURITY.md"
+    };
+    for (size_t index = 0U;
+         index < sizeof(markdown_header_files) /
+                     sizeof(markdown_header_files[0]); index++)
+        require_file_prefix(markdown_header_files[index], LSM_SPDX_MARKDOWN);
+
     require_file_prefix(
         "support/installer/bootstrap.sh",
         "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
@@ -707,8 +752,10 @@ static void check_licensing_contract(void)
 static void check_engineering_documentation(void)
 {
     static const char *const required_files[] = {
-        "README.md", "support/Doxyfile", "LICENSE",
-        "support/legal/THIRD_PARTY_NOTICES",
+        "README.md", "docs/ARCHITECTURE.md", "docs/PORTABILITY.md",
+        "docs/HARDWARE.md", ".github/CODE_OF_CONDUCT.md",
+        ".github/CONTRIBUTING.md", ".github/SECURITY.md",
+        "support/Doxyfile", "LICENSE", "support/legal/THIRD_PARTY_NOTICES",
         "support/packaging/copyright"
     };
     for (size_t index = 0U; index < sizeof(required_files) / sizeof(required_files[0]);
@@ -724,12 +771,20 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
+            "## Design priorities",
             "## Capabilities",
             "## Architecture",
             "## Build and test",
             "src/infiltratr-common",
             "## Release assets",
+            "## Repository layout",
             "## Repository and release policy",
+            "## Contributing and security",
+            "## Documentation",
+            "docs/ARCHITECTURE.md",
+            "docs/PORTABILITY.md",
+            "docs/HARDWARE.md",
+            ".github/CONTRIBUTING.md",
             "## Licence",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };
