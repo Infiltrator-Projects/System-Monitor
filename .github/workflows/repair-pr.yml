@@ -68,9 +68,10 @@ jobs:
              support/tools/repair_audit.py
           git diff --check
           git add -A
+          git fetch origin main --no-tags
 
-          changed=$(git diff --cached --name-only | sort)
-          present=$(git diff --cached --diff-filter=ACMRT --name-only | sort)
+          changed=$(git diff --cached origin/main --name-only | sort)
+          present=$(git diff --cached origin/main --diff-filter=ACMRT --name-only | sort)
 
           for required in \
             .github/workflows/ci.yml \
