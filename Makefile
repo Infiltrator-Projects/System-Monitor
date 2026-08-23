@@ -271,7 +271,7 @@ COMMON_LINK_TARGETS := \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
 	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
-	quality-policy-smoke preferences-smoke
+	quality-policy-smoke preferences-smoke startup-smoke
 
 atomic-file-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
