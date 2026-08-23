@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Triggered once after the temporary PR branch is created.
+# Re-triggered after pre-pinning the Common gitlink so the audited migration can complete.
 name: Prepare audited repair
 
 on:
@@ -69,7 +70,7 @@ jobs:
             .github/workflows/ci.yml \
             .github/workflows/release.yml \
             .github/workflows/repair-branch.yml \
-            CMakeLists.txt Makefile README.md src/infiltratr-common \
+            CMakeLists.txt Makefile README.md \
             support/tools/check_source_style.c \
             support/tools/repair_audit.py | sort)
           actual=$(git status --short | sed 's/^...//' | sort)
