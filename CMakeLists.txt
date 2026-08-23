@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux-System-Monitor source build
 # Author and maintainer: Shannon Smith
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.8.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.8.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "318b1babc7343403ae5e222ea01235a0fc84d752")
+set(INFILTRATR_COMMON_TAG "v1.11.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.11.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "6c1a6c239e51dcf7946b6303a9bad639e8455a17")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -172,24 +172,14 @@ set(LSM_PROCESS_PLATFORM_SOURCES
 set(LSM_MONITOR_BACKEND_SOURCES
     ${LSM_MONITOR_CORE_SOURCES} ${LSM_MONITOR_PLATFORM_SOURCES})
 
-# Maintained applications consume this same versioned source component. The
-# application links it privately so Debian packages remain self-contained;
-# the component's own Makefile can also produce a conventional shared object.
-add_library(infiltratr-common STATIC
-    "${INFILTRATR_COMMON_DIR}/src/core.c"
-    "${INFILTRATR_COMMON_DIR}/src/arithmetic.c"
-    "${INFILTRATR_COMMON_DIR}/src/config.c"
-    "${INFILTRATR_COMMON_DIR}/src/timing.c"
-    "${INFILTRATR_COMMON_DIR}/src/format.c"
-    "${INFILTRATR_COMMON_DIR}/src/dynlib.c"
-    "${INFILTRATR_COMMON_DIR}/src/posix.c")
-target_include_directories(infiltratr-common PUBLIC
-    "${INFILTRATR_COMMON_DIR}/include")
-target_compile_features(infiltratr-common PUBLIC c_std_11)
-target_compile_options(infiltratr-common PRIVATE
-    -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2
-    -Wstrict-prototypes -Wmissing-prototypes)
-target_link_libraries(infiltratr-common PUBLIC m)
+# Common owns its complete internal source/dependency graph. Consumers
+# link the authoritative target instead of reproducing that membership.
+set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL
+    "Build Common tests inside System Monitor" FORCE)
+set(INFILTRATR_COMMON_WARNINGS_AS_ERRORS ON CACHE BOOL
+    "Treat vendored Common warnings as errors" FORCE)
+add_subdirectory("${INFILTRATR_COMMON_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/infiltratr-common" EXCLUDE_FROM_ALL)
 
 add_executable(linux-system-monitor ${LSM_SOURCE_NAMES})
 target_include_directories(linux-system-monitor PRIVATE src)
@@ -226,7 +216,7 @@ if(LSM_SUPPORTS_FULL_RELRO)
         -Wl,-z,relro -Wl,-z,now)
 endif()
 target_link_libraries(linux-system-monitor PRIVATE
-    infiltratr-common PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
+    InfiltratrCommon::Common PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
 if(LSM_IPO_SUPPORTED)
     set_property(TARGET linux-system-monitor
         PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)

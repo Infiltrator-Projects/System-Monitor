@@ -17,7 +17,7 @@ Each GitHub release provides:
 
 - a generic AMD64 Debian package (`.deb`);
 - a hardware-native self-extracting installer (`.run`); and
-- GitHub's automatic source archives for the tagged source tree.
+- a deterministic standalone source ZIP (`Linux-System-Monitor-VERSION-source.zip`).
 
 Install the Debian package through the desktop package installer or with:
 
@@ -62,7 +62,7 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.8.0 in
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.11.0 in
 the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
 repository. It is linked statically into this application, so the source has
 one canonical owner while the installed package has no cross-project runtime
@@ -87,10 +87,10 @@ make
 ./build/linux-system-monitor
 ```
 
-GitHub's automatic source archives preserve the pinned dependency reference
-but do not expand submodules. After extraction, an ordinary `make` automatically
-retrieves the exact pinned Infiltratr Common release into `src/infiltratr-common`;
-no separate shared-library setup is required.
+The standalone release source ZIP vendors the exact pinned Infiltratr Common
+source and therefore remains buildable without a second source download. GitHub's
+automatic source archives preserve only the submodule reference; when one of those
+is used instead, an ordinary `make` retrieves the exact pinned Common release.
 
 Useful build targets:
 
@@ -150,11 +150,13 @@ index preserves the source identity even if a release page becomes unavailable.
 | 1.13.13 | `d98412f9c1a813f634a3f53240d6a602da59cde2` |
 | 1.13.14 | `9b687a8b1f8bc0936120bf3adb30518372481706` |
 | 1.13.15 | `12927f1f4414c34129907bc19513612f3b52aee3` |
+| 1.13.16 | `50ff82ef33842de9a1287cfdacca835a117e8819` |
 
 The v1.13.2 through v1.13.11 release pages and tags were removed during
 repository maintenance in August 2026. Their published commit identities are
 retained above for audit and reconstruction. Published releases are cut from
-verified commits on `main` and use immutable version tags.
+verified commits on `main` and use immutable version tags. `main` now carries
+1.13.17 as the next unreleased line.
 
 ## Licence
 

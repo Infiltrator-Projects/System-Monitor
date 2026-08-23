@@ -16,35 +16,11 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.8.0
-INFILTRATR_COMMON_COMMIT := 318b1babc7343403ae5e222ea01235a0fc84d752
-INFILTRATR_COMMON_VERSION := 1.8.0
-INFILTRATR_COMMON_SOURCES := \
-	$(INFILTRATR_COMMON_DIR)/src/core.c \
-	$(INFILTRATR_COMMON_DIR)/src/arithmetic.c \
-	$(INFILTRATR_COMMON_DIR)/src/config.c \
-	$(INFILTRATR_COMMON_DIR)/src/timing.c \
-	$(INFILTRATR_COMMON_DIR)/src/format.c \
-	$(INFILTRATR_COMMON_DIR)/src/dynlib.c \
-	$(INFILTRATR_COMMON_DIR)/src/posix.c
-INFILTRATR_COMMON_HEADERS := \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/compiler.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/core.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/arithmetic.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/config.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/timing.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/format.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/dynlib.h \
-	$(INFILTRATR_COMMON_DIR)/include/infiltratr/posix.h
-INFILTRATR_COMMON_OBJECTS := \
-	$(BUILD_DIR)/infiltratr-common/core.o \
-	$(BUILD_DIR)/infiltratr-common/arithmetic.o \
-	$(BUILD_DIR)/infiltratr-common/config.o \
-	$(BUILD_DIR)/infiltratr-common/timing.o \
-	$(BUILD_DIR)/infiltratr-common/format.o \
-	$(BUILD_DIR)/infiltratr-common/dynlib.o \
-	$(BUILD_DIR)/infiltratr-common/posix.o
-INFILTRATR_COMMON_ARCHIVE := $(BUILD_DIR)/libinfiltratr-common.a
+INFILTRATR_COMMON_TAG := v1.11.0
+INFILTRATR_COMMON_COMMIT := 6c1a6c239e51dcf7946b6303a9bad639e8455a17
+INFILTRATR_COMMON_VERSION := 1.11.0
+INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
+INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
 TARGET := $(BUILD_DIR)/linux-system-monitor
 STYLE_CHECKER := $(BUILD_DIR)/source-style-checker
@@ -159,7 +135,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
+.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check common-library strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
 	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
@@ -254,13 +230,13 @@ $(BUILD_INFO): $(VERSION_FILE) $(INFILTRATR_COMMON_DIR)/VERSION | $(BUILD_DIR)
 $(BUILD_DIR)/%.o: src/%.c src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/infiltratr-common/%.o: $(INFILTRATR_COMMON_DIR)/src/%.c \
-		$(INFILTRATR_COMMON_HEADERS) src/glibc_compat.h $(BUILD_CONFIG) | $(BUILD_DIR)
-	mkdir -p "$(BUILD_DIR)/infiltratr-common"
-	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+common-library: common-check
+	$(MAKE) -C "$(INFILTRATR_COMMON_DIR)" \
+		BUILD_DIR="$(INFILTRATR_COMMON_BUILD_DIR)" \
+		CC="$(CC)" AR="$(AR)" CFLAGS="$(CFLAGS)" all
 
-$(INFILTRATR_COMMON_ARCHIVE): $(INFILTRATR_COMMON_OBJECTS) | common-check
-	$(AR) rcsD $@ $(INFILTRATR_COMMON_OBJECTS)
+$(INFILTRATR_COMMON_ARCHIVE): common-library
+	@test -f "$@"
 
 $(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
 	$(CC) $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(LDFLAGS) $(LDLIBS) -o $@
@@ -274,7 +250,7 @@ run: $(TARGET)
 check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
-build-check: check-deps strict-check atomic-file-smoke duration-format-smoke infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
+build-check: check-deps strict-check portability-check atomic-file-smoke duration-format-smoke infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
 	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
 	smbios-memory-smoke battery-smoke bluetooth-battery-smoke wifi-metadata-smoke \
 	hidpp-smoke nvml-smoke native-command-audit bundled-pci-smoke startup-smoke \
@@ -373,15 +349,14 @@ docs: docs-check
 # warning policy. The compact GTK compatibility header is syntax-check only.
 strict-check: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat \
-		-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(SOURCES) \
-		$(INFILTRATR_COMMON_SOURCES)
+		-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(SOURCES)
 
 analyzer-check: | $(BUILD_DIR)
 	@if [ -n "$(ANALYZER_FLAG)" ]; then \
 		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
 			-fsyntax-only src/atomic_file_posix.c src/common.c \
 			src/duration_format.c src/process_backend_linux.c src/refresh_policy.c \
-			$(INFILTRATR_COMMON_SOURCES) \
+			$(INFILTRATR_COMMON_ARCHIVE) \
 			src/process_gpu.c src/metric_format.c src/cpu_accounting.c \
 			src/memory_accounting.c \
 			src/disk_accounting.c src/mountinfo.c src/storage_metadata.c \
@@ -611,7 +586,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
-		$(INFILTRATR_COMMON_SOURCES) \
+		$(INFILTRATR_COMMON_ARCHIVE) \
 		$(GTK_LIBS) -pthread -lm -ldl -o $(BUILD_DIR)/runtime-stability-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -633,7 +608,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
-		$(INFILTRATR_COMMON_SOURCES) -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/disk-accounting-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -641,7 +616,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
-		$(INFILTRATR_COMMON_SOURCES) -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/cpu-accounting-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -656,7 +631,7 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c \
-		$(INFILTRATR_COMMON_SOURCES) -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/storage-metadata-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -822,22 +797,18 @@ coverage-check: | $(BUILD_DIR)
 	mkdir -p $(COVERAGE_DIR)
 	ln -s ../../src $(COVERAGE_DIR)/src
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/common.c -o $(COVERAGE_DIR)/common.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c \
-		$(INFILTRATR_COMMON_DIR)/src/core.c -o $(COVERAGE_DIR)/infiltratr-core.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c \
-		$(INFILTRATR_COMMON_DIR)/src/posix.c -o $(COVERAGE_DIR)/infiltratr-posix.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_accounting.c -o $(COVERAGE_DIR)/cpu_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/cpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/cpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/disk_accounting.c -o $(COVERAGE_DIR)/disk_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/disk-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/disk-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_gpu.c -o $(COVERAGE_DIR)/process_gpu.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o -lm -o $(COVERAGE_DIR)/process-gpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/storage_metadata.c -o $(COVERAGE_DIR)/storage_metadata.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/smbios_memory.c -o $(COVERAGE_DIR)/smbios_memory.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/smbios_memory_smoke.c $(COVERAGE_DIR)/smbios_memory.o -o $(COVERAGE_DIR)/smbios-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/memory_accounting.c -o $(COVERAGE_DIR)/memory_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(COVERAGE_DIR)/common.o $(COVERAGE_DIR)/infiltratr-core.o $(COVERAGE_DIR)/infiltratr-posix.o -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/sample_history.c -o $(COVERAGE_DIR)/sample_history.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/sample_history_smoke.c $(COVERAGE_DIR)/sample_history.o -o $(COVERAGE_DIR)/sample-history-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/gpu_metrics.c -o $(COVERAGE_DIR)/gpu_metrics.o
