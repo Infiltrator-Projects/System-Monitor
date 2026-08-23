@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting Linux hardware, process and service information directly wherever practical.
 
-**Current source version:** 1.13.20  
+**Current source version:** 1.13.21  
 **Platform:** Linux desktop  
 **Licence:** GPL-3.0-or-later
 
@@ -28,7 +28,7 @@ Monitoring prefers project-owned C parsers over command orchestration. It does n
 
 Plain-C snapshots and platform-neutral monitor/process contracts separate the GTK interface from Linux-specific providers. procfs/sysfs paths, ioctls and D-Bus details stay below those contracts so another operating-system backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is pinned to Infiltratr Common 1.12.0 and linked statically. Common owns reusable formatting, parsing, timing, dynamic-library mechanics, durable atomic replacement and generic POSIX path selection; hardware-specific collection, availability and presentation policy stays in System Monitor.
+`src/infiltratr-common` is pinned to Infiltratr Common 1.12.0 and linked statically. Common owns reusable formatting, parsing, timing, durable I/O, ordered path selection and dynamic-library mechanics; hardware-specific collection policy stays in System Monitor.
 
 ## Build and test
 
