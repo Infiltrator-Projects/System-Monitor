@@ -41,6 +41,20 @@ jobs:
             exit 1
           fi
 
+      - name: Enforce explicit release approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=.github/workflows/release.yml
+          grep -qx '  workflow_dispatch:' "$release"
+          if grep -Eq '^  (push|workflow_run|schedule):' "$release"; then
+            echo "Release publication must be manual-only." >&2
+            exit 1
+          fi
+          grep -Fq 'ref: main' "$release"
+          grep -Fq 'Release tag %s already exists; published releases are immutable.' "$release"
+          grep -Fq 'Release %s already exists; published releases are immutable.' "$release"
+
       - name: Validate source version format
         shell: bash
         run: |
