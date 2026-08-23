@@ -96,7 +96,7 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Release provenance
 
-Published release assets and tags are immutable. Historical source identities retained from the 1.13 line are:
+Published release assets and tags are immutable. The version tag is the authoritative identity for the active release commit; historical source identities retained from the 1.13 line are:
 
 | Version | Published commit |
 | --- | --- |
