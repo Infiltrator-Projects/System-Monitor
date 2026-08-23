@@ -37,7 +37,7 @@ int main(void)
     assert(strstr(text, "name=Linux System Monitor\n") != NULL);
     assert(strstr(text, "version=" LSM_VERSION "\n") != NULL);
     assert(strstr(text,
-                  "common-library=infiltratr-common-1.11.0\n") != NULL);
+                  "common-library=infiltratr-common-1.12.0\n") != NULL);
     assert(fclose(metadata) == 0);
 
     puts("Canonical project identity smoke test passed.");

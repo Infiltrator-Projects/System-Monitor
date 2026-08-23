@@ -16,9 +16,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.11.0
-INFILTRATR_COMMON_COMMIT := 6c1a6c239e51dcf7946b6303a9bad639e8455a17
-INFILTRATR_COMMON_VERSION := 1.11.0
+INFILTRATR_COMMON_TAG := v1.12.0
+INFILTRATR_COMMON_COMMIT := 221246931ab7f58db8ead81df46e329e13b7c6a5
+INFILTRATR_COMMON_VERSION := 1.12.0
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -262,7 +262,8 @@ build-check: check-deps strict-check portability-check atomic-file-smoke duratio
 	@echo "All application source, backend and feature checks passed."
 
 COMMON_LINK_TARGETS := \
-	common-smoke project-info-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke \
+	atomic-file-smoke duration-format-smoke common-smoke project-info-smoke \
+	cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke \
 	memory-accounting-smoke hardware-topology-smoke backend-smoke \
 	process-management-smoke process-inspection-smoke \
 	filesystem-inventory-smoke efficiency-smoke storage-metadata-smoke \
@@ -275,13 +276,13 @@ COMMON_LINK_TARGETS := \
 atomic-file-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/atomic_file_smoke.c src/atomic_file_posix.c \
-		-o $(BUILD_DIR)/atomic-file-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/atomic-file-smoke
 	./$(BUILD_DIR)/atomic-file-smoke
 
 duration-format-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/duration_format_smoke.c src/duration_format.c \
-		-o $(BUILD_DIR)/duration-format-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/duration-format-smoke
 	./$(BUILD_DIR)/duration-format-smoke
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
@@ -708,10 +709,10 @@ native-command-audit:
 startup-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/startup_smoke.c \
-		src/atomic_file_posix.c src/ui_helpers.c \
+		src/atomic_file_posix.c src/ui_helpers.c $(INFILTRATR_COMMON_ARCHIVE) \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 \
-		-l:libpango-1.0.so.0 -l:libcairo.so.2 -o $(BUILD_DIR)/startup-smoke
+		-l:libpango-1.0.so.0 -l:libcairo.so.2 -lm -o $(BUILD_DIR)/startup-smoke
 	./$(BUILD_DIR)/startup-smoke
 
 dbus-models-smoke: | $(BUILD_DIR)

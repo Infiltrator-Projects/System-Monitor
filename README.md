@@ -28,7 +28,7 @@ Monitoring prefers project-owned C parsers over command orchestration. It does n
 
 Plain-C snapshots and platform-neutral monitor/process contracts separate the GTK interface from Linux-specific providers. procfs/sysfs paths, ioctls and D-Bus details stay below those contracts so another operating-system backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is pinned to Infiltratr Common 1.11.0 and linked statically. Common owns reusable formatting, parsing, timing and dynamic-library mechanics; hardware-specific collection policy stays in System Monitor.
+`src/infiltratr-common` is pinned to Infiltratr Common 1.12.0 and linked statically. Common owns reusable formatting, parsing, timing, dynamic-library mechanics, durable atomic replacement and generic POSIX path selection; hardware-specific collection, availability and presentation policy stays in System Monitor.
 
 ## Build and test
 
@@ -118,6 +118,7 @@ Published release assets and tags are immutable. The version tag is the authorit
 | 1.13.17 | `313310f213db826dde2de9dd1befae401b2e0f3f` |
 | 1.13.18 | `24cc244db5810be8b44fdf09b40ee386bf890f63` |
 | 1.13.19 | `d3ad141982fac68a4fd59814cc4e830c227713c5` |
+| 1.13.20 | `7af44755f057c60b6bce8e45df23c30f84c9aaec` |
 
 The v1.13.2 through v1.13.11 release pages/tags were removed during repository maintenance in August 2026; the commit identities above are retained for reconstruction and audit purposes. The current source version is stated at the top of this README and is checked against `support/VERSION` by CI.
 
