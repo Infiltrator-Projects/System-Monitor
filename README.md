@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting Linux hardware, process and service information directly wherever practical.
 
-**Current source version:** 1.13.19  
+**Current source version:** 1.13.20  
 **Platform:** Linux desktop  
 **Licence:** GPL-3.0-or-later
 
@@ -117,6 +117,7 @@ Published release assets and tags are immutable. The version tag is the authorit
 | 1.13.16 | `50ff82ef33842de9a1287cfdacca835a117e8819` |
 | 1.13.17 | `313310f213db826dde2de9dd1befae401b2e0f3f` |
 | 1.13.18 | `24cc244db5810be8b44fdf09b40ee386bf890f63` |
+| 1.13.19 | `d3ad141982fac68a4fd59814cc4e830c227713c5` |
 
 The v1.13.2 through v1.13.11 release pages/tags were removed during repository maintenance in August 2026; the commit identities above are retained for reconstruction and audit purposes. The current source version is stated at the top of this README and is checked against `support/VERSION` by CI.
 
