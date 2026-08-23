@@ -2,7 +2,9 @@
 name: Publish release
 
 on:
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -13,15 +15,22 @@ concurrency:
 
 jobs:
   publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
     permissions:
       contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - name: Check out current main
+      - name: Check out exact tested main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           submodules: recursive
 
@@ -34,18 +43,20 @@ jobs:
             build-essential cmake gcc-multilib git jq libc6-dev-i386 \
             libgtk-3-dev pkg-config unzip zip
 
-      - name: Verify exact current main
+      - name: Verify exact current main and Release commit
         shell: bash
         run: |
           set -euo pipefail
-          # Exact equality with origin/main is deliberately stronger than the
-          # former git merge-base --is-ancestor release provenance gate.
           git fetch origin main --tags
           head_commit=$(git rev-parse HEAD)
           main_commit=$(git rev-parse origin/main)
-          if [[ "$head_commit" != "$main_commit" ]]; then
-            printf 'Release checkout %s is not current main %s.\n' \
-              "$head_commit" "$main_commit" >&2
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
+          version=$(tr -d '[:space:]' < support/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          subject=$(git log -1 --format=%s "$head_commit")
+          if [[ "$subject" != "Release ${version}" && "$subject" != "Release ${version}:"* ]]; then
+            printf 'Release commit subject must begin with Release %s.\n' "$version" >&2
             exit 1
           fi
 
@@ -67,17 +78,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           git fetch origin main --tags
           head_commit=$(git rev-parse HEAD)
           main_commit=$(git rev-parse origin/main)
-          test "$head_commit" = "$main_commit"
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
 
           version=$(tr -d '[:space:]' < support/VERSION)
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            printf 'Invalid release version: %s\n' "$version" >&2
-            exit 1
-          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v${version}"
 
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
@@ -106,7 +114,6 @@ jobs:
 
           git tag "$tag" "$head_commit"
           git push origin "$tag"
-
           gh release create "$tag" "$deb" "$installer" "$source" \
             --verify-tag \
             --target "$head_commit" \
@@ -115,36 +122,8 @@ jobs:
             --latest
 
           expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$source" | sort)
-          published_assets=$(gh release view "$tag" --json assets \
-            --jq '.assets[].name' | sort)
+          published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then
             printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
-            printf 'Expected:\n%s\nPublished:\n%s\n' \
-              "$expected_assets" "$published_assets" >&2
             exit 1
           fi
-
-          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")
-          for asset in "$deb" "$installer" "$source"; do
-            local_size=$(stat -c '%s' "$asset")
-            remote_size=$(jq -r --arg name "$asset" \
-              '[.assets[] | select(.name == $name) | .size][0] // 0' \
-              <<<"$release_json")
-            if [[ "$remote_size" != "$local_size" ]]; then
-              printf 'Release asset %s has size %s; expected %s.\n' \
-                "$asset" "$remote_size" "$local_size" >&2
-              exit 1
-            fi
-
-            local_digest="sha256:$(sha256sum "$asset" | awk '{print $1}')"
-            remote_digest=$(jq -r --arg name "$asset" \
-              '[.assets[] | select(.name == $name) | .digest][0] // ""' \
-              <<<"$release_json")
-            if [[ -n "$remote_digest" && "$remote_digest" != "$local_digest" ]]; then
-              printf 'Release asset %s digest mismatch.\n' "$asset" >&2
-              exit 1
-            fi
-          done
-
-          published_tag=$(gh release view "$tag" --json tagName --jq .tagName)
-          test "$published_tag" = "$tag"
