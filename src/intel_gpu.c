@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <infiltratr/posix.h>
 #include <linux/perf_event.h>
 #include <math.h>
 #include <stdint.h>
@@ -86,24 +87,22 @@ typedef struct {
     uint64_t time_running;
 } LsmPerfRead;
 
-static char *existing_path(const char *base, const char *suffix)
-{
-    char path[LSM_PATH_LEN];
-    if (!lsm_join_path(path, sizeof(path), base, suffix) ||
-        access(path, R_OK) != 0)
-        return NULL;
-    return strdup(path);
-}
-
 static char *first_existing_path(const char *base,
                                  const char *const *suffixes,
                                  size_t suffix_count)
 {
-    for (size_t index = 0U; index < suffix_count; index++) {
-        char *path = existing_path(base, suffixes[index]);
-        if (path) return path;
-    }
-    return NULL;
+    char path[LSM_PATH_LEN];
+    if (!base || !*base ||
+        !infiltratr_first_readable_path(base, suffixes, suffix_count,
+                                        path, sizeof(path)))
+        return NULL;
+    return strdup(path);
+}
+
+static char *existing_path(const char *base, const char *suffix)
+{
+    const char *const suffixes[] = {suffix};
+    return suffix ? first_existing_path(base, suffixes, 1U) : NULL;
 }
 
 static int perf_event_open_counter(unsigned int type, uint64_t config, int cpu)
