@@ -23,6 +23,8 @@
 
 #include <stdint.h>
 
+typedef struct LsmLinuxHardwareState LsmLinuxHardwareState;
+
 /** Retained Linux disk baselines keyed independently of the public snapshot. */
 typedef struct {
     char name[64];
@@ -56,6 +58,7 @@ typedef struct {
 typedef struct {
     LsmSystemSources *system_sources;
     LsmWifiMetadata *wifi_metadata;
+    LsmLinuxHardwareState *hardware_state;
     void *cpu_frequency_source;
     LsmCpuAccountingState cpu_accounting;
     LsmLinuxDiskState disks[LSM_MAX_DISKS];
@@ -169,8 +172,10 @@ void lsm_hardware_update(LsmMonitor *monitor, double elapsed,
                          bool refresh_topology, bool refresh_batteries);
 /**
  * Release dynamic hardware adapters and stop associated in-process workers.
+ *
+ * @param [in,out] monitor Monitor whose retained hardware state is released.
  */
-void lsm_hardware_shutdown(void);
+void lsm_hardware_shutdown(LsmMonitor *monitor);
 
 /**
  * Merge an authoritative direct HID++ reading into a battery snapshot.

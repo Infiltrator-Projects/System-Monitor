@@ -28,6 +28,8 @@ Monitoring prefers project-owned C parsers over command orchestration. It does n
 
 Plain-C snapshots and platform-neutral monitor/process contracts separate the GTK interface from Linux-specific providers. procfs/sysfs paths, ioctls and D-Bus details stay below those contracts so another operating-system backend can be added without rewriting the application model.
 
+ISO C17 is the project language baseline. Implementation code prefers simpler C11/C99 constructs when they express the same design clearly; C23 and C++ are not required merely for convenience, preserving compatibility with older and less-common native toolchains.
+
 `src/infiltratr-common` is pinned to Infiltratr Common 1.12.0 and linked statically. Common owns reusable formatting, parsing, timing, durable I/O, ordered path selection and dynamic-library mechanics; hardware-specific collection policy stays in System Monitor.
 
 ## Build and test

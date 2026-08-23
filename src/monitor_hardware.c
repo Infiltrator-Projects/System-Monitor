@@ -11,6 +11,10 @@
  * independent availability flags so one failed metric or adapter cannot poison
  * neighbouring data.
  *
+ * Telemetry caches are owned by the active Linux monitor backend rather than by
+ * process-global mutable storage. A monitor therefore destroys exactly the
+ * resources it created, while the public snapshot remains plain C data.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
  * @license GPL-3.0-or-later
@@ -33,7 +37,6 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
-
 
 #define LSM_MAX_GPU_ENGINE_COUNTERS 32U
 
@@ -61,10 +64,18 @@ typedef struct {
     LsmNpuTelemetry *backend;
 } LsmNpuTelemetryCache;
 
-static LsmGpuTelemetryCache gpu_telemetry[LSM_MAX_GPUS];
-static size_t gpu_telemetry_count;
-static LsmNpuTelemetryCache npu_telemetry[LSM_MAX_NPUS];
-static size_t npu_telemetry_count;
+struct LsmLinuxHardwareState {
+    LsmGpuTelemetryCache gpu_telemetry[LSM_MAX_GPUS];
+    size_t gpu_telemetry_count;
+    LsmNpuTelemetryCache npu_telemetry[LSM_MAX_NPUS];
+    size_t npu_telemetry_count;
+};
+
+static LsmLinuxHardwareState *hardware_state(LsmMonitor *monitor)
+{
+    LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
+    return backend ? backend->hardware_state : NULL;
+}
 
 /* Telemetry caches retain resolved driver attribute paths between samples.
  * They are rebuilt only when accelerator membership changes. */
@@ -222,8 +233,11 @@ static void build_npu_telemetry_cache(const LsmNpuInfo *npu,
     cache->backend = lsm_npu_telemetry_create(npu);
 }
 
-static void synchronise_telemetry_caches(const LsmMonitor *monitor)
+static void synchronise_telemetry_caches(LsmMonitor *monitor)
 {
+    LsmLinuxHardwareState *state = hardware_state(monitor);
+    if (!state) return;
+
     LsmGpuTelemetryCache next_gpu[LSM_MAX_GPUS];
     LsmNpuTelemetryCache next_npu[LSM_MAX_NPUS];
     memset(next_gpu, 0, sizeof(next_gpu));
@@ -231,45 +245,49 @@ static void synchronise_telemetry_caches(const LsmMonitor *monitor)
 
     for (size_t index = 0U; index < monitor->gpu_count; index++) {
         const char *identity = gpu_stable_identity(&monitor->gpus[index]);
-        size_t old_index = gpu_telemetry_count;
-        for (size_t candidate = 0U; candidate < gpu_telemetry_count; candidate++) {
-            if (strcmp(gpu_telemetry[candidate].identity, identity) == 0) {
+        size_t old_index = state->gpu_telemetry_count;
+        for (size_t candidate = 0U; candidate < state->gpu_telemetry_count;
+             candidate++) {
+            if (strcmp(state->gpu_telemetry[candidate].identity, identity) == 0) {
                 old_index = candidate;
                 break;
             }
         }
-        if (old_index < gpu_telemetry_count) {
-            next_gpu[index] = gpu_telemetry[old_index];
-            memset(&gpu_telemetry[old_index], 0, sizeof(gpu_telemetry[old_index]));
+        if (old_index < state->gpu_telemetry_count) {
+            next_gpu[index] = state->gpu_telemetry[old_index];
+            memset(&state->gpu_telemetry[old_index], 0,
+                   sizeof(state->gpu_telemetry[old_index]));
         } else {
             build_gpu_telemetry_cache(&monitor->gpus[index], &next_gpu[index]);
         }
     }
-    for (size_t index = 0U; index < gpu_telemetry_count; index++)
-        destroy_gpu_telemetry(&gpu_telemetry[index]);
-    memcpy(gpu_telemetry, next_gpu, sizeof(next_gpu));
-    gpu_telemetry_count = monitor->gpu_count;
+    for (size_t index = 0U; index < state->gpu_telemetry_count; index++)
+        destroy_gpu_telemetry(&state->gpu_telemetry[index]);
+    memcpy(state->gpu_telemetry, next_gpu, sizeof(next_gpu));
+    state->gpu_telemetry_count = monitor->gpu_count;
 
     for (size_t index = 0U; index < monitor->npu_count; index++) {
         const char *identity = npu_stable_identity(&monitor->npus[index]);
-        size_t old_index = npu_telemetry_count;
-        for (size_t candidate = 0U; candidate < npu_telemetry_count; candidate++) {
-            if (strcmp(npu_telemetry[candidate].identity, identity) == 0) {
+        size_t old_index = state->npu_telemetry_count;
+        for (size_t candidate = 0U; candidate < state->npu_telemetry_count;
+             candidate++) {
+            if (strcmp(state->npu_telemetry[candidate].identity, identity) == 0) {
                 old_index = candidate;
                 break;
             }
         }
-        if (old_index < npu_telemetry_count) {
-            next_npu[index] = npu_telemetry[old_index];
-            memset(&npu_telemetry[old_index], 0, sizeof(npu_telemetry[old_index]));
+        if (old_index < state->npu_telemetry_count) {
+            next_npu[index] = state->npu_telemetry[old_index];
+            memset(&state->npu_telemetry[old_index], 0,
+                   sizeof(state->npu_telemetry[old_index]));
         } else {
             build_npu_telemetry_cache(&monitor->npus[index], &next_npu[index]);
         }
     }
-    for (size_t index = 0U; index < npu_telemetry_count; index++)
-        destroy_npu_telemetry(&npu_telemetry[index]);
-    memcpy(npu_telemetry, next_npu, sizeof(next_npu));
-    npu_telemetry_count = monitor->npu_count;
+    for (size_t index = 0U; index < state->npu_telemetry_count; index++)
+        destroy_npu_telemetry(&state->npu_telemetry[index]);
+    memcpy(state->npu_telemetry, next_npu, sizeof(next_npu));
+    state->npu_telemetry_count = monitor->npu_count;
 }
 
 static void read_gpu_identity_details(LsmGpuInfo *gpu)
@@ -332,8 +350,6 @@ static void update_gpu_active_engine(LsmGpuInfo *gpu)
     lsm_copy_string(gpu->active_engine, sizeof(gpu->active_engine),
                     !found ? "N/A" : peak < 0.5 ? "Idle" : name);
 }
-
-
 
 /* Vendor-neutral discovery starts with DRM; vendor-specific telemetry is
  * capability-detected after the stable device identity is known. */
@@ -415,11 +431,13 @@ static bool read_gpu_engine_busy(const LsmGpuTelemetryCache *cache,
 
 static void update_gpus(LsmMonitor *monitor, double elapsed)
 {
+    LsmLinuxHardwareState *state = hardware_state(monitor);
     for (size_t index = 0U; index < monitor->gpu_count; index++) {
         LsmGpuInfo *gpu = &monitor->gpus[index];
         LsmLinuxGpuState *gpu_state = find_gpu_state(monitor, gpu);
         const LsmGpuTelemetryCache *telemetry =
-            index < gpu_telemetry_count ? &gpu_telemetry[index] : NULL;
+            state && index < state->gpu_telemetry_count
+                ? &state->gpu_telemetry[index] : NULL;
 
         /* Availability is sampled independently from the numeric value. A
          * valid zero-percent reading must not be presented as unavailable. */
@@ -629,10 +647,12 @@ static void enumerate_npus(LsmMonitor *monitor)
 
 static void update_npus(LsmMonitor *monitor, double elapsed)
 {
+    LsmLinuxHardwareState *state = hardware_state(monitor);
     for (size_t index = 0U; index < monitor->npu_count; index++) {
         LsmNpuInfo *npu = &monitor->npus[index];
         LsmNpuTelemetryCache *telemetry =
-            index < npu_telemetry_count ? &npu_telemetry[index] : NULL;
+            state && index < state->npu_telemetry_count
+                ? &state->npu_telemetry[index] : NULL;
 
         if (!telemetry || !telemetry->backend) {
             npu->supported_metrics = false;
@@ -642,7 +662,6 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
         (void)lsm_npu_telemetry_refresh(telemetry->backend, npu, elapsed);
     }
 }
-
 
 /** Rescan optional hardware while retaining live metric baselines by stable ID. */
 /* Rebuild into temporary arrays, carry forward matching state, then commit. */
@@ -685,6 +704,11 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
 void lsm_hardware_initialise(LsmMonitor *monitor)
 {
     if (!monitor) return;
+    LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
+    if (!backend) return;
+    if (!backend->hardware_state)
+        backend->hardware_state = calloc(1U, sizeof(*backend->hardware_state));
+
     lsm_battery_start();
     refresh_hardware_topology(monitor);
     lsm_battery_update(monitor);
@@ -701,14 +725,18 @@ void lsm_hardware_update(LsmMonitor *monitor, double elapsed,
     update_npus(monitor, elapsed);
 }
 
-void lsm_hardware_shutdown(void)
+void lsm_hardware_shutdown(LsmMonitor *monitor)
 {
-    for (size_t index = 0U; index < gpu_telemetry_count; index++)
-        destroy_gpu_telemetry(&gpu_telemetry[index]);
-    gpu_telemetry_count = 0U;
-    for (size_t index = 0U; index < npu_telemetry_count; index++)
-        destroy_npu_telemetry(&npu_telemetry[index]);
-    npu_telemetry_count = 0U;
+    LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
+    LsmLinuxHardwareState *state = backend ? backend->hardware_state : NULL;
+    if (state) {
+        for (size_t index = 0U; index < state->gpu_telemetry_count; index++)
+            destroy_gpu_telemetry(&state->gpu_telemetry[index]);
+        for (size_t index = 0U; index < state->npu_telemetry_count; index++)
+            destroy_npu_telemetry(&state->npu_telemetry[index]);
+        free(state);
+        backend->hardware_state = NULL;
+    }
     lsm_battery_shutdown();
     lsm_nvml_shutdown();
 }

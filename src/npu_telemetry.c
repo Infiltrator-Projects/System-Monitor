@@ -9,6 +9,10 @@
  * instantaneous utilization percentage. Every attribute is discovered once
  * and sampled independently without loading a vendor userspace library.
  *
+ * Attribute paths are retained in fixed-size storage owned by the telemetry
+ * context. This avoids per-attribute heap ownership while keeping the backend
+ * deterministic and easy to destroy on every failure path.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
  * @license GPL-3.0-or-later
@@ -27,13 +31,13 @@
 #define LSM_NPU_MIN_BUSY_SAMPLE_SECONDS 0.9
 
 struct LsmNpuTelemetry {
-    char *utilization;
-    char *busy_time_us;
-    char *memory_used;
-    char *memory_total;
-    char *clock;
-    char *temperature;
-    char *power;
+    char utilization[LSM_PATH_LEN];
+    char busy_time_us[LSM_PATH_LEN];
+    char memory_used[LSM_PATH_LEN];
+    char memory_total[LSM_PATH_LEN];
+    char clock[LSM_PATH_LEN];
+    char temperature[LSM_PATH_LEN];
+    char power[LSM_PATH_LEN];
     uint64_t previous_busy_time_us;
     double busy_elapsed_seconds;
     double last_busy_percent;
@@ -42,22 +46,29 @@ struct LsmNpuTelemetry {
     bool intel_ivpu;
 };
 
-static char *first_existing_path(const char *base,
-                                 const char *const *suffixes,
-                                 size_t suffix_count)
+static bool first_existing_path(const char *base,
+                                const char *const *suffixes,
+                                size_t suffix_count,
+                                char *destination,
+                                size_t destination_size)
 {
-    char path[LSM_PATH_LEN];
-    if (!base || !*base ||
-        !infiltratr_first_readable_path(base, suffixes, suffix_count,
-                                        path, sizeof(path)))
-        return NULL;
-    return strdup(path);
+    if (!destination || destination_size == 0U) return false;
+    destination[0] = '\0';
+    if (!base || !*base || !suffixes || suffix_count == 0U) return false;
+    return infiltratr_first_readable_path(base, suffixes, suffix_count,
+                                          destination, destination_size);
 }
 
-static char *existing_path(const char *base, const char *suffix)
+static bool existing_path(const char *base, const char *suffix,
+                          char *destination, size_t destination_size)
 {
+    if (!suffix) {
+        if (destination && destination_size > 0U) destination[0] = '\0';
+        return false;
+    }
     const char *const suffixes[] = {suffix};
-    return suffix ? first_existing_path(base, suffixes, 1U) : NULL;
+    return first_existing_path(base, suffixes, 1U,
+                               destination, destination_size);
 }
 
 static const char *telemetry_base(const LsmNpuInfo *npu)
@@ -65,6 +76,15 @@ static const char *telemetry_base(const LsmNpuInfo *npu)
     const char *override = getenv("LSM_NPU_SYSFS_ROOT");
     if (override && override[0]) return override;
     return npu ? npu->platform_identity : NULL;
+}
+
+static bool telemetry_has_source(const LsmNpuTelemetry *telemetry)
+{
+    return telemetry &&
+        (telemetry->utilization[0] || telemetry->busy_time_us[0] ||
+         telemetry->memory_used[0] || telemetry->memory_total[0] ||
+         telemetry->clock[0] || telemetry->temperature[0] ||
+         telemetry->power[0]);
 }
 
 LsmNpuTelemetry *lsm_npu_telemetry_create(const LsmNpuInfo *npu)
@@ -105,38 +125,48 @@ LsmNpuTelemetry *lsm_npu_telemetry_create(const LsmNpuInfo *npu)
          * busy time is cumulative microseconds, memory is bytes and the
          * current frequency is MHz. Avoid guessing units from unrelated
          * vendor attributes. */
-        telemetry->busy_time_us = existing_path(base, "/npu_busy_time_us");
-        telemetry->memory_used =
-            existing_path(base, "/npu_memory_utilization");
-        telemetry->clock = existing_path(base, "/freq/current_freq");
+        (void)existing_path(base, "/npu_busy_time_us",
+                            telemetry->busy_time_us,
+                            sizeof(telemetry->busy_time_us));
+        (void)existing_path(base, "/npu_memory_utilization",
+                            telemetry->memory_used,
+                            sizeof(telemetry->memory_used));
+        (void)existing_path(base, "/freq/current_freq",
+                            telemetry->clock,
+                            sizeof(telemetry->clock));
     } else {
         /* Unknown drivers are accepted only when the attribute name states
          * its unit. Driver-specific profiles can extend this list safely. */
-        telemetry->utilization = first_existing_path(
+        (void)first_existing_path(
             base, generic_utilization_paths,
-            LSM_ARRAY_LENGTH(generic_utilization_paths));
-        telemetry->busy_time_us = first_existing_path(
+            LSM_ARRAY_LENGTH(generic_utilization_paths),
+            telemetry->utilization, sizeof(telemetry->utilization));
+        (void)first_existing_path(
             base, generic_busy_time_paths,
-            LSM_ARRAY_LENGTH(generic_busy_time_paths));
-        telemetry->memory_used = first_existing_path(
+            LSM_ARRAY_LENGTH(generic_busy_time_paths),
+            telemetry->busy_time_us, sizeof(telemetry->busy_time_us));
+        (void)first_existing_path(
             base, generic_memory_used_paths,
-            LSM_ARRAY_LENGTH(generic_memory_used_paths));
-        telemetry->memory_total = first_existing_path(
+            LSM_ARRAY_LENGTH(generic_memory_used_paths),
+            telemetry->memory_used, sizeof(telemetry->memory_used));
+        (void)first_existing_path(
             base, generic_memory_total_paths,
-            LSM_ARRAY_LENGTH(generic_memory_total_paths));
-        telemetry->clock = first_existing_path(
-            base, generic_clock_paths, LSM_ARRAY_LENGTH(generic_clock_paths));
-        telemetry->temperature = first_existing_path(
+            LSM_ARRAY_LENGTH(generic_memory_total_paths),
+            telemetry->memory_total, sizeof(telemetry->memory_total));
+        (void)first_existing_path(
+            base, generic_clock_paths, LSM_ARRAY_LENGTH(generic_clock_paths),
+            telemetry->clock, sizeof(telemetry->clock));
+        (void)first_existing_path(
             base, generic_temperature_paths,
-            LSM_ARRAY_LENGTH(generic_temperature_paths));
-        telemetry->power = first_existing_path(
-            base, generic_power_paths, LSM_ARRAY_LENGTH(generic_power_paths));
+            LSM_ARRAY_LENGTH(generic_temperature_paths),
+            telemetry->temperature, sizeof(telemetry->temperature));
+        (void)first_existing_path(
+            base, generic_power_paths, LSM_ARRAY_LENGTH(generic_power_paths),
+            telemetry->power, sizeof(telemetry->power));
     }
 
-    if (!telemetry->utilization && !telemetry->busy_time_us &&
-        !telemetry->memory_used && !telemetry->memory_total &&
-        !telemetry->clock && !telemetry->temperature && !telemetry->power) {
-        lsm_npu_telemetry_destroy(telemetry);
+    if (!telemetry_has_source(telemetry)) {
+        free(telemetry);
         return NULL;
     }
     return telemetry;
@@ -146,7 +176,7 @@ static bool refresh_busy_time(LsmNpuTelemetry *telemetry,
                               LsmNpuInfo *npu,
                               double elapsed_seconds)
 {
-    if (!telemetry->busy_time_us || elapsed_seconds <= 0.0) return false;
+    if (!telemetry->busy_time_us[0] || elapsed_seconds <= 0.0) return false;
     telemetry->busy_elapsed_seconds += elapsed_seconds;
     if (telemetry->busy_elapsed_seconds < LSM_NPU_MIN_BUSY_SAMPLE_SECONDS) {
         if (!telemetry->last_busy_valid) return false;
@@ -211,7 +241,7 @@ bool lsm_npu_telemetry_refresh(LsmNpuTelemetry *telemetry,
     bool any = false;
     uint64_t value = 0U;
 
-    if (telemetry->utilization &&
+    if (telemetry->utilization[0] &&
         lsm_read_u64_file(telemetry->utilization, &value)) {
         npu->utilization_percent = lsm_clamp_double(
             (double)value, 0.0, 100.0);
@@ -221,13 +251,13 @@ bool lsm_npu_telemetry_refresh(LsmNpuTelemetry *telemetry,
         any = refresh_busy_time(telemetry, npu, elapsed_seconds) || any;
     }
 
-    if (telemetry->memory_used &&
+    if (telemetry->memory_used[0] &&
         lsm_read_u64_file(telemetry->memory_used, &value)) {
         npu->memory_used_bytes = value;
         npu->memory_used_available = true;
         any = true;
     }
-    if (telemetry->memory_total &&
+    if (telemetry->memory_total[0] &&
         lsm_read_u64_file(telemetry->memory_total, &value) && value > 0U) {
         npu->memory_total_bytes = value;
         npu->memory_total_available = true;
@@ -238,18 +268,18 @@ bool lsm_npu_telemetry_refresh(LsmNpuTelemetry *telemetry,
             npu->memory_used_bytes, npu->memory_total_bytes);
     }
 
-    if (telemetry->clock && lsm_read_u64_file(telemetry->clock, &value)) {
+    if (telemetry->clock[0] && lsm_read_u64_file(telemetry->clock, &value)) {
         npu->clock_mhz = (double)value;
         npu->clock_available = true;
         any = true;
     }
-    if (telemetry->temperature &&
+    if (telemetry->temperature[0] &&
         lsm_read_u64_file(telemetry->temperature, &value)) {
         npu->temperature_c = (double)value / 1000.0;
         npu->temperature_available = true;
         any = true;
     }
-    if (telemetry->power && lsm_read_u64_file(telemetry->power, &value)) {
+    if (telemetry->power[0] && lsm_read_u64_file(telemetry->power, &value)) {
         npu->power_watts = (double)value / 1000000.0;
         npu->power_available = true;
         any = true;
@@ -267,13 +297,5 @@ bool lsm_npu_telemetry_refresh(LsmNpuTelemetry *telemetry,
 
 void lsm_npu_telemetry_destroy(LsmNpuTelemetry *telemetry)
 {
-    if (!telemetry) return;
-    free(telemetry->utilization);
-    free(telemetry->busy_time_us);
-    free(telemetry->memory_used);
-    free(telemetry->memory_total);
-    free(telemetry->clock);
-    free(telemetry->temperature);
-    free(telemetry->power);
     free(telemetry);
 }

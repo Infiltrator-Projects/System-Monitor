@@ -107,7 +107,7 @@ void lsm_monitor_platform_destroy(LsmMonitor *monitor)
     if (!monitor) return;
 
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
-    lsm_hardware_shutdown();
+    lsm_hardware_shutdown(monitor);
     lsm_cpu_memory_shutdown(monitor);
     if (state) {
         lsm_wifi_metadata_destroy(state->wifi_metadata);

@@ -20,7 +20,8 @@ typedef struct LsmNpuTelemetry LsmNpuTelemetry;
  * Resolve documented telemetry attributes for one accelerator device.
  *
  * Driver-specific profiles are preferred. Generic attributes are accepted only
- * when their filenames encode unambiguous units.
+ * when their filenames encode unambiguous units. Resolved paths are retained
+ * in storage owned directly by the returned context.
  *
  * @param [in] npu Enumerated accelerator identity and device path.
  * @return Retained telemetry context, or NULL when no safe source is available.
@@ -41,7 +42,7 @@ bool lsm_npu_telemetry_refresh(LsmNpuTelemetry *telemetry,
                                LsmNpuInfo *npu,
                                double elapsed_seconds);
 /**
- * Release cached attribute paths and cumulative NPU sampling state.
+ * Release the retained NPU telemetry context.
  *
  * @param [in,out] telemetry Context to release, or NULL.
  */

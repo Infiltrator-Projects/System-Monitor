@@ -10,6 +10,9 @@
  * short interval because these descriptive fields do not need graph-rate
  * sampling.
  *
+ * Cache entries are explicitly invalidated after a failed refresh so a broken
+ * or disconnected driver query cannot keep presenting stale link metadata.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
  * @license GPL-3.0-or-later
@@ -61,9 +64,21 @@ static LsmWifiCacheRecord *find_record(LsmWifiMetadata *metadata,
     }
     if (create && empty) {
         lsm_copy_string(empty->name, sizeof(empty->name), name);
+        empty->signal_dbm = NAN;
         return empty;
     }
     return NULL;
+}
+
+static void invalidate_record(LsmWifiCacheRecord *record, double sampled_at)
+{
+    if (!record) return;
+    char name[sizeof(record->name)];
+    lsm_copy_string(name, sizeof(name), record->name);
+    memset(record, 0, sizeof(*record));
+    lsm_copy_string(record->name, sizeof(record->name), name);
+    record->signal_dbm = NAN;
+    record->last_sampled = sampled_at;
 }
 
 static void initialise_request(struct iwreq *request, const char *interface_name)
@@ -239,6 +254,7 @@ LsmWifiMetadata *lsm_wifi_metadata_create(void)
 {
     LsmWifiMetadata *metadata = calloc(1U, sizeof(*metadata));
     if (!metadata) return NULL;
+    metadata->socket_fd = -1;
     metadata->socket_fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     return metadata;
 }
@@ -258,7 +274,7 @@ void lsm_wifi_metadata_refresh(LsmWifiMetadata *metadata, LsmNetInfo *network)
             collected.last_sampled = now;
             *record = collected;
         } else {
-            record->last_sampled = now;
+            invalidate_record(record, now);
         }
     }
 
