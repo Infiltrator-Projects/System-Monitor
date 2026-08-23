@@ -59,7 +59,7 @@ jobs:
             exit 1
           fi
 
-      - name: Validate source version and README provenance
+      - name: Validate source version and immutable release identity
         shell: bash
         run: |
           set -euo pipefail
@@ -80,9 +80,9 @@ jobs:
 
           if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
             tag_commit=$(git rev-list -n 1 "v${version}")
-            provenance_row="| ${version} | \`${tag_commit}\` |"
-            if ! grep -Fqx "$provenance_row" README.md; then
-              printf 'README provenance is missing %s at %s.\n' \
+            head_commit=$(git rev-parse HEAD)
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Source version %s is already published at %s; advance support/VERSION before changing main.\n' \
                 "$version" "$tag_commit" >&2
               exit 1
             fi

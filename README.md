@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting Linux hardware, process and service information directly wherever practical.
 
-**Current source version:** 1.0.0  
+**Current source version:** 1.0.1  
 **Platform:** Linux desktop  
 **Licence:** GPL-3.0-or-later
 
@@ -89,6 +89,8 @@ Every push to `main` runs the full Verify workflow. Ordinary commits do not publ
 
 The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and standalone source ZIP, then creates the version tag and GitHub release. Published version tags and releases are treated as immutable release identities.
 
+Once a version tag exists, further source changes must advance `support/VERSION` before Verify will accept them. This prevents `main` from silently diverging from an already-published release while claiming the same version.
+
 Manually runnable build/test helpers, where present, are diagnostic tools only and are not release-approval mechanisms.
 
 ## Source layout
@@ -98,7 +100,7 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Release identity
 
-Linux System Monitor is presented as version **1.0.0**. The `v1.0.0` tag identifies the verified release commit, and the GitHub release contains the three supported distribution artifacts listed above.
+Linux System Monitor source is version **1.0.1**. A published `v1.0.1` tag identifies the verified release commit, and the GitHub release contains the three supported distribution artifacts listed above.
 
 ## Licence
 
