@@ -124,4 +124,4 @@ Copyright © 2026 Shannon Smith.
 
 Shannon Smith-owned source and documentation are licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). See `LICENSE`.
 
-The retained SysMonTask icon and bundled PCI-name data remain under compatible BSD 3-Clause terms; their notices are preserved under `support/legal/`.
+The retained SysMonTask icon and bundled PCI-name data remain under compatible BSD 3-Clause terms; their authorship and complete notices are preserved in `support/legal/THIRD_PARTY_NOTICES` and the corresponding file-specific licence records.
