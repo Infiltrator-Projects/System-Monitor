@@ -129,10 +129,11 @@ not additional project manuals.
 
 ## Release provenance
 
-Published tags and uploaded release assets are immutable. Every changed source
-tree merged to `main` must use a version that has not already been assigned to
-another commit. Detailed release notes remain on GitHub Releases; this permanent
-index preserves the source identity even if a release page becomes unavailable.
+Published tags and uploaded release assets are immutable. Ordinary development
+and documentation commits may retain the currently released source version; a
+new version is required when creating a new release tag, not for every commit to
+`main`. Detailed release notes remain on GitHub Releases; this permanent index
+preserves the source identity even if a release page becomes unavailable.
 
 | Version | Published commit |
 | --- | --- |
@@ -150,6 +151,7 @@ index preserves the source identity even if a release page becomes unavailable.
 | 1.13.13 | `d98412f9c1a813f634a3f53240d6a602da59cde2` |
 | 1.13.14 | `9b687a8b1f8bc0936120bf3adb30518372481706` |
 | 1.13.15 | `12927f1f4414c34129907bc19513612f3b52aee3` |
+| 1.13.16 | `50ff82ef33842de9a1287cfdacca835a117e8819` |
 
 The v1.13.2 through v1.13.11 release pages and tags were removed during
 repository maintenance in August 2026. Their published commit identities are

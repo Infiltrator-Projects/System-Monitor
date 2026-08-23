@@ -41,22 +41,16 @@ jobs:
             exit 1
           fi
 
-      - name: Enforce immutable version identity
+      - name: Validate source version format
         shell: bash
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            printf 'Invalid release version: %s\n' "$version" >&2
+            printf 'Invalid source version: %s\n' "$version" >&2
             exit 1
           fi
-          tag_commit=$(git rev-list -n 1 "v${version}" 2>/dev/null || true)
-          if [[ -n "$tag_commit" && "$tag_commit" != "$GITHUB_SHA" ]]; then
-            printf 'Version %s is already assigned to commit %s.\n' \
-              "$version" "$tag_commit" >&2
-            printf 'Increment support/VERSION before changing the source tree.\n' >&2
-            exit 1
-          fi
+
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
