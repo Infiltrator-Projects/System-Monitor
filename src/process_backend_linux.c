@@ -165,6 +165,17 @@ static bool numeric_name(const char *name)
     return true;
 }
 
+static bool parse_proc_pid(const char *name, pid_t *pid)
+{
+    uint64_t value = 0U;
+    if (!pid || !numeric_name(name) ||
+        !infiltratr_parse_u64_range(name, 10U, 1U, (uint64_t)INT_MAX,
+                                    &value))
+        return false;
+    *pid = (pid_t)value;
+    return true;
+}
+
 static bool read_whole_file(const char *path, char *buffer, size_t size)
 {
     if (!path || !buffer || size < 2U) return false;
@@ -268,7 +279,8 @@ static const char *state_name(char state)
 
 /* /proc/<pid>/stat field 2 may contain spaces and parentheses.  The code
  * locates that field first, then tokenises fields 3 onward by their documented
- * numeric positions. */
+ * numeric positions. Complete numeric tokens use Common's strict parsers so a
+ * malformed or overflowing kernel record is rejected rather than coerced. */
 static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
                               LinuxProcessStat *native_stat)
 {
@@ -293,26 +305,50 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     int nice_value = 0;
 
     while (token) {
+        uint64_t unsigned_value = 0U;
+        int64_t signed_value = 0;
         switch (field) {
-            case 3: state = token[0]; break;
-            case 4: process->ppid = (LsmProcessId)strtoull(token, NULL, 10); have_ppid = true; break;
-            case 10: minflt = strtoull(token, NULL, 10); break;
-            case 12: majflt = strtoull(token, NULL, 10); break;
-            case 14: utime = strtoull(token, NULL, 10); break;
-            case 15: stime = strtoull(token, NULL, 10); break;
-            case 19: nice_value = (int)strtol(token, NULL, 10); break;
-            case 20: {
-                long threads = strtol(token, NULL, 10);
-                process->threads = threads <= 0 ? 0U :
-                    (unsigned long)threads > UINT_MAX
-                        ? UINT_MAX : (unsigned)threads;
+            case 3:
+                state = token[0];
                 break;
-            }
+            case 4:
+                if (!infiltratr_parse_u64(token, 10U, &unsigned_value))
+                    return false;
+                process->ppid = (LsmProcessId)unsigned_value;
+                have_ppid = true;
+                break;
+            case 10:
+                if (!infiltratr_parse_u64(token, 10U, &minflt)) return false;
+                break;
+            case 12:
+                if (!infiltratr_parse_u64(token, 10U, &majflt)) return false;
+                break;
+            case 14:
+                if (!infiltratr_parse_u64(token, 10U, &utime)) return false;
+                break;
+            case 15:
+                if (!infiltratr_parse_u64(token, 10U, &stime)) return false;
+                break;
+            case 19:
+                if (!infiltratr_parse_i64_range(
+                        token, 10U, INT_MIN, INT_MAX, &signed_value))
+                    return false;
+                nice_value = (int)signed_value;
+                break;
+            case 20:
+                if (!infiltratr_parse_u64(token, 10U, &unsigned_value))
+                    return false;
+                process->threads = unsigned_value <= UINT_MAX
+                    ? (unsigned)unsigned_value : UINT_MAX;
+                break;
             case 22:
-                native_stat->start_ticks = strtoull(token, NULL, 10);
+                if (!infiltratr_parse_u64(token, 10U,
+                                          &native_stat->start_ticks))
+                    return false;
                 have_start = true;
                 break;
-            default: break;
+            default:
+                break;
         }
         if (field >= 22) break;
         token = strtok_r(NULL, " ", &save);
@@ -631,9 +667,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
 
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (!numeric_name(entry->d_name)) continue;
-        pid_t pid = (pid_t)atoi(entry->d_name);
-        if (pid <= 0) continue;
+        pid_t pid = 0;
+        if (!parse_proc_pid(entry->d_name, &pid)) continue;
 
         if (count == capacity) {
             if (capacity > SIZE_MAX / 2U ||
@@ -940,8 +975,8 @@ bool lsm_process_control_tree(LsmProcessId root_id,
 
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (!numeric_name(entry->d_name)) continue;
-        const pid_t pid = (pid_t)atoi(entry->d_name);
+        pid_t pid = 0;
+        if (!parse_proc_pid(entry->d_name, &pid)) continue;
         PidParent item = {0};
         if (pid <= 1 || !read_pid_parent(pid, &item)) continue;
         if (count == capacity) {
