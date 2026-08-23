@@ -38,6 +38,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Exact equality with origin/main is deliberately stronger than the
+          # former git merge-base --is-ancestor release provenance gate.
           git fetch origin main --tags
           head_commit=$(git rev-parse HEAD)
           main_commit=$(git rev-parse origin/main)
