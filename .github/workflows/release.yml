@@ -39,7 +39,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake git jq libgtk-3-dev pkg-config zip
+            build-essential cmake gcc-multilib git jq libc6-dev-i386 \
+            libgtk-3-dev pkg-config unzip zip
 
       - name: Verify with CMake and CTest
         run: |
@@ -48,7 +49,7 @@ jobs:
           ctest --test-dir build-cmake --output-on-failure --parallel 2
 
       - name: Verify with Make
-        run: make check
+        run: REQUIRE_I386=1 make check
 
       - name: Build release packages
         run: make -j2 release
@@ -88,12 +89,21 @@ jobs:
             exit 1
           fi
 
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            printf 'Tag %s is not a commit on main.\n' "$tag" >&2
+            exit 1
+          fi
+
           deb="linux-system-monitor_${version}_amd64.deb"
           installer="linux-system-monitor-${version}-native-installer.run"
+          source="Linux-System-Monitor-${version}-source.zip"
           test -f "$deb"
           test -x "$installer"
+          test -f "$source"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           ./"$installer" --help >/dev/null
+          test "$(unzip -p "$source" '*/src/infiltratr-common/VERSION' | tr -d '[:space:]')" = "1.11.0"
 
           notes=$(git log -1 --format=%b "$tag")
           if [[ -z "$notes" ]]; then
@@ -103,14 +113,14 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             printf 'Existing release %s is immutable; verifying only.\n' "$tag"
           else
-            gh release create "$tag" "$deb" "$installer" \
+            gh release create "$tag" "$deb" "$installer" "$source" \
               --verify-tag \
               --title "Linux System Monitor $version" \
               --notes "$notes" \
               --latest
           fi
 
-          expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
+          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$source" | sort)
           published_assets=$(gh release view "$tag" --json assets \
             --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then
@@ -121,7 +131,7 @@ jobs:
           fi
 
           release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")
-          for asset in "$deb" "$installer"; do
+          for asset in "$deb" "$installer" "$source"; do
             local_size=$(stat -c '%s' "$asset")
             remote_size=$(jq -r --arg name "$asset" \
               '[.assets[] | select(.name == $name) | .size][0] // 0' \
