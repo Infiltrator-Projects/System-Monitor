@@ -794,6 +794,52 @@ static void check_shell_boundary(void)
     check_shell_boundary_tree(".");
 }
 
+
+static void check_shared_release_contract(void)
+{
+    size_t size = 0U;
+    char *makefile = read_file("Makefile", &size);
+    (void)size;
+    if (makefile) {
+        require_text_marker("Makefile", makefile,
+                            "common-library: common-check");
+        if (strstr(makefile, "INFILTRATR_COMMON_SOURCES"))
+            report_error("Makefile: Common private source membership must remain Common-owned");
+        free(makefile);
+    }
+
+    char *cmake = read_file("CMakeLists.txt", &size);
+    if (cmake) {
+        require_text_marker("CMakeLists.txt", cmake,
+                            "InfiltratrCommon::Common");
+        require_text_marker("CMakeLists.txt", cmake,
+                            "add_subdirectory(\"${INFILTRATR_COMMON_DIR}\"");
+        if (strstr(cmake, "${INFILTRATR_COMMON_DIR}/src/"))
+            report_error("CMakeLists.txt: Common private source membership must remain Common-owned");
+        free(cmake);
+    }
+
+    char *ci = read_file(".github/workflows/ci.yml", &size);
+    if (ci) {
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "REQUIRE_I386=1 make check");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "gcc-multilib");
+        free(ci);
+    }
+
+    char *release = read_file(".github/workflows/release.yml", &size);
+    if (release) {
+        require_text_marker(".github/workflows/release.yml", release,
+                            "Linux-System-Monitor-${version}-source.zip");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "git merge-base --is-ancestor");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "REQUIRE_I386=1 make check");
+        free(release);
+    }
+}
+
 int main(void)
 {
     StringList sources = {0};
@@ -804,6 +850,7 @@ int main(void)
     check_engineering_documentation();
     check_licensing_contract();
     check_shell_boundary();
+    check_shared_release_contract();
     scan_source_tree("src");
     scan_source_tree("support/tests");
     scan_source_tree("support/tools");

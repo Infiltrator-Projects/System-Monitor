@@ -17,7 +17,7 @@ Each GitHub release provides:
 
 - a generic AMD64 Debian package (`.deb`);
 - a hardware-native self-extracting installer (`.run`); and
-- GitHub's automatic source archives for the tagged source tree.
+- a deterministic standalone source ZIP (`Linux-System-Monitor-VERSION-source.zip`).
 
 Install the Debian package through the desktop package installer or with:
 
@@ -62,7 +62,7 @@ GTK interface from Linux providers. Linux-specific paths, procfs/sysfs data,
 ioctls and D-Bus details stay below those contracts so another operating-system
 backend can be added without rewriting the application model.
 
-`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.8.0 in
+`src/infiltratr-common` is a Git submodule pinned to Infiltratr Common 1.11.0 in
 the [Infiltrator Libraries](https://github.com/The-First-Infiltrator/Infiltrator-Libraries)
 repository. It is linked statically into this application, so the source has
 one canonical owner while the installed package has no cross-project runtime
@@ -87,10 +87,10 @@ make
 ./build/linux-system-monitor
 ```
 
-GitHub's automatic source archives preserve the pinned dependency reference
-but do not expand submodules. After extraction, an ordinary `make` automatically
-retrieves the exact pinned Infiltratr Common release into `src/infiltratr-common`;
-no separate shared-library setup is required.
+The standalone release source ZIP vendors the exact pinned Infiltratr Common
+source and therefore remains buildable without a second source download. GitHub's
+automatic source archives preserve only the submodule reference; when one of those
+is used instead, an ordinary `make` retrieves the exact pinned Common release.
 
 Useful build targets:
 
@@ -129,11 +129,10 @@ not additional project manuals.
 
 ## Release provenance
 
-Published tags and uploaded release assets are immutable. Ordinary development
-and documentation commits may retain the currently released source version; a
-new version is required when creating a new release tag, not for every commit to
-`main`. Detailed release notes remain on GitHub Releases; this permanent index
-preserves the source identity even if a release page becomes unavailable.
+Published tags and uploaded release assets are immutable. Every changed source
+tree merged to `main` must use a version that has not already been assigned to
+another commit. Detailed release notes remain on GitHub Releases; this permanent
+index preserves the source identity even if a release page becomes unavailable.
 
 | Version | Published commit |
 | --- | --- |
@@ -156,7 +155,8 @@ preserves the source identity even if a release page becomes unavailable.
 The v1.13.2 through v1.13.11 release pages and tags were removed during
 repository maintenance in August 2026. Their published commit identities are
 retained above for audit and reconstruction. Published releases are cut from
-verified commits on `main` and use immutable version tags.
+verified commits on `main` and use immutable version tags. `main` now carries
+1.13.17 as the next unreleased line.
 
 ## Licence
 
