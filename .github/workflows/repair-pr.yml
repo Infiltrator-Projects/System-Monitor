@@ -59,21 +59,20 @@ jobs:
           test -f Linux-System-Monitor-1.13.17-source.zip
           test "$(unzip -p Linux-System-Monitor-1.13.17-source.zip '*/src/infiltratr-common/VERSION' | tr -d '[:space:]')" = "1.11.0"
 
-      - name: Commit verified repair
+      - name: Persist verified non-workflow repair
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/workflows/repair-pr.yml \
-             .github/workflows/repair-branch.yml \
-             support/tools/repair_audit.py
+          # The GitHub Actions token cannot safely rewrite workflow definitions.
+          # Leave those two generated workflow edits for the authenticated connector.
+          git restore .github/workflows/ci.yml .github/workflows/release.yml
+          rm support/tools/repair_audit.py
           git diff --check
-          git add -A
+          git add CMakeLists.txt Makefile README.md \
+                  support/tools/check_source_style.c \
+                  support/tools/repair_audit.py
           git diff --cached --check
-          git diff --cached --quiet && {
-            echo "Verified repair produced no final changes." >&2
-            exit 1
-          }
           git config user.name "Shannon Smith"
           git config user.email "The-First-Infiltrator@users.noreply.github.com"
-          git commit -m "Harden System Monitor release and Common contracts" -m "Adopt Infiltratr Common 1.11 through its authoritative build targets, restore the standalone source ZIP release asset, require release tags to come from main, make ILP32 portability mandatory in CI, and lock the repaired contracts into the source audit."
+          git commit -m "Harden System Monitor Common and source contracts" -m "Adopt Infiltratr Common 1.11 through its authoritative build targets, restore the standalone source ZIP contract, make ILP32 portability mechanically non-regressible, and remove the temporary repair transformer."
           git push origin HEAD:audit-repair-1.13.17
