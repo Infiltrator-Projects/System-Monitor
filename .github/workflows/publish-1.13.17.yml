@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  actions: write
 
 jobs:
   publish:
@@ -22,7 +22,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Create release tag on verified main
+      - name: Verify release tag on main
         env:
           EXPECTED_SHA: 313310f213db826dde2de9dd1befae401b2e0f3f
           TAG: v1.13.17
@@ -43,6 +43,19 @@ jobs:
             git config user.email "The-First-Infiltrator@users.noreply.github.com"
             git tag -a "$TAG" "$EXPECTED_SHA" -m "Linux System Monitor 1.13.17"
             git push origin "refs/tags/${TAG}"
+          fi
+
+      - name: Dispatch normal release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.13.17
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            printf 'Release %s already exists; verification will continue.\n' "$TAG"
+          else
+            gh workflow run release.yml --ref main -f tag="$TAG"
           fi
 
       - name: Wait for normal release workflow and verify assets
@@ -78,4 +91,8 @@ jobs:
       - name: Remove temporary publication branch
         if: success()
         shell: bash
-        run: git push origin --delete publish-1.13.17
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin publish-1.13.17 >/dev/null 2>&1; then
+            git push origin --delete publish-1.13.17
+          fi
