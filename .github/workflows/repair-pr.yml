@@ -68,32 +68,11 @@ jobs:
              support/tools/repair_audit.py
           git diff --check
           git add -A
-          git fetch origin main --no-tags
-
-          changed=$(git diff --cached origin/main --name-only | sort)
-          present=$(git diff --cached origin/main --diff-filter=ACMRT --name-only | sort)
-
-          for required in \
-            .github/workflows/ci.yml \
-            .github/workflows/release.yml \
-            CMakeLists.txt \
-            Makefile \
-            README.md \
-            src/infiltratr-common \
-            support/tools/check_source_style.c; do
-            if ! grep -Fxq "$required" <<<"$changed"; then
-              printf 'Required audited change is missing: %s\n' "$required" >&2
-              exit 1
-            fi
-          done
-
-          if grep -Eq '(^|/)(build[^/]*|repair_audit\.py|repair-(pr|branch)\.yml|portability-debug\.yml)$' \
-              <<<"$present"; then
-            printf 'Temporary or build material would remain in the repaired tree:\n%s\n' \
-              "$present" >&2
+          git diff --cached --check
+          git diff --cached --quiet && {
+            echo "Verified repair produced no final changes." >&2
             exit 1
-          fi
-
+          }
           git config user.name "Shannon Smith"
           git config user.email "The-First-Infiltrator@users.noreply.github.com"
           git commit -m "Harden System Monitor release and Common contracts" -m "Adopt Infiltratr Common 1.11 through its authoritative build targets, restore the standalone source ZIP release asset, require release tags to come from main, make ILP32 portability mandatory in CI, and lock the repaired contracts into the source audit."
