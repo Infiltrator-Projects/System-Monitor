@@ -84,6 +84,8 @@ int main(void)
     if (!files_ok || setenv("LSM_POWER_SUPPLY_ROOT", root, 1) != 0) return 1;
 
     LsmMonitor monitor = {0};
+    LsmLinuxMonitorBackendState backend_state = {0};
+    monitor.backend_state = &backend_state;
     lsm_hardware_initialise(&monitor);
     const LsmBatteryInfo *bat0 = find_battery(&monitor, "BAT0");
     const LsmBatteryInfo *mouse = find_battery(&monitor, "hidpp_battery_0");
@@ -127,7 +129,8 @@ int main(void)
         strcmp(mouse->manufacturer, "Logitech") == 0 &&
         hidpp_priority_ok && hidpp_unavailable_preserves_generic;
 
-    lsm_hardware_shutdown();
+    lsm_hardware_shutdown(&monitor);
+    monitor.backend_state = NULL;
     unsetenv("LSM_POWER_SUPPLY_ROOT");
 
     static const char *const ac_files[] = {"type", "online"};
