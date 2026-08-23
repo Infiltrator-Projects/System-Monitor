@@ -18,11 +18,11 @@
 
 #include "common.h"
 
+#include <infiltratr/posix.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #define LSM_NPU_MIN_BUSY_SAMPLE_SECONDS 0.9
 
@@ -42,25 +42,22 @@ struct LsmNpuTelemetry {
     bool intel_ivpu;
 };
 
-static char *existing_path(const char *base, const char *suffix)
-{
-    char path[LSM_PATH_LEN];
-    if (!base || !*base || !suffix ||
-        !lsm_join_path(path, sizeof(path), base, suffix) ||
-        access(path, R_OK) != 0)
-        return NULL;
-    return strdup(path);
-}
-
 static char *first_existing_path(const char *base,
                                  const char *const *suffixes,
                                  size_t suffix_count)
 {
-    for (size_t index = 0U; index < suffix_count; index++) {
-        char *path = existing_path(base, suffixes[index]);
-        if (path) return path;
-    }
-    return NULL;
+    char path[LSM_PATH_LEN];
+    if (!base || !*base ||
+        !infiltratr_first_readable_path(base, suffixes, suffix_count,
+                                        path, sizeof(path)))
+        return NULL;
+    return strdup(path);
+}
+
+static char *existing_path(const char *base, const char *suffix)
+{
+    const char *const suffixes[] = {suffix};
+    return suffix ? first_existing_path(base, suffixes, 1U) : NULL;
 }
 
 static const char *telemetry_base(const LsmNpuInfo *npu)
