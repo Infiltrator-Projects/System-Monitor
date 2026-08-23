@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting Linux hardware, process and service information directly wherever practical.
 
-**Current source version:** 1.13.21  
+**Current source version:** 1.0.0  
 **Platform:** Linux desktop  
 **Licence:** GPL-3.0-or-later
 
@@ -85,7 +85,7 @@ This repository uses `main` as its working branch. Development changes are made 
 
 Every push to `main` runs the full Verify workflow. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete Verify workflow succeeds.
 
-The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and standalone source ZIP, then creates the version tag and GitHub release. Existing version tags and published releases are immutable and are never moved, replaced or edited in place.
+The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and standalone source ZIP, then creates the version tag and GitHub release. Published version tags and releases are treated as immutable release identities.
 
 Manually runnable build/test helpers, where present, are diagnostic tools only and are not release-approval mechanisms.
 
@@ -94,33 +94,9 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 - `src/` — application code, Linux providers and the pinned Common submodule.
 - `support/` — tests, release tooling, resources, packaging, version metadata, installer internals and legal notices.
 
-## Release provenance
+## Release identity
 
-Published release assets and tags are immutable. The version tag is the authoritative identity for the active release commit; historical source identities retained from the 1.13 line are:
-
-| Version | Published commit |
-| --- | --- |
-| 1.13.2 | `a2562d6509e263d00e9aacdec623a6560207ba7e` |
-| 1.13.3 | `f30df5a8d7722286a96d8ba5b2ef6d8f94492bdb` |
-| 1.13.4 | `a4b7de1a382b9709accf191d846ea1113d49e48e` |
-| 1.13.5 | `e2c87dc0cb1f2074308307a8a0d82a6f0a264950` |
-| 1.13.6 | `86cad6d00da617e42632127bf3bc5cd0494a66fd` |
-| 1.13.7 | `99fb4a5264f014d84acfb9430536a915f6741fcf` |
-| 1.13.8 | `a46b47007fa899b7af46cded183faab7c43b1dfd` |
-| 1.13.9 | `66f7be218da025f6c38c89008493c04eb88cf90d` |
-| 1.13.10 | `84ddd343cdf6fe73bc303ec406a48bb90e9fb755` |
-| 1.13.11 | `5a3b63653ed8e551176bce9ee09e798d985a78c8` |
-| 1.13.12 | `e1110329ef9ee27a3705b7539652cb24f250f1c6` |
-| 1.13.13 | `d98412f9c1a813f634a3f53240d6a602da59cde2` |
-| 1.13.14 | `9b687a8b1f8bc0936120bf3adb30518372481706` |
-| 1.13.15 | `12927f1f4414c34129907bc19513612f3b52aee3` |
-| 1.13.16 | `50ff82ef33842de9a1287cfdacca835a117e8819` |
-| 1.13.17 | `313310f213db826dde2de9dd1befae401b2e0f3f` |
-| 1.13.18 | `24cc244db5810be8b44fdf09b40ee386bf890f63` |
-| 1.13.19 | `d3ad141982fac68a4fd59814cc4e830c227713c5` |
-| 1.13.20 | `7af44755f057c60b6bce8e45df23c30f84c9aaec` |
-
-The v1.13.2 through v1.13.11 release pages/tags were removed during repository maintenance in August 2026; the commit identities above are retained for reconstruction and audit purposes. The current source version is stated at the top of this README and is checked against `support/VERSION` by CI.
+Linux System Monitor is presented as version **1.0.0**. The `v1.0.0` tag identifies the verified release commit, and the GitHub release contains the three supported distribution artifacts listed above.
 
 ## Licence
 
