@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Finalize 1.13.17 publication
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: github.head_ref == 'publish-1.13.17' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out immutable main candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Create release tag on verified main
+        env:
+          EXPECTED_SHA: 313310f213db826dde2de9dd1befae401b2e0f3f
+          TAG: v1.13.17
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          test "$version" = "1.13.17"
+          main_sha=$(git rev-parse HEAD)
+          test "$main_sha" = "$EXPECTED_SHA"
+
+          remote_sha=$(git ls-remote --refs origin "refs/tags/${TAG}" | awk '{print $1}')
+          if [[ -n "$remote_sha" ]]; then
+            test "$remote_sha" = "$EXPECTED_SHA"
+            printf 'Tag %s already exists at verified main %s.\n' "$TAG" "$EXPECTED_SHA"
+          else
+            git config user.name "Shannon Smith"
+            git config user.email "The-First-Infiltrator@users.noreply.github.com"
+            git tag -a "$TAG" "$EXPECTED_SHA" -m "Linux System Monitor 1.13.17"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+      - name: Wait for normal release workflow and verify assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.13.17
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(printf '%s\n' \
+            'Linux-System-Monitor-1.13.17-source.zip' \
+            'linux-system-monitor-1.13.17-native-installer.run' \
+            'linux-system-monitor_1.13.17_amd64.deb' | sort)
+
+          deadline=$((SECONDS + 2100))
+          while (( SECONDS < deadline )); do
+            if json=$(gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets 2>/dev/null); then
+              tag=$(jq -r '.tagName' <<<"$json")
+              draft=$(jq -r '.isDraft' <<<"$json")
+              prerelease=$(jq -r '.isPrerelease' <<<"$json")
+              actual=$(jq -r '.assets[].name' <<<"$json" | sort)
+              if [[ "$tag" == "$TAG" && "$draft" == "false" && "$prerelease" == "false" && "$actual" == "$expected" ]]; then
+                printf 'Release %s is published with the exact three required assets.\n' "$TAG"
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+
+          printf 'Timed out waiting for verified release %s.\n' "$TAG" >&2
+          exit 1
+
+      - name: Remove temporary publication branch
+        if: success()
+        shell: bash
+        run: git push origin --delete publish-1.13.17
