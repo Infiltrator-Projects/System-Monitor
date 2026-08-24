@@ -103,7 +103,12 @@ static void remove_tree(const char *path)
 static time_t source_date_epoch(void)
 {
     const char *value = getenv("SOURCE_DATE_EPOCH");
-    if (!value || !value[0]) value = "0";
+    if (!value || !value[0]) {
+        /* Keep local builds deterministic without producing Unix-epoch package
+         * metadata that older Debian-family tools flag as ancient. Release CI
+         * supplies the exact release commit timestamp. */
+        value = "1767225600"; /* 2026-01-01 00:00:00 UTC */
+    }
 
     errno = 0;
     char *end = NULL;
@@ -400,18 +405,40 @@ static void write_staged(const char *relative, mode_t mode, const char *text)
     write_text(destination, mode, text);
 }
 
-static void install_release_changelog(const char *version)
+static void format_debian_date(time_t epoch, char *destination, size_t size)
+{
+    static const char *weekdays[] = {
+        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+    };
+    static const char *months[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    struct tm utc;
+    if (!gmtime_r(&epoch, &utc) || utc.tm_wday < 0 || utc.tm_wday > 6 ||
+        utc.tm_mon < 0 || utc.tm_mon > 11)
+        fail("cannot format Debian changelog date");
+    const int written = snprintf(
+        destination, size, "%s, %02d %s %04d %02d:%02d:%02d +0000",
+        weekdays[utc.tm_wday], utc.tm_mday, months[utc.tm_mon],
+        utc.tm_year + 1900, utc.tm_hour, utc.tm_min, utc.tm_sec);
+    if (written < 0 || (size_t)written >= size)
+        fail("Debian changelog date is too long");
+}
+
+static void install_release_changelog(const char *version, time_t epoch)
 {
     static const char relative[] =
         "usr/share/doc/linux-system-monitor/changelog";
-    char text[1024];
+    char date[64];
+    format_debian_date(epoch, date, sizeof(date));
+    char text[1536];
     const int written = snprintf(
         text, sizeof(text),
-        "Linux System Monitor %s\n\n"
-        "Release notes:\n"
-        "https://github.com/The-First-Infiltrator/System-Monitor/"
-        "releases/tag/v%s\n",
-        version, version);
+        "linux-system-monitor (%s) unstable; urgency=medium\n\n"
+        "  * Release %s. See the GitHub release notes for details.\n\n"
+        " -- Shannon Smith <The-First-Infiltrator@users.noreply.github.com>  %s\n",
+        version, version, date);
     if (written < 0 || (size_t)written >= sizeof(text))
         fail("release changelog is too long");
 
@@ -452,6 +479,8 @@ int main(int argc, char **argv)
     if (chmod(stage_root, 0755) != 0)
         fail("chmod %s: %s", stage_root, strerror(errno));
     if (atexit(cleanup) != 0) fail("atexit failed");
+
+    const time_t epoch = source_date_epoch();
 
     copy_staged("build/linux-system-monitor",
                 "usr/bin/linux-system-monitor", 0755);
@@ -494,7 +523,7 @@ int main(int argc, char **argv)
         copy_staged("build/BUILD-INFO",
                     "usr/share/doc/linux-system-monitor/BUILD-INFO", 0644);
 
-    install_release_changelog(version);
+    install_release_changelog(version, epoch);
 
     const char desktop[] =
         "# SPDX-License-Identifier: GPL-3.0-or-later\n"
@@ -537,11 +566,10 @@ int main(int argc, char **argv)
     write_staged("DEBIAN/control", 0644, control);
 
     /* Package payload metadata and the outer ar archive must use one stable
-     * timestamp.  dpkg-deb honours SOURCE_DATE_EPOCH for its archive members;
+     * timestamp. dpkg-deb honours SOURCE_DATE_EPOCH for its archive members;
      * normalising the staged tree also removes creation-time variation from
-     * control.tar and data.tar.  A caller may provide a release epoch, while
-     * the zero default keeps identical inputs byte-for-byte reproducible. */
-    const time_t epoch = source_date_epoch();
+     * control.tar and data.tar. Release CI supplies the release commit time;
+     * local builds use the stable project-era fallback above. */
     char epoch_text[32];
     const int epoch_written = snprintf(epoch_text, sizeof(epoch_text), "%lld",
                                        (long long)epoch);
@@ -566,10 +594,11 @@ int main(int argc, char **argv)
             fail("cannot resolve output path");
     }
     (void)unlink(output_absolute);
+    char option_compression[] = "-Zxz";
     char option_build[] = "--build";
     char option_root_owner[] = "--root-owner-group";
-    char *arguments[] = {dpkg_deb, option_build, option_root_owner,
-                         stage_root, output_absolute, NULL};
+    char *arguments[] = {dpkg_deb, option_compression, option_build,
+                         option_root_owner, stage_root, output_absolute, NULL};
     const int result = run_process(dpkg_deb, arguments, -1);
     if (result != 0) fail("dpkg-deb failed with status %d", result);
     printf("Created %s\n", output_absolute);

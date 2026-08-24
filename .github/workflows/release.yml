@@ -34,6 +34,14 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Set reproducible release timestamp
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch=$(git show -s --format=%ct "$EXPECTED_SHA")
+          [[ "$epoch" =~ ^[0-9]+$ ]]
+          printf 'SOURCE_DATE_EPOCH=%s\n' "$epoch" >> "$GITHUB_ENV"
+
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -71,6 +79,42 @@ jobs:
 
       - name: Build release packages
         run: make -j2 deb native-installer
+
+      - name: Verify Debian compatibility contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          deb="linux-system-monitor_${version}_amd64.deb"
+          test -f "$deb"
+
+          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
+          actual_members=$(ar t "$deb")
+          if [[ "$actual_members" != "$expected_members" ]]; then
+            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
+            printf 'Found:\n%s\n' "$actual_members" >&2
+            exit 1
+          fi
+
+          contents=$(dpkg-deb --contents "$deb")
+          if grep -q '1970-01-01' <<<"$contents"; then
+            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
+            exit 1
+          fi
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          dpkg-deb -x "$deb" "$tmp/root"
+          changelog="$tmp/root/usr/share/doc/linux-system-monitor/changelog.gz"
+          gzip -t "$changelog"
+          first_line=$(gzip -cd "$changelog" | sed -n '1p')
+          expected_line="linux-system-monitor (${version}) unstable; urgency=medium"
+          if [[ "$first_line" != "$expected_line" ]]; then
+            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
+            exit 1
+          fi
+          gzip -cd "$changelog" > "$tmp/debian-changelog"
+          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
 
       - name: Publish immutable release
         env:
