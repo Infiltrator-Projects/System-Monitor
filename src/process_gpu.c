@@ -16,13 +16,13 @@
 
 #include "process_gpu.h"
 
+#include "common.h"
+
 #include <ctype.h>
 #include <dirent.h>
-#include <errno.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define LSM_PROCESS_GPU_MAX_CLIENTS 128
@@ -52,37 +52,16 @@ static bool numeric_name(const char *name)
     return true;
 }
 
-static uint64_t add_saturating(uint64_t left, uint64_t right)
-{
-    return UINT64_MAX - left < right ? UINT64_MAX : left + right;
-}
-
-static bool parse_u64(const char *text, uint64_t *value)
-{
-    if (!text || !value) return false;
-    while (*text && isspace((unsigned char)*text)) text++;
-    if (!isdigit((unsigned char)*text)) return false;
-    errno = 0;
-    char *end = NULL;
-    const unsigned long long parsed = strtoull(text, &end, 10);
-    if (errno != 0 || end == text) return false;
-    *value = (uint64_t)parsed;
-    return true;
-}
-
 static bool parse_bytes(const char *text, uint64_t *bytes)
 {
     if (!text || !bytes) return false;
-    while (*text && isspace((unsigned char)*text)) text++;
-    if (!isdigit((unsigned char)*text)) return false;
-    errno = 0;
-    char *end = NULL;
-    const unsigned long long parsed = strtoull(text, &end, 10);
-    if (errno != 0 || end == text) return false;
-    while (*end && isspace((unsigned char)*end)) end++;
+    const char *cursor = text;
+    uint64_t parsed = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &parsed)) return false;
+    while (*cursor && isspace((unsigned char)*cursor)) cursor++;
 
     uint64_t multiplier = 1U;
-    switch (toupper((unsigned char)*end)) {
+    switch (toupper((unsigned char)*cursor)) {
     case 'K': multiplier = 1024U; break;
     case 'M': multiplier = 1024U * 1024U; break;
     case 'G': multiplier = 1024U * 1024U * 1024U; break;
@@ -90,8 +69,7 @@ static bool parse_bytes(const char *text, uint64_t *bytes)
     case 'B': break;
     default: return false;
     }
-    *bytes = (uint64_t)parsed > UINT64_MAX / multiplier
-        ? UINT64_MAX : (uint64_t)parsed * multiplier;
+    *bytes = lsm_u64_multiply_saturating(parsed, multiplier);
     return true;
 }
 
@@ -114,7 +92,7 @@ static void add_engine(LsmProcessGpuEngine *engines, size_t *count,
     for (size_t index = 0U; index < *count; index++) {
         if (strcmp(engines[index].name, name) != 0) continue;
         if (have_time) {
-            engines[index].time_ns = add_saturating(
+            engines[index].time_ns = lsm_u64_add_saturating(
                 engines[index].time_ns, time_ns);
             engines[index].time_available = true;
         }
@@ -175,11 +153,14 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
             if (value) (void)snprintf(device, sizeof(device), "minor-%s", value);
         } else if (strncmp(line, "drm-client-id:", 14U) == 0) {
             char *value = field_value(line);
-            have_client_id = value && parse_u64(value, &client_id);
+            const char *cursor = value;
+            have_client_id = value &&
+                lsm_parse_u64_token(&cursor, 10U, &client_id);
         } else if (strncmp(line, "drm-engine-capacity-", 20U) == 0) {
             char *separator = strchr(line, ':');
             uint64_t capacity = 0U;
-            if (!separator || !parse_u64(separator + 1, &capacity) ||
+            const char *cursor = separator ? separator + 1 : NULL;
+            if (!cursor || !lsm_parse_u64_token(&cursor, 10U, &capacity) ||
                 capacity == 0U)
                 continue;
             *separator = '\0';
@@ -191,7 +172,9 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
         } else if (strncmp(line, "drm-engine-", 11U) == 0) {
             char *separator = strchr(line, ':');
             uint64_t time_ns = 0U;
-            if (!separator || !parse_u64(separator + 1, &time_ns)) continue;
+            const char *cursor = separator ? separator + 1 : NULL;
+            if (!cursor || !lsm_parse_u64_token(&cursor, 10U, &time_ns))
+                continue;
             *separator = '\0';
             add_engine(client->engines, &client->engine_count,
                        line + 11U, time_ns, 1U, true);
@@ -220,7 +203,7 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
                        driver, device, (unsigned long long)client_id);
     else
         (void)snprintf(client->key, sizeof(client->key), "fd:%.180s",
-                       strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+                       lsm_path_basename(path));
     return true;
 }
 
@@ -276,7 +259,7 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
                        client.engines[index].capacity, true);
         }
         for (size_t index = 0U; index < client.region_count; index++)
-            snapshot->memory_bytes = add_saturating(
+            snapshot->memory_bytes = lsm_u64_add_saturating(
                 snapshot->memory_bytes, client.regions[index].bytes);
         snapshot->memory_available = snapshot->memory_available ||
                                      client.memory_available;
@@ -307,7 +290,6 @@ void lsm_process_gpu_normalise(LsmProcessGpuSnapshot *current,
             engine->time_ns = old->time_ns;
     }
 }
-
 
 bool lsm_process_gpu_calculate_engine(
     const LsmProcessGpuSnapshot *current,

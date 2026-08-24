@@ -14,9 +14,7 @@
 #include "common.h"
 
 #include <ctype.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static bool parse_quantity(char *line, char **key, uint64_t *bytes)
@@ -27,35 +25,24 @@ static bool parse_quantity(char *line, char **key, uint64_t *bytes)
     *separator = '\0';
     lsm_trim(line);
 
-    char *cursor = separator + 1;
+    const char *cursor = separator + 1;
+    uint64_t parsed = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &parsed)) return false;
     while (*cursor && isspace((unsigned char)*cursor)) cursor++;
-    if (!isdigit((unsigned char)*cursor)) return false;
-
-    errno = 0;
-    char *end = NULL;
-    const unsigned long long parsed = strtoull(cursor, &end, 10);
-    if (errno != 0 || end == cursor) return false;
-    while (*end && isspace((unsigned char)*end)) end++;
 
     uint64_t multiplier = 1U;
-    if (*end) {
-        char *unit_end = end;
-        while (*unit_end && !isspace((unsigned char)*unit_end)) unit_end++;
-        const char saved = *unit_end;
-        *unit_end = '\0';
-        if (strcmp(end, "kB") == 0)
-            multiplier = 1024U;
-        else {
-            *unit_end = saved;
+    if (*cursor) {
+        if (cursor[0] != 'k' || cursor[1] != 'B' ||
+            (cursor[2] && !isspace((unsigned char)cursor[2])))
             return false;
-        }
-        *unit_end = saved;
-        while (*unit_end && isspace((unsigned char)*unit_end)) unit_end++;
-        if (*unit_end) return false;
+        multiplier = 1024U;
+        cursor += 2;
+        while (*cursor && isspace((unsigned char)*cursor)) cursor++;
+        if (*cursor) return false;
     }
 
     *key = line;
-    *bytes = lsm_u64_multiply_saturating((uint64_t)parsed, multiplier);
+    *bytes = lsm_u64_multiply_saturating(parsed, multiplier);
     return true;
 }
 

@@ -54,17 +54,12 @@ static bool filesystem_default_visible(const LsmMountInfoEntry *entry)
 
 static bool collector_reserve(FilesystemCollector *collector)
 {
-    if (collector->count < collector->capacity) return true;
-    const size_t next = collector->capacity ? collector->capacity * 2U :
-        FILESYSTEM_INITIAL_CAPACITY;
-    if (next < collector->capacity || next > SIZE_MAX / sizeof(*collector->items))
-        return false;
-    LsmFilesystemInfo *grown = realloc(collector->items,
-                                       next * sizeof(*collector->items));
-    if (!grown) return false;
-    collector->items = grown;
-    collector->capacity = next;
-    return true;
+    if (!collector) return false;
+    return lsm_array_reserve((void **)&collector->items,
+                             &collector->capacity,
+                             sizeof(*collector->items),
+                             collector->count + 1U,
+                             FILESYSTEM_INITIAL_CAPACITY);
 }
 
 static void collect_capacity(LsmFilesystemInfo *item)

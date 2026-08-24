@@ -39,7 +39,6 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-
 #ifndef IOPRIO_CLASS_SHIFT
 #define IOPRIO_CLASS_SHIFT 13
 #endif
@@ -89,8 +88,8 @@ typedef struct {
     char name[64];
 } UidNameEntry;
 
-/* One context is owned by each application instance.  GTK invokes scans
- * serially from the main loop, so no locking is required.  start_ticks
+/* One context is owned by each application instance. GTK invokes scans
+ * serially from the main loop, so no locking is required. start_ticks
  * protects every delta from PID reuse. */
 struct LsmProcessBackend {
     PreviousProcessSample *samples;
@@ -197,20 +196,11 @@ static bool parse_prefixed_u64(const char *line, const char *prefix,
                                uint64_t *value)
 {
     const size_t prefix_length = strlen(prefix);
-    if (strncmp(line, prefix, prefix_length) != 0) return false;
+    if (!line || !prefix || !value ||
+        strncmp(line, prefix, prefix_length) != 0)
+        return false;
     const char *cursor = line + prefix_length;
-    while (*cursor == ' ' || *cursor == '\t') cursor++;
-    if (!isdigit((unsigned char)*cursor)) return false;
-
-    uint64_t parsed = 0U;
-    do {
-        const unsigned digit = (unsigned)(*cursor - '0');
-        if (parsed > (UINT64_MAX - digit) / 10U) return false;
-        parsed = parsed * 10U + digit;
-        cursor++;
-    } while (isdigit((unsigned char)*cursor));
-    *value = parsed;
-    return true;
+    return lsm_parse_u64_token(&cursor, 10U, value);
 }
 
 static int compare_sample_pid(const void *left, const void *right)
@@ -242,25 +232,17 @@ static PreviousProcessSample *find_or_create_sample(LsmProcessBackend *backend,
     if (low < searchable_count && backend->samples[low].pid == pid)
         return &backend->samples[low];
 
-    if (backend->sample_count == backend->sample_capacity) {
-        const size_t new_capacity = backend->sample_capacity
-            ? backend->sample_capacity * 2U : 1024U;
-        if (new_capacity < backend->sample_capacity ||
-            new_capacity > SIZE_MAX / sizeof(*backend->samples))
-            return NULL;
-        PreviousProcessSample *grown = realloc(
-            backend->samples, new_capacity * sizeof(*grown));
-        if (!grown) return NULL;
-        backend->samples = grown;
-        backend->sample_capacity = new_capacity;
-    }
+    if (!lsm_array_reserve((void **)&backend->samples,
+                           &backend->sample_capacity,
+                           sizeof(*backend->samples),
+                           backend->sample_count + 1U, 1024U))
+        return NULL;
 
     PreviousProcessSample *sample = &backend->samples[backend->sample_count++];
     memset(sample, 0, sizeof(*sample));
     sample->pid = pid;
     return sample;
 }
-
 
 static const char *state_name(char state)
 {
@@ -277,7 +259,7 @@ static const char *state_name(char state)
     }
 }
 
-/* /proc/<pid>/stat field 2 may contain spaces and parentheses.  The code
+/* /proc/<pid>/stat field 2 may contain spaces and parentheses. The code
  * locates that field first, then tokenises fields 3 onward by their documented
  * numeric positions. Complete numeric tokens use Common's strict parsers so a
  * malformed or overflowing kernel record is rejected rather than coerced. */
@@ -450,8 +432,7 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
         if (parse_prefixed_u64(line, "Uid:", &value)) {
             native_status->uid = (uid_t)value;
             native_status->uid_available = true;
-        }
-        else if (parse_prefixed_u64(line, "VmRSS:", &value))
+        } else if (parse_prefixed_u64(line, "VmRSS:", &value))
             process->rss_bytes =
                 lsm_u64_multiply_saturating(value, 1024U);
         else if (parse_prefixed_u64(line, "Threads:", &value))
@@ -553,7 +534,8 @@ static unsigned count_process_fds(pid_t pid)
     return count;
 }
 
-bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process, unsigned scan_flags)
+bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
+                        unsigned scan_flags)
 {
     pid_t pid = 0;
     if (!process || process->pid != process_id ||
@@ -670,15 +652,9 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         pid_t pid = 0;
         if (!parse_proc_pid(entry->d_name, &pid)) continue;
 
-        if (count == capacity) {
-            if (capacity > SIZE_MAX / 2U ||
-                capacity * 2U > SIZE_MAX / sizeof(*processes))
-                break;
-            capacity *= 2U;
-            LsmProcessInfo *grown = realloc(processes, capacity * sizeof(*grown));
-            if (!grown) break;
-            processes = grown;
-        }
+        if (!lsm_array_reserve((void **)&processes, &capacity,
+                               sizeof(*processes), count + 1U, 512U))
+            break;
 
         LsmProcessInfo process = {0};
         LinuxProcessStat native_stat = {0};
@@ -704,7 +680,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                                    (long double)ticks_per_second;
             process.cpu_time_nanoseconds = ns >= (long double)UINT64_MAX
                 ? UINT64_MAX : (uint64_t)ns;
-            double started_after_boot = (double)process.instance_id / (double)ticks_per_second;
+            double started_after_boot = (double)process.instance_id /
+                                        (double)ticks_per_second;
             process.start_time_epoch = boot_time > 0 ?
                 boot_time + (int64_t)started_after_boot : 0;
             process.elapsed_seconds = uptime > started_after_boot ?
@@ -714,10 +691,10 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         PreviousProcessSample *sample = find_or_create_sample(
             backend, searchable_sample_count, pid);
         if (sample) {
-            bool same_process = sample->start_ticks == process.instance_id && sample->start_ticks != 0;
+            bool same_process = sample->start_ticks == process.instance_id &&
+                                sample->start_ticks != 0;
             if (same_process && total_delta > 0 && cpu_ticks >= sample->cpu_ticks) {
-                const uint64_t delta =
-                    cpu_ticks - sample->cpu_ticks;
+                const uint64_t delta = cpu_ticks - sample->cpu_ticks;
                 process.cpu_percent = lsm_process_cpu_total_percent(
                     delta, total_delta);
             }
@@ -736,8 +713,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                     process.gpu_memory_bytes = gpu.memory_available
                         ? gpu.memory_bytes : 0U;
                     process.gpu_memory_available = gpu.memory_available;
-                    const double gpu_interval =
-                        sampled_at - sample->gpu_sampled_at;
+                    const double gpu_interval = sampled_at - sample->gpu_sampled_at;
                     if (same_process && sample->gpu_sampled_at > 0.0)
                         lsm_process_gpu_normalise(&gpu, &sample->gpu);
                     process.gpu_available = same_process &&
@@ -809,13 +785,11 @@ bool lsm_process_set_efficiency(LsmProcessId process_id,
         return false;
     }
 
-    /*
-     * Efficiency mode deliberately uses only standard scheduler controls:
-     * lower CPU priority plus the idle block-I/O class.  No resident service,
-     * cgroup or external command is required.  Linux may refuse a later CPU
+    /* Efficiency mode deliberately uses only standard scheduler controls:
+     * lower CPU priority plus the idle block-I/O class. No resident service,
+     * cgroup or external command is required. Linux may refuse a later CPU
      * priority increase for an unprivileged caller; the UI reports that error
-     * rather than pretending the original priority was restored.
-     */
+     * rather than pretending the original priority was restored. */
     const int nice_value = enabled ? 10 : 0;
     const int io_value = enabled
         ? LSM_IOPRIO_VALUE(IOPRIO_CLASS_IDLE, 0)
@@ -831,7 +805,7 @@ bool lsm_process_set_efficiency(LsmProcessId process_id,
     const bool cpu_ok = setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
     const int cpu_error = cpu_ok ? 0 : errno;
 
-    /* Some containers and older kernels block ioprio_set.  A successfully
+    /* Some containers and older kernels block ioprio_set. A successfully
      * lowered CPU priority is still useful Efficiency mode, and vice versa. */
     if (cpu_ok || io_ok) return true;
     errno = cpu_error ? cpu_error : io_error;
@@ -966,7 +940,7 @@ bool lsm_process_control_tree(LsmProcessId root_id,
 
     DIR *directory = opendir("/proc");
     if (!directory) return false;
-    size_t count = 0, capacity = 256;
+    size_t count = 0U, capacity = 256U;
     PidParent *items = calloc(capacity, sizeof(*items));
     if (!items) {
         closedir(directory);
@@ -979,15 +953,9 @@ bool lsm_process_control_tree(LsmProcessId root_id,
         if (!parse_proc_pid(entry->d_name, &pid)) continue;
         PidParent item = {0};
         if (pid <= 1 || !read_pid_parent(pid, &item)) continue;
-        if (count == capacity) {
-            if (capacity > SIZE_MAX / 2U ||
-                capacity * 2U > SIZE_MAX / sizeof(*items))
-                break;
-            capacity *= 2U;
-            PidParent *grown = realloc(items, capacity * sizeof(*grown));
-            if (!grown) break;
-            items = grown;
-        }
+        if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                               count + 1U, 256U))
+            break;
         items[count++] = item;
     }
     closedir(directory);
@@ -998,24 +966,26 @@ bool lsm_process_control_tree(LsmProcessId root_id,
     if (count > 1U)
         qsort(items, count, sizeof(*items), compare_pid_parent_pid);
 
-    PidParent *descendant_items = calloc(count ? count : 1, sizeof(*descendant_items));
+    PidParent *descendant_items = calloc(count ? count : 1U,
+                                         sizeof(*descendant_items));
     if (!descendant_items) {
         free(items);
         return false;
     }
-    size_t descendants = 0;
-    for (size_t i = 0; i < count; i++) {
+    size_t descendants = 0U;
+    for (size_t i = 0U; i < count; i++) {
         unsigned depth = process_depth(items, count, i, root_pid);
-        if (depth > 0) {
+        if (depth > 0U) {
             descendant_items[descendants] = items[i];
             descendant_items[descendants++].depth = depth;
         }
     }
-    qsort(descendant_items, descendants, sizeof(*descendant_items), compare_depth_descending);
+    qsort(descendant_items, descendants, sizeof(*descendant_items),
+          compare_depth_descending);
 
     bool success = true;
     int saved_errno = 0;
-    for (size_t i = 0; i < descendants; i++) {
+    for (size_t i = 0U; i < descendants; i++) {
         if (!lsm_process_control((LsmProcessId)descendant_items[i].pid,
                                  descendant_items[i].instance_id, action) &&
             errno != ESRCH) {

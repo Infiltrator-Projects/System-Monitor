@@ -91,6 +91,37 @@ bool lsm_string_ends_with(const char *text, const char *suffix);
  */
 bool lsm_parse_u64(const char *text, unsigned int base, uint64_t *value);
 
+/**
+ * Parse one unsigned field from structured text and advance its cursor.
+ *
+ * Leading whitespace is skipped, signs are rejected and trailing record text
+ * is left unconsumed. Failure preserves both caller outputs.
+ *
+ * @param cursor Points to the current text cursor and receives the first
+ *               unconsumed byte on success.
+ * @param base Numeric base; zero enables conventional C prefixes.
+ * @param value Receives the parsed value on success.
+ * @return true when one unsigned field was parsed without overflow.
+ */
+bool lsm_parse_u64_token(const char **cursor, unsigned int base,
+                         uint64_t *value);
+
+/**
+ * Ensure a caller-owned contiguous array can hold the requested element count.
+ *
+ * The shared implementation performs geometric growth and rejects allocation
+ * size overflow before reallocating. Pointer and capacity remain unchanged on
+ * failure.
+ *
+ * @param array Address of the caller's array pointer.
+ * @param capacity Address of the current element capacity.
+ * @param element_size Size of one array element in bytes.
+ * @param required Minimum required element count.
+ * @param initial_capacity First capacity used for an empty array.
+ * @return true when the existing or grown array can hold @p required elements.
+ */
+bool lsm_array_reserve(void **array, size_t *capacity, size_t element_size,
+                       size_t required, size_t initial_capacity);
 
 /**
  * Clamp a floating-point value to inclusive bounds.
@@ -111,6 +142,17 @@ double lsm_clamp_double(double value, double lower, double upper);
  * @return true when realpath(3) succeeded and the result fitted completely.
  */
 bool lsm_realpath_copy(const char *path, char *destination, size_t size);
+
+/**
+ * Return the final lexical component of a POSIX path.
+ *
+ * The returned pointer aliases @p path. NULL and paths ending in a slash map
+ * to an empty final component.
+ *
+ * @param path POSIX path, or NULL.
+ * @return Pointer to the final component or a shared empty string.
+ */
+const char *lsm_path_basename(const char *path);
 
 /**
  * Concatenate a base path and suffix without implicit separators.
@@ -177,7 +219,6 @@ bool lsm_read_double_file(const char *path, double *value);
  * @return Parsed finite value, or NAN on failure.
  */
 double lsm_read_double_or_nan(const char *path);
-
 
 /**
  * Add two unsigned quantities without allowing wraparound.

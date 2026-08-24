@@ -59,7 +59,6 @@ static bool process_path(char *buffer, size_t size, pid_t pid,
     return written >= 0 && (size_t)written < size;
 }
 
-
 static bool parse_start_ticks(const char *stat_text, uint64_t *start_ticks)
 {
     if (!stat_text || !start_ticks) return false;
@@ -73,15 +72,11 @@ static bool parse_start_ticks(const char *stat_text, uint64_t *start_ticks)
         const char *begin = cursor;
         while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
         if (field != 22U) continue;
-        if (begin == cursor) return false;
         uint64_t value = 0U;
-        for (const char *digit = begin; digit < cursor; digit++) {
-            if (!isdigit((unsigned char)*digit)) return false;
-            const unsigned number = (unsigned)(*digit - '0');
-            if (value > (UINT64_MAX - number) / 10U) return false;
-            value = value * 10U + number;
-        }
-        if (value == 0U) return false;
+        const char *number = begin;
+        if (!lsm_parse_u64_token(&number, 10U, &value) ||
+            number != cursor || value == 0U)
+            return false;
         *start_ticks = value;
         return true;
     }
@@ -107,23 +102,6 @@ static bool numeric_name(const char *text)
     if (!text || !*text) return false;
     for (const unsigned char *cursor = (const unsigned char *)text; *cursor; cursor++)
         if (!isdigit(*cursor)) return false;
-    return true;
-}
-
-static bool grow_array(void **array, size_t *capacity, size_t item_size,
-                       size_t required)
-{
-    if (required <= *capacity) return true;
-    size_t next = *capacity ? *capacity : 32U;
-    while (next < required) {
-        if (next > SIZE_MAX / 2U) return false;
-        next *= 2U;
-    }
-    if (item_size && next > SIZE_MAX / item_size) return false;
-    void *grown = realloc(*array, next * item_size);
-    if (!grown) return false;
-    *array = grown;
-    *capacity = next;
     return true;
 }
 
@@ -173,7 +151,8 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
         const ssize_t length = readlink(link_path, target, sizeof(target) - 1U);
         if (length < 0) continue;
         target[length] = '\0';
-        if (!grow_array((void **)&items, &capacity, sizeof(*items), count + 1U))
+        if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                               count + 1U, 32U))
             break;
         LsmOpenFileInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
@@ -220,7 +199,8 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapI
         if (tail_length >= sizeof(pathname)) tail_length = sizeof(pathname) - 1U;
         memcpy(pathname, tail, tail_length);
         pathname[tail_length] = '\0';
-        if (!grow_array((void **)&items, &capacity, sizeof(*items), count + 1U))
+        if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                               count + 1U, 32U))
             break;
         LsmMemoryMapInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
@@ -281,11 +261,14 @@ size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **o
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         if (!numeric_name(entry->d_name)) continue;
-        if (!grow_array((void **)&items, &capacity, sizeof(*items), count + 1U))
+        uint64_t tid = 0U;
+        if (!lsm_parse_u64(entry->d_name, 10U, &tid)) continue;
+        if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                               count + 1U, 32U))
             break;
         LsmThreadInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
-        item->tid = (LsmProcessId)strtoull(entry->d_name, NULL, 10);
+        item->tid = (LsmProcessId)tid;
         char path[PATH_MAX], text[LSM_NAME_LEN];
         int written = snprintf(path, sizeof(path), "%s/%s/comm", task_path,
                                entry->d_name);
@@ -330,7 +313,6 @@ static bool canonical_descriptor_target(const char *target, char *resolved,
     return true;
 }
 
-
 static int compare_file_user(const void *left, const void *right)
 {
     const LsmFileUserInfo *a = left;
@@ -368,7 +350,8 @@ size_t lsm_process_inspection_find_file_users(const char *path,
                                              sizeof(resolved)) ||
                 strcmp(resolved, requested) != 0)
                 continue;
-            if (!grow_array((void **)&items, &capacity, sizeof(*items), count + 1U))
+            if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                                   count + 1U, 32U))
                 break;
             LsmFileUserInfo *item = &items[count++];
             memset(item, 0, sizeof(*item));

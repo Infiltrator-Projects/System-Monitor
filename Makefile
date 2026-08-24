@@ -16,9 +16,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.12.0
-INFILTRATR_COMMON_COMMIT := 221246931ab7f58db8ead81df46e329e13b7c6a5
-INFILTRATR_COMMON_VERSION := 1.12.0
+INFILTRATR_COMMON_TAG := v1.13.0
+INFILTRATR_COMMON_COMMIT := 78ad8a30786f22f8ce238a9422b0b7ea49e18f0c
+INFILTRATR_COMMON_VERSION := 1.13.0
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -241,7 +241,6 @@ $(INFILTRATR_COMMON_ARCHIVE): common-library
 $(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
 	$(CC) $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(LDFLAGS) $(LDLIBS) -o $@
 
-
 -include $(OBJECTS:.o=.d)
 
 run: $(TARGET)
@@ -271,7 +270,7 @@ COMMON_LINK_TARGETS := \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
 	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
-	quality-policy-smoke preferences-smoke startup-smoke
+	quality-policy-smoke preferences-smoke startup-smoke process-gpu-smoke
 
 atomic-file-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
@@ -392,13 +391,11 @@ common-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/common-smoke
 	./$(BUILD_DIR)/common-smoke
 
-
 cpu-direct-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/cpu_direct_smoke.c \
 		src/cpu_direct.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/cpu-direct-smoke
 	./$(BUILD_DIR)/cpu-direct-smoke
-
 
 intel-gpu-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/intel_gpu_smoke.c \
@@ -406,20 +403,17 @@ intel-gpu-smoke: | $(BUILD_DIR)
 		-o $(BUILD_DIR)/intel-gpu-smoke
 	./$(BUILD_DIR)/intel-gpu-smoke
 
-
 npu-telemetry-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/npu_telemetry_smoke.c \
 		src/npu_telemetry.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/npu-telemetry-smoke
 	./$(BUILD_DIR)/npu-telemetry-smoke
 
-
 memory-accounting-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/memory-accounting-smoke
 	./$(BUILD_DIR)/memory-accounting-smoke
-
 
 quality-policy-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/quality_policy_smoke.c \
@@ -481,7 +475,6 @@ process-management-smoke: | $(BUILD_DIR)
 		-o $(BUILD_DIR)/process-management-smoke
 	./$(BUILD_DIR)/process-management-smoke
 
-
 process-inspection-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/process_inspection_smoke.c \
 		src/process_inspection.c src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
@@ -536,7 +529,6 @@ bluetooth-battery-smoke: | $(BUILD_DIR)
 		$(GTK_LIBS) -pthread -o $(BUILD_DIR)/bluetooth-battery-smoke
 	./$(BUILD_DIR)/bluetooth-battery-smoke
 
-
 wifi-metadata-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/wifi_metadata_smoke.c src/wifi_metadata.c src/common.c \
@@ -563,8 +555,6 @@ nvml-smoke: | $(BUILD_DIR)
 	LSM_NVML_LIBRARY=$(CURDIR)/$(BUILD_DIR)/libnvidia-ml-test.so \
 		./$(BUILD_DIR)/nvml-smoke
 
-
-
 runtime-stability-smoke: backend-check
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
@@ -583,7 +573,7 @@ benchmark: runtime-stability-smoke process-scan-benchmark
 
 # Sanitizers are a developer/CI gate rather than a universal local-build
 # requirement because some supported toolchains do not ship sanitizer runtimes.
-sanitizer-check: check-deps | $(BUILD_DIR)
+sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/runtime_stability_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
@@ -601,7 +591,8 @@ sanitizer-check: check-deps | $(BUILD_DIR)
 		./$(BUILD_DIR)/process-grouping-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/process_gpu_smoke.c src/process_gpu.c -lm \
+		support/tests/process_gpu_smoke.c src/process_gpu.c src/common.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-gpu-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -746,7 +737,8 @@ process-grouping-smoke: | $(BUILD_DIR)
 
 process-gpu-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		support/tests/process_gpu_smoke.c src/process_gpu.c -lm \
+		support/tests/process_gpu_smoke.c src/process_gpu.c src/common.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-gpu-smoke
 	./$(BUILD_DIR)/process-gpu-smoke
 
@@ -793,7 +785,7 @@ preferences-smoke: | $(BUILD_DIR)
 # Each listed module must retain at least 65 percent line coverage in its smoke
 # fixture. This gate intentionally complements, rather than substitutes for,
 # the broader behaviour and runtime-stability tests above.
-coverage-check: | $(BUILD_DIR)
+coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	rm -rf $(COVERAGE_DIR)
 	mkdir -p $(COVERAGE_DIR)
 	ln -s ../../src $(COVERAGE_DIR)/src
@@ -803,7 +795,7 @@ coverage-check: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/disk_accounting.c -o $(COVERAGE_DIR)/disk_accounting.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/disk-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_gpu.c -o $(COVERAGE_DIR)/process_gpu.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o -lm -o $(COVERAGE_DIR)/process-gpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-gpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/storage_metadata.c -o $(COVERAGE_DIR)/storage_metadata.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/smbios_memory.c -o $(COVERAGE_DIR)/smbios_memory.o

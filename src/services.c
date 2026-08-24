@@ -15,6 +15,7 @@
 #include "services.h"
 #include "app_internal.h"
 #include "app_config.h"
+#include "common.h"
 #include "ui_helpers.h"
 
 #include <stdio.h>
@@ -88,13 +89,9 @@ static ServiceEntry *service_get(ServiceEntry **entries, size_t *count,
 {
     ssize_t existing = service_find(*entries, *count, name);
     if (existing >= 0) return &(*entries)[existing];
-    if (*count == *capacity) {
-        size_t next = *capacity ? *capacity * 2 : 128;
-        ServiceEntry *grown = realloc(*entries, next * sizeof(*grown));
-        if (!grown) return NULL;
-        *entries = grown;
-        *capacity = next;
-    }
+    if (!lsm_array_reserve((void **)entries, capacity, sizeof(**entries),
+                           *count + 1U, 128U))
+        return NULL;
     ServiceEntry *entry = &(*entries)[(*count)++];
     memset(entry, 0, sizeof(*entry));
     g_strlcpy(entry->name, name, sizeof(entry->name));
@@ -103,12 +100,6 @@ static ServiceEntry *service_get(ServiceEntry **entries, size_t *count,
     g_strlcpy(entry->substate, "dead", sizeof(entry->substate));
     g_strlcpy(entry->startup, "unknown", sizeof(entry->startup));
     return entry;
-}
-
-static const char *base_name(const char *path)
-{
-    const char *slash = strrchr(path, '/');
-    return slash ? slash + 1 : path;
 }
 
 static int service_compare(const void *left, const void *right)
@@ -149,7 +140,7 @@ static void merge_unit_files(GVariant *files, ServiceEntry **entries,
     g_variant_get(files, "(a(ss))", &iter);
     const char *path, *state;
     while (g_variant_iter_loop(iter, "(&s&s)", &path, &state)) {
-        const char *unit = base_name(path);
+        const char *unit = lsm_path_basename(path);
         size_t length = strlen(unit);
         if (length < 8 || strcmp(unit + length - 8, ".service") != 0) continue;
         ServiceEntry *entry = service_get(entries, count, capacity, unit);
@@ -405,7 +396,6 @@ static void service_search_changed(GtkEditable *editable, gpointer user_data)
     app->services.services_search_timer = g_timeout_add(LSM_SEARCH_DEBOUNCE_MS,
                                                       service_search_timeout, app);
 }
-
 
 static void restore_service_selection(LsmApp *app, const char *name)
 {

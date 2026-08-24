@@ -13,8 +13,11 @@
  */
 #include "common.h"
 
+#include <infiltratr/arithmetic.h>
 #include <infiltratr/core.h>
 #include <infiltratr/posix.h>
+#include <infiltratr/posix_path.h>
+#include <infiltratr/token.h>
 
 void lsm_copy_string(char *destination, size_t size, const char *source)
 {
@@ -51,6 +54,18 @@ bool lsm_parse_u64(const char *text, unsigned int base, uint64_t *value)
     return infiltratr_parse_u64(text, base, value);
 }
 
+bool lsm_parse_u64_token(const char **cursor, unsigned int base,
+                         uint64_t *value)
+{
+    return infiltratr_parse_u64_token(cursor, base, value);
+}
+
+bool lsm_array_reserve(void **array, size_t *capacity, size_t element_size,
+                       size_t required, size_t initial_capacity)
+{
+    return infiltratr_array_reserve(array, capacity, element_size, required,
+                                    initial_capacity);
+}
 
 double lsm_clamp_double(double value, double lower, double upper)
 {
@@ -60,6 +75,11 @@ double lsm_clamp_double(double value, double lower, double upper)
 bool lsm_realpath_copy(const char *path, char *destination, size_t size)
 {
     return infiltratr_realpath_copy(path, destination, size);
+}
+
+const char *lsm_path_basename(const char *path)
+{
+    return infiltratr_path_basename(path);
 }
 
 bool lsm_join_path(char *destination, size_t size,
@@ -92,7 +112,6 @@ double lsm_read_double_or_nan(const char *path)
 {
     return infiltratr_read_double_or_nan(path);
 }
-
 
 uint64_t lsm_u64_add_saturating(uint64_t left, uint64_t right)
 {

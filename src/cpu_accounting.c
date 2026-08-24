@@ -22,16 +22,7 @@
 
 static bool parse_u64_field(const char **cursor, uint64_t *value)
 {
-    if (!cursor || !*cursor || !value) return false;
-    while (**cursor && isspace((unsigned char)**cursor)) (*cursor)++;
-    if (!isdigit((unsigned char)**cursor)) return false;
-    errno = 0;
-    char *end = NULL;
-    const unsigned long long parsed = strtoull(*cursor, &end, 10);
-    if (errno != 0 || end == *cursor) return false;
-    *cursor = end;
-    *value = (uint64_t)parsed;
-    return true;
+    return lsm_parse_u64_token(cursor, 10U, value);
 }
 
 static bool parse_cpu_row(const char *line, LsmCpuCounters *counter)
@@ -122,29 +113,12 @@ bool lsm_cpu_accounting_read(const char *path,
     char buffer[4096];
     while (fgets(buffer, sizeof(buffer), file)) {
         const size_t chunk = strlen(buffer);
-        if (length > SIZE_MAX - chunk - 1U) {
+        if (length > SIZE_MAX - chunk - 1U ||
+            !lsm_array_reserve((void **)&text, &capacity, sizeof(*text),
+                               length + chunk + 1U, 8192U)) {
             free(text);
             fclose(file);
             return false;
-        }
-        if (length + chunk + 1U > capacity) {
-            size_t next = capacity ? capacity * 2U : 8192U;
-            while (next < length + chunk + 1U) {
-                if (next > SIZE_MAX / 2U) {
-                    free(text);
-                    fclose(file);
-                    return false;
-                }
-                next *= 2U;
-            }
-            char *grown = realloc(text, next);
-            if (!grown) {
-                free(text);
-                fclose(file);
-                return false;
-            }
-            text = grown;
-            capacity = next;
         }
         memcpy(text + length, buffer, chunk);
         length += chunk;

@@ -178,13 +178,9 @@ static SessionInfo *parse_session_list(GVariant *reply, size_t *out_count)
     const char *id, *username, *seat, *path;
     guint32 uid;
     while (g_variant_iter_loop(iter, "(&su&s&s&o)", &id, &uid, &username, &seat, &path)) {
-        if (count == capacity) {
-            size_t next = capacity ? capacity * 2 : 8;
-            SessionInfo *grown = realloc(sessions, next * sizeof(*grown));
-            if (!grown) break;
-            sessions = grown;
-            capacity = next;
-        }
+        if (!lsm_array_reserve((void **)&sessions, &capacity,
+                               sizeof(*sessions), count + 1U, 8U))
+            break;
         SessionInfo *session = &sessions[count++];
         memset(session, 0, sizeof(*session));
         g_strlcpy(session->id, id, sizeof(session->id));
@@ -357,7 +353,6 @@ static gboolean selected_user_row(LsmApp *app, char **session_id, char **usernam
                        -1);
     return TRUE;
 }
-
 
 static gboolean restore_user_selection_level(LsmApp *app, GtkTreeModel *model,
                                              GtkTreeIter *parent,

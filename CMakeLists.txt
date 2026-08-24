@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.12.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.12.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "221246931ab7f58db8ead81df46e329e13b7c6a5")
+set(INFILTRATR_COMMON_TAG "v1.13.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.13.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "78ad8a30786f22f8ce238a9422b0b7ea49e18f0c")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -341,7 +341,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         support/tests/process_grouping_smoke.c src/process_grouping.c
         src/process_model.c)
     add_executable(lsm-process-gpu-smoke
-        support/tests/process_gpu_smoke.c src/process_gpu.c)
+        support/tests/process_gpu_smoke.c src/process_gpu.c src/common.c)
     add_executable(lsm-disk-accounting-smoke
         support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c)
     add_executable(lsm-cpu-accounting-smoke
