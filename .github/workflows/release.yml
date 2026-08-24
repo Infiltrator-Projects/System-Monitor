@@ -40,8 +40,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake gcc-multilib git jq libc6-dev-i386 \
-            libgtk-3-dev pkg-config unzip zip
+            build-essential cmake gcc-multilib git libc6-dev-i386 \
+            libgtk-3-dev pkg-config
 
       - name: Verify exact current main and Release commit
         shell: bash
@@ -70,7 +70,7 @@ jobs:
         run: REQUIRE_I386=1 make check
 
       - name: Build release packages
-        run: make -j2 release
+        run: make -j2 deb native-installer
 
       - name: Publish immutable release
         env:
@@ -99,13 +99,10 @@ jobs:
 
           deb="linux-system-monitor_${version}_amd64.deb"
           installer="linux-system-monitor-${version}-native-installer.run"
-          source="Linux-System-Monitor-${version}-source.zip"
           test -f "$deb"
           test -x "$installer"
-          test -f "$source"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           ./"$installer" --help >/dev/null
-          test "$(unzip -p "$source" '*/src/infiltratr-common/VERSION' | tr -d '[:space:]')" = "1.13.0"
 
           notes=$(git log -1 --format=%b "$head_commit")
           if [[ -z "$notes" ]]; then
@@ -114,14 +111,14 @@ jobs:
 
           git tag "$tag" "$head_commit"
           git push origin "$tag"
-          gh release create "$tag" "$deb" "$installer" "$source" \
+          gh release create "$tag" "$deb" "$installer" \
             --verify-tag \
             --target "$head_commit" \
             --title "Linux System Monitor $version" \
             --notes "$notes" \
             --latest
 
-          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$source" | sort)
+          expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
           published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then
             printf 'Release %s has an unexpected asset set.\n' "$tag" >&2

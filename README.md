@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.3 ([version file](support/VERSION))  
+**Current source version:** 1.0.4 ([version file](support/VERSION))\
 **Shared foundation:** exact Infiltratr Common 1.13.0 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -81,13 +81,12 @@ Direct `make install` is disabled. Installation is owned by the Debian package o
 
 ## Release assets
 
-A numbered release publishes exactly three primary artifacts:
+A numbered release publishes exactly two downloadable artifacts:
 
 | File | Purpose |
 | --- | --- |
 | `linux-system-monitor_<version>_amd64.deb` | Generic amd64 Debian package. |
 | `linux-system-monitor-<version>-native-installer.run` | Native local build/test/install program. |
-| `Linux-System-Monitor-<version>-source.zip` | Tested standalone source archive including the exact pinned Common source. |
 
 Install the generic package with:
 
@@ -124,7 +123,7 @@ This repository uses `main` as its working branch. Development changes are made 
 
 Every push to `main` runs the full Verify workflow. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete Verify workflow succeeds.
 
-The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb`, `.run` and source ZIP, then creates the version tag and GitHub release. Published version tags and releases are immutable release identities.
+The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb` and `.run`, then creates the version tag and GitHub release. Published version tags and releases are immutable release identities.
 
 Once a version tag exists, further source changes must advance `support/VERSION` before Verify will accept them. This prevents `main` from silently diverging from an already-published release while claiming the same version.
 

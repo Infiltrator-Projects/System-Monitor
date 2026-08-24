@@ -14,7 +14,7 @@ body:
     attributes:
       label: Version or commit
       description: Release number, tag, or commit SHA.
-      placeholder: "1.0.3 or 0123abc..."
+      placeholder: "1.0.4 or 0123abc..."
     validations:
       required: true
 

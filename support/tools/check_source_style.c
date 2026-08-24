@@ -882,7 +882,13 @@ static void check_shared_release_contract(void)
     char *release = read_file(".github/workflows/release.yml", &size);
     if (release) {
         require_text_marker(".github/workflows/release.yml", release,
-                            "Linux-System-Monitor-${version}-source.zip");
+                            "linux-system-monitor_${version}_amd64.deb");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "linux-system-monitor-${version}-native-installer.run");
+        if (strstr(release, "Linux-System-Monitor-${version}-source.zip"))
+            report_error(
+                ".github/workflows/release.yml: releases must upload only "
+                "the .deb and .run artifacts");
         require_text_marker(".github/workflows/release.yml", release,
                             "test \"$main_commit\" = \"$EXPECTED_SHA\"");
         require_text_marker(".github/workflows/release.yml", release,
