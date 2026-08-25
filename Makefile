@@ -351,12 +351,16 @@ strict-check: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat \
 		-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(SOURCES)
 
-analyzer-check: | $(BUILD_DIR)
-	@if [ -n "$(ANALYZER_FLAG)" ]; then \
+# GCC's static analyser operates on source only. Keep linker artifacts out of
+# this gate so parallel verification has no archive-ordering race, and make the
+# analyser's exit status authoritative rather than allowing a later echo to
+# mask a diagnostic failure.
+analyzer-check: check-deps | $(BUILD_DIR)
+	@set -e; \
+	if [ -n "$(ANALYZER_FLAG)" ]; then \
 		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
 			-fsyntax-only src/atomic_file_posix.c src/common.c \
 			src/duration_format.c src/process_backend_linux.c src/refresh_policy.c \
-			$(INFILTRATR_COMMON_ARCHIVE) \
 			src/process_gpu.c src/metric_format.c src/cpu_accounting.c \
 			src/memory_accounting.c \
 			src/disk_accounting.c src/mountinfo.c src/storage_metadata.c \
