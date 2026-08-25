@@ -220,20 +220,17 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     if (!state || !state->sampler_state) return false;
     LsmLinuxSamplerState *sampler = state->sampler_state;
 
-    LsmMonitor completed;
-    bool have_completed = false;
     (void)pthread_mutex_lock(&sampler->mutex);
     if (sampler->sample_ready) {
-        completed = sampler->completed;
+        /* The completed slot already lives in heap-owned sampler state. Copy it
+         * directly while holding the short publication lock rather than placing
+         * another multi-megabyte LsmMonitor on the caller's stack. */
+        copy_public_snapshot(monitor, &sampler->completed, state, true);
         sampler->sample_ready = false;
-        have_completed = true;
     }
     sampler->request_pending = true;
     (void)pthread_cond_signal(&sampler->condition);
     (void)pthread_mutex_unlock(&sampler->mutex);
-
-    if (have_completed)
-        copy_public_snapshot(monitor, &completed, state, true);
 
     /* A refresh request is considered successful even when the worker is
      * still completing the previous native sample. The GTK caller therefore
