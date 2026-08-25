@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 typedef struct LsmLinuxHardwareState LsmLinuxHardwareState;
+typedef struct LsmLinuxSamplerState LsmLinuxSamplerState;
 
 /** Retained Linux disk baselines keyed independently of the public snapshot. */
 typedef struct {
@@ -59,6 +60,7 @@ typedef struct {
     LsmSystemSources *system_sources;
     LsmWifiMetadata *wifi_metadata;
     LsmLinuxHardwareState *hardware_state;
+    LsmLinuxSamplerState *sampler_state;
     void *cpu_frequency_source;
     LsmCpuAccountingState cpu_accounting;
     LsmLinuxDiskState disks[LSM_MAX_DISKS];
