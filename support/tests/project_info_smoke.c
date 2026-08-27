@@ -18,16 +18,16 @@
 
 static const char *expected_build_label(const char *profile)
 {
-    if (!profile) return "Build: Source build";
+    if (!profile) return "Build: Source / development build";
     if (strcmp(profile, "native") == 0 ||
         strcmp(profile, "aggressive") == 0 ||
         strcmp(profile, "portable") == 0)
-        return "Build: Native local build";
+        return "Build: Native / local machine compile";
     if (strcmp(profile, "generic") == 0)
-        return "Build: Generic Debian package";
-    if (strcmp(profile, "cmake") == 0) return "Build: CMake source build";
+        return "Build: Generic / APT package";
+    if (strcmp(profile, "cmake") == 0) return "Build: Source / CMake build";
     if (strcmp(profile, "development") == 0)
-        return "Build: Development build";
+        return "Build: Source / development build";
     return "Build: Source build";
 }
 
