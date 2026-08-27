@@ -47,15 +47,15 @@
 const InfiltratrProjectInfo *lsm_project_info(void)
 {
     static const InfiltratrProjectInfo generic_info =
-        LSM_PROJECT_INFO_INITIALIZER("Generic Debian package");
+        LSM_PROJECT_INFO_INITIALIZER("Generic / APT package");
     static const InfiltratrProjectInfo native_info =
-        LSM_PROJECT_INFO_INITIALIZER("Native local build");
+        LSM_PROJECT_INFO_INITIALIZER("Native / local machine compile");
     static const InfiltratrProjectInfo cmake_info =
-        LSM_PROJECT_INFO_INITIALIZER("CMake source build");
+        LSM_PROJECT_INFO_INITIALIZER("Source / CMake build");
     static const InfiltratrProjectInfo development_info =
-        LSM_PROJECT_INFO_INITIALIZER("Development build");
+        LSM_PROJECT_INFO_INITIALIZER("Source / development build");
     static const InfiltratrProjectInfo source_info =
-        LSM_PROJECT_INFO_INITIALIZER("Source build");
+        LSM_PROJECT_INFO_INITIALIZER("Source / development build");
 
     if (strcmp(LSM_BUILD_PROFILE, "native") == 0 ||
         strcmp(LSM_BUILD_PROFILE, "aggressive") == 0 ||
