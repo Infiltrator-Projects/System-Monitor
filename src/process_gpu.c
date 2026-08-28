@@ -18,6 +18,8 @@
 
 #include "common.h"
 
+#include <infiltratr/quantity.h>
+
 #include <ctype.h>
 #include <dirent.h>
 #include <limits.h>
@@ -54,23 +56,7 @@ static bool numeric_name(const char *name)
 
 static bool parse_bytes(const char *text, uint64_t *bytes)
 {
-    if (!text || !bytes) return false;
-    const char *cursor = text;
-    uint64_t parsed = 0U;
-    if (!lsm_parse_u64_token(&cursor, 10U, &parsed)) return false;
-    while (*cursor && isspace((unsigned char)*cursor)) cursor++;
-
-    uint64_t multiplier = 1U;
-    switch (toupper((unsigned char)*cursor)) {
-    case 'K': multiplier = 1024U; break;
-    case 'M': multiplier = 1024U * 1024U; break;
-    case 'G': multiplier = 1024U * 1024U * 1024U; break;
-    case '\0':
-    case 'B': break;
-    default: return false;
-    }
-    *bytes = lsm_u64_multiply_saturating(parsed, multiplier);
-    return true;
+    return infiltratr_parse_binary_quantity_u64(text, bytes);
 }
 
 static char *field_value(char *line)

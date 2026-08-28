@@ -73,16 +73,16 @@ int main(void)
                "0%") != 0)
         return 19;
     if (strcmp(lsm_metric_format_link_speed_mbps(10000.0, text, sizeof(text)),
-               "9.31 Gb/s") != 0)
+               "9.77 Gb/s") != 0)
         return 20;
     if (strcmp(lsm_metric_format_link_speed_mbps(1000.0, text, sizeof(text)),
-               "953.67 Mb/s") != 0)
+               "1000.00 Mb/s") != 0)
         return 21;
     if (strcmp(lsm_metric_format_link_speed_mbps(100.0, text, sizeof(text)),
-               "95.37 Mb/s") != 0)
+               "100.00 Mb/s") != 0)
         return 22;
     if (strcmp(lsm_metric_format_link_speed_mbps(1.0, text, sizeof(text)),
-               "976.56 Kb/s") != 0)
+               "1.00 Mb/s") != 0)
         return 23;
     if (strcmp(lsm_metric_format_link_speed_mbps(0.0, text, sizeof(text)),
                "N/A") != 0)

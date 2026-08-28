@@ -38,6 +38,7 @@
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 #include <linux/wireless.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,7 +104,19 @@ static bool block_device_numbers(LsmSystemSources *sources,
         !child_path(path, sizeof(path), root, block_name, "/dev") ||
         !lsm_read_text_file(path, text, sizeof(text)))
         return false;
-    return sscanf(text, "%u:%u", major_number, minor_number) == 2;
+
+    const char *cursor = text;
+    uint64_t major_value = 0U;
+    uint64_t minor_value = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &major_value) || *cursor != ':')
+        return false;
+    cursor++;
+    if (!lsm_parse_u64_token(&cursor, 10U, &minor_value) ||
+        *cursor != '\0' || major_value > UINT_MAX || minor_value > UINT_MAX)
+        return false;
+    *major_number = (unsigned int)major_value;
+    *minor_number = (unsigned int)minor_value;
+    return true;
 }
 
 /** Resolve cached storage identity after translating the kernel block name. */

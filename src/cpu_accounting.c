@@ -81,12 +81,12 @@ bool lsm_cpu_accounting_parse(const char *text,
                 aggregate_found = true;
             } else {
                 const char *cursor = line + 3U;
-                errno = 0;
-                char *end = NULL;
-                const unsigned long index = strtoul(cursor, &end, 10);
-                if (errno || end == cursor ||
-                    !isspace((unsigned char)*end) || index >= LSM_MAX_CPUS)
+                uint64_t parsed_index = 0U;
+                if (!lsm_parse_u64_token(&cursor, 10U, &parsed_index) ||
+                    !isspace((unsigned char)*cursor) ||
+                    parsed_index >= LSM_MAX_CPUS)
                     continue;
+                const size_t index = (size_t)parsed_index;
                 sample->cpus[index + 1U] = counter;
                 if (sample->cpu_count < index + 2U)
                     sample->cpu_count = index + 2U;

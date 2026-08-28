@@ -31,8 +31,9 @@
 /**
  * Copy a possibly-null string into a fixed-size destination.
  *
- * The value is truncated when necessary. Source and destination must not
- * overlap; use memmove directly for overlapping regions.
+ * The value is truncated when necessary. Source and destination may overlap;
+ * Common preserves memmove-style copy semantics while always terminating a
+ * non-empty destination buffer.
  *
  * @param destination Writable output buffer.
  * @param size Capacity of @p destination in bytes.

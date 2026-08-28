@@ -78,7 +78,8 @@ int main(void)
         "drm-engine-render: 1000000000 ns\n"
         "drm-engine-copy: 500000000 ns\n"
         "drm-memory-local: 2097152\n"
-        "drm-resident-local: 1024 K\n";
+        "drm-resident-local: 1024 K\n"
+        "drm-resident-malformed: 10 Kjunk\n";
     write_client(fdinfo, "3", first_client);
     write_client(fdinfo, "4", first_client);
     write_client(fdinfo, "5",
@@ -102,7 +103,8 @@ int main(void)
         "drm-engine-render: 1400000000 ns\n"
         "drm-engine-copy: 700000000 ns\n"
         "drm-memory-local: 2097152\n"
-        "drm-resident-local: 1024 K\n";
+        "drm-resident-local: 1024 K\n"
+        "drm-resident-malformed: 10 Kjunk\n";
     write_client(fdinfo, "3", updated_client);
     write_client(fdinfo, "4", updated_client);
     write_client(fdinfo, "5",

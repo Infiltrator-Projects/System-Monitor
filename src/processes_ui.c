@@ -231,13 +231,10 @@ static void group_destroy(gpointer data)
 static gboolean group_append(ProcessGroup *group, size_t process_index,
                              const LsmProcessInfo *process)
 {
-    if (group->count == group->capacity) {
-        const size_t next = group->capacity ? group->capacity * 2U : 4U;
-        size_t *grown = realloc(group->indices, next * sizeof(*grown));
-        if (!grown) return FALSE;
-        group->indices = grown;
-        group->capacity = next;
-    }
+    if (!group || !process || group->count == SIZE_MAX ||
+        !lsm_array_reserve((void **)&group->indices, &group->capacity,
+                           sizeof(*group->indices), group->count + 1U, 4U))
+        return FALSE;
     group->indices[group->count++] = process_index;
     lsm_process_group_metrics_add(&group->metrics, process);
     return TRUE;

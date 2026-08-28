@@ -13,6 +13,8 @@
  */
 #include "mountinfo.h"
 
+#include <infiltratr/token.h>
+
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
@@ -43,18 +45,15 @@ static bool parse_device_number(const char *text,
 {
     if (!text || !major_number || !minor_number) return false;
 
-    errno = 0;
-    char *separator = NULL;
-    const unsigned long major_value = strtoul(text, &separator, 10);
-    if (errno != 0 || separator == text || !separator || *separator != ':' ||
-        major_value > UINT_MAX)
+    const char *cursor = text;
+    uint64_t major_value = 0U;
+    uint64_t minor_value = 0U;
+    if (!infiltratr_parse_u64_token(&cursor, 10U, &major_value) ||
+        *cursor != ':')
         return false;
-
-    errno = 0;
-    char *end = NULL;
-    const unsigned long minor_value = strtoul(separator + 1, &end, 10);
-    if (errno != 0 || end == separator + 1 || !end || *end != '\0' ||
-        minor_value > UINT_MAX)
+    cursor++;
+    if (!infiltratr_parse_u64_token(&cursor, 10U, &minor_value) ||
+        *cursor != '\0' || major_value > UINT_MAX || minor_value > UINT_MAX)
         return false;
 
     *major_number = (unsigned)major_value;

@@ -140,11 +140,10 @@ static bool read_pmu_config(const char *path, uint64_t *config)
 static int first_cpu_in_mask(const char *text)
 {
     if (!text) return 0;
-    while (*text && isspace((unsigned char)*text)) text++;
-    errno = 0;
-    char *end = NULL;
-    const long cpu = strtol(text, &end, 10);
-    if (errno != 0 || end == text || cpu < 0 || cpu > INT32_MAX) return 0;
+    const char *cursor = text;
+    uint64_t cpu = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &cpu) || cpu > INT32_MAX)
+        return 0;
     return (int)cpu;
 }
 

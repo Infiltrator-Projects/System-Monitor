@@ -20,6 +20,9 @@
 
 #include "smbios_memory.h"
 
+#include <infiltratr/endian.h>
+#include <infiltratr/posix_io.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -40,19 +43,6 @@ static void set_error(char *error, size_t size,
     if (!error || size == 0) return;
     if (detail && *detail) snprintf(error, size, "%s: %s", message, detail);
     else snprintf(error, size, "%s", message);
-}
-
-static uint16_t read_le16(const uint8_t *bytes)
-{
-    return (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
-}
-
-static uint32_t read_le32(const uint8_t *bytes)
-{
-    return (uint32_t)bytes[0] |
-           ((uint32_t)bytes[1] << 8) |
-           ((uint32_t)bytes[2] << 16) |
-           ((uint32_t)bytes[3] << 24);
 }
 
 static const char *form_factor_name(uint8_t value)
@@ -88,11 +78,11 @@ static const char *memory_type_name(uint8_t value)
 static uint64_t memory_size_bytes(const uint8_t *record, size_t length)
 {
     if (!record || length <= 0x0d) return 0U;
-    const uint16_t encoded = read_le16(record + 0x0c);
+    const uint16_t encoded = infiltratr_load_le16(record + 0x0c);
     if (encoded == 0U || encoded == UINT16_MAX) return 0U;
     if (encoded == 0x7fffU) {
         if (length < 0x20) return 0U;
-        return (uint64_t)read_le32(record + 0x1c) * 1024U * 1024U;
+        return (uint64_t)infiltratr_load_le32(record + 0x1c) * 1024U * 1024U;
     }
     if ((encoded & 0x8000U) != 0U)
         return (uint64_t)(encoded & 0x7fffU) * 1024U;
@@ -136,10 +126,10 @@ static void copy_smbios_string(const uint8_t *table, size_t table_size,
 static bool populated_memory_device(const uint8_t *record, size_t length)
 {
     if (length <= 0x0d) return false;
-    const uint16_t size = read_le16(record + 0x0c);
+    const uint16_t size = infiltratr_load_le16(record + 0x0c);
     if (size == 0 || size == UINT16_MAX) return false;
     if (size != 0x7fff) return true;
-    return length >= 0x20 && read_le32(record + 0x1c) != 0;
+    return length >= 0x20 && infiltratr_load_le32(record + 0x1c) != 0;
 }
 
 static unsigned memory_speed(const uint8_t *record, size_t length)
@@ -147,15 +137,15 @@ static unsigned memory_speed(const uint8_t *record, size_t length)
     uint32_t rated = 0;
     uint32_t configured = 0;
 
-    if (length >= 0x17) rated = read_le16(record + 0x15);
-    if (length >= 0x22) configured = read_le16(record + 0x20);
+    if (length >= 0x17) rated = infiltratr_load_le16(record + 0x15);
+    if (length >= 0x22) configured = infiltratr_load_le16(record + 0x20);
 
     /* SMBIOS 3.3 added 32-bit extended speed fields for values that cannot be
      * represented in the original 16-bit locations. */
     if (rated == UINT16_MAX && length >= 0x58)
-        rated = read_le32(record + 0x54);
+        rated = infiltratr_load_le32(record + 0x54);
     if (configured == UINT16_MAX && length >= 0x5c)
-        configured = read_le32(record + 0x58);
+        configured = infiltratr_load_le32(record + 0x58);
 
     if (configured == UINT16_MAX) configured = 0;
     if (rated == UINT16_MAX) rated = 0;
@@ -191,20 +181,23 @@ static bool read_table(const char *path, uint8_t **bytes_out, size_t *size_out,
         return false;
     }
 
-    size_t offset = 0;
-    while (offset < size) {
-        const ssize_t result = read(descriptor, bytes + offset, size - offset);
-        if (result < 0 && errno == EINTR) continue;
-        if (result <= 0) {
-            set_error(error, error_size, "Unable to read DMI table",
-                      result < 0 ? strerror(errno) : "unexpected end of file");
-            free(bytes);
-            close(descriptor);
-            return false;
-        }
-        offset += (size_t)result;
+    if (infiltratr_read_full(descriptor, bytes, size) != 0) {
+        const int saved_errno = errno;
+        set_error(error, error_size, "Unable to read DMI table",
+                  strerror(saved_errno));
+        free(bytes);
+        (void)close(descriptor);
+        errno = saved_errno;
+        return false;
     }
-    close(descriptor);
+    if (close(descriptor) != 0) {
+        const int saved_errno = errno;
+        set_error(error, error_size, "Unable to close DMI table",
+                  strerror(saved_errno));
+        free(bytes);
+        errno = saved_errno;
+        return false;
+    }
     *bytes_out = bytes;
     *size_out = size;
     return true;

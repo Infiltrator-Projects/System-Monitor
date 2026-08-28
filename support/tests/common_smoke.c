@@ -25,6 +25,10 @@ int main(void)
     lsm_copy_string(text, sizeof(text), "123456789");
     assert(strcmp(text, "1234567") == 0);
 
+    char overlap[16] = "abcdef";
+    lsm_copy_string(overlap + 1U, sizeof(overlap) - 1U, overlap);
+    assert(strcmp(overlap + 1U, "abcdef") == 0);
+
     char whitespace[] = "  value \n";
     lsm_trim(whitespace);
     assert(strcmp(whitespace, "value") == 0);
@@ -76,6 +80,18 @@ int main(void)
            (ssize_t)(sizeof(overflow) - 1U));
     assert(close(overflow_descriptor) == 0);
     assert(!lsm_read_u64_file(temporary, &maximum));
+
+    const int truncated_descriptor = open(temporary, O_WRONLY | O_TRUNC);
+    assert(truncated_descriptor >= 0);
+    const char oversized_text[] = "abcdef";
+    assert(write(truncated_descriptor, oversized_text,
+                 sizeof(oversized_text) - 1U) ==
+           (ssize_t)(sizeof(oversized_text) - 1U));
+    assert(close(truncated_descriptor) == 0);
+    char undersized[4] = "x";
+    assert(!lsm_read_text_file(temporary, undersized, sizeof(undersized)));
+    assert(undersized[0] == '\0');
+
     assert(unlink(temporary) == 0);
 
     char quantity[32];

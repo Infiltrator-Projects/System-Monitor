@@ -18,6 +18,8 @@
 #include "memory_hardware.h"
 #include "system_sources.h"
 
+#include <infiltratr/quantity.h>
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -45,28 +47,8 @@ static bool read_cpu_counters(LsmMonitor *monitor, bool initial,
 /* Non-x86 and incomplete-CPUID fallback for immutable cache geometry. */
 static uint64_t parse_cache_size_bytes(const char *text)
 {
-    if (!text || !*text) return 0;
-    errno = 0;
-    char *end = NULL;
-    const long double value = strtold(text, &end);
-    if (errno != 0 || end == text || value < 0.0L || !isfinite(value))
-        return 0U;
-    while (*end && isspace((unsigned char)*end)) end++;
-    uint64_t multiplier = 1U;
-    if (*end == 'K' || *end == 'k') multiplier = 1024U;
-    else if (*end == 'M' || *end == 'm') multiplier = 1024U * 1024U;
-    else if (*end == 'G' || *end == 'g')
-        multiplier = 1024U * 1024U * 1024U;
-    else if (*end != '\0') return 0U;
-    if (*end) end++;
-    if (*end == 'B' || *end == 'b') end++;
-    while (*end && isspace((unsigned char)*end)) end++;
-    if (*end != '\0') return 0U;
-
-    const long double bytes = value * (long double)multiplier;
-    if (!isfinite(bytes) || bytes > (long double)UINT64_MAX)
-        return UINT64_MAX;
-    return (uint64_t)bytes;
+    uint64_t bytes = 0U;
+    return infiltratr_parse_binary_quantity_u64(text, &bytes) ? bytes : 0U;
 }
 
 static void format_cache_summary(uint64_t bytes, unsigned instances,

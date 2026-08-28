@@ -23,6 +23,8 @@
 #include "duration_format.h"
 #include "ui_helpers.h"
 
+#include <infiltratr/core.h>
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,18 +163,36 @@ static void history_load(LsmApp *app)
             g_strfreev(fields);
             continue;
         }
+        double cpu_seconds = 0.0;
+        double active_seconds = 0.0;
+        uint64_t read_bytes = 0U;
+        uint64_t write_bytes = 0U;
+        uint64_t peak_rss_bytes = 0U;
+        int64_t first_seen = 0;
+        int64_t last_seen = 0;
+        if (!infiltratr_parse_double(fields[4], &cpu_seconds) ||
+            !infiltratr_parse_double(fields[5], &active_seconds) ||
+            !infiltratr_parse_u64(fields[6], 10U, &read_bytes) ||
+            !infiltratr_parse_u64(fields[7], 10U, &write_bytes) ||
+            !infiltratr_parse_u64(fields[8], 10U, &peak_rss_bytes) ||
+            !infiltratr_parse_i64(fields[9], 10U, &first_seen) ||
+            !infiltratr_parse_i64(fields[10], 10U, &last_seen)) {
+            g_strfreev(fields);
+            continue;
+        }
+
         LsmHistoryEntry *entry = g_new0(LsmHistoryEntry, 1);
         entry->key = g_strdup(fields[0]);
         entry->name = g_strdup(fields[1]);
         entry->user = g_strdup(fields[2]);
         entry->identity = g_strdup(fields[3]);
-        entry->cpu_seconds = g_ascii_strtod(fields[4], NULL);
-        entry->active_seconds = g_ascii_strtod(fields[5], NULL);
-        entry->read_bytes = g_ascii_strtoull(fields[6], NULL, 10);
-        entry->write_bytes = g_ascii_strtoull(fields[7], NULL, 10);
-        entry->peak_rss_bytes = g_ascii_strtoull(fields[8], NULL, 10);
-        entry->first_seen = g_ascii_strtoll(fields[9], NULL, 10);
-        entry->last_seen = g_ascii_strtoll(fields[10], NULL, 10);
+        entry->cpu_seconds = cpu_seconds;
+        entry->active_seconds = active_seconds;
+        entry->read_bytes = read_bytes;
+        entry->write_bytes = write_bytes;
+        entry->peak_rss_bytes = peak_rss_bytes;
+        entry->first_seen = first_seen;
+        entry->last_seen = last_seen;
         g_hash_table_replace(app->history.app_history, g_strdup(entry->key), entry);
         g_strfreev(fields);
     }
