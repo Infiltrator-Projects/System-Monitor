@@ -265,7 +265,8 @@ COMMON_LINK_TARGETS := \
 	cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke \
 	memory-accounting-smoke hardware-topology-smoke backend-smoke \
 	process-management-smoke process-inspection-smoke \
-	filesystem-inventory-smoke efficiency-smoke storage-metadata-smoke \
+	filesystem-inventory-smoke efficiency-smoke mountinfo-smoke \
+	storage-metadata-smoke \
 	system-sources-smoke battery-smoke wifi-metadata-smoke hidpp-smoke \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
@@ -499,7 +500,8 @@ efficiency-smoke: | $(BUILD_DIR)
 
 mountinfo-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/mountinfo_smoke.c \
-		src/mountinfo.c -o $(BUILD_DIR)/mountinfo-smoke
+		src/mountinfo.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/mountinfo-smoke
 	./$(BUILD_DIR)/mountinfo-smoke
 
 storage-metadata-smoke: | $(BUILD_DIR)
