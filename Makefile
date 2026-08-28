@@ -267,7 +267,8 @@ COMMON_LINK_TARGETS := \
 	process-management-smoke process-inspection-smoke \
 	filesystem-inventory-smoke efficiency-smoke mountinfo-smoke \
 	storage-metadata-smoke \
-	system-sources-smoke battery-smoke wifi-metadata-smoke hidpp-smoke \
+	system-sources-smoke smbios-memory-smoke battery-smoke \
+	wifi-metadata-smoke hidpp-smoke \
 	nvml-smoke runtime-stability-smoke process-scan-benchmark \
 	dbus-models-smoke bundled-pci-smoke disk-accounting-smoke \
 	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
@@ -519,7 +520,8 @@ system-sources-smoke: | $(BUILD_DIR)
 
 smbios-memory-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/smbios_memory_smoke.c \
-		src/smbios_memory.c -o $(BUILD_DIR)/smbios-memory-smoke
+		src/smbios_memory.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/smbios-memory-smoke
 	./$(BUILD_DIR)/smbios-memory-smoke
 
 battery-smoke: backend-check
