@@ -137,13 +137,6 @@ static bool filesystem_label_from_device_database(LsmSystemSources *sources,
                                            filesystem, filesystem_size);
 }
 
-static const char *path_basename(const char *path)
-{
-    if (!path) return "";
-    const char *separator = strrchr(path, '/');
-    return separator ? separator + 1 : path;
-}
-
 static bool read_symlink_basename(const char *path, char *destination, size_t size)
 {
     if (!path || !destination || size == 0U) return false;
@@ -154,7 +147,7 @@ static bool read_symlink_basename(const char *path, char *destination, size_t si
         return false;
     }
     link[length] = '\0';
-    lsm_copy_string(destination, size, path_basename(link));
+    lsm_copy_string(destination, size, lsm_path_basename(link));
     return destination[0] != '\0';
 }
 
@@ -706,7 +699,7 @@ static void resolve_block_identity(LsmSystemSources *sources,
 
     char canonical[LSM_PATH_LEN];
     if (!lsm_realpath_copy(link, canonical, sizeof(canonical))) return;
-    const char *name = path_basename(canonical);
+    const char *name = lsm_path_basename(canonical);
     if (block_name && block_name_size)
         lsm_copy_string(block_name, block_name_size, name);
 
@@ -723,7 +716,7 @@ static void resolve_block_identity(LsmSystemSources *sources,
     if (!separator) return;
     *separator = '\0';
     if (parent && parent_size)
-        lsm_copy_string(parent, parent_size, path_basename(parent_path));
+        lsm_copy_string(parent, parent_size, lsm_path_basename(parent_path));
 }
 
 typedef struct {
@@ -843,7 +836,7 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
             char *separator = strrchr(parent_path, '/');
             if (!separator) continue;
             *separator = '\0';
-            lsm_copy_string(parent_name, sizeof(parent_name), path_basename(parent_path));
+            lsm_copy_string(parent_name, sizeof(parent_name), lsm_path_basename(parent_path));
         } else {
             lsm_copy_string(parent_name, sizeof(parent_name), entry->d_name);
         }

@@ -140,12 +140,32 @@ static bool is_nvidia_gpu(const LsmGpuInfo *gpu)
 
 static bool normalise_pci_bus_id(const char *text, char *buffer, size_t size)
 {
-    if (!text || !*text || !buffer || size == 0) return false;
-    unsigned int domain = 0, bus = 0, device = 0, function = 0;
-    if (sscanf(text, "%x:%x:%x.%x", &domain, &bus, &device, &function) != 4)
+    if (!text || !*text || !buffer || size == 0U) return false;
+
+    const char *cursor = text;
+    uint64_t domain = 0U;
+    uint64_t bus = 0U;
+    uint64_t device = 0U;
+    uint64_t function = 0U;
+    if (!lsm_parse_u64_token(&cursor, 16U, &domain) || *cursor != ':')
         return false;
-    snprintf(buffer, size, "%08x:%02x:%02x.%x", domain, bus, device, function);
-    return true;
+    cursor++;
+    if (!lsm_parse_u64_token(&cursor, 16U, &bus) || *cursor != ':')
+        return false;
+    cursor++;
+    if (!lsm_parse_u64_token(&cursor, 16U, &device) || *cursor != '.')
+        return false;
+    cursor++;
+    if (!lsm_parse_u64_token(&cursor, 16U, &function) || *cursor != '\0' ||
+        domain > UINT_MAX || bus > UINT_MAX ||
+        device > UINT_MAX || function > UINT_MAX)
+        return false;
+
+    const int written = snprintf(
+        buffer, size, "%08x:%02x:%02x.%x",
+        (unsigned int)domain, (unsigned int)bus,
+        (unsigned int)device, (unsigned int)function);
+    return written >= 0 && (size_t)written < size;
 }
 
 static bool gpu_pci_bus_id(const LsmGpuInfo *gpu, char *buffer, size_t size)

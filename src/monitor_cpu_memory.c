@@ -208,11 +208,9 @@ static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
                        "/sys/devices/system/cpu/cpu%u/topology/physical_package_id",
                        index);
         if (!lsm_read_text_file(path, value, sizeof(value))) continue;
-        char *end = NULL;
-        errno = 0;
-        const long package = strtol(value, &end, 10);
-        if (errno != 0 || end == value || (*end && *end != '\n') ||
-            package < INT_MIN || package > INT_MAX)
+        int64_t package = 0;
+        if (!infiltratr_parse_i64_range(value, 10U, INT_MIN, INT_MAX,
+                                        &package))
             continue;
         bool known = false;
         for (size_t current = 0U; current < count; current++)
