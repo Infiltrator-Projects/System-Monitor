@@ -833,7 +833,7 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/process-grouping-smoke
 	$(COVERAGE_DIR)/mountinfo-smoke
 	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c > coverage.txt
-	@awk '/^File / { file=$$0 } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; checked++; file="" } END { if (checked != 11) failed=1; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	@awk '/^File .*\\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\\n", file, line; if ((line + 0) < 65) failed=1; checked++; file="" } END { if (checked != 11) failed=1; exit failed }' $(COVERAGE_DIR)/coverage.txt
 	@echo "Deterministic core line-coverage gate passed."
 
 task-manager-layout-smoke: | $(BUILD_DIR)
