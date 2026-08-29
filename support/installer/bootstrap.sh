@@ -63,18 +63,10 @@ if [[ -z "$compiler" ]] || ((make_missing)); then
 fi
 
 pkg_config=$(command -v pkg-config 2>/dev/null || command -v pkgconf 2>/dev/null || true)
-if [[ -z "$pkg_config" ]]; then
-    missing+=("pkg-config or pkgconf" "GTK 3.22 development files")
-    packages+=(pkg-config libgtk-3-dev)
-elif ! "$pkg_config" --exists 'gtk+-3.0 >= 3.22' >/dev/null 2>&1; then
-    missing+=("GTK 3.22 development files")
-    packages+=(libgtk-3-dev)
-fi
-
-if [[ ! -r /usr/include/bluetooth/bluetooth.h ||
-      ! -r /usr/include/bluetooth/hci.h ]]; then
-    missing+=("BlueZ Bluetooth development headers")
-    packages+=(libbluetooth-dev)
+if [[ -z "$pkg_config" ]] ||
+   ! "$pkg_config" --exists 'gtk+-3.0 >= 3.22' bluez >/dev/null 2>&1; then
+    missing+=("pkg-config, GTK 3.22 or BlueZ development files")
+    packages+=(pkg-config libgtk-3-dev libbluetooth-dev)
 fi
 
 dpkg_missing=0
