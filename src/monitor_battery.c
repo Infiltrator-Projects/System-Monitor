@@ -262,6 +262,49 @@ static void merge_bluez_batteries(LsmMonitor *monitor)
     }
 }
 
+void lsm_bluetooth_enumerate(LsmMonitor *monitor)
+{
+    if (!monitor) return;
+    LsmBluetoothAdapterRecord records[LSM_BLUETOOTH_ADAPTER_MAX] = {0};
+    const size_t count = lsm_bluetooth_adapter_snapshot(
+        records, LSM_BLUETOOTH_ADAPTER_MAX);
+
+    monitor->bluetooth_count = count < LSM_MAX_BLUETOOTH
+        ? count : LSM_MAX_BLUETOOTH;
+    for (size_t index = 0U; index < monitor->bluetooth_count; index++) {
+        const LsmBluetoothAdapterRecord *source = &records[index];
+        LsmBluetoothInfo *destination = &monitor->bluetooth[index];
+        memset(destination, 0, sizeof(*destination));
+
+        const char *name = strrchr(source->object_path, '/');
+        name = name && name[1] ? name + 1 : source->object_path;
+        lsm_copy_string(destination->name, sizeof(destination->name),
+                        name && name[0] ? name : "Bluetooth");
+        lsm_copy_string(destination->address, sizeof(destination->address),
+                        source->address);
+        lsm_copy_string(destination->adapter_name,
+                        sizeof(destination->adapter_name), source->name);
+        lsm_copy_string(destination->alias, sizeof(destination->alias),
+                        source->alias);
+        lsm_copy_string(destination->connected_devices,
+                        sizeof(destination->connected_devices),
+                        source->connected_names);
+        destination->device_count = source->device_count;
+        destination->connected_count = source->connected_count;
+        destination->paired_count = source->paired_count;
+        destination->trusted_count = source->trusted_count;
+        destination->powered = source->powered;
+        destination->discoverable = source->discoverable;
+        destination->pairable = source->pairable;
+        destination->discovering = source->discovering;
+    }
+    if (monitor->bluetooth_count < LSM_MAX_BLUETOOTH) {
+        memset(&monitor->bluetooth[monitor->bluetooth_count], 0,
+               (LSM_MAX_BLUETOOTH - monitor->bluetooth_count) *
+               sizeof(monitor->bluetooth[0]));
+    }
+}
+
 static void track_hidpp_batteries(const LsmMonitor *monitor)
 {
     const char *devices[LSM_LOGITECH_HIDPP_MAX_DEVICES] = {0};
