@@ -25,6 +25,7 @@ enum {
 #define LSM_COLOUR_MEMORY   "#5c9efa"
 #define LSM_COLOUR_DISK     "#638d1e"
 #define LSM_COLOUR_NETWORK  "#f5628e"
+#define LSM_COLOUR_BLUETOOTH "#4b9cff"
 #define LSM_COLOUR_GPU      "#de68f2"
 #define LSM_COLOUR_GPU_AUX  "#f0a0fa"
 #define LSM_COLOUR_BATTERY  "#d8a62a"
@@ -61,6 +62,7 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app);
 LsmDevicePage *performance_build_memory_page(LsmApp *app);
 LsmDevicePage *performance_build_disk_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index);
+LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_gpu_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_npu_page(LsmApp *app, size_t index);
