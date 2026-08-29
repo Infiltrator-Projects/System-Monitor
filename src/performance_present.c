@@ -449,6 +449,50 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->mid_scale, "%s", mid_scale);
 }
 
+static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
+{
+    LsmBluetoothInfo *adapter = &app->monitor.bluetooth[page->index];
+    LsmBluetoothPageWidgets *widgets = &page->widgets.bluetooth;
+    const double connected = (double)adapter->connected_count;
+
+    lsm_graph_push(page->graph, connected, 0.0, app->runtime.newer_on_right);
+    lsm_graph_push(page->side_graph, connected, 0.0,
+                   app->runtime.newer_on_right);
+
+    lsm_ui_set_label_text(page->button_value, "%u connected",
+                          adapter->connected_count);
+    lsm_ui_set_label_text(page->scale_label, "BlueZ");
+    lsm_ui_set_label_text(widgets->status, "%s",
+                          adapter->powered ? "Powered" : "Powered off");
+    lsm_ui_set_label_text(widgets->connected, "%u",
+                          adapter->connected_count);
+    lsm_ui_set_label_text(widgets->known, "%u", adapter->device_count);
+    lsm_ui_set_label_text(widgets->paired, "%u", adapter->paired_count);
+    lsm_ui_set_label_text(widgets->controller, "%s",
+                          adapter->name[0] ? adapter->name : "N/A");
+    lsm_ui_set_label_text(widgets->address, "%s",
+                          adapter->address[0] ? adapter->address : "N/A");
+    lsm_ui_set_label_text(widgets->adapter_name, "%s",
+                          adapter->adapter_name[0]
+                              ? adapter->adapter_name : "N/A");
+    lsm_ui_set_label_text(widgets->alias, "%s",
+                          adapter->alias[0] ? adapter->alias : "N/A");
+    lsm_ui_set_label_text(widgets->discoverable, "%s",
+                          adapter->discoverable ? "Yes" : "No");
+    lsm_ui_set_label_text(widgets->pairable, "%s",
+                          adapter->pairable ? "Yes" : "No");
+    lsm_ui_set_label_text(widgets->discovering, "%s",
+                          adapter->discovering ? "Yes" : "No");
+    lsm_ui_set_label_text(widgets->trusted, "%u", adapter->trusted_count);
+    lsm_ui_set_label_text(widgets->connected_devices, "%s",
+                          adapter->connected_devices[0]
+                              ? adapter->connected_devices : "None");
+    lsm_ui_set_label_text(widgets->product, "%s",
+                          adapter->alias[0] ? adapter->alias :
+                          (adapter->adapter_name[0]
+                               ? adapter->adapter_name : adapter->name));
+}
+
 static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmGpuInfo *gpu = &app->monitor.gpus[page->index];
@@ -928,6 +972,7 @@ void lsm_performance_present_page(LsmApp *app, LsmDevicePage *page)
         case LSM_PAGE_MEMORY: update_memory_page(app, page); break;
         case LSM_PAGE_DISK: update_disk_page(app, page); break;
         case LSM_PAGE_NETWORK: update_network_page(app, page); break;
+        case LSM_PAGE_BLUETOOTH: update_bluetooth_page(app, page); break;
         case LSM_PAGE_GPU: update_gpu_page(app, page); break;
         case LSM_PAGE_BATTERY: update_battery_page(app, page); break;
         case LSM_PAGE_NPU: update_npu_page(app, page); break;
