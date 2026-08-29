@@ -34,6 +34,8 @@
 #define LSM_MAX_BATTERIES 8
 /** Maximum compute accelerators/NPU devices displayed. */
 #define LSM_MAX_NPUS 16
+/** Maximum local Bluetooth controllers displayed. */
+#define LSM_MAX_BLUETOOTH 4
 /** Maximum populated SMBIOS memory modules retained for presentation. */
 #define LSM_MAX_MEMORY_MODULES 32
 /** Standard short-name buffer size. */
@@ -171,6 +173,23 @@ typedef struct {
     char connection_state[32];      /**< Backend-supplied connection state, normalised for display. */
 } LsmNetInfo;
 
+/** Current state of one local Bluetooth controller. */
+typedef struct {
+    char name[64];                    /**< Kernel/BlueZ controller name, such as hci0. */
+    char address[32];                 /**< Local controller Bluetooth address. */
+    char adapter_name[LSM_NAME_LEN];  /**< BlueZ adapter name. */
+    char alias[LSM_NAME_LEN];         /**< User-visible BlueZ alias. */
+    char connected_devices[512];      /**< Comma-separated connected device names. */
+    unsigned device_count;            /**< Devices known to BlueZ for this adapter. */
+    unsigned connected_count;         /**< Currently connected devices. */
+    unsigned paired_count;            /**< Paired devices. */
+    unsigned trusted_count;           /**< Trusted devices. */
+    bool powered;
+    bool discoverable;
+    bool pairable;
+    bool discovering;
+} LsmBluetoothInfo;
+
 /** Current identity and optional metrics for one graphics adapter. */
 typedef struct {
     char name[LSM_NAME_LEN];
@@ -289,6 +308,8 @@ typedef struct {
     uint64_t topology_generation;       /**< Incremented whenever any displayed device membership changes. */
     LsmNetInfo nets[LSM_MAX_NETS];
     size_t net_count;
+    LsmBluetoothInfo bluetooth[LSM_MAX_BLUETOOTH];
+    size_t bluetooth_count;
     LsmGpuInfo gpus[LSM_MAX_GPUS];
     size_t gpu_count;
     LsmBatteryInfo batteries[LSM_MAX_BATTERIES];
