@@ -140,11 +140,16 @@ void lsm_storage_update(LsmMonitor *monitor, double elapsed,
  */
 void lsm_battery_start(void);
 /**
+ * Rebuild the bounded Bluetooth-controller inventory from cached BlueZ data.
+ *
+ * @param [in,out] monitor Snapshot whose Bluetooth topology is replaced.
+ */
+void lsm_bluetooth_enumerate(LsmMonitor *monitor);
+/**
  * Rebuild the bounded battery inventory from native driver interfaces.
  *
  * @param [in,out] monitor Snapshot whose battery topology is replaced.
  */
-void lsm_bluetooth_enumerate(LsmMonitor *monitor);
 void lsm_battery_enumerate(LsmMonitor *monitor);
 /**
  * Apply current system and peripheral battery telemetry to the snapshot.
