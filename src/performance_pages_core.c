@@ -536,3 +536,97 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index)
     gtk_box_pack_start(GTK_BOX(page->page), details, FALSE, TRUE, 0);
     return page;
 }
+
+
+LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
+{
+    LsmBluetoothInfo *adapter = &app->monitor.bluetooth[index];
+    char stack[96];
+    char friendly[LSM_NAME_LEN + 32];
+    snprintf(stack, sizeof(stack), "bluetooth-%s", adapter->name);
+    performance_numbered_device_name(
+        friendly, sizeof(friendly), "Bluetooth", index,
+        adapter->alias[0] ? adapter->alias :
+        (adapter->adapter_name[0] ? adapter->adapter_name : NULL));
+
+    LsmDevicePage *page = performance_new_page(
+        app, LSM_PAGE_BLUETOOTH, index, stack, friendly, adapter->name);
+    LsmBluetoothPageWidgets *widgets = &page->widgets.bluetooth;
+
+    GtkWidget *header = gtk_grid_new();
+    gtk_widget_set_hexpand(header, TRUE);
+    page->title = gtk_label_new(NULL);
+    char *markup = g_markup_printf_escaped(
+        "<span size='18000' weight='bold'>%s</span>", friendly);
+    gtk_label_set_markup(GTK_LABEL(page->title), markup);
+    g_free(markup);
+    gtk_widget_set_halign(page->title, GTK_ALIGN_START);
+    page->subtitle = gtk_label_new("Connected devices");
+    gtk_widget_set_halign(page->subtitle, GTK_ALIGN_START);
+
+    widgets->product = gtk_label_new(
+        adapter->alias[0] ? adapter->alias :
+        (adapter->adapter_name[0] ? adapter->adapter_name : adapter->name));
+    gtk_widget_set_halign(widgets->product, GTK_ALIGN_END);
+    gtk_label_set_ellipsize(GTK_LABEL(widgets->product), PANGO_ELLIPSIZE_END);
+
+    page->scale_label = gtk_label_new("BlueZ");
+    gtk_widget_set_halign(page->scale_label, GTK_ALIGN_END);
+    gtk_grid_attach(GTK_GRID(header), page->title, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(header), page->subtitle, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(header), widgets->product, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(header), page->scale_label, 1, 1, 1, 1);
+    gtk_widget_set_hexpand(page->title, TRUE);
+    gtk_box_pack_start(GTK_BOX(page->page), header, FALSE, FALSE, 0);
+
+    page->graph = performance_new_primary_graph(FALSE, FALSE, 0.0);
+    lsm_graph_set_colours(
+        page->graph, performance_page_colour(LSM_PAGE_BLUETOOTH), NULL);
+    lsm_graph_set_dynamic_scale(page->graph, 0.0, 1.0);
+    gtk_box_pack_start(GTK_BOX(page->page), page->graph->area, TRUE, TRUE, 0);
+
+    GtkWidget *details = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    GtkWidget *live = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(live), 24);
+    gtk_grid_set_row_spacing(GTK_GRID(live), 5);
+    gtk_grid_attach(GTK_GRID(live),
+                    performance_make_metric_block("Status", &widgets->status),
+                    0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(live),
+                    performance_make_metric_block("Connected", &widgets->connected),
+                    1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(live),
+                    performance_make_metric_block("Known devices", &widgets->known),
+                    0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(live),
+                    performance_make_metric_block("Paired", &widgets->paired),
+                    1, 1, 1, 1);
+
+    GtkWidget *identity = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(identity), 24);
+    gtk_grid_set_row_spacing(GTK_GRID(identity), 4);
+    gtk_widget_set_margin_start(identity, 14);
+    gtk_widget_set_halign(identity, GTK_ALIGN_START);
+    static const char *names[] = {
+        "Controller", "Address", "Adapter name", "Alias", "Discoverable",
+        "Pairable", "Discovering", "Trusted devices", "Connected devices"
+    };
+    GtkWidget **values[] = {
+        &widgets->product, &widgets->address, &widgets->adapter_name,
+        &widgets->alias, &widgets->discoverable, &widgets->pairable,
+        &widgets->discovering, &widgets->trusted, &widgets->connected_devices
+    };
+    for (size_t i = 0U; i < G_N_ELEMENTS(names); i++) {
+        GtkWidget *caption = performance_make_network_caption(names[i]);
+        if (i != 0U)
+            *values[i] = performance_make_network_value(FALSE);
+        gtk_grid_attach(GTK_GRID(identity), caption, 0, (int)i, 1, 1);
+        gtk_grid_attach(GTK_GRID(identity), *values[i], 1, (int)i, 1, 1);
+    }
+
+    gtk_paned_pack1(GTK_PANED(details), live, FALSE, TRUE);
+    gtk_paned_pack2(GTK_PANED(details), identity, TRUE, TRUE);
+    gtk_paned_set_position(GTK_PANED(details), 390);
+    gtk_box_pack_start(GTK_BOX(page->page), details, FALSE, TRUE, 0);
+    return page;
+}
