@@ -663,6 +663,29 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
     }
 }
 
+static bool bluetooth_membership_changed(
+    const LsmBluetoothInfo *old_records, size_t old_count,
+    const LsmMonitor *monitor)
+{
+    if (!monitor || old_count != monitor->bluetooth_count) return true;
+    for (size_t index = 0U; index < monitor->bluetooth_count; index++) {
+        const LsmBluetoothInfo *current = &monitor->bluetooth[index];
+        bool found = false;
+        for (size_t old_index = 0U; old_index < old_count; old_index++) {
+            const LsmBluetoothInfo *old = &old_records[old_index];
+            if ((current->address[0] && old->address[0] &&
+                 strcmp(current->address, old->address) == 0) ||
+                (!current->address[0] && !old->address[0] &&
+                 strcmp(current->name, old->name) == 0)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return true;
+    }
+    return false;
+}
+
 /** Rescan optional hardware while retaining live metric baselines by stable ID. */
 /* Rebuild into temporary arrays, carry forward matching state, then commit. */
 static void refresh_hardware_topology(LsmMonitor *monitor)
@@ -670,19 +693,25 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
     LsmGpuInfo old_gpus[LSM_MAX_GPUS];
     LsmBatteryInfo old_batteries[LSM_MAX_BATTERIES];
     LsmNpuInfo old_npus[LSM_MAX_NPUS];
+    LsmBluetoothInfo old_bluetooth[LSM_MAX_BLUETOOTH];
     const size_t old_gpu_count = monitor->gpu_count;
     const size_t old_battery_count = monitor->battery_count;
     const size_t old_npu_count = monitor->npu_count;
+    const size_t old_bluetooth_count = monitor->bluetooth_count;
     memcpy(old_gpus, monitor->gpus, sizeof(old_gpus));
     memcpy(old_batteries, monitor->batteries, sizeof(old_batteries));
     memcpy(old_npus, monitor->npus, sizeof(old_npus));
+    memcpy(old_bluetooth, monitor->bluetooth, sizeof(old_bluetooth));
 
     enumerate_gpus(monitor);
+    lsm_bluetooth_enumerate(monitor);
     lsm_battery_enumerate(monitor);
     enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
         monitor, old_gpus, old_gpu_count, old_batteries, old_battery_count,
-        old_npus, old_npu_count);
+        old_npus, old_npu_count) ||
+        bluetooth_membership_changed(
+            old_bluetooth, old_bluetooth_count, monitor);
 
     reconcile_gpu_states(monitor);
     synchronise_telemetry_caches(monitor);
