@@ -612,14 +612,13 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
         "Pairable", "Discovering", "Trusted devices", "Connected devices"
     };
     GtkWidget **values[] = {
-        &widgets->product, &widgets->address, &widgets->adapter_name,
+        &widgets->controller, &widgets->address, &widgets->adapter_name,
         &widgets->alias, &widgets->discoverable, &widgets->pairable,
         &widgets->discovering, &widgets->trusted, &widgets->connected_devices
     };
     for (size_t i = 0U; i < G_N_ELEMENTS(names); i++) {
         GtkWidget *caption = performance_make_network_caption(names[i]);
-        if (i != 0U)
-            *values[i] = performance_make_network_value(FALSE);
+        *values[i] = performance_make_network_value(FALSE);
         gtk_grid_attach(GTK_GRID(identity), caption, 0, (int)i, 1, 1);
         gtk_grid_attach(GTK_GRID(identity), *values[i], 1, (int)i, 1, 1);
     }
