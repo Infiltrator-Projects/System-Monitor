@@ -83,12 +83,24 @@ static void append_connected_name(LsmBluetoothAdapterRecord *adapter,
                                   const char *name)
 {
     if (!adapter || !name || !name[0]) return;
-    const size_t used = strlen(adapter->connected_names);
-    if (used >= sizeof(adapter->connected_names) - 1U) return;
-    g_strlcat(adapter->connected_names, used ? ", " : "",
-              sizeof(adapter->connected_names));
-    g_strlcat(adapter->connected_names, name,
-              sizeof(adapter->connected_names));
+
+    size_t used = strlen(adapter->connected_names);
+    const size_t capacity = sizeof(adapter->connected_names);
+    if (used >= capacity - 1U) return;
+
+    if (used != 0U) {
+        if (capacity - used <= 2U) return;
+        adapter->connected_names[used++] = ',';
+        adapter->connected_names[used++] = ' ';
+        adapter->connected_names[used] = '\0';
+    }
+
+    size_t length = strlen(name);
+    const size_t available = capacity - used - 1U;
+    if (length > available) length = available;
+    if (length != 0U)
+        memcpy(adapter->connected_names + used, name, length);
+    adapter->connected_names[used + length] = '\0';
 }
 
 size_t lsm_bluetooth_adapter_parse_objects(
