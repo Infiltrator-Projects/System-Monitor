@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: linux-native
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out source and Common
@@ -89,7 +89,6 @@ jobs:
           fi
 
       - name: Install build dependencies
-        if: runner.environment == 'github-hosted'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -146,3 +145,36 @@ jobs:
           fi
           gzip -cd "$changelog" > "$tmp/debian-changelog"
           dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
+
+  local-native:
+    name: Local Linux / native verification
+    runs-on: linux-native
+    timeout-minutes: 30
+    steps:
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Validate source version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < support/VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+      - name: Verify with CMake and CTest
+        run: |
+          cmake -S . -B build-local -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-local --parallel
+          ctest --test-dir build-local --output-on-failure --parallel
+
+      - name: Verify native Make checks
+        run: make check
+
+      - name: Verify with sanitizers
+        run: make sanitizer-check
+
+      - name: Build release packages without publishing
+        run: make -j2 deb native-installer
