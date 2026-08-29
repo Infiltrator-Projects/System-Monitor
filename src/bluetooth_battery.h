@@ -74,6 +74,13 @@ bool lsm_bluetooth_battery_start(void);
  */
 size_t lsm_bluetooth_battery_snapshot(LsmBluetoothBatteryRecord *records,
                                       size_t capacity);
+/**
+ * Copy the latest cached BlueZ controller records without blocking on D-Bus.
+ *
+ * @param [out] records Caller-owned destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @return Number of controller records copied.
+ */
 size_t lsm_bluetooth_adapter_snapshot(LsmBluetoothAdapterRecord *records,
                                       size_t capacity);
 /**
@@ -93,6 +100,14 @@ void lsm_bluetooth_battery_stop(void);
  * @param [out] records Caller-owned destination array.
  * @param [in] capacity Number of records available in @p records.
  * @return Number of valid Battery1 records written.
+ */
+/**
+ * Parse BlueZ ObjectManager data into controller and connected-device records.
+ *
+ * @param [in] objects BlueZ ObjectManager result variant.
+ * @param [out] records Caller-owned controller destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @return Number of Adapter1 controller records written.
  */
 size_t lsm_bluetooth_adapter_parse_objects(
     GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity);
