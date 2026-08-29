@@ -89,6 +89,7 @@ const char *performance_page_colour(LsmPageType type)
         case LSM_PAGE_MEMORY: return LSM_COLOUR_MEMORY;
         case LSM_PAGE_DISK: return LSM_COLOUR_DISK;
         case LSM_PAGE_NETWORK: return LSM_COLOUR_NETWORK;
+        case LSM_PAGE_BLUETOOTH: return LSM_COLOUR_BLUETOOTH;
         case LSM_PAGE_GPU: return LSM_COLOUR_GPU;
         case LSM_PAGE_BATTERY: return LSM_COLOUR_BATTERY;
         case LSM_PAGE_NPU: return LSM_COLOUR_NPU;
@@ -173,7 +174,8 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     page->side_graph = lsm_graph_new(page->type == LSM_PAGE_NETWORK,
-                                     page->type != LSM_PAGE_NETWORK, 0.0,
+                                     page->type != LSM_PAGE_NETWORK &&
+                                     page->type != LSM_PAGE_BLUETOOTH, 0.0,
                                      LSM_SIDE_GRAPH_WIDTH, LSM_SIDE_GRAPH_HEIGHT);
     lsm_graph_set_compact(page->side_graph, TRUE);
     lsm_graph_set_colours(page->side_graph, performance_page_colour(page->type), performance_page_colour(page->type));
@@ -447,6 +449,7 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     performance_build_memory_page(app);
     for (size_t i = 0; i < app->monitor.disk_count; i++) performance_build_disk_page(app, i);
     for (size_t i = 0; i < app->monitor.net_count; i++) performance_build_network_page(app, i);
+    for (size_t i = 0; i < app->monitor.bluetooth_count; i++) performance_build_bluetooth_page(app, i);
     for (size_t i = 0; i < app->monitor.gpu_count; i++) performance_build_gpu_page(app, i);
     for (size_t i = 0; i < app->monitor.battery_count; i++) performance_build_battery_page(app, i);
     for (size_t i = 0; i < app->monitor.npu_count; i++) performance_build_npu_page(app, i);
@@ -566,6 +569,10 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
     } else if (strncmp(name, "network-", 8) == 0) {
         for (size_t index = 0; index < app->monitor.net_count; index++)
             if (strcmp(app->monitor.nets[index].name, name + 8) == 0) return true;
+    } else if (strncmp(name, "bluetooth-", 10) == 0) {
+        for (size_t index = 0; index < app->monitor.bluetooth_count; index++)
+            if (strcmp(app->monitor.bluetooth[index].name, name + 10) == 0)
+                return true;
     } else if (strncmp(name, "gpu-", 4) == 0) {
         for (size_t index = 0; index < app->monitor.gpu_count; index++) {
             char candidate[96];
