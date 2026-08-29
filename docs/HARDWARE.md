@@ -30,24 +30,39 @@ Network byte counters are sampled directly and converted into rates from monoton
 
 Wireless enrichment uses the Linux Wireless Extensions ioctl ABI directly for fields such as SSID, access-point identity, signal quality, frequency and negotiated bitrate when the driver supports those requests. The cache is short-lived, and a failed refresh invalidates stale descriptive data rather than preserving it indefinitely.
 
-## Bluetooth controllers
+## Bluetooth devices
 
-Bluetooth topology and device identity come from the cached BlueZ ObjectManager
-snapshot, while traffic is sampled independently from the native Linux HCI
-controller ABI. The collector reads the cumulative `byte_rx` and `byte_tx`
-values returned by `HCIGETDEVINFO` for each `hciN` controller and converts
-their deltas to receive/send rates using monotonic elapsed time.
+BlueZ ObjectManager snapshots provide local-controller identity and remote
+`Device1` state. Only currently connected remote devices become Bluetooth
+Performance entries. Each entry is keyed by its owning `hciN` controller and
+remote Bluetooth address, so reconnects and topology reordering do not merge
+different devices.
 
-The HCI counters are 32-bit. A rollback is accepted as wrap only at the narrow
-unsigned-counter boundary; an ordinary rollback, controller reset or power
-cycle establishes a new baseline and publishes a zero rate rather than a false
-throughput spike. A failed HCI read marks traffic unavailable and invalidates
-the baseline so stale values are not shown as live data.
+Exact per-device throughput comes from Linux's read-only HCI monitor channel.
+The monitor stream identifies the controller and direction for ACL, SCO and ISO
+data packets. The collector extracts each packet's HCI connection handle and
+counts its declared data payload bytes. A read-only `HCIGETCONNLIST` snapshot
+maps active handles to remote Bluetooth addresses, allowing traffic to be
+attributed to the corresponding BlueZ device rather than to the controller as
+a whole.
 
-The traffic collector is an in-process kernel interface. It does not launch
-`hcitop`, `btmon` or another command, and it requires no project-owned
-privileged helper. BlueZ development headers are a source-build requirement;
-the installed monitor does not call libbluetooth at runtime for these counters.
+Linux restricts binding the HCI monitor channel to `CAP_NET_RAW`. The packaged
+GUI executable carries only that file capability. At process startup it opens
+and binds the monitor socket, then clears its entire capability set before the
+GTK application or monitoring worker threads are created. The retained socket
+is read-only in this design; no HCI commands, connection changes, resets or
+controller configuration are issued through it. No project helper daemon or
+root GUI is installed.
+
+If the capability is absent or the kernel does not provide the monitor channel,
+Bluetooth identity still works and traffic is explicitly shown as unavailable.
+If capability removal itself fails, startup aborts rather than continuing with
+elevated capability. Counter rollback or a reused HCI handle establishes a new
+baseline instead of generating a false throughput spike.
+
+BlueZ development headers are a source-build requirement. Installed packages
+also depend on `libcap2-bin` so their post-install step can apply the single
+`CAP_NET_RAW` file capability deterministically.
 
 ## GPUs
 

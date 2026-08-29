@@ -24,7 +24,7 @@
 #define LSM_BLUEZ_ADAPTER_INTERFACE "org.bluez.Adapter1"
 #define LSM_BLUEZ_DEVICE_INTERFACE "org.bluez.Device1"
 #define LSM_BLUEZ_BATTERY_INTERFACE "org.bluez.Battery1"
-#define LSM_BLUEZ_REFRESH_SECONDS 10
+#define LSM_BLUEZ_REFRESH_SECONDS 2
 #define LSM_BLUEZ_TIMEOUT_MS 1500
 
 /** Process-wide cache state; the monitor owns exactly one hardware sampler. */
@@ -35,8 +35,10 @@ typedef struct {
     GCancellable *cancellable;
     LsmBluetoothBatteryRecord records[LSM_BLUETOOTH_BATTERY_MAX];
     LsmBluetoothAdapterRecord adapters[LSM_BLUETOOTH_ADAPTER_MAX];
+    LsmBluetoothDeviceRecord devices[LSM_BLUETOOTH_DEVICE_MAX];
     size_t count;
     size_t adapter_count;
+    size_t device_count;
     bool stop_requested;
     bool thread_started;
 } LsmBluetoothBatteryState;
@@ -208,6 +210,86 @@ size_t lsm_bluetooth_adapter_parse_objects(
     return count;
 }
 
+
+size_t lsm_bluetooth_device_parse_objects(
+    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity)
+{
+    if (!objects || !records || capacity == 0U ||
+        !g_variant_is_of_type(objects, G_VARIANT_TYPE("a{oa{sa{sv}}}")))
+        return 0U;
+
+    size_t count = 0U;
+    GVariantIter *object_iterator = g_variant_iter_new(objects);
+    if (!object_iterator) return 0U;
+    const char *object_path = NULL;
+    GVariant *interfaces = NULL;
+    while (count < capacity &&
+           g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
+                               &object_path, &interfaces)) {
+        GVariant *device = g_variant_lookup_value(
+            interfaces, LSM_BLUEZ_DEVICE_INTERFACE,
+            G_VARIANT_TYPE("a{sv}"));
+        if (!device) {
+            g_variant_unref(interfaces);
+            continue;
+        }
+
+        LsmBluetoothDeviceRecord *record = &records[count++];
+        memset(record, 0, sizeof(*record));
+        g_strlcpy(record->object_path, object_path,
+                  sizeof(record->object_path));
+        (void)lookup_object_path(device, "Adapter", record->adapter_path,
+                                 sizeof(record->adapter_path));
+        if (!record->adapter_path[0]) {
+            const char *marker = strstr(object_path, "/dev_");
+            if (marker) {
+                size_t length = (size_t)(marker - object_path);
+                if (length >= sizeof(record->adapter_path))
+                    length = sizeof(record->adapter_path) - 1U;
+                memcpy(record->adapter_path, object_path, length);
+                record->adapter_path[length] = '\0';
+            }
+        }
+        const char *controller = strrchr(record->adapter_path, '/');
+        controller = controller && controller[1]
+            ? controller + 1 : record->adapter_path;
+        g_strlcpy(record->controller,
+                  controller && controller[0] ? controller : "Bluetooth",
+                  sizeof(record->controller));
+
+        (void)lookup_string(device, "Address", record->address,
+                            sizeof(record->address));
+        (void)lookup_string(device, "Name", record->name,
+                            sizeof(record->name));
+        (void)lookup_string(device, "Alias", record->alias,
+                            sizeof(record->alias));
+        (void)lookup_string(device, "AddressType", record->address_type,
+                            sizeof(record->address_type));
+        (void)lookup_string(device, "Icon", record->icon,
+                            sizeof(record->icon));
+        (void)lookup_string(device, "Modalias", record->modalias,
+                            sizeof(record->modalias));
+        (void)lookup_boolean(device, "Connected", &record->connected);
+        (void)lookup_boolean(device, "Paired", &record->paired);
+        (void)lookup_boolean(device, "Trusted", &record->trusted);
+        (void)lookup_boolean(device, "ServicesResolved",
+                             &record->services_resolved);
+        if (!record->alias[0])
+            g_strlcpy(record->alias,
+                      record->name[0] ? record->name : record->address,
+                      sizeof(record->alias));
+        if (!record->name[0])
+            g_strlcpy(record->name,
+                      record->alias[0] ? record->alias : "Bluetooth device",
+                      sizeof(record->name));
+
+        g_variant_unref(device);
+        g_variant_unref(interfaces);
+    }
+    g_variant_iter_free(object_iterator);
+    return count;
+}
+
 size_t lsm_bluetooth_battery_parse_objects(
     GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity)
 {
@@ -299,10 +381,13 @@ static void collect_bluez_snapshot(
     LsmBluetoothBatteryRecord *battery_records, size_t battery_capacity,
     size_t *battery_count,
     LsmBluetoothAdapterRecord *adapter_records, size_t adapter_capacity,
-    size_t *adapter_count)
+    size_t *adapter_count,
+    LsmBluetoothDeviceRecord *device_records, size_t device_capacity,
+    size_t *device_count)
 {
     if (battery_count) *battery_count = 0U;
     if (adapter_count) *adapter_count = 0U;
+    if (device_count) *device_count = 0U;
     GError *error = NULL;
     GDBusConnection *connection =
         g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
@@ -330,6 +415,9 @@ static void collect_bluez_snapshot(
     if (adapter_count)
         *adapter_count = lsm_bluetooth_adapter_parse_objects(
             objects, adapter_records, adapter_capacity);
+    if (device_count)
+        *device_count = lsm_bluetooth_device_parse_objects(
+            objects, device_records, device_capacity);
     g_variant_unref(objects);
     g_variant_unref(reply);
 }
@@ -362,19 +450,24 @@ static void *bluetooth_worker(void *user_data)
 
         LsmBluetoothBatteryRecord records[LSM_BLUETOOTH_BATTERY_MAX] = {0};
         LsmBluetoothAdapterRecord adapters[LSM_BLUETOOTH_ADAPTER_MAX] = {0};
+        LsmBluetoothDeviceRecord devices[LSM_BLUETOOTH_DEVICE_MAX] = {0};
         size_t count = 0U;
         size_t adapter_count = 0U;
+        size_t device_count = 0U;
         collect_bluez_snapshot(
             cancellable, records, LSM_BLUETOOTH_BATTERY_MAX, &count,
-            adapters, LSM_BLUETOOTH_ADAPTER_MAX, &adapter_count);
+            adapters, LSM_BLUETOOTH_ADAPTER_MAX, &adapter_count,
+            devices, LSM_BLUETOOTH_DEVICE_MAX, &device_count);
         g_object_unref(cancellable);
 
         pthread_mutex_lock(&state->mutex);
         if (!state->stop_requested) {
             memcpy(state->records, records, sizeof(records));
             memcpy(state->adapters, adapters, sizeof(adapters));
+            memcpy(state->devices, devices, sizeof(devices));
             state->count = count;
             state->adapter_count = adapter_count;
+            state->device_count = device_count;
             wait_for_next_refresh(state);
         }
         const bool finished = state->stop_requested;
@@ -394,8 +487,10 @@ bool lsm_bluetooth_battery_start(void)
     bluetooth_state.stop_requested = false;
     bluetooth_state.count = 0U;
     bluetooth_state.adapter_count = 0U;
+    bluetooth_state.device_count = 0U;
     memset(bluetooth_state.records, 0, sizeof(bluetooth_state.records));
     memset(bluetooth_state.adapters, 0, sizeof(bluetooth_state.adapters));
+    memset(bluetooth_state.devices, 0, sizeof(bluetooth_state.devices));
     bluetooth_state.cancellable = g_cancellable_new();
     if (!bluetooth_state.cancellable) {
         pthread_mutex_unlock(&bluetooth_state.mutex);
@@ -438,6 +533,18 @@ size_t lsm_bluetooth_adapter_snapshot(LsmBluetoothAdapterRecord *records,
     return count;
 }
 
+size_t lsm_bluetooth_device_snapshot(LsmBluetoothDeviceRecord *records,
+                                     size_t capacity)
+{
+    if (!records || capacity == 0U) return 0U;
+    pthread_mutex_lock(&bluetooth_state.mutex);
+    size_t count = bluetooth_state.device_count;
+    if (count > capacity) count = capacity;
+    memcpy(records, bluetooth_state.devices, count * sizeof(records[0]));
+    pthread_mutex_unlock(&bluetooth_state.mutex);
+    return count;
+}
+
 void lsm_bluetooth_battery_stop(void)
 {
     pthread_mutex_lock(&bluetooth_state.mutex);
@@ -462,7 +569,9 @@ void lsm_bluetooth_battery_stop(void)
     }
     bluetooth_state.count = 0U;
     bluetooth_state.adapter_count = 0U;
+    bluetooth_state.device_count = 0U;
     memset(bluetooth_state.records, 0, sizeof(bluetooth_state.records));
     memset(bluetooth_state.adapters, 0, sizeof(bluetooth_state.adapters));
+    memset(bluetooth_state.devices, 0, sizeof(bluetooth_state.devices));
     pthread_mutex_unlock(&bluetooth_state.mutex);
 }

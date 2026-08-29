@@ -41,12 +41,12 @@ typedef struct {
     bool initialized;
 } LsmLinuxNetworkState;
 
-/** Linux-only Bluetooth identity and cumulative-counter state. */
+/** Linux-only per-device Bluetooth identity and traffic baseline. */
 typedef struct {
-    char name[64];
+    char controller[64];
     char address[32];
     LsmBluetoothTrafficState accounting;
-} LsmLinuxBluetoothState;
+} LsmLinuxBluetoothDeviceState;
 
 /** Linux-only GPU identity and cumulative-counter state. */
 typedef struct {
@@ -75,8 +75,8 @@ typedef struct {
     size_t disk_count;
     LsmLinuxNetworkState networks[LSM_MAX_NETS];
     size_t network_count;
-    LsmLinuxBluetoothState bluetooth[LSM_MAX_BLUETOOTH];
-    size_t bluetooth_count;
+    LsmLinuxBluetoothDeviceState bluetooth_devices[LSM_MAX_BLUETOOTH_DEVICES];
+    size_t bluetooth_device_count;
     LsmLinuxGpuState gpus[LSM_MAX_GPUS];
     size_t gpu_count;
     LsmLinuxBatteryState batteries[LSM_MAX_BATTERIES];
@@ -150,7 +150,8 @@ void lsm_storage_update(LsmMonitor *monitor, double elapsed,
  */
 void lsm_battery_start(void);
 /**
- * Rebuild the bounded Bluetooth-controller inventory from cached BlueZ data.
+ * Rebuild bounded Bluetooth controller and connected-device inventories from
+ * cached BlueZ data.
  *
  * @param [in,out] monitor Snapshot whose Bluetooth topology is replaced.
  */

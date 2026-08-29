@@ -451,40 +451,41 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
 
 static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
 {
-    LsmBluetoothInfo *adapter = &app->monitor.bluetooth[page->index];
+    LsmBluetoothDeviceInfo *device =
+        &app->monitor.bluetooth_devices[page->index];
     LsmBluetoothPageWidgets *widgets = &page->widgets.bluetooth;
     char receive[64], send[64], received[64], sent[64];
     char scale[64], mid_scale[64], compact_rates[64];
 
-    const double rx_rate = adapter->traffic_available
-        ? adapter->rx_bytes_per_sec : 0.0;
-    const double tx_rate = adapter->traffic_available
-        ? adapter->tx_bytes_per_sec : 0.0;
+    const double rx_rate = device->traffic_available
+        ? device->rx_bytes_per_sec : 0.0;
+    const double tx_rate = device->traffic_available
+        ? device->tx_bytes_per_sec : 0.0;
     lsm_graph_push(page->graph, rx_rate, tx_rate,
                    app->runtime.newer_on_right);
     lsm_graph_push(page->side_graph, rx_rate, tx_rate,
                    app->runtime.newer_on_right);
 
-    if (adapter->traffic_available) {
+    if (device->traffic_available) {
         lsm_metric_format_network(
-            (long double)adapter->rx_bytes_per_sec,
+            (long double)device->rx_bytes_per_sec,
             app->runtime.network_use_bits, true,
             receive, sizeof(receive));
         lsm_metric_format_network(
-            (long double)adapter->tx_bytes_per_sec,
+            (long double)device->tx_bytes_per_sec,
             app->runtime.network_use_bits, true,
             send, sizeof(send));
         lsm_metric_format_network(
-            (long double)adapter->rx_bytes_total,
+            (long double)device->rx_bytes_total,
             app->runtime.network_use_bits, false,
             received, sizeof(received));
         lsm_metric_format_network(
-            (long double)adapter->tx_bytes_total,
+            (long double)device->tx_bytes_total,
             app->runtime.network_use_bits, false,
             sent, sizeof(sent));
         lsm_metric_format_network_pair(
-            (long double)adapter->tx_bytes_per_sec,
-            (long double)adapter->rx_bytes_per_sec,
+            (long double)device->tx_bytes_per_sec,
+            (long double)device->rx_bytes_per_sec,
             app->runtime.network_use_bits,
             compact_rates, sizeof(compact_rates));
         lsm_ui_set_label_text(page->button_value, "%s", compact_rates);
@@ -511,34 +512,35 @@ static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(widgets->sent_total, "%s", sent);
 
     lsm_ui_set_label_text(widgets->status, "%s",
-                          adapter->powered ? "Powered" : "Powered off");
-    lsm_ui_set_label_text(widgets->connected, "%u",
-                          adapter->connected_count);
-    lsm_ui_set_label_text(widgets->known, "%u", adapter->device_count);
-    lsm_ui_set_label_text(widgets->paired, "%u", adapter->paired_count);
+                          device->connected ? "Connected" : "Disconnected");
+    if (device->traffic_available)
+        lsm_ui_set_label_text(widgets->links, "%u", device->link_count);
+    else
+        lsm_ui_set_label_text(widgets->links, "N/A");
+    lsm_ui_set_label_text(widgets->paired, "%s",
+                          device->paired ? "Yes" : "No");
+    lsm_ui_set_label_text(widgets->trusted, "%s",
+                          device->trusted ? "Yes" : "No");
     lsm_ui_set_label_text(widgets->controller, "%s",
-                          adapter->name[0] ? adapter->name : "N/A");
+                          device->controller[0] ? device->controller : "N/A");
     lsm_ui_set_label_text(widgets->address, "%s",
-                          adapter->address[0] ? adapter->address : "N/A");
-    lsm_ui_set_label_text(widgets->adapter_name, "%s",
-                          adapter->adapter_name[0]
-                              ? adapter->adapter_name : "N/A");
+                          device->address[0] ? device->address : "N/A");
+    lsm_ui_set_label_text(widgets->name, "%s",
+                          device->name[0] ? device->name : "N/A");
     lsm_ui_set_label_text(widgets->alias, "%s",
-                          adapter->alias[0] ? adapter->alias : "N/A");
-    lsm_ui_set_label_text(widgets->discoverable, "%s",
-                          adapter->discoverable ? "Yes" : "No");
-    lsm_ui_set_label_text(widgets->pairable, "%s",
-                          adapter->pairable ? "Yes" : "No");
-    lsm_ui_set_label_text(widgets->discovering, "%s",
-                          adapter->discovering ? "Yes" : "No");
-    lsm_ui_set_label_text(widgets->trusted, "%u", adapter->trusted_count);
-    lsm_ui_set_label_text(widgets->connected_devices, "%s",
-                          adapter->connected_devices[0]
-                              ? adapter->connected_devices : "None");
+                          device->alias[0] ? device->alias : "N/A");
+    lsm_ui_set_label_text(widgets->address_type, "%s",
+                          device->address_type[0]
+                              ? device->address_type : "N/A");
+    lsm_ui_set_label_text(widgets->services_resolved, "%s",
+                          device->services_resolved ? "Yes" : "No");
+    lsm_ui_set_label_text(widgets->icon, "%s",
+                          device->icon[0] ? device->icon : "N/A");
+    lsm_ui_set_label_text(widgets->modalias, "%s",
+                          device->modalias[0] ? device->modalias : "N/A");
     lsm_ui_set_label_text(widgets->product, "%s",
-                          adapter->alias[0] ? adapter->alias :
-                          (adapter->adapter_name[0]
-                               ? adapter->adapter_name : adapter->name));
+                          device->controller[0]
+                              ? device->controller : "Bluetooth");
 }
 
 static void update_gpu_page(LsmApp *app, LsmDevicePage *page)

@@ -683,6 +683,7 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	@grep -Fq 'apt_get=/usr/bin/apt-get' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'libgtk-3-dev' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'libbluetooth-dev' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'libcap2-bin' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'build-essential' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' $(INSTALL_BOOTSTRAP)

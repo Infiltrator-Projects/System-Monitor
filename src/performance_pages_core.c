@@ -540,17 +540,18 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index)
 
 LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
 {
-    LsmBluetoothInfo *adapter = &app->monitor.bluetooth[index];
+    LsmBluetoothDeviceInfo *device = &app->monitor.bluetooth_devices[index];
     char stack[96];
     char friendly[LSM_NAME_LEN + 32];
-    snprintf(stack, sizeof(stack), "bluetooth-%s", adapter->name);
+    performance_stable_stack_name(
+        stack, sizeof(stack), "bluetooth", device->address, device->alias);
     performance_numbered_device_name(
         friendly, sizeof(friendly), "Bluetooth", index,
-        adapter->alias[0] ? adapter->alias :
-        (adapter->adapter_name[0] ? adapter->adapter_name : NULL));
+        device->alias[0] ? device->alias :
+        (device->name[0] ? device->name : device->address));
 
     LsmDevicePage *page = performance_new_page(
-        app, LSM_PAGE_BLUETOOTH, index, stack, friendly, adapter->name);
+        app, LSM_PAGE_BLUETOOTH, index, stack, friendly, device->address);
     LsmBluetoothPageWidgets *widgets = &page->widgets.bluetooth;
 
     GtkWidget *header = gtk_grid_new();
@@ -565,8 +566,7 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
     gtk_widget_set_halign(page->subtitle, GTK_ALIGN_START);
 
     widgets->product = gtk_label_new(
-        adapter->alias[0] ? adapter->alias :
-        (adapter->adapter_name[0] ? adapter->adapter_name : adapter->name));
+        device->controller[0] ? device->controller : "Bluetooth");
     gtk_widget_set_halign(widgets->product, GTK_ALIGN_END);
     gtk_label_set_ellipsize(GTK_LABEL(widgets->product), PANGO_ELLIPSIZE_END);
 
@@ -651,13 +651,13 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
                     performance_make_metric_block("Status", &widgets->status),
                     0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(live),
-                    performance_make_metric_block("Connected", &widgets->connected),
+                    performance_make_metric_block("HCI links", &widgets->links),
                     1, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(live),
-                    performance_make_metric_block("Known devices", &widgets->known),
+                    performance_make_metric_block("Paired", &widgets->paired),
                     0, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(live),
-                    performance_make_metric_block("Paired", &widgets->paired),
+                    performance_make_metric_block("Trusted", &widgets->trusted),
                     1, 1, 1, 1);
     gtk_box_pack_start(GTK_BOX(left), live, FALSE, TRUE, 0);
 
@@ -667,13 +667,13 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
     gtk_widget_set_margin_start(identity, 14);
     gtk_widget_set_halign(identity, GTK_ALIGN_START);
     static const char *names[] = {
-        "Controller", "Address", "Adapter name", "Alias", "Discoverable",
-        "Pairable", "Discovering", "Trusted devices", "Connected devices"
+        "Controller", "Address", "Name", "Alias", "Address type",
+        "Services resolved", "Icon", "Modalias"
     };
     GtkWidget **values[] = {
-        &widgets->controller, &widgets->address, &widgets->adapter_name,
-        &widgets->alias, &widgets->discoverable, &widgets->pairable,
-        &widgets->discovering, &widgets->trusted, &widgets->connected_devices
+        &widgets->controller, &widgets->address, &widgets->name,
+        &widgets->alias, &widgets->address_type,
+        &widgets->services_resolved, &widgets->icon, &widgets->modalias
     };
     for (size_t i = 0U; i < G_N_ELEMENTS(names); i++) {
         GtkWidget *caption = performance_make_network_caption(names[i]);

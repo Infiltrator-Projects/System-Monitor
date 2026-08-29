@@ -17,6 +17,7 @@ typedef struct _GVariant GVariant;
 
 #define LSM_BLUETOOTH_BATTERY_MAX 16U
 #define LSM_BLUETOOTH_ADAPTER_MAX 4U
+#define LSM_BLUETOOTH_DEVICE_MAX 32U
 #define LSM_BLUETOOTH_CONNECTED_NAMES_LEN 512U
 #define LSM_BLUETOOTH_ADDRESS_LEN 32U
 #define LSM_BLUETOOTH_NAME_LEN 256U
@@ -39,6 +40,23 @@ typedef struct {
     bool pairable;
     bool discovering;
 } LsmBluetoothAdapterRecord;
+
+/** One BlueZ Device1 record, independent of Battery1 support. */
+typedef struct {
+    char object_path[LSM_BLUETOOTH_PATH_LEN];
+    char adapter_path[LSM_BLUETOOTH_PATH_LEN];
+    char controller[64];
+    char address[LSM_BLUETOOTH_ADDRESS_LEN];
+    char name[LSM_BLUETOOTH_NAME_LEN];
+    char alias[LSM_BLUETOOTH_NAME_LEN];
+    char address_type[32];
+    char icon[LSM_BLUETOOTH_DETAIL_LEN];
+    char modalias[LSM_BLUETOOTH_DETAIL_LEN];
+    bool connected;
+    bool paired;
+    bool trusted;
+    bool services_resolved;
+} LsmBluetoothDeviceRecord;
 
 /** One connected BlueZ device that exports org.bluez.Battery1. */
 typedef struct {
@@ -84,6 +102,15 @@ size_t lsm_bluetooth_battery_snapshot(LsmBluetoothBatteryRecord *records,
 size_t lsm_bluetooth_adapter_snapshot(LsmBluetoothAdapterRecord *records,
                                       size_t capacity);
 /**
+ * Copy cached BlueZ Device1 records without blocking on D-Bus.
+ *
+ * @param [out] records Caller-owned destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @return Number of Device1 records copied.
+ */
+size_t lsm_bluetooth_device_snapshot(LsmBluetoothDeviceRecord *records,
+                                     size_t capacity);
+/**
  * Stop and join the BlueZ snapshot worker.
  *
  * This function is idempotent and leaves no project-owned background process.
@@ -100,6 +127,16 @@ void lsm_bluetooth_battery_stop(void);
  */
 size_t lsm_bluetooth_adapter_parse_objects(
     GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity);
+/**
+ * Parse BlueZ ObjectManager data into bounded Device1 records.
+ *
+ * @param [in] objects BlueZ ObjectManager result variant.
+ * @param [out] records Caller-owned Device1 destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @return Number of Device1 records written.
+ */
+size_t lsm_bluetooth_device_parse_objects(
+    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity);
 /**
  * Parse ObjectManager.GetManagedObjects output into bounded battery records.
  *

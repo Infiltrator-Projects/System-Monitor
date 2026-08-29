@@ -663,80 +663,94 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
     }
 }
 
-static bool bluetooth_state_matches(
-    const LsmLinuxBluetoothState *state, const LsmBluetoothInfo *adapter)
+static bool bluetooth_device_state_matches(
+    const LsmLinuxBluetoothDeviceState *state,
+    const LsmBluetoothDeviceInfo *device)
 {
-    if (!state || !adapter) return false;
-    if (state->address[0] && adapter->address[0])
-        return strcmp(state->address, adapter->address) == 0;
-    return strcmp(state->name, adapter->name) == 0;
+    return state && device &&
+        strcmp(state->controller, device->controller) == 0 &&
+        strcmp(state->address, device->address) == 0;
 }
 
-static LsmLinuxBluetoothState *find_bluetooth_state(
-    LsmLinuxMonitorBackendState *state, const LsmBluetoothInfo *adapter)
+static LsmLinuxBluetoothDeviceState *find_bluetooth_device_state(
+    LsmLinuxMonitorBackendState *state,
+    const LsmBluetoothDeviceInfo *device)
 {
-    if (!state || !adapter) return NULL;
-    for (size_t index = 0U; index < state->bluetooth_count; index++)
-        if (bluetooth_state_matches(&state->bluetooth[index], adapter))
-            return &state->bluetooth[index];
+    if (!state || !device) return NULL;
+    for (size_t index = 0U; index < state->bluetooth_device_count; index++)
+        if (bluetooth_device_state_matches(
+                &state->bluetooth_devices[index], device))
+            return &state->bluetooth_devices[index];
     return NULL;
 }
 
-static void reconcile_bluetooth_states(LsmMonitor *monitor)
+static void reconcile_bluetooth_device_states(LsmMonitor *monitor)
 {
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (!state) return;
 
-    LsmLinuxBluetoothState next[LSM_MAX_BLUETOOTH] = {0};
-    const size_t count = monitor->bluetooth_count < LSM_MAX_BLUETOOTH
-        ? monitor->bluetooth_count : LSM_MAX_BLUETOOTH;
+    LsmLinuxBluetoothDeviceState next[LSM_MAX_BLUETOOTH_DEVICES] = {0};
+    const size_t count =
+        monitor->bluetooth_device_count < LSM_MAX_BLUETOOTH_DEVICES
+            ? monitor->bluetooth_device_count : LSM_MAX_BLUETOOTH_DEVICES;
     for (size_t index = 0U; index < count; index++) {
-        const LsmBluetoothInfo *adapter = &monitor->bluetooth[index];
-        LsmLinuxBluetoothState *old = find_bluetooth_state(state, adapter);
+        const LsmBluetoothDeviceInfo *device =
+            &monitor->bluetooth_devices[index];
+        LsmLinuxBluetoothDeviceState *old =
+            find_bluetooth_device_state(state, device);
         if (old) next[index] = *old;
-        lsm_copy_string(next[index].name, sizeof(next[index].name),
-                        adapter->name);
+        lsm_copy_string(next[index].controller,
+                        sizeof(next[index].controller),
+                        device->controller);
         lsm_copy_string(next[index].address, sizeof(next[index].address),
-                        adapter->address);
+                        device->address);
     }
-    memcpy(state->bluetooth, next, sizeof(next));
-    state->bluetooth_count = count;
+    memcpy(state->bluetooth_devices, next, sizeof(next));
+    state->bluetooth_device_count = count;
 }
 
 static void update_bluetooth_traffic(LsmMonitor *monitor, double elapsed)
 {
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (!state) return;
-    const size_t count = monitor->bluetooth_count < state->bluetooth_count
-        ? monitor->bluetooth_count : state->bluetooth_count;
+
+    for (size_t index = 0U; index < monitor->bluetooth_count; index++)
+        (void)lsm_bluetooth_traffic_refresh_connections(
+            monitor->bluetooth[index].name);
+
+    const size_t count =
+        monitor->bluetooth_device_count < state->bluetooth_device_count
+            ? monitor->bluetooth_device_count
+            : state->bluetooth_device_count;
     for (size_t index = 0U; index < count; index++) {
-        LsmBluetoothInfo *adapter = &monitor->bluetooth[index];
+        LsmBluetoothDeviceInfo *device =
+            &monitor->bluetooth_devices[index];
         LsmBluetoothTrafficCounters counters;
-        if (lsm_bluetooth_traffic_read(adapter->name, &counters)) {
-            lsm_bluetooth_traffic_apply(
-                adapter, &state->bluetooth[index].accounting,
+        if (lsm_bluetooth_traffic_read_device(
+                device->controller, device->address, &counters)) {
+            lsm_bluetooth_traffic_apply_device(
+                device, &state->bluetooth_devices[index].accounting,
                 &counters, elapsed);
         } else {
-            lsm_bluetooth_traffic_mark_unavailable(
-                adapter, &state->bluetooth[index].accounting);
+            lsm_bluetooth_traffic_mark_device_unavailable(
+                device, &state->bluetooth_devices[index].accounting);
         }
     }
 }
 
 static bool bluetooth_membership_changed(
-    const LsmBluetoothInfo *old_records, size_t old_count,
+    const LsmBluetoothDeviceInfo *old_records, size_t old_count,
     const LsmMonitor *monitor)
 {
-    if (!monitor || old_count != monitor->bluetooth_count) return true;
-    for (size_t index = 0U; index < monitor->bluetooth_count; index++) {
-        const LsmBluetoothInfo *current = &monitor->bluetooth[index];
+    if (!monitor || old_count != monitor->bluetooth_device_count) return true;
+    for (size_t index = 0U; index < monitor->bluetooth_device_count; index++) {
+        const LsmBluetoothDeviceInfo *current =
+            &monitor->bluetooth_devices[index];
         bool found = false;
         for (size_t old_index = 0U; old_index < old_count; old_index++) {
-            const LsmBluetoothInfo *old = &old_records[old_index];
-            if ((current->address[0] && old->address[0] &&
-                 strcmp(current->address, old->address) == 0) ||
-                (!current->address[0] && !old->address[0] &&
-                 strcmp(current->name, old->name) == 0)) {
+            const LsmBluetoothDeviceInfo *old = &old_records[old_index];
+            if (strcmp(current->controller, old->controller) == 0 &&
+                strcmp(current->address, old->address) == 0) {
                 found = true;
                 break;
             }
@@ -746,6 +760,7 @@ static bool bluetooth_membership_changed(
     return false;
 }
 
+
 /** Rescan optional hardware while retaining live metric baselines by stable ID. */
 /* Rebuild into temporary arrays, carry forward matching state, then commit. */
 static void refresh_hardware_topology(LsmMonitor *monitor)
@@ -753,26 +768,27 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
     LsmGpuInfo old_gpus[LSM_MAX_GPUS];
     LsmBatteryInfo old_batteries[LSM_MAX_BATTERIES];
     LsmNpuInfo old_npus[LSM_MAX_NPUS];
-    LsmBluetoothInfo old_bluetooth[LSM_MAX_BLUETOOTH];
+    LsmBluetoothDeviceInfo old_bluetooth_devices[LSM_MAX_BLUETOOTH_DEVICES];
     const size_t old_gpu_count = monitor->gpu_count;
     const size_t old_battery_count = monitor->battery_count;
     const size_t old_npu_count = monitor->npu_count;
-    const size_t old_bluetooth_count = monitor->bluetooth_count;
+    const size_t old_bluetooth_device_count = monitor->bluetooth_device_count;
     memcpy(old_gpus, monitor->gpus, sizeof(old_gpus));
     memcpy(old_batteries, monitor->batteries, sizeof(old_batteries));
     memcpy(old_npus, monitor->npus, sizeof(old_npus));
-    memcpy(old_bluetooth, monitor->bluetooth, sizeof(old_bluetooth));
+    memcpy(old_bluetooth_devices, monitor->bluetooth_devices,
+           sizeof(old_bluetooth_devices));
 
     enumerate_gpus(monitor);
     lsm_bluetooth_enumerate(monitor);
-    reconcile_bluetooth_states(monitor);
+    reconcile_bluetooth_device_states(monitor);
     lsm_battery_enumerate(monitor);
     enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
         monitor, old_gpus, old_gpu_count, old_batteries, old_battery_count,
         old_npus, old_npu_count) ||
         bluetooth_membership_changed(
-            old_bluetooth, old_bluetooth_count, monitor);
+            old_bluetooth_devices, old_bluetooth_device_count, monitor);
 
     reconcile_gpu_states(monitor);
     synchronise_telemetry_caches(monitor);

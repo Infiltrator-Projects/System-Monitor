@@ -551,8 +551,8 @@ int main(int argc, char **argv)
         "Architecture: %s\n"
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
         "Homepage: https://github.com/The-First-Infiltrator/System-Monitor\n"
-        "Depends: libc6 (>= %u.%u), libgtk-3-0 (>= 3.22) | "
-        "libgtk-3-0t64 (>= 3.22)\n"
+        "Depends: libc6 (>= %u.%u), libcap2-bin, "
+        "libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
         "Description: native GTK system and hardware monitor for Linux\n"
         " A native C system monitor with performance graphs, process management,\n"
         " storage, network, battery, GPU and NPU telemetry. Hardware collectors use\n"
@@ -564,6 +564,20 @@ int main(int argc, char **argv)
     if (written < 0 || (size_t)written >= sizeof(control))
         fail("control file is too large");
     write_staged("DEBIAN/control", 0644, control);
+
+    const char postinst[] =
+        "#!/bin/sh\n"
+        "set -e\n"
+        "if command -v setcap >/dev/null 2>&1; then\n"
+        "  setcap cap_net_raw=ep /usr/bin/linux-system-monitor || "
+        "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
+        "could not apply CAP_NET_RAW.' >&2\n"
+        "else\n"
+        "  echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
+        "setcap is missing.' >&2\n"
+        "fi\n"
+        "exit 0\n";
+    write_staged("DEBIAN/postinst", 0755, postinst);
 
     /* Package payload metadata and the outer ar archive must use one stable
      * timestamp. dpkg-deb honours SOURCE_DATE_EPOCH for its archive members;

@@ -6,14 +6,14 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.14 ([version file](support/VERSION))\
+**Current source version:** 1.0.15 ([version file](support/VERSION))\
 **Shared foundation:** exact Infiltratr Common 1.15.3 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
 
 ## Design priorities
 
-Linux System Monitor is deliberately a native application rather than an orchestration layer. The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons, shell launchers, privileged collectors or policy changes.
+Linux System Monitor is deliberately a native application rather than an orchestration layer. The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons or shell launchers. The package grants that executable only `CAP_NET_RAW` so startup can bind Linux's read-only HCI monitor channel for exact per-device Bluetooth traffic; the process immediately clears all capabilities before creating the GTK application or monitoring workers.
 
 Collection prefers project-owned C parsers and native kernel/driver interfaces over external commands. Unsupported metrics are presented as unavailable rather than guessed or fabricated. Potentially slow native Performance sampling is isolated from the GTK main thread so temporary kernel I/O or memory pressure cannot freeze the interface.
 
@@ -21,8 +21,8 @@ Storage, memory and network quantities use 1024-based scaling with traditional l
 
 ## Capabilities
 
-- Performance pages for CPU, memory, disks, partitions, networks, Bluetooth controllers, GPUs, batteries and supported NPUs.
-- Bluetooth controller Performance pages graph live HCI receive/send throughput and retain controller/device state from BlueZ.
+- Performance pages for CPU, memory, disks, partitions, networks, connected Bluetooth devices, GPUs, batteries and supported NPUs.
+- Each connected Bluetooth device gets its own receive/send graph, live rates and byte totals; BlueZ supplies device identity while Linux HCI monitor packets are attributed by controller and connection handle.
 - Processes, Application history, Startup, Users, Details, Services and File systems pages.
 - Process inspection, termination, suspend/resume, priority, efficiency mode and CPU-affinity controls.
 - Native hardware identity and telemetry with explicit per-metric availability.
@@ -63,7 +63,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Portability](docs/PORTABILITY.md) and
 On Debian, Ubuntu or Linux Mint:
 
 ```bash
-sudo apt install build-essential git pkg-config libgtk-3-dev libbluetooth-dev
+sudo apt install build-essential git pkg-config libgtk-3-dev libbluetooth-dev libcap2-bin
 git clone --recurse-submodules https://github.com/The-First-Infiltrator/System-Monitor.git
 cd System-Monitor
 make

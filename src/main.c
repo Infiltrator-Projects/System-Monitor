@@ -9,16 +9,27 @@
  */
 #include "app.h"
 #include "app_config.h"
+#include "bluetooth_traffic.h"
 #include <locale.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 int main(int argc, char **argv)
 {
+    const LsmBluetoothTrafficStartResult bluetooth_traffic =
+        lsm_bluetooth_traffic_start();
+    if (bluetooth_traffic == LSM_BLUETOOTH_TRAFFIC_SECURITY_FAILURE) {
+        fputs("Unable to discard Bluetooth capture capability\n", stderr);
+        return EXIT_FAILURE;
+    }
+
     setlocale(LC_ALL, "");
 
-
     LsmApp *app = lsm_app_create();
-    if (!app) return EXIT_FAILURE;
+    if (!app) {
+        lsm_bluetooth_traffic_stop();
+        return EXIT_FAILURE;
+    }
 #if GLIB_CHECK_VERSION(2, 74, 0)
     const GApplicationFlags application_flags = G_APPLICATION_DEFAULT_FLAGS;
 #else
@@ -31,5 +42,6 @@ int main(int argc, char **argv)
     lsm_app_shutdown(app);
     g_object_unref(application);
     lsm_app_free(app);
+    lsm_bluetooth_traffic_stop();
     return status;
 }

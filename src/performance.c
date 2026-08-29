@@ -451,7 +451,8 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     performance_build_memory_page(app);
     for (size_t i = 0; i < app->monitor.disk_count; i++) performance_build_disk_page(app, i);
     for (size_t i = 0; i < app->monitor.net_count; i++) performance_build_network_page(app, i);
-    for (size_t i = 0; i < app->monitor.bluetooth_count; i++) performance_build_bluetooth_page(app, i);
+    for (size_t i = 0; i < app->monitor.bluetooth_device_count; i++)
+        performance_build_bluetooth_page(app, i);
     for (size_t i = 0; i < app->monitor.gpu_count; i++) performance_build_gpu_page(app, i);
     for (size_t i = 0; i < app->monitor.battery_count; i++) performance_build_battery_page(app, i);
     for (size_t i = 0; i < app->monitor.npu_count; i++) performance_build_npu_page(app, i);
@@ -572,9 +573,16 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
         for (size_t index = 0; index < app->monitor.net_count; index++)
             if (strcmp(app->monitor.nets[index].name, name + 8) == 0) return true;
     } else if (strncmp(name, "bluetooth-", 10) == 0) {
-        for (size_t index = 0; index < app->monitor.bluetooth_count; index++)
-            if (strcmp(app->monitor.bluetooth[index].name, name + 10) == 0)
-                return true;
+        for (size_t index = 0; index < app->monitor.bluetooth_device_count;
+             index++) {
+            char candidate[96];
+            const LsmBluetoothDeviceInfo *device =
+                &app->monitor.bluetooth_devices[index];
+            performance_stable_stack_name(
+                candidate, sizeof(candidate), "bluetooth",
+                device->address, device->alias);
+            if (strcmp(candidate, name) == 0) return true;
+        }
     } else if (strncmp(name, "gpu-", 4) == 0) {
         for (size_t index = 0; index < app->monitor.gpu_count; index++) {
             char candidate[96];

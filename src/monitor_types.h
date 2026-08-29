@@ -34,8 +34,10 @@
 #define LSM_MAX_BATTERIES 8
 /** Maximum compute accelerators/NPU devices displayed. */
 #define LSM_MAX_NPUS 16
-/** Maximum local Bluetooth controllers displayed. */
+/** Maximum local Bluetooth controllers retained as parent topology. */
 #define LSM_MAX_BLUETOOTH 4
+/** Maximum simultaneously connected remote Bluetooth devices displayed. */
+#define LSM_MAX_BLUETOOTH_DEVICES 32
 /** Maximum populated SMBIOS memory modules retained for presentation. */
 #define LSM_MAX_MEMORY_MODULES 32
 /** Standard short-name buffer size. */
@@ -195,6 +197,27 @@ typedef struct {
     bool traffic_available;            /**< Native HCI byte counters are currently available. */
 } LsmBluetoothInfo;
 
+/** Current identity and per-link traffic for one connected Bluetooth device. */
+typedef struct {
+    char controller[64];
+    char address[32];
+    char name[LSM_NAME_LEN];
+    char alias[LSM_NAME_LEN];
+    char address_type[32];
+    char icon[64];
+    char modalias[128];
+    uint64_t rx_bytes_total;
+    uint64_t tx_bytes_total;
+    double rx_bytes_per_sec;
+    double tx_bytes_per_sec;
+    unsigned link_count;
+    bool connected;
+    bool paired;
+    bool trusted;
+    bool services_resolved;
+    bool traffic_available;
+} LsmBluetoothDeviceInfo;
+
 /** Current identity and optional metrics for one graphics adapter. */
 typedef struct {
     char name[LSM_NAME_LEN];
@@ -315,6 +338,8 @@ typedef struct {
     size_t net_count;
     LsmBluetoothInfo bluetooth[LSM_MAX_BLUETOOTH];
     size_t bluetooth_count;
+    LsmBluetoothDeviceInfo bluetooth_devices[LSM_MAX_BLUETOOTH_DEVICES];
+    size_t bluetooth_device_count;
     LsmGpuInfo gpus[LSM_MAX_GPUS];
     size_t gpu_count;
     LsmBatteryInfo batteries[LSM_MAX_BATTERIES];

@@ -118,7 +118,7 @@ typedef struct {
     GtkWidget *mid_scale;
 } LsmNetworkPageWidgets;
 
-/** Named Bluetooth-controller page widgets. */
+/** Named connected Bluetooth-device page widgets. */
 typedef struct {
     GtkWidget *receive_rate;
     GtkWidget *received_total;
@@ -126,18 +126,17 @@ typedef struct {
     GtkWidget *sent_total;
     GtkWidget *mid_scale;
     GtkWidget *status;
-    GtkWidget *controller;
-    GtkWidget *connected;
-    GtkWidget *known;
+    GtkWidget *links;
     GtkWidget *paired;
-    GtkWidget *address;
-    GtkWidget *adapter_name;
-    GtkWidget *alias;
-    GtkWidget *discoverable;
-    GtkWidget *pairable;
-    GtkWidget *discovering;
     GtkWidget *trusted;
-    GtkWidget *connected_devices;
+    GtkWidget *controller;
+    GtkWidget *address;
+    GtkWidget *name;
+    GtkWidget *alias;
+    GtkWidget *address_type;
+    GtkWidget *services_resolved;
+    GtkWidget *icon;
+    GtkWidget *modalias;
     GtkWidget *product;
 } LsmBluetoothPageWidgets;
 

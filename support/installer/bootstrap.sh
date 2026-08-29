@@ -69,6 +69,8 @@ if [[ -z "$pkg_config" ]] ||
     packages+=(pkg-config libgtk-3-dev libbluetooth-dev)
 fi
 
+command -v setcap >/dev/null 2>&1 || { missing+=(setcap); packages+=(libcap2-bin); }
+
 dpkg_missing=0
 command -v dpkg >/dev/null 2>&1 || dpkg_missing=1
 command -v dpkg-deb >/dev/null 2>&1 || dpkg_missing=1
