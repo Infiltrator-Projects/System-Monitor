@@ -16,11 +16,29 @@
 typedef struct _GVariant GVariant;
 
 #define LSM_BLUETOOTH_BATTERY_MAX 16U
+#define LSM_BLUETOOTH_ADAPTER_MAX 4U
+#define LSM_BLUETOOTH_CONNECTED_NAMES_LEN 512U
 #define LSM_BLUETOOTH_ADDRESS_LEN 32U
 #define LSM_BLUETOOTH_NAME_LEN 256U
 #define LSM_BLUETOOTH_SOURCE_LEN 96U
 #define LSM_BLUETOOTH_DETAIL_LEN 128U
 #define LSM_BLUETOOTH_PATH_LEN 256U
+
+typedef struct {
+    char object_path[LSM_BLUETOOTH_PATH_LEN];
+    char address[LSM_BLUETOOTH_ADDRESS_LEN];
+    char name[LSM_BLUETOOTH_NAME_LEN];
+    char alias[LSM_BLUETOOTH_NAME_LEN];
+    char connected_names[LSM_BLUETOOTH_CONNECTED_NAMES_LEN];
+    unsigned device_count;
+    unsigned connected_count;
+    unsigned paired_count;
+    unsigned trusted_count;
+    bool powered;
+    bool discoverable;
+    bool pairable;
+    bool discovering;
+} LsmBluetoothAdapterRecord;
 
 /** One connected BlueZ device that exports org.bluez.Battery1. */
 typedef struct {
@@ -56,6 +74,8 @@ bool lsm_bluetooth_battery_start(void);
  */
 size_t lsm_bluetooth_battery_snapshot(LsmBluetoothBatteryRecord *records,
                                       size_t capacity);
+size_t lsm_bluetooth_adapter_snapshot(LsmBluetoothAdapterRecord *records,
+                                      size_t capacity);
 /**
  * Stop and join the BlueZ snapshot worker.
  *
@@ -74,6 +94,8 @@ void lsm_bluetooth_battery_stop(void);
  * @param [in] capacity Number of records available in @p records.
  * @return Number of valid Battery1 records written.
  */
+size_t lsm_bluetooth_adapter_parse_objects(
+    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity);
 size_t lsm_bluetooth_battery_parse_objects(
     GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity);
 
