@@ -150,7 +150,8 @@ set(LSM_MONITOR_CORE_SOURCES
 set(LSM_HARDWARE_MONITOR_SOURCES
     src/monitor_hardware.c
     src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
-    src/monitor_battery.c src/bluetooth_battery.c src/logitech_hidpp.c
+    src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c
+    src/logitech_hidpp.c
     src/logitech_hidpp_protocol.c src/common.c src/memory_hardware.c
     src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c
     src/system_sources.c
@@ -274,6 +275,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         ${LSM_HARDWARE_MONITOR_SOURCES})
     add_executable(lsm-bluetooth-battery-smoke
         support/tests/bluetooth_battery_smoke.c src/bluetooth_battery.c)
+    add_executable(lsm-bluetooth-traffic-smoke
+        support/tests/bluetooth_traffic_smoke.c src/bluetooth_traffic.c)
     add_executable(lsm-bundled-pci-smoke support/tests/bundled_pci_smoke.c
         src/pci_names.c src/pci_names_data.c src/common.c)
     add_executable(lsm-common-smoke support/tests/common_smoke.c src/common.c)
@@ -379,6 +382,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         lsm-backend-smoke
         lsm-battery-smoke
         lsm-bluetooth-battery-smoke
+        lsm-bluetooth-traffic-smoke
         lsm-bundled-pci-smoke
         lsm-common-smoke
         lsm-cpu-direct-smoke
@@ -466,6 +470,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
     target_link_libraries(lsm-bluetooth-battery-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads)
+    target_link_libraries(lsm-bluetooth-traffic-smoke PRIVATE m)
     target_link_libraries(lsm-bundled-pci-smoke PRIVATE m)
     target_link_libraries(lsm-common-smoke PRIVATE m)
     target_link_libraries(lsm-cpu-direct-smoke PRIVATE m)

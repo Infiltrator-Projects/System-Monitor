@@ -30,6 +30,25 @@ Network byte counters are sampled directly and converted into rates from monoton
 
 Wireless enrichment uses the Linux Wireless Extensions ioctl ABI directly for fields such as SSID, access-point identity, signal quality, frequency and negotiated bitrate when the driver supports those requests. The cache is short-lived, and a failed refresh invalidates stale descriptive data rather than preserving it indefinitely.
 
+## Bluetooth controllers
+
+Bluetooth topology and device identity come from the cached BlueZ ObjectManager
+snapshot, while traffic is sampled independently from the native Linux HCI
+controller ABI. The collector reads the cumulative `byte_rx` and `byte_tx`
+values returned by `HCIGETDEVINFO` for each `hciN` controller and converts
+their deltas to receive/send rates using monotonic elapsed time.
+
+The HCI counters are 32-bit. A rollback is accepted as wrap only at the narrow
+unsigned-counter boundary; an ordinary rollback, controller reset or power
+cycle establishes a new baseline and publishes a zero rate rather than a false
+throughput spike. A failed HCI read marks traffic unavailable and invalidates
+the baseline so stale values are not shown as live data.
+
+The traffic collector is an in-process kernel interface. It does not launch
+`hcitop`, `btmon` or another command, and it requires no project-owned
+privileged helper. BlueZ development headers are a source-build requirement;
+the installed monitor does not call libbluetooth at runtime for these counters.
+
 ## GPUs
 
 GPU discovery starts from native DRM/device information and stable driver/device identity. Generic driver-readable sysfs attributes are capability-detected and resolved outside the fast sample path where practical.

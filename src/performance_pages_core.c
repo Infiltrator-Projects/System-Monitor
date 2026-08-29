@@ -561,7 +561,7 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
     gtk_label_set_markup(GTK_LABEL(page->title), markup);
     g_free(markup);
     gtk_widget_set_halign(page->title, GTK_ALIGN_START);
-    page->subtitle = gtk_label_new("Connected devices");
+    page->subtitle = gtk_label_new("Throughput");
     gtk_widget_set_halign(page->subtitle, GTK_ALIGN_START);
 
     widgets->product = gtk_label_new(
@@ -570,22 +570,80 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
     gtk_widget_set_halign(widgets->product, GTK_ALIGN_END);
     gtk_label_set_ellipsize(GTK_LABEL(widgets->product), PANGO_ELLIPSIZE_END);
 
-    page->scale_label = gtk_label_new("BlueZ");
+    page->scale_label = gtk_label_new("16.0 KB/s");
     gtk_widget_set_halign(page->scale_label, GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(header), page->title, 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(header), page->subtitle, 0, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(header), widgets->product, 1, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(header), page->scale_label, 1, 1, 1, 1);
     gtk_widget_set_hexpand(page->title, TRUE);
+    gtk_widget_set_hexpand(page->subtitle, TRUE);
     gtk_box_pack_start(GTK_BOX(page->page), header, FALSE, FALSE, 0);
 
-    page->graph = performance_new_primary_graph(FALSE, FALSE, 0.0);
+    page->graph = performance_new_primary_graph(TRUE, FALSE, 0.0);
     lsm_graph_set_colours(
-        page->graph, performance_page_colour(LSM_PAGE_BLUETOOTH), NULL);
-    lsm_graph_set_dynamic_scale(page->graph, 0.0, 1.0);
-    gtk_box_pack_start(GTK_BOX(page->page), page->graph->area, TRUE, TRUE, 0);
+        page->graph, performance_page_colour(LSM_PAGE_BLUETOOTH),
+        performance_page_colour(LSM_PAGE_BLUETOOTH));
+    lsm_graph_set_dynamic_scale(page->graph, 0.0, 16.0 * 1024.0);
+    lsm_graph_set_midline_emphasis(page->graph, TRUE);
+
+    GtkWidget *graph_row = gtk_grid_new();
+    gtk_widget_set_hexpand(graph_row, TRUE);
+    gtk_widget_set_vexpand(graph_row, TRUE);
+    gtk_grid_attach(GTK_GRID(graph_row), page->graph->area, 0, 0, 1, 1);
+    widgets->mid_scale = gtk_label_new("8.0 KB/s");
+    gtk_widget_set_halign(widgets->mid_scale, GTK_ALIGN_END);
+    gtk_widget_set_valign(widgets->mid_scale, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(widgets->mid_scale, 6);
+    gtk_grid_attach(GTK_GRID(graph_row), widgets->mid_scale, 1, 0, 1, 1);
+    gtk_box_pack_start(GTK_BOX(page->page), graph_row, TRUE, TRUE, 0);
 
     GtkWidget *details = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_widget_set_margin_top(details, 4);
+    GtkWidget *left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+
+    GtkWidget *rates = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(rates), 18);
+    gtk_grid_set_row_spacing(GTK_GRID(rates), 1);
+    gtk_widget_set_margin_bottom(rates, 4);
+
+    GtkWidget *receive_marker = gtk_label_new(NULL);
+    char *marker = g_strdup_printf(
+        "<span size='20000' foreground='%s'>|</span>",
+        performance_page_colour(LSM_PAGE_BLUETOOTH));
+    gtk_label_set_markup(GTK_LABEL(receive_marker), marker);
+    g_free(marker);
+    GtkWidget *send_marker = gtk_label_new(NULL);
+    marker = g_strdup_printf(
+        "<span size='20000' foreground='%s'>¦</span>",
+        performance_page_colour(LSM_PAGE_BLUETOOTH));
+    gtk_label_set_markup(GTK_LABEL(send_marker), marker);
+    g_free(marker);
+
+    widgets->receive_rate = performance_make_network_value(TRUE);
+    widgets->received_total = performance_make_network_value(TRUE);
+    widgets->send_rate = performance_make_network_value(TRUE);
+    widgets->sent_total = performance_make_network_value(TRUE);
+    gtk_grid_attach(GTK_GRID(rates),
+                    performance_make_network_caption("Receive"),
+                    1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates),
+                    performance_make_network_caption("Total Received"),
+                    2, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), receive_marker, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), widgets->receive_rate, 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), widgets->received_total, 2, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates),
+                    performance_make_network_caption("Send"),
+                    1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates),
+                    performance_make_network_caption("Total Sent"),
+                    2, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), send_marker, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), widgets->send_rate, 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(rates), widgets->sent_total, 2, 3, 1, 1);
+    gtk_box_pack_start(GTK_BOX(left), rates, FALSE, TRUE, 0);
+
     GtkWidget *live = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(live), 24);
     gtk_grid_set_row_spacing(GTK_GRID(live), 5);
@@ -601,6 +659,7 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
     gtk_grid_attach(GTK_GRID(live),
                     performance_make_metric_block("Paired", &widgets->paired),
                     1, 1, 1, 1);
+    gtk_box_pack_start(GTK_BOX(left), live, FALSE, TRUE, 0);
 
     GtkWidget *identity = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(identity), 24);
@@ -623,7 +682,7 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index)
         gtk_grid_attach(GTK_GRID(identity), *values[i], 1, (int)i, 1, 1);
     }
 
-    gtk_paned_pack1(GTK_PANED(details), live, FALSE, TRUE);
+    gtk_paned_pack1(GTK_PANED(details), left, FALSE, TRUE);
     gtk_paned_pack2(GTK_PANED(details), identity, TRUE, TRUE);
     gtk_paned_set_position(GTK_PANED(details), 390);
     gtk_box_pack_start(GTK_BOX(page->page), details, FALSE, TRUE, 0);

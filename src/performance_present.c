@@ -453,15 +453,63 @@ static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmBluetoothInfo *adapter = &app->monitor.bluetooth[page->index];
     LsmBluetoothPageWidgets *widgets = &page->widgets.bluetooth;
-    const double connected = (double)adapter->connected_count;
+    char receive[64], send[64], received[64], sent[64];
+    char scale[64], mid_scale[64], compact_rates[64];
 
-    lsm_graph_push(page->graph, connected, 0.0, app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, connected, 0.0,
+    const double rx_rate = adapter->traffic_available
+        ? adapter->rx_bytes_per_sec : 0.0;
+    const double tx_rate = adapter->traffic_available
+        ? adapter->tx_bytes_per_sec : 0.0;
+    lsm_graph_push(page->graph, rx_rate, tx_rate,
+                   app->runtime.newer_on_right);
+    lsm_graph_push(page->side_graph, rx_rate, tx_rate,
                    app->runtime.newer_on_right);
 
-    lsm_ui_set_label_text(page->button_value, "%u connected",
-                          adapter->connected_count);
-    lsm_ui_set_label_text(page->scale_label, "BlueZ");
+    if (adapter->traffic_available) {
+        lsm_metric_format_network(
+            (long double)adapter->rx_bytes_per_sec,
+            app->runtime.network_use_bits, true,
+            receive, sizeof(receive));
+        lsm_metric_format_network(
+            (long double)adapter->tx_bytes_per_sec,
+            app->runtime.network_use_bits, true,
+            send, sizeof(send));
+        lsm_metric_format_network(
+            (long double)adapter->rx_bytes_total,
+            app->runtime.network_use_bits, false,
+            received, sizeof(received));
+        lsm_metric_format_network(
+            (long double)adapter->tx_bytes_total,
+            app->runtime.network_use_bits, false,
+            sent, sizeof(sent));
+        lsm_metric_format_network_pair(
+            (long double)adapter->tx_bytes_per_sec,
+            (long double)adapter->rx_bytes_per_sec,
+            app->runtime.network_use_bits,
+            compact_rates, sizeof(compact_rates));
+        lsm_ui_set_label_text(page->button_value, "%s", compact_rates);
+    } else {
+        snprintf(receive, sizeof(receive), "N/A");
+        snprintf(send, sizeof(send), "N/A");
+        snprintf(received, sizeof(received), "N/A");
+        snprintf(sent, sizeof(sent), "N/A");
+        lsm_ui_set_label_text(page->button_value, "Traffic N/A");
+    }
+
+    const double graph_maximum = lsm_graph_get_maximum(page->graph);
+    lsm_metric_format_network(
+        (long double)graph_maximum,
+        app->runtime.network_use_bits, true, scale, sizeof(scale));
+    lsm_metric_format_network(
+        (long double)(graph_maximum / 2.0),
+        app->runtime.network_use_bits, true, mid_scale, sizeof(mid_scale));
+    lsm_ui_set_label_text(page->scale_label, "%s", scale);
+    lsm_ui_set_label_text(widgets->mid_scale, "%s", mid_scale);
+    lsm_ui_set_label_text(widgets->receive_rate, "%s", receive);
+    lsm_ui_set_label_text(widgets->received_total, "%s", received);
+    lsm_ui_set_label_text(widgets->send_rate, "%s", send);
+    lsm_ui_set_label_text(widgets->sent_total, "%s", sent);
+
     lsm_ui_set_label_text(widgets->status, "%s",
                           adapter->powered ? "Powered" : "Powered off");
     lsm_ui_set_label_text(widgets->connected, "%u",

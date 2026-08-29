@@ -663,6 +663,66 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
     }
 }
 
+static bool bluetooth_state_matches(
+    const LsmLinuxBluetoothState *state, const LsmBluetoothInfo *adapter)
+{
+    if (!state || !adapter) return false;
+    if (state->address[0] && adapter->address[0])
+        return strcmp(state->address, adapter->address) == 0;
+    return strcmp(state->name, adapter->name) == 0;
+}
+
+static LsmLinuxBluetoothState *find_bluetooth_state(
+    LsmLinuxMonitorBackendState *state, const LsmBluetoothInfo *adapter)
+{
+    if (!state || !adapter) return NULL;
+    for (size_t index = 0U; index < state->bluetooth_count; index++)
+        if (bluetooth_state_matches(&state->bluetooth[index], adapter))
+            return &state->bluetooth[index];
+    return NULL;
+}
+
+static void reconcile_bluetooth_states(LsmMonitor *monitor)
+{
+    LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
+    if (!state) return;
+
+    LsmLinuxBluetoothState next[LSM_MAX_BLUETOOTH] = {0};
+    const size_t count = monitor->bluetooth_count < LSM_MAX_BLUETOOTH
+        ? monitor->bluetooth_count : LSM_MAX_BLUETOOTH;
+    for (size_t index = 0U; index < count; index++) {
+        const LsmBluetoothInfo *adapter = &monitor->bluetooth[index];
+        LsmLinuxBluetoothState *old = find_bluetooth_state(state, adapter);
+        if (old) next[index] = *old;
+        lsm_copy_string(next[index].name, sizeof(next[index].name),
+                        adapter->name);
+        lsm_copy_string(next[index].address, sizeof(next[index].address),
+                        adapter->address);
+    }
+    memcpy(state->bluetooth, next, sizeof(next));
+    state->bluetooth_count = count;
+}
+
+static void update_bluetooth_traffic(LsmMonitor *monitor, double elapsed)
+{
+    LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
+    if (!state) return;
+    const size_t count = monitor->bluetooth_count < state->bluetooth_count
+        ? monitor->bluetooth_count : state->bluetooth_count;
+    for (size_t index = 0U; index < count; index++) {
+        LsmBluetoothInfo *adapter = &monitor->bluetooth[index];
+        LsmBluetoothTrafficCounters counters;
+        if (lsm_bluetooth_traffic_read(adapter->name, &counters)) {
+            lsm_bluetooth_traffic_apply(
+                adapter, &state->bluetooth[index].accounting,
+                &counters, elapsed);
+        } else {
+            lsm_bluetooth_traffic_mark_unavailable(
+                adapter, &state->bluetooth[index].accounting);
+        }
+    }
+}
+
 static bool bluetooth_membership_changed(
     const LsmBluetoothInfo *old_records, size_t old_count,
     const LsmMonitor *monitor)
@@ -705,6 +765,7 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
 
     enumerate_gpus(monitor);
     lsm_bluetooth_enumerate(monitor);
+    reconcile_bluetooth_states(monitor);
     lsm_battery_enumerate(monitor);
     enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
@@ -740,6 +801,7 @@ void lsm_hardware_initialise(LsmMonitor *monitor)
 
     lsm_battery_start();
     refresh_hardware_topology(monitor);
+    update_bluetooth_traffic(monitor, 0.0);
     lsm_battery_update(monitor);
     update_npus(monitor, 1.0);
 }
@@ -749,6 +811,7 @@ void lsm_hardware_update(LsmMonitor *monitor, double elapsed,
 {
     if (!monitor) return;
     if (refresh_topology) refresh_hardware_topology(monitor);
+    update_bluetooth_traffic(monitor, elapsed);
     update_gpus(monitor, elapsed);
     if (refresh_batteries) lsm_battery_update(monitor);
     update_npus(monitor, elapsed);

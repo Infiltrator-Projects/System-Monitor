@@ -20,6 +20,7 @@
 #include "monitor_types.h"
 #include "system_sources.h"
 #include "wifi_metadata.h"
+#include "bluetooth_traffic.h"
 
 #include <stdint.h>
 
@@ -39,6 +40,13 @@ typedef struct {
     uint64_t previous_tx;
     bool initialized;
 } LsmLinuxNetworkState;
+
+/** Linux-only Bluetooth identity and cumulative-counter state. */
+typedef struct {
+    char name[64];
+    char address[32];
+    LsmBluetoothTrafficState accounting;
+} LsmLinuxBluetoothState;
 
 /** Linux-only GPU identity and cumulative-counter state. */
 typedef struct {
@@ -67,6 +75,8 @@ typedef struct {
     size_t disk_count;
     LsmLinuxNetworkState networks[LSM_MAX_NETS];
     size_t network_count;
+    LsmLinuxBluetoothState bluetooth[LSM_MAX_BLUETOOTH];
+    size_t bluetooth_count;
     LsmLinuxGpuState gpus[LSM_MAX_GPUS];
     size_t gpu_count;
     LsmLinuxBatteryState batteries[LSM_MAX_BATTERIES];

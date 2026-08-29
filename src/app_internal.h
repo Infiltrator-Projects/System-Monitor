@@ -120,6 +120,11 @@ typedef struct {
 
 /** Named Bluetooth-controller page widgets. */
 typedef struct {
+    GtkWidget *receive_rate;
+    GtkWidget *received_total;
+    GtkWidget *send_rate;
+    GtkWidget *sent_total;
+    GtkWidget *mid_scale;
     GtkWidget *status;
     GtkWidget *controller;
     GtkWidget *connected;

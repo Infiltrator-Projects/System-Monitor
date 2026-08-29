@@ -49,7 +49,8 @@ OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
 HARDWARE_MONITOR_SOURCES := \
 	src/monitor_hardware.c src/hardware_topology.c src/intel_gpu.c \
 	src/npu_telemetry.c \
-	src/monitor_battery.c src/bluetooth_battery.c src/logitech_hidpp.c \
+	src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c \
+	src/logitech_hidpp.c \
 	src/logitech_hidpp_protocol.c src/common.c src/memory_hardware.c \
 	src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c \
 	src/system_sources.c src/pci_names.c src/pci_names_data.c
@@ -201,10 +202,19 @@ check-deps: common-check
 	done
 	@$(PKG_CONFIG) --exists '$(GTK_REQUIREMENT)' || { \
 		echo "Missing GTK 3.22 or newer development files."; \
-		echo "Debian/Ubuntu/Mint/MX/Pop/Zorin: sudo apt install build-essential pkg-config libgtk-3-dev"; \
-		echo "Fedora: sudo dnf install gcc make pkgconf-pkg-config gtk3-devel"; \
-		echo "Arch/Manjaro: sudo pacman -S --needed base-devel pkgconf gtk3"; \
-		echo "openSUSE: sudo zypper install gcc make pkg-config gtk3-devel"; \
+		echo "Debian/Ubuntu/Mint/MX/Pop/Zorin: sudo apt install build-essential pkg-config libgtk-3-dev libbluetooth-dev"; \
+		echo "Fedora: sudo dnf install gcc make pkgconf-pkg-config gtk3-devel bluez-libs-devel"; \
+		echo "Arch/Manjaro: sudo pacman -S --needed base-devel pkgconf gtk3 bluez-libs"; \
+		echo "openSUSE: sudo zypper install gcc make pkg-config gtk3-devel libbluetooth-devel"; \
+		exit 1; \
+	}
+	@printf '#include <bluetooth/bluetooth.h>\n#include <bluetooth/hci.h>\nint main(void){return 0;}\n' | \
+		$(CC) -std=c17 -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo "Missing BlueZ Bluetooth development headers."; \
+		echo "Debian/Ubuntu/Mint/MX/Pop/Zorin: sudo apt install libbluetooth-dev"; \
+		echo "Fedora: sudo dnf install bluez-libs-devel"; \
+		echo "Arch/Manjaro: sudo pacman -S --needed bluez-libs"; \
+		echo "openSUSE: sudo zypper install libbluetooth-devel"; \
 		exit 1; \
 	}
 
@@ -251,7 +261,8 @@ check: style-check docs-check installer-check build-check
 
 build-check: check-deps strict-check portability-check atomic-file-smoke duration-format-smoke infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
 	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
-	smbios-memory-smoke battery-smoke bluetooth-battery-smoke wifi-metadata-smoke \
+	smbios-memory-smoke battery-smoke bluetooth-battery-smoke bluetooth-traffic-smoke \
+	wifi-metadata-smoke \
 	hidpp-smoke nvml-smoke native-command-audit bundled-pci-smoke startup-smoke \
 	dbus-models-smoke application-catalog-smoke process-grouping-smoke \
 	task-manager-layout-smoke process-gpu-smoke disk-accounting-smoke \
@@ -537,6 +548,12 @@ bluetooth-battery-smoke: | $(BUILD_DIR)
 		$(GTK_LIBS) -pthread -o $(BUILD_DIR)/bluetooth-battery-smoke
 	./$(BUILD_DIR)/bluetooth-battery-smoke
 
+bluetooth-traffic-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/bluetooth_traffic_smoke.c src/bluetooth_traffic.c \
+		-lm -o $(BUILD_DIR)/bluetooth-traffic-smoke
+	./$(BUILD_DIR)/bluetooth-traffic-smoke
+
 wifi-metadata-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/wifi_metadata_smoke.c src/wifi_metadata.c src/common.c \
@@ -665,6 +682,7 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	@grep -Fq 'sudo_path=/usr/bin/sudo' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'apt_get=/usr/bin/apt-get' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'libgtk-3-dev' $(INSTALL_BOOTSTRAP)
+	@grep -Fq 'libbluetooth-dev' $(INSTALL_BOOTSTRAP)
 	@grep -Fq 'build-essential' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" update' $(INSTALL_BOOTSTRAP)
 	@grep -Fq '"$$sudo_path" -- "$$apt_get" install -y' $(INSTALL_BOOTSTRAP)

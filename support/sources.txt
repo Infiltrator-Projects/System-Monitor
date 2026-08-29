@@ -53,6 +53,7 @@ intel_gpu.c
 npu_telemetry.c
 monitor_battery.c
 bluetooth_battery.c
+bluetooth_traffic.c
 logitech_hidpp.c
 logitech_hidpp_protocol.c
 common.c

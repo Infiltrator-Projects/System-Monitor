@@ -173,10 +173,12 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
     gtk_widget_set_name(button, "lsm-side-button");
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    page->side_graph = lsm_graph_new(page->type == LSM_PAGE_NETWORK,
-                                     page->type != LSM_PAGE_NETWORK &&
-                                     page->type != LSM_PAGE_BLUETOOTH, 0.0,
-                                     LSM_SIDE_GRAPH_WIDTH, LSM_SIDE_GRAPH_HEIGHT);
+    page->side_graph = lsm_graph_new(
+        page->type == LSM_PAGE_NETWORK ||
+            page->type == LSM_PAGE_BLUETOOTH,
+        page->type != LSM_PAGE_NETWORK &&
+            page->type != LSM_PAGE_BLUETOOTH,
+        0.0, LSM_SIDE_GRAPH_WIDTH, LSM_SIDE_GRAPH_HEIGHT);
     lsm_graph_set_compact(page->side_graph, TRUE);
     lsm_graph_set_colours(page->side_graph, performance_page_colour(page->type), performance_page_colour(page->type));
     gtk_widget_set_valign(page->side_graph->area, GTK_ALIGN_CENTER);

@@ -180,6 +180,10 @@ typedef struct {
     char adapter_name[LSM_NAME_LEN];  /**< BlueZ adapter name. */
     char alias[LSM_NAME_LEN];         /**< User-visible BlueZ alias. */
     char connected_devices[512];      /**< Comma-separated connected device names. */
+    uint64_t rx_bytes_total;           /**< HCI bytes received in the current counter epoch. */
+    uint64_t tx_bytes_total;           /**< HCI bytes transmitted in the current counter epoch. */
+    double rx_bytes_per_sec;           /**< Receive throughput from retained HCI counters. */
+    double tx_bytes_per_sec;           /**< Send throughput from retained HCI counters. */
     unsigned device_count;            /**< Devices known to BlueZ for this adapter. */
     unsigned connected_count;         /**< Currently connected devices. */
     unsigned paired_count;            /**< Paired devices. */
@@ -188,6 +192,7 @@ typedef struct {
     bool discoverable;
     bool pairable;
     bool discovering;
+    bool traffic_available;            /**< Native HCI byte counters are currently available. */
 } LsmBluetoothInfo;
 
 /** Current identity and optional metrics for one graphics adapter. */

@@ -71,6 +71,12 @@ elif ! "$pkg_config" --exists 'gtk+-3.0 >= 3.22' >/dev/null 2>&1; then
     packages+=(libgtk-3-dev)
 fi
 
+if [[ ! -r /usr/include/bluetooth/bluetooth.h ||
+      ! -r /usr/include/bluetooth/hci.h ]]; then
+    missing+=("BlueZ Bluetooth development headers")
+    packages+=(libbluetooth-dev)
+fi
+
 dpkg_missing=0
 command -v dpkg >/dev/null 2>&1 || dpkg_missing=1
 command -v dpkg-deb >/dev/null 2>&1 || dpkg_missing=1
