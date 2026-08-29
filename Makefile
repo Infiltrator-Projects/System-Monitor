@@ -15,7 +15,7 @@ BUILD_PROFILE ?= generic
 
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
-INFILTRATR_COMMON_URL := https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
+INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
 INFILTRATR_COMMON_TAG := v1.15.3
 INFILTRATR_COMMON_COMMIT := 7838188eb3e5293ab37851f25cfe60fa28aa11ec
 INFILTRATR_COMMON_VERSION := 1.15.3

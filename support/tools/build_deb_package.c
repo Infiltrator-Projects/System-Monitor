@@ -550,7 +550,7 @@ int main(int argc, char **argv)
         "Priority: optional\n"
         "Architecture: %s\n"
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
-        "Homepage: https://github.com/The-First-Infiltrator/System-Monitor\n"
+        "Homepage: https://github.com/Infiltrator-Projects/System-Monitor\n"
         "Depends: libc6 (>= %u.%u), libcap2-bin, "
         "libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
         "Description: native GTK system and hardware monitor for Linux\n"

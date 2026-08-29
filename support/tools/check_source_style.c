@@ -743,10 +743,10 @@ static void check_licensing_contract(void)
                         ".license_id = \"GPL-3.0-or-later\"");
     require_file_marker(
         "src/project_info.c",
-        "https://github.com/The-First-Infiltrator/System-Monitor");
+        "https://github.com/Infiltrator-Projects/System-Monitor");
     require_file_marker(
         "support/tools/build_deb_package.c",
-        "https://github.com/The-First-Infiltrator/System-Monitor");
+        "https://github.com/Infiltrator-Projects/System-Monitor");
 }
 
 static void check_engineering_documentation(void)

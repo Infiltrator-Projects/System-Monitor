@@ -38,7 +38,7 @@ int main(void)
     assert(strcmp(info->program_name, "Linux System Monitor") == 0);
     assert(strcmp(info->version, LSM_VERSION) == 0);
     assert(strcmp(info->website,
-                  "https://github.com/The-First-Infiltrator/System-Monitor") == 0);
+                  "https://github.com/Infiltrator-Projects/System-Monitor") == 0);
     assert(strcmp(info->license_id, "GPL-3.0-or-later") == 0);
     assert(strstr(info->comments, expected_build_label(info->build_profile)) != NULL);
 

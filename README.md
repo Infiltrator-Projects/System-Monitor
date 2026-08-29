@@ -2,7 +2,7 @@
 
 # Linux System Monitor
 
-[![Verify](https://github.com/The-First-Infiltrator/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/The-First-Infiltrator/System-Monitor/actions/workflows/ci.yml)
+[![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
@@ -64,7 +64,7 @@ On Debian, Ubuntu or Linux Mint:
 
 ```bash
 sudo apt install build-essential git pkg-config libgtk-3-dev libbluetooth-dev libcap2-bin
-git clone --recurse-submodules https://github.com/The-First-Infiltrator/System-Monitor.git
+git clone --recurse-submodules https://github.com/Infiltrator-Projects/System-Monitor.git
 cd System-Monitor
 make
 ./build/linux-system-monitor

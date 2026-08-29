@@ -30,7 +30,7 @@ Prefer checked sizes, explicit-width integer types where width matters, saturati
 Clone recursively because System Monitor pins Infiltratr Common as a submodule:
 
 ```bash
-git clone --recurse-submodules https://github.com/The-First-Infiltrator/System-Monitor.git
+git clone --recurse-submodules https://github.com/Infiltrator-Projects/System-Monitor.git
 cd System-Monitor
 make check
 ```

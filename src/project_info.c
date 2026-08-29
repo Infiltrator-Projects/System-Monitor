@@ -37,7 +37,7 @@
         .source_id = "linux-system-monitor-" LSM_VERSION,                       \
         .build_profile = LSM_BUILD_PROFILE,                                     \
         .author = "Shannon Smith",                                             \
-        .website = "https://github.com/The-First-Infiltrator/System-Monitor",  \
+        .website = "https://github.com/Infiltrator-Projects/System-Monitor",  \
         .license_id = "GPL-3.0-or-later",                                      \
         .comments = LSM_PROJECT_COMMENTS "\n\nBuild: " BUILD_LABEL,                 \
         .icon_name = LSM_EXECUTABLE_NAME,                                       \

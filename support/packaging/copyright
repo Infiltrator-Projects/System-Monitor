@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Linux System Monitor
 Upstream-Contact: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>
-Source: https://github.com/The-First-Infiltrator/System-Monitor
+Source: https://github.com/Infiltrator-Projects/System-Monitor
 
 Files: *
 Copyright: 2026 Shannon Smith
