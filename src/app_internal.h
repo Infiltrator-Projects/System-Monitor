@@ -32,6 +32,7 @@ typedef enum {
     LSM_PAGE_MEMORY,
     LSM_PAGE_DISK,
     LSM_PAGE_NETWORK,
+    LSM_PAGE_BLUETOOTH,
     LSM_PAGE_GPU,
     LSM_PAGE_BATTERY,
     LSM_PAGE_NPU
@@ -116,6 +117,23 @@ typedef struct {
     GtkWidget *connection_state;
     GtkWidget *mid_scale;
 } LsmNetworkPageWidgets;
+
+/** Named Bluetooth-controller page widgets. */
+typedef struct {
+    GtkWidget *status;
+    GtkWidget *connected;
+    GtkWidget *known;
+    GtkWidget *paired;
+    GtkWidget *address;
+    GtkWidget *adapter_name;
+    GtkWidget *alias;
+    GtkWidget *discoverable;
+    GtkWidget *pairable;
+    GtkWidget *discovering;
+    GtkWidget *trusted;
+    GtkWidget *connected_devices;
+    GtkWidget *product;
+} LsmBluetoothPageWidgets;
 
 /** One selectable Task-Manager-style GPU engine graph. */
 typedef struct {
@@ -218,6 +236,7 @@ typedef union {
     LsmMemoryPageWidgets memory;
     LsmDiskPageWidgets disk;
     LsmNetworkPageWidgets network;
+    LsmBluetoothPageWidgets bluetooth;
     LsmGpuPageWidgets gpu;
     LsmBatteryPageWidgets battery;
     LsmNpuPageWidgets npu;
