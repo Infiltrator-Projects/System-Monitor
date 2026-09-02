@@ -41,12 +41,28 @@ typedef struct {
     size_t device_count;
     bool stop_requested;
     bool thread_started;
+    bool condition_initialized;
 } LsmBluetoothBatteryState;
 
 static LsmBluetoothBatteryState bluetooth_state = {
-    .mutex = PTHREAD_MUTEX_INITIALIZER,
-    .condition = PTHREAD_COND_INITIALIZER
+    .mutex = PTHREAD_MUTEX_INITIALIZER
 };
+
+static bool ensure_condition_locked(void)
+{
+    if (bluetooth_state.condition_initialized) return true;
+    pthread_condattr_t attributes;
+    if (pthread_condattr_init(&attributes) != 0) return false;
+    const int clock_result = pthread_condattr_setclock(
+        &attributes, CLOCK_MONOTONIC);
+    const int condition_result = clock_result == 0
+        ? pthread_cond_init(&bluetooth_state.condition, &attributes)
+        : clock_result;
+    (void)pthread_condattr_destroy(&attributes);
+    if (condition_result != 0) return false;
+    bluetooth_state.condition_initialized = true;
+    return true;
+}
 
 static bool lookup_string(GVariant *properties, const char *key,
                           char *destination, size_t destination_size)
@@ -425,7 +441,7 @@ static void collect_bluez_snapshot(
 static void wait_for_next_refresh(LsmBluetoothBatteryState *state)
 {
     struct timespec deadline;
-    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) return;
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) return;
     deadline.tv_sec += LSM_BLUEZ_REFRESH_SECONDS;
     while (!state->stop_requested) {
         const int result = pthread_cond_timedwait(
@@ -483,6 +499,10 @@ bool lsm_bluetooth_battery_start(void)
     if (bluetooth_state.thread_started) {
         pthread_mutex_unlock(&bluetooth_state.mutex);
         return true;
+    }
+    if (!ensure_condition_locked()) {
+        pthread_mutex_unlock(&bluetooth_state.mutex);
+        return false;
     }
     bluetooth_state.stop_requested = false;
     bluetooth_state.count = 0U;

@@ -73,6 +73,19 @@ static bool csv_needs_formula_escape(const char *text)
     return false;
 }
 
+static void append_spreadsheet_text(GString *destination, const char *text)
+{
+    if (!destination || !text) return;
+    if (csv_needs_formula_escape(text)) g_string_append_c(destination, '\'');
+    for (const unsigned char *cursor = (const unsigned char *)text;
+         *cursor; cursor++) {
+        if (*cursor >= 32U && *cursor != 127U && *cursor != '\t')
+            g_string_append_c(destination, (char)*cursor);
+        else
+            g_string_append_c(destination, ' ');
+    }
+}
+
 static void csv_field(FILE *file, const char *text)
 {
     fputc('"', file);
@@ -168,12 +181,17 @@ void lsm_process_export_copy_selected(const LsmApp *app)
             (void)snprintf(gpu, sizeof(gpu), "%.1f%%", process->gpu_percent);
         else
             (void)snprintf(gpu, sizeof(gpu), "N/A");
-        g_string_append_printf(text,
-            "%s\t%llu\t%s\t%.1f%%\t%s\t%s\t%s\t%s\n",
-            process->name, (unsigned long long)process->pid, process->user,
-            process->cpu_percent, memory, gpu,
-            process->gpu_engine[0] ? process->gpu_engine : "N/A",
-            process->command);
+        append_spreadsheet_text(text, process->name);
+        g_string_append_printf(text, "\t%llu\t",
+                               (unsigned long long)process->pid);
+        append_spreadsheet_text(text, process->user);
+        g_string_append_printf(text, "\t%.1f%%\t%s\t%s\t",
+                               process->cpu_percent, memory, gpu);
+        append_spreadsheet_text(
+            text, process->gpu_engine[0] ? process->gpu_engine : "N/A");
+        g_string_append_c(text, '\t');
+        append_spreadsheet_text(text, process->command);
+        g_string_append_c(text, '\n');
     }
     GtkClipboard *clipboard = gtk_clipboard_get(
         gdk_atom_intern_static_string("CLIPBOARD"));

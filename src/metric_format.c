@@ -3,9 +3,9 @@
  * @file metric_format.c
  * @brief Linux System Monitor compatibility facade over shared formatting.
  *
- * Formatting policy is owned by Infiltratr Common so Calendar Plus and future
- * applications can reuse the same dependency-free implementation. This file
- * preserves the established `lsm_metric_` API for existing monitor call sites.
+ * Shared scalar, memory and storage formatting comes from Infiltratr Common.
+ * System Monitor retains its product-specific decimal network presentation
+ * locally while preserving the established `lsm_metric_` API for callers.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith

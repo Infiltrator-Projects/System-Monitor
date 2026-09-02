@@ -896,7 +896,7 @@ clean:
 
 dist: common-check clean
 	@command -v zip >/dev/null 2>&1 || { \
-		echo "zip is required to create the standard source release." >&2; exit 1; \
+		echo "zip is required to create the optional source archive." >&2; exit 1; \
 	}
 	@tmp=$$(mktemp -d); root="$$tmp/Linux-System-Monitor-$(VERSION)-source"; \
 		mkdir -p "$$root"; \
@@ -908,10 +908,9 @@ dist: common-check clean
 		(cd "$$tmp" && find "Linux-System-Monitor-$(VERSION)-source" -print | \
 			LC_ALL=C sort | zip -X -q "$(CURDIR)/$(SOURCE_ZIP)" -@); \
 		rm -rf "$$tmp"
-	@echo "Created deterministic standard source release: $(SOURCE_ZIP)"
+	@echo "Created deterministic optional source archive: $(SOURCE_ZIP)"
 
 release:
 	$(MAKE) deb
 	$(MAKE) native-installer
-	$(MAKE) dist
-	@echo "Release artifacts created: $(DEB_OUTPUT), linux-system-monitor-$(VERSION)-native-installer.run, $(SOURCE_ZIP)"
+	@echo "Release artifacts created: $(DEB_OUTPUT), linux-system-monitor-$(VERSION)-native-installer.run"

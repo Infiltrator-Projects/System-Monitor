@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file process_export_smoke.c
- * @brief Selected-row CSV escaping and group-selection regression.
+ * @brief Selected-row spreadsheet escaping and group-selection regression.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
