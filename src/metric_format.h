@@ -36,10 +36,10 @@ char *lsm_metric_format_memory_gb(uint64_t bytes, char *buffer, size_t size);
  */
 char *lsm_metric_format_disk_capacity(uint64_t bytes, char *buffer, size_t size);
 /**
- * Format a network byte quantity using 1024-based byte or bit steps.
+ * Format a network byte quantity using decimal network-unit steps.
  *
- * Network presentation begins at KB or Kb, so sub-unit quantities render as
- * zero at that scale. Exact 1024 boundaries advance to the next unit.
+ * Network presentation begins at KB or Kb and scales by 1000, matching
+ * conventional network-rate notation while storage and memory remain base-2.
  *
  * @param [in] bytes Byte quantity or byte-per-second rate.
  * @param [in] use_bits Whether to convert bytes to bits before scaling.
@@ -53,7 +53,7 @@ char *lsm_metric_format_network(long double bytes, bool use_bits,
 /**
  * Format send and receive rates on one compact line using one shared unit.
  *
- * The larger of the two rates chooses the 1024-based display unit so the pair
+ * The larger of the two rates chooses one decimal display unit so the pair
  * remains directly comparable and avoids repeating the suffix in the compact
  * Performance sidebar.
  *
@@ -70,10 +70,9 @@ char *lsm_metric_format_network_pair(long double send_bytes,
 /**
  * Format a negotiated network link rate reported in decimal Mb/s.
  *
- * The backend's decimal-Mb/s value is first converted back to bits/s, then the
- * application applies its 1024-based Kb/Mb/Gb/Tb display policy. Promotion
- * occurs only when the next unit is at least 1.00, so the formatter never
- * produces a 0.xxx value merely to use a larger suffix.
+ * The backend's decimal-Mb/s value is preserved as a decimal network rate.
+ * Values below 1 Mb/s are shown as Kb/s; values at 1000 Mb/s and above are
+ * promoted through Gb/s and Tb/s without binary rescaling.
  *
  * @param [in] megabits_per_second Negotiated decimal-Mb/s rate from backend.
  * @param [out] buffer Caller-owned output buffer.

@@ -15,6 +15,9 @@
 
 #include <infiltratr/format.h>
 
+#include <math.h>
+#include <stdio.h>
+
 char *lsm_metric_format_memory_gb(uint64_t bytes, char *buffer, size_t size)
 {
     return infiltratr_format_memory_gb(bytes, buffer, size);
@@ -25,24 +28,80 @@ char *lsm_metric_format_disk_capacity(uint64_t bytes, char *buffer, size_t size)
     return infiltratr_format_disk_capacity(bytes, buffer, size);
 }
 
+static long double network_value(long double bytes, bool use_bits)
+{
+    if (!isfinite(bytes) || bytes <= 0.0L) return 0.0L;
+    return use_bits ? bytes * 8.0L : bytes;
+}
+
+static char *format_network_value(long double bytes, bool use_bits,
+                                  bool per_second, char *buffer, size_t size)
+{
+    if (!buffer || size == 0U) return buffer;
+    static const char *const byte_units[] = {"KB", "MB", "GB", "TB"};
+    static const char *const bit_units[] = {"Kb", "Mb", "Gb", "Tb"};
+    const char *const *units = use_bits ? bit_units : byte_units;
+    long double value = network_value(bytes, use_bits) / 1000.0L;
+    size_t unit = 0U;
+    while (unit + 1U < 4U && value >= 1000.0L) {
+        value /= 1000.0L;
+        unit++;
+    }
+    (void)snprintf(buffer, size, "%.1Lf %s%s", value, units[unit],
+                   per_second ? "/s" : "");
+    return buffer;
+}
+
 char *lsm_metric_format_network(long double bytes, bool use_bits,
                                 bool per_second, char *buffer, size_t size)
 {
-    return infiltratr_format_network(bytes, use_bits, per_second, buffer, size);
+    return format_network_value(bytes, use_bits, per_second, buffer, size);
 }
 
 char *lsm_metric_format_network_pair(long double send_bytes,
                                      long double receive_bytes, bool use_bits,
                                      char *buffer, size_t size)
 {
-    return infiltratr_format_network_pair(send_bytes, receive_bytes, use_bits,
-                                          buffer, size);
+    if (!buffer || size == 0U) return buffer;
+    static const char *const byte_units[] = {"KB", "MB", "GB", "TB"};
+    static const char *const bit_units[] = {"Kb", "Mb", "Gb", "Tb"};
+    const char *const *units = use_bits ? bit_units : byte_units;
+    const long double send = network_value(send_bytes, use_bits);
+    const long double receive = network_value(receive_bytes, use_bits);
+    const long double largest = send > receive ? send : receive;
+    long double divisor = 1000.0L;
+    size_t unit = 0U;
+    while (unit + 1U < 4U && largest / divisor >= 1000.0L) {
+        divisor *= 1000.0L;
+        unit++;
+    }
+    (void)snprintf(buffer, size, "S:%.1Lf R:%.1Lf %s/s",
+                   send / divisor, receive / divisor, units[unit]);
+    return buffer;
 }
 
 char *lsm_metric_format_link_speed_mbps(double megabits_per_second,
                                         char *buffer, size_t size)
 {
-    return infiltratr_format_link_speed_mbps(megabits_per_second, buffer, size);
+    if (!buffer || size == 0U) return buffer;
+    if (!isfinite(megabits_per_second) || megabits_per_second <= 0.0) {
+        (void)snprintf(buffer, size, "N/A");
+        return buffer;
+    }
+    static const char *const units[] = {"Kb/s", "Mb/s", "Gb/s", "Tb/s"};
+    long double value = (long double)megabits_per_second;
+    size_t unit = 1U;
+    if (value < 1.0L) {
+        value *= 1000.0L;
+        unit = 0U;
+    } else {
+        while (unit + 1U < 4U && value >= 1000.0L) {
+            value /= 1000.0L;
+            unit++;
+        }
+    }
+    (void)snprintf(buffer, size, "%.2Lf %s", value, units[unit]);
+    return buffer;
 }
 
 char *lsm_metric_format_percent(bool available, double value,

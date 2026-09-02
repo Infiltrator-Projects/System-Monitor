@@ -36,8 +36,8 @@ int main(void)
     strcpy(processes[0].command, "one \"quoted\" command");
     processes[1].pid = 11;
     processes[1].instance_id = 101U;
-    strcpy(processes[1].name, "two");
-    strcpy(processes[1].command, "line\nbreak");
+    strcpy(processes[1].name, "=two");
+    strcpy(processes[1].command, "@SUM(1,1)\nline");
     processes[2].pid = 12;
     processes[2].instance_id = 102U;
     strcpy(processes[2].name, "not selected");
@@ -69,7 +69,8 @@ int main(void)
     fclose(file);
     assert(strstr(contents, "\"one, process\""));
     assert(strstr(contents, "one \"\"quoted\"\" command"));
-    assert(strstr(contents, "\"two\",11"));
+    assert(strstr(contents, "\"'=two\",11"));
+    assert(strstr(contents, "\"'@SUM(1,1)line\""));
     assert(!strstr(contents, "not selected"));
     assert(!strstr(contents, "K" "iB"));
 
@@ -83,8 +84,8 @@ int main(void)
     contents[stale_length] = '\0';
     fclose(file);
     assert(strstr(contents, "\"one, process\""));
-    assert(!strstr(contents, "\"two\",11"));
+    assert(!strstr(contents, "\"'=two\",11"));
     unlink(path);
-    puts("Selected process CSV identity, group export and escaping passed.");
+    puts("Selected process CSV identity, group export and spreadsheet escaping passed.");
     return 0;
 }

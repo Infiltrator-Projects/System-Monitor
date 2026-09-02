@@ -62,13 +62,29 @@ typedef struct {
     size_t count;
     bool stop_requested;
     bool thread_started;
+    bool condition_initialized;
 } LsmHidppWorkerState;
 
 static LsmHidppWorkerState hidpp_state = {
     .mutex = PTHREAD_MUTEX_INITIALIZER,
-    .condition = PTHREAD_COND_INITIALIZER,
     .cancel_pipe = {-1, -1}
 };
+
+static bool ensure_worker_condition_locked(void)
+{
+    if (hidpp_state.condition_initialized) return true;
+    pthread_condattr_t attributes;
+    if (pthread_condattr_init(&attributes) != 0) return false;
+    const int clock_result = pthread_condattr_setclock(
+        &attributes, CLOCK_MONOTONIC);
+    const int condition_result = clock_result == 0
+        ? pthread_cond_init(&hidpp_state.condition, &attributes)
+        : clock_result;
+    (void)pthread_condattr_destroy(&attributes);
+    if (condition_result != 0) return false;
+    hidpp_state.condition_initialized = true;
+    return true;
+}
 
 static const char *hidraw_sys_root(void)
 {
@@ -368,7 +384,7 @@ static void timed_worker_wait_locked(double seconds)
 {
     if (seconds < 0.01) seconds = 0.01;
     struct timespec deadline;
-    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) return;
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) return;
     const time_t whole_seconds = (time_t)seconds;
     deadline.tv_sec += whole_seconds;
     deadline.tv_nsec +=
@@ -463,6 +479,10 @@ bool lsm_logitech_hidpp_start(void)
         pthread_mutex_unlock(&hidpp_state.mutex);
         return true;
     }
+    if (!ensure_worker_condition_locked()) {
+        pthread_mutex_unlock(&hidpp_state.mutex);
+        return false;
+    }
 
     hidpp_state.stop_requested = false;
     hidpp_state.count = 0U;
@@ -519,7 +539,8 @@ void lsm_logitech_hidpp_set_devices(const char *const *device_paths,
     }
     memcpy(hidpp_state.devices, updated, sizeof(updated));
     hidpp_state.count = updated_count;
-    pthread_cond_broadcast(&hidpp_state.condition);
+    if (ensure_worker_condition_locked())
+        pthread_cond_broadcast(&hidpp_state.condition);
     pthread_mutex_unlock(&hidpp_state.mutex);
 }
 

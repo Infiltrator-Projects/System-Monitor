@@ -42,7 +42,7 @@ Direct interfaces make the dependency visible in code and allow each platform ba
 
 Persistent/public quantities use explicit-width integer types where width matters. Counter arithmetic must handle rollback, overflow and invalid timing without turning errors into spikes.
 
-Storage, memory and network presentation uses 1024-based scaling with the traditional KB, MB, GB and TB labels used throughout the project.
+Storage and memory presentation uses 1024-based scaling with the traditional KB, MB, GB and TB labels used throughout the project. Network rates and negotiated link speeds use decimal 1000-based scaling while retaining the project's traditional byte/bit labels.
 
 Do not encode host pointer size, byte order or structure padding into file formats or cross-platform contracts without an explicit format definition.
 

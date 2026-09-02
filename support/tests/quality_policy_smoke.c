@@ -41,27 +41,27 @@ int main(void)
                "1.0 MB") != 0)
         return 11;
     if (strcmp(lsm_metric_format_network(
-                   1023.0L, false, true, text, sizeof(text)),
-               "0.0 KB/s") != 0)
+                   1000.0L, false, true, text, sizeof(text)),
+               "1.0 KB/s") != 0)
         return 12;
     if (strcmp(lsm_metric_format_network(
-                   1024.0L, false, true, text, sizeof(text)),
-               "1.0 KB/s") != 0)
+                   1000000.0L, false, true, text, sizeof(text)),
+               "1.0 MB/s") != 0)
         return 13;
     if (strcmp(lsm_metric_format_network(
-                   1048576.0L, false, true, text, sizeof(text)),
-               "1.0 MB/s") != 0)
+                   1000000000.0L, false, true, text, sizeof(text)),
+               "1.0 GB/s") != 0)
         return 14;
     if (strcmp(lsm_metric_format_network(
-                   128.0L, true, true, text, sizeof(text)),
+                   125.0L, true, true, text, sizeof(text)),
                "1.0 Kb/s") != 0)
         return 15;
     if (strcmp(lsm_metric_format_network(
-                   131072.0L, true, true, text, sizeof(text)),
+                   125000.0L, true, true, text, sizeof(text)),
                "1.0 Mb/s") != 0)
         return 16;
     if (strcmp(lsm_metric_format_network(
-                   1073741824.0L, false, false, text, sizeof(text)),
+                   1000000000.0L, false, false, text, sizeof(text)),
                "1.0 GB") != 0)
         return 17;
     if (strcmp(lsm_metric_format_percent(
@@ -73,10 +73,10 @@ int main(void)
                "0%") != 0)
         return 19;
     if (strcmp(lsm_metric_format_link_speed_mbps(10000.0, text, sizeof(text)),
-               "9.77 Gb/s") != 0)
+               "10.00 Gb/s") != 0)
         return 20;
     if (strcmp(lsm_metric_format_link_speed_mbps(1000.0, text, sizeof(text)),
-               "1000.00 Mb/s") != 0)
+               "1.00 Gb/s") != 0)
         return 21;
     if (strcmp(lsm_metric_format_link_speed_mbps(100.0, text, sizeof(text)),
                "100.00 Mb/s") != 0)
@@ -88,12 +88,12 @@ int main(void)
                "N/A") != 0)
         return 24;
     if (strcmp(lsm_metric_format_network_pair(
-                   262144.0L, 1048576.0L, false, text, sizeof(text)),
-               "S:0.2 R:1.0 MB/s") != 0)
+                   250000.0L, 1000000.0L, false, text, sizeof(text)),
+               "S:0.3 R:1.0 MB/s") != 0)
         return 25;
     if (strcmp(lsm_metric_format_network_pair(
-                   39321.6L, 799539.2L, true, text, sizeof(text)),
-               "S:0.3 R:6.1 Mb/s") != 0)
+                   125000.0L, 750000.0L, true, text, sizeof(text)),
+               "S:1.0 R:6.0 Mb/s") != 0)
         return 26;
 
     if (strcmp(lsm_metric_format_ghz(true, 2.2, text, sizeof(text)),

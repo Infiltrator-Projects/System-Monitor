@@ -57,9 +57,26 @@ static size_t selected_count(const LsmApp *app)
     return count;
 }
 
+static bool csv_needs_formula_escape(const char *text)
+{
+    if (!text) return false;
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor) {
+        if (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' ||
+            *cursor == '\n' || *cursor < 32U || *cursor == 127U) {
+            cursor++;
+            continue;
+        }
+        return *cursor == '=' || *cursor == '+' || *cursor == '-' ||
+               *cursor == '@';
+    }
+    return false;
+}
+
 static void csv_field(FILE *file, const char *text)
 {
     fputc('"', file);
+    if (csv_needs_formula_escape(text)) fputc('\'', file);
     if (text) {
         for (const unsigned char *cursor = (const unsigned char *)text;
              *cursor; cursor++) {
