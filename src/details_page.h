@@ -9,6 +9,8 @@
 #ifndef LINUX_SYSTEM_MONITOR_DETAILS_PAGE_H
 #define LINUX_SYSTEM_MONITOR_DETAILS_PAGE_H
 
+#include "monitor_types.h"
+
 #include <gtk/gtk.h>
 
 typedef struct LsmApp LsmApp;
@@ -77,6 +79,18 @@ void lsm_process_group_selection_clear(LsmApp *app);
  * @param [in] active TRUE to start recording; FALSE to stop it.
  */
 void lsm_process_record_set(LsmApp *app, gboolean active);
+/**
+ * Append one current sample to the active process recording.
+ *
+ * Write, flush and stream-close failures stop recording instead of silently
+ * leaving the interface in a false recording state.
+ *
+ * @param [in,out] app Application containing the recording stream.
+ * @param [in] process Current process sample matching the recorded instance.
+ * @return TRUE when the row and flush completed; FALSE otherwise.
+ */
+gboolean lsm_process_record_append(LsmApp *app,
+                                   const LsmProcessInfo *process);
 /**
  * Open details for the currently selected process when one is available.
  *

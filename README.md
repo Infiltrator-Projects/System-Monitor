@@ -23,7 +23,7 @@ Storage and memory use 1024-based scaling with traditional labels: 1 KB = 1024 b
 
 - Performance pages for CPU, memory, disks, partitions, networks, connected Bluetooth devices, GPUs, batteries and supported NPUs.
 - Each connected Bluetooth device gets its own receive/send graph, live rates and byte totals; BlueZ supplies device identity while Linux HCI monitor packets are attributed by controller and connection handle.
-- Processes, Application history, Startup, Users, Details, Services and File systems pages.
+- Processes, bounded Application history, Startup, Users, Details, Services and File systems pages.
 - Process inspection, termination, suspend/resume, priority, efficiency mode and CPU-affinity controls.
 - Native hardware identity and telemetry with explicit per-metric availability.
 - GPU engine telemetry where the active driver exposes a safe native interface.
@@ -80,7 +80,7 @@ make dist
 make release
 ```
 
-`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, a 65% minimum line-coverage floor across 15 selected deterministic core modules, lifecycle stability, package boundaries and installer safety. The coverage result is explicitly scoped and is not presented as a whole-application percentage. CI also runs CMake/CTest and a required 32-bit compile check.
+`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, a 65% minimum line-coverage floor across 16 selected deterministic core modules, lifecycle stability, package boundaries and installer safety. The coverage result is explicitly scoped and is not presented as a whole-application percentage. CI also runs CMake/CTest and a required 32-bit compile check.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 
@@ -130,7 +130,7 @@ This repository uses `main` as its working branch. Development changes are made 
 
 Every push to `main` runs the full Verify workflow. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete Verify workflow succeeds.
 
-The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb` and `.run`, then creates the version tag and GitHub release. Published version tags and releases are immutable release identities.
+The publisher checks out the exact tested commit, verifies it is still current `main`, reruns CMake/CTest and Make verification, builds the `.deb` and `.run`, then creates the version tag and GitHub release. Published version tags and releases are immutable release identities. If a later publication step fails, a rerun may resume only an existing tag at that exact verified commit and only when the published `.deb` and `.run` are byte-for-byte identical to the verified rebuild.
 
 Once a version tag exists, further source changes must advance `support/VERSION` before Verify will accept them. This prevents `main` from silently diverging from an already-published release while claiming the same version.
 

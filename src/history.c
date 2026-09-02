@@ -7,6 +7,8 @@
  * identity.  Delta accounting is protected by PID start time so PID reuse
  * cannot transfer counters between unrelated programs.  The history is stored
  * as a compact tab-separated file in the user's configuration directory.
+ * Retained identities are bounded by recency so long-running installations do
+ * not grow the persistence file without limit.
  *
  * Linux does not expose portable per-process network byte counters.  This page
  * therefore records the reliable cross-kernel values: CPU time, active time,
@@ -25,6 +27,7 @@
 
 #include <infiltratr/core.h>
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +48,8 @@ typedef struct {
     int64_t first_seen;
     int64_t last_seen;
 } LsmHistoryEntry;
+
+#define LSM_HISTORY_MAX_ENTRIES 4096U
 
 typedef struct {
     uint64_t cpu_time_nanoseconds;
@@ -82,6 +87,49 @@ static void history_sample_free(gpointer data)
 {
     g_free(data);
 }
+
+static gboolean history_remove_oldest(LsmApp *app)
+{
+    if (!app || !app->history.app_history ||
+        g_hash_table_size(app->history.app_history) == 0U)
+        return FALSE;
+
+    GHashTableIter iterator;
+    gpointer key = NULL;
+    gpointer value = NULL;
+    const char *oldest_key = NULL;
+    int64_t oldest_last_seen = 0;
+    int64_t oldest_first_seen = 0;
+    gboolean found = FALSE;
+
+    g_hash_table_iter_init(&iterator, app->history.app_history);
+    while (g_hash_table_iter_next(&iterator, &key, &value)) {
+        const LsmHistoryEntry *entry = value;
+        if (!found || entry->last_seen < oldest_last_seen ||
+            (entry->last_seen == oldest_last_seen &&
+             entry->first_seen < oldest_first_seen)) {
+            oldest_key = key;
+            oldest_last_seen = entry->last_seen;
+            oldest_first_seen = entry->first_seen;
+            found = TRUE;
+        }
+    }
+    return found ? g_hash_table_remove(app->history.app_history, oldest_key)
+                 : FALSE;
+}
+
+static gboolean history_trim_to_limit(LsmApp *app)
+{
+    gboolean changed = FALSE;
+    while (app && app->history.app_history &&
+           g_hash_table_size(app->history.app_history) >
+               LSM_HISTORY_MAX_ENTRIES) {
+        if (!history_remove_oldest(app)) break;
+        changed = TRUE;
+    }
+    return changed;
+}
+
 
 static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
                               GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
@@ -198,16 +246,21 @@ static void history_load(LsmApp *app)
     }
     g_strfreev(lines);
     g_free(contents);
+    if (history_trim_to_limit(app))
+        app->history.history_dirty = TRUE;
 }
 
-void lsm_history_save(LsmApp *app)
+static int history_save_checked(LsmApp *app)
 {
-    if (!app || !app->history.app_history) return;
-    if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0) return;
+    if (!app || !app->history.app_history || !app->history.history_dirty)
+        return 0;
+    if (g_mkdir_with_parents(app->paths.config_dir, 0700) != 0)
+        return errno ? errno : EIO;
 
     GString *output = g_string_new("# Linux-System-Monitor App History v1\n");
     GHashTableIter iterator;
-    gpointer key, value;
+    gpointer key = NULL;
+    gpointer value = NULL;
     g_hash_table_iter_init(&iterator, app->history.app_history);
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
         (void)key;
@@ -230,10 +283,33 @@ void lsm_history_save(LsmApp *app)
         g_free(safe_identity);
     }
 
-    (void)lsm_atomic_file_write_bytes(app->history.history_path,
-                                      LSM_ATOMIC_FILE_PRIVATE,
-                                      output->str, output->len);
+    const int failure = lsm_atomic_file_write_bytes(
+        app->history.history_path, LSM_ATOMIC_FILE_PRIVATE,
+        output->str, output->len);
     g_string_free(output, TRUE);
+    if (failure == 0) app->history.history_dirty = FALSE;
+    return failure;
+}
+
+void lsm_history_save(LsmApp *app)
+{
+    if (!app) return;
+    const int failure = history_save_checked(app);
+    if (failure == 0) {
+        app->history.history_save_error_reported = FALSE;
+        return;
+    }
+
+    if (app->history.history_save_error_reported) return;
+    app->history.history_save_error_reported = TRUE;
+    if (app->shell.window && !app->runtime.shutting_down) {
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to save application history", "%s",
+                          g_strerror(failure));
+    } else {
+        fprintf(stderr, "Linux System Monitor: unable to save application history: %s\n",
+                g_strerror(failure));
+    }
 }
 
 static gboolean history_save_timer(gpointer user_data)
@@ -265,6 +341,12 @@ static LsmHistoryEntry *history_entry_get(LsmApp *app, const LsmProcessInfo *pro
 {
     LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
     if (entry) return entry;
+
+    if (g_hash_table_size(app->history.app_history) >=
+        LSM_HISTORY_MAX_ENTRIES) {
+        if (history_remove_oldest(app))
+            app->history.history_dirty = TRUE;
+    }
 
     entry = g_new0(LsmHistoryEntry, 1);
     entry->key = g_strdup(key);
@@ -362,6 +444,7 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
                                 GUINT_TO_POINTER(app->history.history_generation));
     g_hash_table_destroy(seen_apps);
     g_hash_table_destroy(rss_totals);
+    if (count > 0U) app->history.history_dirty = TRUE;
 
     if (app->history.history_tree && gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) == 2)
         lsm_history_refresh(app);
@@ -422,7 +505,8 @@ static void history_reset(GtkButton *button, gpointer user_data)
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         g_hash_table_remove_all(app->history.app_history);
         g_hash_table_remove_all(app->history.app_history_samples);
-        unlink(app->history.history_path);
+        app->history.history_dirty = TRUE;
+        lsm_history_save(app);
         lsm_history_refresh(app);
     }
     gtk_widget_destroy(dialog);

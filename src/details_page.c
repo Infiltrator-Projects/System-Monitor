@@ -852,35 +852,27 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
         gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
 }
 
-static void append_record_if_needed(LsmApp *app, const LsmProcessInfo *processes, size_t count)
+static void append_record_if_needed(LsmApp *app,
+                                    const LsmProcessInfo *processes,
+                                    size_t count)
 {
     if (!app->process.record_file || app->process.recording_pid <= 1 ||
         app->process.recording_instance_id == 0U)
         return;
     const LsmProcessInfo *found = NULL;
-    for (size_t i = 0; i < count; i++)
-        if (processes[i].pid == app->process.recording_pid &&
-            processes[i].instance_id == app->process.recording_instance_id) {
-            found = &processes[i];
+    for (size_t index = 0U; index < count; index++) {
+        if (processes[index].pid == app->process.recording_pid &&
+            processes[index].instance_id ==
+                app->process.recording_instance_id) {
+            found = &processes[index];
             break;
         }
+    }
     if (!found) {
         lsm_process_record_stop(app);
         return;
     }
-    time_t now = time(NULL);
-    char timestamp[64];
-    struct tm local;
-    localtime_r(&now, &local);
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S%z", &local);
-    fprintf(app->process.record_file,
-            "%s,%llu,%.3f,%.3f,%llu,%llu,%llu,%u\n",
-            timestamp, (unsigned long long)found->pid, found->cpu_percent, found->memory_percent,
-            (unsigned long long)found->rss_bytes,
-            (unsigned long long)found->read_bytes,
-            (unsigned long long)found->write_bytes,
-            found->threads);
-    fflush(app->process.record_file);
+    (void)lsm_process_record_append(app, found);
 }
 
 gboolean lsm_processes_update(gpointer user_data)

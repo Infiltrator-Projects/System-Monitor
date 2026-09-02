@@ -116,7 +116,7 @@ jobs:
           gzip -cd "$changelog" > "$tmp/debian-changelog"
           dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
 
-      - name: Publish immutable release
+      - name: Publish or resume exact immutable release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -131,16 +131,6 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v${version}"
-
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            printf 'Release tag %s already exists; published releases are immutable.\n' "$tag" >&2
-            exit 1
-          fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            printf 'Release %s already exists; published releases are immutable.\n' "$tag" >&2
-            exit 1
-          fi
-
           deb="linux-system-monitor_${version}_amd64.deb"
           installer="linux-system-monitor-${version}-native-installer.run"
           test -f "$deb"
@@ -148,21 +138,52 @@ jobs:
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           ./"$installer" --help >/dev/null
 
-          notes=$(git log -1 --format=%b "$head_commit")
-          if [[ -z "$notes" ]]; then
-            notes="Verified Linux System Monitor ${version} release."
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "$tag")
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Release tag %s points to %s instead of verified commit %s.\n' \
+                "$tag" "$tag_commit" "$head_commit" >&2
+              exit 1
+            fi
+            printf 'Resuming exact existing tag %s at %s.\n' "$tag" "$head_commit"
+          else
+            git tag "$tag" "$head_commit"
+            git push origin "$tag"
           fi
 
-          git tag "$tag" "$head_commit"
-          git push origin "$tag"
-          gh release create "$tag" "$deb" "$installer" \
-            --verify-tag \
-            --target "$head_commit" \
-            --title "Linux System Monitor $version" \
-            --notes "$notes" \
-            --latest
-
           expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+            if [[ "$published_assets" != "$expected_assets" ]]; then
+              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
+                "$tag" >&2
+              exit 1
+            fi
+            tmp=$(mktemp -d)
+            trap 'rm -rf "$tmp"' EXIT
+            gh release download "$tag" --dir "$tmp"
+            cmp -s "$deb" "$tmp/$deb" || {
+              printf 'Published Debian asset differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            cmp -s "$installer" "$tmp/$installer" || {
+              printf 'Published native installer differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            printf 'Resuming exact existing immutable release %s.\n' "$tag"
+          else
+            notes=$(git log -1 --format=%b "$head_commit")
+            if [[ -z "$notes" ]]; then
+              notes="Verified Linux System Monitor ${version} release."
+            fi
+            gh release create "$tag" "$deb" "$installer" \
+              --verify-tag \
+              --target "$head_commit" \
+              --title "Linux System Monitor $version" \
+              --notes "$notes" \
+              --latest
+          fi
+
           published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then
             printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
@@ -208,5 +229,6 @@ jobs:
             sleep 10
           done
 
-          echo "::error::GitHub release was published, but the central APT repository did not advertise $APP_ID $VERSION within 12 minutes."
+          echo "::error::The central APT repository did not advertise $APP_ID $VERSION within 12 minutes."
+          echo "::error::This exact verified release can be safely rerun; matching immutable tag/assets will be resumed and reverified."
           exit 1

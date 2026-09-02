@@ -599,7 +599,7 @@ benchmark: runtime-stability-smoke process-scan-benchmark
 # Sanitizers are a developer/CI gate rather than a universal local-build
 # requirement because some supported toolchains do not ship sanitizer runtimes.
 # The full GTK/GLib lifecycle fixture keeps leak accounting disabled because
-# those libraries retain documented process-global caches. The eight dependency-
+# those libraries retain documented process-global caches. The nine dependency-
 # light fixtures below must also pass LeakSanitizer with leak detection enabled.
 sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
@@ -673,6 +673,14 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/filesystem-inventory-sanitized
+	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		support/tests/quality_policy_smoke.c src/metric_format.c src/refresh_policy.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/quality-policy-sanitized
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		./$(BUILD_DIR)/quality-policy-sanitized
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/application_catalog_smoke.c src/application_catalog.c \
@@ -680,7 +688,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/application-catalog-sanitized
-	@echo "ASan/UBSan passed; LeakSanitizer also passed on eight deterministic core fixtures."
+	@echo "ASan/UBSan passed; LeakSanitizer also passed on nine deterministic core fixtures."
 
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
@@ -861,11 +869,12 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/duration_format.c -o $(COVERAGE_DIR)/duration_format.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/refresh_policy.c -o $(COVERAGE_DIR)/refresh_policy.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/metric_format.c -o $(COVERAGE_DIR)/metric_format.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/filesystem_inventory.c -o $(COVERAGE_DIR)/filesystem_inventory.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_inspection.c -o $(COVERAGE_DIR)/process_inspection.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/mountinfo-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/duration_format_smoke.c $(COVERAGE_DIR)/duration_format.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/duration-format-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c src/metric_format.c $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c $(COVERAGE_DIR)/metric_format.o $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/filesystem_inventory_smoke.c $(COVERAGE_DIR)/filesystem_inventory.o $(COVERAGE_DIR)/mountinfo.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_inspection_smoke.c $(COVERAGE_DIR)/process_inspection.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-inspection-smoke
 	$(COVERAGE_DIR)/cpu-smoke
@@ -883,9 +892,9 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/refresh-policy-smoke
 	$(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(COVERAGE_DIR)/process-inspection-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/duration_format.c ../../src/refresh_policy.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
-	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 15) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
-	@echo "Coverage scope: 15 deterministic core modules, each at least 65%; this is not a whole-application percentage."
+	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/duration_format.c ../../src/refresh_policy.c ../../src/metric_format.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
+	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 16) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	@echo "Coverage scope: 16 deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."
 
 task-manager-layout-smoke: | $(BUILD_DIR)

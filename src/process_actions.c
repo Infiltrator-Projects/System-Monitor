@@ -82,26 +82,37 @@ void lsm_process_group_selection_clear(LsmApp *app)
 }
 
 /* Per-process CSV recording is a UI concern and never changes sampling. */
-static void close_record_file(LsmApp *app)
+static int close_record_file(LsmApp *app)
 {
+    int failure = 0;
     if (app->process.record_file) {
-        fclose(app->process.record_file);
+        if (fclose(app->process.record_file) != 0)
+            failure = errno ? errno : EIO;
         app->process.record_file = NULL;
     }
     app->process.recording_pid = 0;
     app->process.recording_instance_id = 0U;
+    return failure;
+}
+
+static void mark_recording_stopped(LsmApp *app)
+{
+    if (!app || !app->details.process_record_menu_item) return;
+    gtk_menu_item_set_label(GTK_MENU_ITEM(app->details.process_record_menu_item),
+                            "Record selected process");
+    gtk_check_menu_item_set_active(
+        GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item), FALSE);
 }
 
 void lsm_process_record_stop(LsmApp *app)
 {
     if (!app) return;
-    close_record_file(app);
-    if (app->details.process_record_menu_item) {
-        gtk_menu_item_set_label(GTK_MENU_ITEM(app->details.process_record_menu_item),
-                                "Record selected process");
-        gtk_check_menu_item_set_active(
-            GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item), FALSE);
-    }
+    const int failure = close_record_file(app);
+    mark_recording_stopped(app);
+    if (failure != 0 && app->shell.window && !app->runtime.shutting_down)
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to finish process recording", "%s",
+                          g_strerror(failure));
 }
 
 static gchar *selected_process_name(LsmApp *app)
@@ -115,10 +126,7 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
 {
     if (!app) return;
     if (!active) {
-        close_record_file(app);
-        if (app->details.process_record_menu_item)
-            gtk_menu_item_set_label(GTK_MENU_ITEM(app->details.process_record_menu_item),
-                                    "Record selected process");
+        lsm_process_record_stop(app);
         return;
     }
     if (app->process.selected_pid <= 1 ||
@@ -164,9 +172,20 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
                 GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item), FALSE);
         return;
     }
-    fprintf(app->process.record_file,
+    errno = 0;
+    const int header_result = fprintf(app->process.record_file,
         "timestamp,pid,cpu_percent,memory_percent,rss_bytes,read_bytes,write_bytes,threads\n");
-    fflush(app->process.record_file);
+    const int flush_result = header_result >= 0
+        ? fflush(app->process.record_file) : EOF;
+    if (header_result < 0 || flush_result != 0) {
+        const int failure = errno ? errno : EIO;
+        (void)close_record_file(app);
+        mark_recording_stopped(app);
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to start recording", "%s",
+                          g_strerror(failure));
+        return;
+    }
     app->process.recording_pid = app->process.selected_pid;
     app->process.recording_instance_id = app->process.selected_instance_id;
     char label[96];
@@ -175,6 +194,41 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
     if (app->details.process_record_menu_item)
         gtk_menu_item_set_label(GTK_MENU_ITEM(app->details.process_record_menu_item),
                                 label);
+}
+
+gboolean lsm_process_record_append(LsmApp *app,
+                                   const LsmProcessInfo *process)
+{
+    if (!app || !process || !app->process.record_file) return FALSE;
+
+    time_t now = time(NULL);
+    char timestamp[64];
+    struct tm local;
+    localtime_r(&now, &local);
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S%z", &local);
+
+    errno = 0;
+    const int write_result = fprintf(app->process.record_file,
+        "%s,%llu,%.3f,%.3f,%llu,%llu,%llu,%u\n",
+        timestamp, (unsigned long long)process->pid,
+        process->cpu_percent, process->memory_percent,
+        (unsigned long long)process->rss_bytes,
+        (unsigned long long)process->read_bytes,
+        (unsigned long long)process->write_bytes,
+        process->threads);
+    const int flush_result = write_result >= 0
+        ? fflush(app->process.record_file) : EOF;
+    if (write_result >= 0 && flush_result == 0) return TRUE;
+
+    const int failure = errno ? errno : EIO;
+    (void)close_record_file(app);
+    mark_recording_stopped(app);
+    if (app->shell.window && !app->runtime.shutting_down)
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Process recording stopped",
+                          "The recording file could not be written: %s",
+                          g_strerror(failure));
+    return FALSE;
 }
 
 void lsm_process_filters_load(LsmApp *app)
