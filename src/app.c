@@ -23,6 +23,7 @@
 #include "monitor.h"
 #include "performance.h"
 #include "preferences.h"
+#include "process_backend.h"
 #include "process_scanner.h"
 #include "process_inspector.h"
 #include "processes_ui.h"

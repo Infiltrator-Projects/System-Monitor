@@ -271,7 +271,7 @@ static char *sanitise_field(const char *text)
 static void history_mark_dirty(LsmApp *app)
 {
     if (!app) return;
-    if (app->history.history_mutation_generation < UINT64_MAX)
+    if (app->history.history_mutation_generation < UINT_MAX)
         app->history.history_mutation_generation++;
     app->history.history_dirty = TRUE;
 }

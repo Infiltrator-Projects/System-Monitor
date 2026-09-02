@@ -469,9 +469,9 @@ static void process_action_activate(GtkMenuItem *item, gpointer user_data)
             if (app->details.process_record_menu_item)
                 gtk_check_menu_item_set_active(
                     GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item),
-                    app->process.record_file == NULL);
+                    app->process.recorder == NULL);
             else
-                lsm_process_record_set(app, app->process.record_file == NULL);
+                lsm_process_record_set(app, app->process.recorder == NULL);
             break;
         case ACTION_COPY_PID: {
             char pid_text[32];
@@ -537,10 +537,10 @@ GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns)
     GtkWidget *details =
         action_menu_item("Process details", ACTION_DETAILS, app);
     GtkWidget *record =
-        action_menu_item(app->process.record_file ? "Stop recording" : "Record process",
+        action_menu_item(app->process.recorder ? "Stop recording" : "Record process",
                          ACTION_RECORD, app);
     gtk_widget_set_sensitive(details, !grouped);
-    gtk_widget_set_sensitive(record, !grouped || app->process.record_file != NULL);
+    gtk_widget_set_sensitive(record, !grouped || app->process.recorder != NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), details);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), record);
     if (include_columns) {

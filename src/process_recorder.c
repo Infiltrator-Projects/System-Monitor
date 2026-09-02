@@ -108,6 +108,10 @@ static void *recorder_thread_main(void *user_data)
             break;
         }
         RecordNode *node = recorder->head;
+        if (!node) {
+            (void)pthread_mutex_unlock(&recorder->mutex);
+            continue;
+        }
         recorder->head = node->next;
         if (!recorder->head) recorder->tail = NULL;
         if (recorder->queued > 0U) recorder->queued--;
