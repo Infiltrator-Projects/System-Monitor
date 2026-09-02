@@ -51,4 +51,11 @@ void lsm_history_save(LsmApp *app);
  */
 void lsm_history_destroy(LsmApp *app);
 
+#ifdef LSM_HISTORY_TEST_API
+gboolean lsm_history_test_init(LsmApp *app, const char *config_dir);
+guint lsm_history_test_retained_count(const LsmApp *app);
+gboolean lsm_history_test_contains(const LsmApp *app, const char *key);
+void lsm_history_test_dispose(LsmApp *app);
+#endif
+
 #endif

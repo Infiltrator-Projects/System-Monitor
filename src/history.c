@@ -7,8 +7,9 @@
  * identity.  Delta accounting is protected by PID start time so PID reuse
  * cannot transfer counters between unrelated programs.  The history is stored
  * as a compact tab-separated file in the user's configuration directory.
- * Retained identities are bounded by recency so long-running installations do
- * not grow the persistence file without limit.
+ * Retained inactive identities are bounded by recency so long-running
+ * installations do not grow the persistence file without limit. Identities
+ * represented by the current process snapshot are protected from eviction.
  *
  * Linux does not expose portable per-process network byte counters.  This page
  * therefore records the reliable cross-kernel values: CPU time, active time,
@@ -93,39 +94,56 @@ static gboolean remove_history_key(gpointer key, gpointer value,
 {
     (void)value;
     const char *candidate = key;
-    const char *oldest = user_data;
-    return candidate && oldest && strcmp(candidate, oldest) == 0;
+    const char *target = user_data;
+    return candidate && target && strcmp(candidate, target) == 0;
 }
 
-static gboolean history_remove_oldest(LsmApp *app)
+static int history_entry_recency_compare(const LsmHistoryEntry *left,
+                                         const LsmHistoryEntry *right)
+{
+    if (left->last_seen != right->last_seen)
+        return left->last_seen < right->last_seen ? -1 : 1;
+    if (left->first_seen != right->first_seen)
+        return left->first_seen < right->first_seen ? -1 : 1;
+    return strcmp(left->key, right->key);
+}
+
+static char *history_oldest_key(const LsmApp *app,
+                                GHashTable *protected_keys)
 {
     if (!app || !app->history.app_history ||
         app->history.history_entry_count == 0U)
-        return FALSE;
+        return NULL;
 
     GHashTableIter iterator;
     gpointer key = NULL;
     gpointer value = NULL;
-    gpointer oldest_key = NULL;
-    int64_t oldest_last_seen = 0;
-    int64_t oldest_first_seen = 0;
-    gboolean found = FALSE;
+    const LsmHistoryEntry *oldest_entry = NULL;
+    const char *oldest_key = NULL;
 
     g_hash_table_iter_init(&iterator, app->history.app_history);
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
+        if (protected_keys && g_hash_table_contains(protected_keys, key))
+            continue;
         const LsmHistoryEntry *entry = value;
-        if (!found || entry->last_seen < oldest_last_seen ||
-            (entry->last_seen == oldest_last_seen &&
-             entry->first_seen < oldest_first_seen)) {
+        if (!oldest_entry ||
+            history_entry_recency_compare(entry, oldest_entry) < 0) {
+            oldest_entry = entry;
             oldest_key = key;
-            oldest_last_seen = entry->last_seen;
-            oldest_first_seen = entry->first_seen;
-            found = TRUE;
         }
     }
-    if (!found) return FALSE;
+    return oldest_key ? g_strdup(oldest_key) : NULL;
+}
+
+static gboolean history_remove_oldest(LsmApp *app,
+                                      GHashTable *protected_keys)
+{
+    char *oldest_key = history_oldest_key(app, protected_keys);
+    if (!oldest_key) return FALSE;
+
     const guint removed = g_hash_table_foreach_remove(
         app->history.app_history, remove_history_key, oldest_key);
+    g_free(oldest_key);
     if (removed == 0U) return FALSE;
     app->history.history_entry_count -=
         removed > app->history.history_entry_count
@@ -133,12 +151,13 @@ static gboolean history_remove_oldest(LsmApp *app)
     return TRUE;
 }
 
-static gboolean history_trim_to_limit(LsmApp *app)
+static gboolean history_trim_to_limit(LsmApp *app,
+                                      GHashTable *protected_keys)
 {
     gboolean changed = FALSE;
     while (app && app->history.app_history &&
            app->history.history_entry_count > LSM_HISTORY_MAX_ENTRIES) {
-        if (!history_remove_oldest(app)) break;
+        if (!history_remove_oldest(app, protected_keys)) break;
         changed = TRUE;
     }
     return changed;
@@ -215,8 +234,11 @@ static void history_load(LsmApp *app)
 {
     gchar *contents = NULL;
     gsize length = 0;
-    if (!g_file_get_contents(app->history.history_path, &contents, &length, NULL)) return;
+    if (!g_file_get_contents(app->history.history_path,
+                             &contents, &length, NULL))
+        return;
 
+    gboolean truncated = FALSE;
     gchar **lines = g_strsplit(contents, "\n", -1);
     for (gchar **line = lines; *line; line++) {
         if (!**line || **line == '#') continue;
@@ -225,6 +247,7 @@ static void history_load(LsmApp *app)
             g_strfreev(fields);
             continue;
         }
+
         double cpu_seconds = 0.0;
         double active_seconds = 0.0;
         uint64_t read_bytes = 0U;
@@ -243,7 +266,7 @@ static void history_load(LsmApp *app)
             continue;
         }
 
-        LsmHistoryEntry *entry = g_new0(LsmHistoryEntry, 1);
+        LsmHistoryEntry *entry = g_new0(LsmHistoryEntry, 1U);
         entry->key = g_strdup(fields[0]);
         entry->name = g_strdup(fields[1]);
         entry->user = g_strdup(fields[2]);
@@ -255,17 +278,43 @@ static void history_load(LsmApp *app)
         entry->peak_rss_bytes = peak_rss_bytes;
         entry->first_seen = first_seen;
         entry->last_seen = last_seen;
+
         const gboolean existed = g_hash_table_contains(
             app->history.app_history, entry->key);
-        g_hash_table_replace(app->history.app_history, g_strdup(entry->key), entry);
+        if (!existed &&
+            app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
+            char *oldest_key = history_oldest_key(app, NULL);
+            LsmHistoryEntry *oldest = oldest_key
+                ? g_hash_table_lookup(app->history.app_history, oldest_key)
+                : NULL;
+            if (!oldest ||
+                history_entry_recency_compare(entry, oldest) <= 0) {
+                history_entry_free(entry);
+                g_free(oldest_key);
+                g_strfreev(fields);
+                truncated = TRUE;
+                continue;
+            }
+            g_free(oldest_key);
+            if (!history_remove_oldest(app, NULL)) {
+                history_entry_free(entry);
+                g_strfreev(fields);
+                truncated = TRUE;
+                continue;
+            }
+            truncated = TRUE;
+        }
+
+        g_hash_table_replace(app->history.app_history,
+                             g_strdup(entry->key), entry);
         if (!existed) app->history.history_entry_count++;
         g_strfreev(fields);
     }
     g_strfreev(lines);
     g_free(contents);
-    if (history_trim_to_limit(app))
-        app->history.history_dirty = TRUE;
+    if (truncated) app->history.history_dirty = TRUE;
 }
+
 
 static int history_save_checked(LsmApp *app)
 {
@@ -353,14 +402,16 @@ static void history_identity(const LsmProcessInfo *process,
              process->account_identity, executable);
 }
 
-static LsmHistoryEntry *history_entry_get(LsmApp *app, const LsmProcessInfo *process,
-                                           const char *key, const char *identity)
+static LsmHistoryEntry *history_entry_get(
+    LsmApp *app, const LsmProcessInfo *process,
+    const char *key, const char *identity,
+    GHashTable *live_apps)
 {
     LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
     if (entry) return entry;
 
     if (app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        if (history_remove_oldest(app))
+        if (history_remove_oldest(app, live_apps))
             app->history.history_dirty = TRUE;
     }
 
@@ -395,6 +446,16 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
     app->history.history_last_sample = now_mono;
     const int64_t now_epoch = (int64_t)time(NULL);
 
+    GHashTable *live_apps = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, NULL);
+    for (size_t i = 0U; i < count; i++) {
+        char app_key[LSM_PATH_LEN + 64U];
+        char identity[LSM_PATH_LEN];
+        history_identity(&processes[i], app_key, sizeof(app_key),
+                         identity, sizeof(identity));
+        g_hash_table_add(live_apps, g_strdup(app_key));
+    }
+
     GHashTable *seen_apps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GHashTable *rss_totals = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
@@ -402,7 +463,8 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
         const LsmProcessInfo *process = &processes[i];
         char app_key[LSM_PATH_LEN + 64], identity[LSM_PATH_LEN];
         history_identity(process, app_key, sizeof(app_key), identity, sizeof(identity));
-        LsmHistoryEntry *entry = history_entry_get(app, process, app_key, identity);
+        LsmHistoryEntry *entry = history_entry_get(
+            app, process, app_key, identity, live_apps);
 
         char sample_key[96];
         snprintf(sample_key, sizeof(sample_key), "%llu:%llu",
@@ -459,6 +521,9 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
 
     g_hash_table_foreach_remove(app->history.app_history_samples, remove_stale_sample,
                                 GUINT_TO_POINTER(app->history.history_generation));
+    if (history_trim_to_limit(app, live_apps))
+        app->history.history_dirty = TRUE;
+    g_hash_table_destroy(live_apps);
     g_hash_table_destroy(seen_apps);
     g_hash_table_destroy(rss_totals);
     if (count > 0U) app->history.history_dirty = TRUE;
@@ -602,3 +667,45 @@ void lsm_history_destroy(LsmApp *app)
     app->history.history_store = NULL;
     app->history.history_entry_count = 0U;
 }
+
+#ifdef LSM_HISTORY_TEST_API
+gboolean lsm_history_test_init(LsmApp *app, const char *config_dir)
+{
+    if (!app || !config_dir || !*config_dir) return FALSE;
+    g_strlcpy(app->paths.config_dir, config_dir, sizeof(app->paths.config_dir));
+    app->history.app_history = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, history_entry_free);
+    app->history.app_history_samples = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, history_sample_free);
+    char *path = g_build_filename(config_dir, "app-history.tsv", NULL);
+    if (!path) return FALSE;
+    g_strlcpy(app->history.history_path, path,
+              sizeof(app->history.history_path));
+    g_free(path);
+    history_load(app);
+    return TRUE;
+}
+
+guint lsm_history_test_retained_count(const LsmApp *app)
+{
+    return app ? app->history.history_entry_count : 0U;
+}
+
+gboolean lsm_history_test_contains(const LsmApp *app, const char *key)
+{
+    return app && app->history.app_history && key &&
+        g_hash_table_contains(app->history.app_history, key);
+}
+
+void lsm_history_test_dispose(LsmApp *app)
+{
+    if (!app) return;
+    if (app->history.app_history)
+        g_hash_table_destroy(app->history.app_history);
+    if (app->history.app_history_samples)
+        g_hash_table_destroy(app->history.app_history_samples);
+    app->history.app_history = NULL;
+    app->history.app_history_samples = NULL;
+    app->history.history_entry_count = 0U;
+}
+#endif

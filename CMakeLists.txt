@@ -370,6 +370,12 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-filesystem-inventory-smoke
         support/tests/filesystem_inventory_smoke.c src/filesystem_inventory.c
         src/mountinfo.c src/common.c)
+    add_executable(lsm-history-retention-smoke
+        support/tests/history_retention_smoke.c src/history.c
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c
+        src/duration_format.c src/ui_helpers.c)
+    target_compile_definitions(lsm-history-retention-smoke PRIVATE
+        LSM_HISTORY_TEST_API)
     add_executable(lsm-process-scan-benchmark support/tests/process_scan_benchmark.c
         ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
     add_executable(lsm-runtime-stability-smoke support/tests/runtime_stability_smoke.c
@@ -422,6 +428,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         lsm-wifi-metadata-smoke
         lsm-process-inspection-smoke
         lsm-filesystem-inventory-smoke
+        lsm-history-retention-smoke
         lsm-process-scan-benchmark
         lsm-runtime-stability-smoke)
 
@@ -497,6 +504,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_libraries(lsm-startup-smoke PRIVATE PkgConfig::GTK3)
     target_link_libraries(lsm-ui-update-smoke PRIVATE PkgConfig::GTK3)
     target_link_libraries(lsm-wifi-metadata-smoke PRIVATE m)
+    target_link_libraries(lsm-history-retention-smoke PRIVATE PkgConfig::GTK3 m)
     target_link_libraries(lsm-process-scan-benchmark PRIVATE m)
     target_link_libraries(lsm-runtime-stability-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})

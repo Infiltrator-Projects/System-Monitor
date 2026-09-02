@@ -413,12 +413,18 @@ static void process_columns_load(LsmApp *app)
 static unsigned process_scan_flags(const LsmApp *app)
 {
     unsigned flags = LSM_PROCESS_SCAN_NONE;
-    if (gtk_tree_view_column_get_visible(app->details.details_columns[PROC_COL_EXECUTABLE]))
-        flags |= LSM_PROCESS_SCAN_EXECUTABLE;
-    if (gtk_tree_view_column_get_visible(app->details.details_columns[PROC_COL_HANDLE_COUNT]))
-        flags |= LSM_PROCESS_SCAN_HANDLE_COUNT;
     const gint current = gtk_notebook_get_current_page(
         GTK_NOTEBOOK(app->shell.notebook));
+
+    if (current == LSM_TAB_DETAILS) {
+        if (gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_EXECUTABLE]))
+            flags |= LSM_PROCESS_SCAN_EXECUTABLE;
+        if (gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_HANDLE_COUNT]))
+            flags |= LSM_PROCESS_SCAN_HANDLE_COUNT;
+    }
+
     if (current == LSM_TAB_PROCESSES ||
         (current == LSM_TAB_DETAILS &&
          (gtk_tree_view_column_get_visible(app->details.details_columns[PROC_COL_GPU]) ||

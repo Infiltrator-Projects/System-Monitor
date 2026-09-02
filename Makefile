@@ -137,7 +137,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
 .PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check common-library strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
-	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke \
+	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
 	bundled-pci-smoke startup-smoke dbus-models-smoke common-smoke infiltratr-common-smoke project-info-smoke cpu-direct-smoke \
@@ -276,7 +276,7 @@ COMMON_LINK_TARGETS := \
 	cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke \
 	memory-accounting-smoke hardware-topology-smoke backend-smoke \
 	process-management-smoke process-inspection-smoke \
-	filesystem-inventory-smoke efficiency-smoke mountinfo-smoke \
+	filesystem-inventory-smoke history-retention-smoke efficiency-smoke mountinfo-smoke \
 	storage-metadata-smoke \
 	system-sources-smoke smbios-memory-smoke battery-smoke \
 	wifi-metadata-smoke hidpp-smoke \
@@ -504,6 +504,14 @@ filesystem-inventory-smoke: | $(BUILD_DIR)
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/filesystem-inventory-smoke
 	./$(BUILD_DIR)/filesystem-inventory-smoke
 
+history-retention-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 $(STRICT_WARNINGS) \
+		support/tests/history_retention_smoke.c src/history.c src/atomic_file_posix.c \
+		src/common.c src/duration_format.c src/ui_helpers.c \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
+		-o $(BUILD_DIR)/history-retention-smoke
+	./$(BUILD_DIR)/history-retention-smoke
+
 efficiency-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/efficiency_smoke.c \
 		$(PROCESS_SOURCES) src/common.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
@@ -599,7 +607,7 @@ benchmark: runtime-stability-smoke process-scan-benchmark
 # Sanitizers are a developer/CI gate rather than a universal local-build
 # requirement because some supported toolchains do not ship sanitizer runtimes.
 # The full GTK/GLib lifecycle fixture keeps leak accounting disabled because
-# those libraries retain documented process-global caches. The nine dependency-
+# those libraries retain documented process-global caches. The ten dependency-
 # light fixtures below must also pass LeakSanitizer with leak detection enabled.
 sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
@@ -681,6 +689,15 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/quality-policy-sanitized
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 -O1 -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		support/tests/history_retention_smoke.c src/history.c src/atomic_file_posix.c \
+		src/common.c src/duration_format.c src/ui_helpers.c \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
+		-o $(BUILD_DIR)/history-retention-sanitized
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		./$(BUILD_DIR)/history-retention-sanitized
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/application_catalog_smoke.c src/application_catalog.c \
@@ -688,7 +705,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/application-catalog-sanitized
-	@echo "ASan/UBSan passed; LeakSanitizer also passed on nine deterministic core fixtures."
+	@echo "ASan/UBSan passed; LeakSanitizer also passed on ten deterministic core fixtures."
 
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
