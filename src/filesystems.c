@@ -21,6 +21,7 @@
 #include "ui_helpers.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define FILESYSTEM_COLUMNS 7

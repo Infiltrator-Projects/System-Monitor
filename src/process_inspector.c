@@ -929,7 +929,7 @@ static void file_users_complete(GObject *source_object,
     FileUsersResult *result = g_task_propagate_pointer(
         G_TASK(async_result), NULL);
     if (result && source_object &&
-        gtk_widget_get_mapped(GTK_WIDGET(source_object)))
+        gtk_widget_get_mapped((GtkWidget *)source_object))
         show_file_users_results(GTK_WINDOW(source_object), result->path,
                                 result->items, result->count);
     file_users_result_free(result);
