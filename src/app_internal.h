@@ -425,6 +425,7 @@ typedef struct {
     double history_last_sample;
     guint history_save_timer;
     guint history_generation;
+    guint history_entry_count;
     gboolean history_dirty;
     gboolean history_save_error_reported;
 } LsmHistoryState;
