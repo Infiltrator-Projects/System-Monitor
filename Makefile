@@ -137,7 +137,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
 .PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check common-library strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
-	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke efficiency-smoke \
+	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke async-workers-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
 	bundled-pci-smoke startup-smoke dbus-models-smoke common-smoke infiltratr-common-smoke project-info-smoke cpu-direct-smoke \
@@ -260,7 +260,7 @@ check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
 build-check: check-deps strict-check portability-check atomic-file-smoke duration-format-smoke infiltratr-common-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
-	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
+	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke async-workers-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
 	smbios-memory-smoke battery-smoke bluetooth-battery-smoke bluetooth-traffic-smoke \
 	wifi-metadata-smoke \
 	hidpp-smoke nvml-smoke native-command-audit bundled-pci-smoke startup-smoke \
@@ -276,7 +276,7 @@ COMMON_LINK_TARGETS := \
 	cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke \
 	memory-accounting-smoke hardware-topology-smoke backend-smoke \
 	process-management-smoke process-inspection-smoke \
-	filesystem-inventory-smoke history-retention-smoke efficiency-smoke mountinfo-smoke \
+	filesystem-inventory-smoke history-retention-smoke async-workers-smoke efficiency-smoke mountinfo-smoke \
 	storage-metadata-smoke \
 	system-sources-smoke smbios-memory-smoke battery-smoke \
 	wifi-metadata-smoke hidpp-smoke \
@@ -511,6 +511,14 @@ history-retention-smoke: | $(BUILD_DIR)
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
 	./$(BUILD_DIR)/history-retention-smoke
+
+async-workers-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/async_workers_smoke.c src/process_scanner.c \
+		src/process_recorder.c $(PROCESS_SOURCES) src/common.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
+		-o $(BUILD_DIR)/async-workers-smoke
+	./$(BUILD_DIR)/async-workers-smoke
 
 efficiency-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/efficiency_smoke.c \

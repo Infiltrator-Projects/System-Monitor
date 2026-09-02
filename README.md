@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.17 ([version file](support/VERSION))\
+**Current source version:** 1.0.18 ([version file](support/VERSION))\
 **Shared foundation:** exact Infiltratr Common 1.15.3 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -15,7 +15,7 @@ Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It 
 
 Linux System Monitor is deliberately a native application rather than an orchestration layer. The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons or shell launchers. The package grants that executable only `CAP_NET_RAW` so startup can bind Linux's read-only HCI monitor channel for exact per-device Bluetooth traffic; the process immediately clears all capabilities before creating the GTK application or monitoring workers.
 
-Collection prefers project-owned C parsers and native kernel/driver interfaces over external commands. Unsupported metrics are presented as unavailable rather than guessed or fabricated. Potentially slow native Performance sampling, mounted-filesystem capacity queries and explicit process-inspection inventories are isolated from the GTK main thread so kernel or remote-I/O delays cannot freeze the interface.
+Collection prefers project-owned C parsers and native kernel/driver interfaces over external commands. Unsupported metrics are presented as unavailable rather than guessed or fabricated. Potentially slow native Performance sampling, recurring process scans, mounted-filesystem capacity queries, explicit process-inspection inventories, Application History persistence and recurring process-recording writes are isolated from the GTK main thread so kernel, NSS, remote-I/O or storage delays cannot freeze the interface.
 
 Storage and memory use 1024-based scaling with traditional labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB. Network rates and negotiated link speeds use decimal 1000-based scaling, matching conventional network notation.
 
@@ -35,9 +35,11 @@ Storage and memory use 1024-based scaling with traditional labels: 1 KB = 1024 b
 ```text
 GTK 3 presentation
         ↓
-completed plain-C monitor snapshots
+completed plain-C monitor/process snapshots
         ↓
-dedicated native sampling worker
+dedicated monitor + process collection workers
+        ↓
+background history / recording persistence
         ↓
 platform-neutral snapshots and process contracts
         ↓
@@ -80,7 +82,7 @@ make dist
 make release
 ```
 
-`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, a 65% minimum line-coverage floor across 16 selected deterministic core modules, lifecycle stability, package boundaries and installer safety. The coverage result is explicitly scoped and is not presented as a whole-application percentage. CI also runs CMake/CTest and a required 32-bit compile check.
+`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, asynchronous scanner/recording lifecycle coverage, a 65% minimum line-coverage floor across 16 selected deterministic core modules, lifecycle stability, package boundaries and installer safety. The coverage result is explicitly scoped and is not presented as a whole-application percentage. CI also runs CMake/CTest and a required 32-bit compile check.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 

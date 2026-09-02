@@ -16,6 +16,7 @@
 #include "atomic_file.h"
 #include "process_backend.h"
 #include "process_inspector.h"
+#include "process_recorder.h"
 #include "processes_ui.h"
 #include "ui_helpers.h"
 
@@ -82,17 +83,15 @@ void lsm_process_group_selection_clear(LsmApp *app)
 }
 
 /* Per-process CSV recording is a UI concern and never changes sampling. */
-static int close_record_file(LsmApp *app)
+static void close_record_file(LsmApp *app)
 {
-    int failure = 0;
-    if (app->process.record_file) {
-        if (fclose(app->process.record_file) != 0)
-            failure = errno ? errno : EIO;
-        app->process.record_file = NULL;
+    if (!app) return;
+    if (app->process.recorder) {
+        lsm_process_recorder_stop(app->process.recorder);
+        app->process.recorder = NULL;
     }
-    app->process.recording_pid = 0;
+    app->process.recording_pid = 0U;
     app->process.recording_instance_id = 0U;
-    return failure;
 }
 
 static void mark_recording_stopped(LsmApp *app)
@@ -107,12 +106,20 @@ static void mark_recording_stopped(LsmApp *app)
 void lsm_process_record_stop(LsmApp *app)
 {
     if (!app) return;
-    const int failure = close_record_file(app);
+    close_record_file(app);
     mark_recording_stopped(app);
-    if (failure != 0 && app->shell.window && !app->runtime.shutting_down)
+}
+
+static gboolean stop_recording_after_failure(LsmApp *app, int failure)
+{
+    close_record_file(app);
+    mark_recording_stopped(app);
+    if (app && app->shell.window && !app->runtime.shutting_down)
         lsm_ui_show_error(GTK_WINDOW(app->shell.window),
-                          "Unable to finish process recording", "%s",
-                          g_strerror(failure));
+                          "Process recording stopped",
+                          "The recording file could not be written: %s",
+                          g_strerror(failure ? failure : EIO));
+    return FALSE;
 }
 
 static gchar *selected_process_name(LsmApp *app)
@@ -164,26 +171,16 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
     g_free(full_path);
     g_free(name);
 
-    app->process.record_file = fopen(app->process.record_path, "w");
-    if (!app->process.record_file) {
-        lsm_ui_show_error(GTK_WINDOW(app->shell.window), "Unable to start recording", "%s", g_strerror(errno));
+    int recorder_error = 0;
+    app->process.recorder = lsm_process_recorder_create(
+        app->process.record_path, &recorder_error);
+    if (!app->process.recorder) {
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to start recording", "%s",
+                          g_strerror(recorder_error ? recorder_error : EIO));
         if (app->details.process_record_menu_item)
             gtk_check_menu_item_set_active(
                 GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item), FALSE);
-        return;
-    }
-    errno = 0;
-    const int header_result = fprintf(app->process.record_file,
-        "timestamp,pid,cpu_percent,memory_percent,rss_bytes,read_bytes,write_bytes,threads\n");
-    const int flush_result = header_result >= 0
-        ? fflush(app->process.record_file) : EOF;
-    if (header_result < 0 || flush_result != 0) {
-        const int failure = errno ? errno : EIO;
-        (void)close_record_file(app);
-        mark_recording_stopped(app);
-        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
-                          "Unable to start recording", "%s",
-                          g_strerror(failure));
         return;
     }
     app->process.recording_pid = app->process.selected_pid;
@@ -199,36 +196,18 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
 gboolean lsm_process_record_append(LsmApp *app,
                                    const LsmProcessInfo *process)
 {
-    if (!app || !process || !app->process.record_file) return FALSE;
+    if (!app || !process || !app->process.recorder) return FALSE;
 
-    time_t now = time(NULL);
-    char timestamp[64];
-    struct tm local;
-    localtime_r(&now, &local);
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S%z", &local);
+    int failure = lsm_process_recorder_error(app->process.recorder);
+    if (failure != 0)
+        return stop_recording_after_failure(app, failure);
 
-    errno = 0;
-    const int write_result = fprintf(app->process.record_file,
-        "%s,%llu,%.3f,%.3f,%llu,%llu,%llu,%u\n",
-        timestamp, (unsigned long long)process->pid,
-        process->cpu_percent, process->memory_percent,
-        (unsigned long long)process->rss_bytes,
-        (unsigned long long)process->read_bytes,
-        (unsigned long long)process->write_bytes,
-        process->threads);
-    const int flush_result = write_result >= 0
-        ? fflush(app->process.record_file) : EOF;
-    if (write_result >= 0 && flush_result == 0) return TRUE;
-
-    const int failure = errno ? errno : EIO;
-    (void)close_record_file(app);
-    mark_recording_stopped(app);
-    if (app->shell.window && !app->runtime.shutting_down)
-        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
-                          "Process recording stopped",
-                          "The recording file could not be written: %s",
-                          g_strerror(failure));
-    return FALSE;
+    if (!lsm_process_recorder_append(app->process.recorder, process)) {
+        failure = lsm_process_recorder_error(app->process.recorder);
+        return stop_recording_after_failure(
+            app, failure != 0 ? failure : ENOMEM);
+    }
+    return TRUE;
 }
 
 void lsm_process_filters_load(LsmApp *app)
@@ -296,6 +275,8 @@ void lsm_process_filters_dialog(LsmApp *app)
                               g_strerror(failure));
         } else {
             lsm_process_filters_load(app);
+            app->processes.processes_structure_valid = FALSE;
+            app->details.details_structure_valid = FALSE;
             app->processes.processes_model_dirty = TRUE;
             app->details.details_model_dirty = TRUE;
             lsm_details_present_snapshot(app);

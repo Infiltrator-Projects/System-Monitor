@@ -21,6 +21,7 @@
 #include "history.h"
 #include "process_backend.h"
 #include "process_inspector.h"
+#include "process_scanner.h"
 #include "processes_ui.h"
 #include "ui_helpers.h"
 
@@ -519,6 +520,96 @@ static void set_process_row(GtkTreeStore *store, GtkTreeIter *iter,
         -1);
 }
 
+static uint64_t process_signature_text(uint64_t hash, const char *text)
+{
+    const unsigned char *cursor =
+        (const unsigned char *)(text ? text : "");
+    while (*cursor) {
+        hash ^= *cursor++;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t process_structure_signature(const LsmApp *app)
+{
+    uint64_t xor_value = app && app->details.details_tree_mode
+        ? UINT64_C(0x6a09e667f3bcc909)
+        : UINT64_C(0xbb67ae8584caa73b);
+    uint64_t sum_value = app
+        ? (uint64_t)app->process.process_snapshot_count *
+          UINT64_C(0x9e3779b185ebca87) : 0U;
+    if (!app) return xor_value;
+
+    for (size_t index = 0U;
+         index < app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process =
+            &app->process.process_snapshot[index];
+        uint64_t row = UINT64_C(14695981039346656037);
+        row ^= (uint64_t)process->pid;
+        row *= UINT64_C(1099511628211);
+        row ^= process->instance_id;
+        row *= UINT64_C(1099511628211);
+        row ^= (uint64_t)process->ppid;
+        row *= UINT64_C(1099511628211);
+        row = process_signature_text(row, process->name);
+        row = process_signature_text(row, process->user);
+        row = process_signature_text(row, process->command);
+        const unsigned shift = (unsigned)(process->pid % 63U) + 1U;
+        const uint64_t rotated =
+            (row << shift) | (row >> (64U - shift));
+        xor_value ^= rotated;
+        sum_value += row * UINT64_C(0x94d049bb133111eb);
+    }
+    return xor_value ^ sum_value;
+}
+
+static gboolean update_details_branch(LsmApp *app, GHashTable *pid_index,
+                                      GtkTreeIter *parent)
+{
+    GtkTreeModel *model = GTK_TREE_MODEL(app->details.details_store);
+    GtkTreeIter iter;
+    gboolean valid = parent
+        ? gtk_tree_model_iter_children(model, &iter, parent)
+        : gtk_tree_model_get_iter_first(model, &iter);
+    while (valid) {
+        guint64 pid = 0U;
+        gtk_tree_model_get(model, &iter, PROC_COL_PID, &pid, -1);
+        if (pid == 0U || pid > UINT_MAX) return FALSE;
+        gpointer value = g_hash_table_lookup(
+            pid_index, GUINT_TO_POINTER((guint)pid));
+        if (!value) return FALSE;
+        const size_t index =
+            (size_t)(GPOINTER_TO_UINT(value) - 1U);
+        set_process_row(app->details.details_store, &iter,
+                        &app->process.process_snapshot[index]);
+        if (!update_details_branch(app, pid_index, &iter))
+            return FALSE;
+        valid = gtk_tree_model_iter_next(model, &iter);
+    }
+    return TRUE;
+}
+
+static gboolean update_details_model_values(LsmApp *app)
+{
+    if (!app || !app->details.details_store) return FALSE;
+    GHashTable *pid_index =
+        g_hash_table_new(g_direct_hash, g_direct_equal);
+    if (!pid_index) return FALSE;
+    for (size_t index = 0U;
+         index < app->process.process_snapshot_count; index++) {
+        const LsmProcessId pid =
+            app->process.process_snapshot[index].pid;
+        if (pid == 0U || pid > UINT_MAX || index >= UINT_MAX) continue;
+        g_hash_table_insert(pid_index,
+                            GUINT_TO_POINTER((guint)pid),
+                            GUINT_TO_POINTER((guint)index + 1U));
+    }
+    const gboolean okay = update_details_branch(app, pid_index, NULL);
+    g_hash_table_destroy(pid_index);
+    return okay;
+}
+
 static ssize_t process_index_for_pid(ProcessBuildContext *context, LsmProcessId pid)
 {
     gpointer value = g_hash_table_lookup(context->pid_to_index, GINT_TO_POINTER(pid));
@@ -689,8 +780,17 @@ static gboolean details_page_visible(const LsmApp *app)
 
 void lsm_details_present_snapshot(LsmApp *app)
 {
-    if (!app || !app->details.details_model_dirty || !app->details.details_store) return;
-    rebuild_details_model(app);
+    if (!app || !app->details.details_model_dirty ||
+        !app->details.details_store)
+        return;
+    const uint64_t signature = process_structure_signature(app);
+    if (!app->details.details_structure_valid ||
+        app->details.details_structure_signature != signature ||
+        !update_details_model_values(app)) {
+        rebuild_details_model(app);
+        app->details.details_structure_signature = signature;
+        app->details.details_structure_valid = TRUE;
+    }
     app->details.details_model_dirty = FALSE;
 }
 
@@ -698,6 +798,7 @@ static void refilter_processes(GtkEditable *editable, gpointer user_data)
 {
     (void)editable;
     LsmApp *app = user_data;
+    app->details.details_structure_valid = FALSE;
     app->details.details_model_dirty = TRUE;
     lsm_details_present_snapshot(app);
 }
@@ -717,12 +818,12 @@ static void selected_process_changed(GtkTreeSelection *selection, gpointer user_
         gtk_widget_set_sensitive(app->details.details_inspect_button, pid > 0);
         if (app->details.process_record_menu_item)
             gtk_widget_set_sensitive(app->details.process_record_menu_item,
-                                     valid || app->process.record_file != NULL);
+                                     valid || app->process.recorder != NULL);
     } else {
         lsm_process_selection_set(app, 0U);
         gtk_widget_set_sensitive(app->details.details_end_button, FALSE);
         gtk_widget_set_sensitive(app->details.details_inspect_button, FALSE);
-        if (!app->process.record_file && app->details.process_record_menu_item)
+        if (!app->process.recorder && app->details.process_record_menu_item)
             gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
     }
 }
@@ -771,8 +872,10 @@ static void process_view_changed(GtkComboBox *combo, gpointer user_data)
     if (tree_mode != app->details.details_tree_mode) {
         app->details.details_tree_mode = tree_mode;
         if (tree_mode) app->details.details_tree_initialized = FALSE;
+        app->details.details_structure_valid = FALSE;
+        app->details.details_model_dirty = TRUE;
         lsm_details_save_layout(app);
-        rebuild_details_model(app);
+        lsm_details_present_snapshot(app);
     }
 }
 
@@ -862,7 +965,7 @@ static void append_record_if_needed(LsmApp *app,
                                     const LsmProcessInfo *processes,
                                     size_t count)
 {
-    if (!app->process.record_file || app->process.recording_pid <= 1 ||
+    if (!app->process.recorder || app->process.recording_pid <= 1 ||
         app->process.recording_instance_id == 0U)
         return;
     const LsmProcessInfo *found = NULL;
@@ -884,11 +987,17 @@ static void append_record_if_needed(LsmApp *app,
 gboolean lsm_processes_update(gpointer user_data)
 {
     LsmApp *app = user_data;
-    if (app->runtime.paused) return G_SOURCE_CONTINUE;
+    if (!app || app->runtime.paused || !app->process_scanner)
+        return G_SOURCE_CONTINUE;
 
     LsmProcessInfo *processes = NULL;
-    size_t count = lsm_process_scan(app->process_backend, &processes,
-                                    process_scan_flags(app));
+    size_t count = 0U;
+    const gboolean have_snapshot = lsm_process_scanner_take(
+        app->process_scanner, &processes, &count);
+    (void)lsm_process_scanner_request(
+        app->process_scanner, process_scan_flags(app));
+    if (!have_snapshot) return G_SOURCE_CONTINUE;
+
     lsm_monitor_set_process_totals(&app->monitor, processes, count);
     append_record_if_needed(app, processes, count);
     lsm_app_history_ingest(app, processes, count);
@@ -911,4 +1020,5 @@ void lsm_details_destroy(LsmApp *app)
     if (app->details.details_store) g_object_unref(app->details.details_store);
     app->details.details_sort_model = NULL;
     app->details.details_store = NULL;
+    app->details.details_structure_valid = FALSE;
 }

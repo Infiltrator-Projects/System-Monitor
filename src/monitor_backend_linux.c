@@ -22,10 +22,12 @@
 #include "sampling_policy.h"
 #include "system_sources.h"
 
+#include <errno.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 struct LsmLinuxSamplerState {
     pthread_t thread;
@@ -38,7 +40,10 @@ struct LsmLinuxSamplerState {
     bool request_pending;
     bool sample_ready;
     bool stop_requested;
+    bool detached_cleanup;
 };
+
+#define LSM_SAMPLER_SHUTDOWN_WAIT_MS 250L
 
 static void copy_public_snapshot(LsmMonitor *destination,
                                  const LsmMonitor *source,
@@ -85,6 +90,25 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
     return true;
 }
 
+static void sampler_cleanup_detached(LsmLinuxSamplerState *sampler)
+{
+    if (!sampler) return;
+    LsmLinuxMonitorBackendState *state = sampler->backend;
+    lsm_hardware_shutdown(&sampler->sample);
+    lsm_cpu_memory_shutdown(&sampler->sample);
+    (void)pthread_cond_destroy(&sampler->condition);
+    (void)pthread_mutex_destroy(&sampler->mutex);
+    if (state) {
+        state->sampler_state = NULL;
+        lsm_wifi_metadata_destroy(state->wifi_metadata);
+        state->wifi_metadata = NULL;
+        lsm_sources_destroy(state->system_sources);
+        state->system_sources = NULL;
+        free(state);
+    }
+    free(sampler);
+}
+
 static void *sampler_thread_main(void *user_data)
 {
     LsmLinuxSamplerState *sampler = user_data;
@@ -96,7 +120,12 @@ static void *sampler_thread_main(void *user_data)
         while (!sampler->request_pending && !sampler->stop_requested)
             (void)pthread_cond_wait(&sampler->condition, &sampler->mutex);
         if (sampler->stop_requested) {
+            const bool detached_cleanup = sampler->detached_cleanup;
             (void)pthread_mutex_unlock(&sampler->mutex);
+            if (detached_cleanup) {
+                sampler_cleanup_detached(sampler);
+                return NULL;
+            }
             break;
         }
         sampler->request_pending = false;
@@ -118,16 +147,42 @@ static void *sampler_thread_main(void *user_data)
     return NULL;
 }
 
-static void destroy_sampler(LsmLinuxMonitorBackendState *state)
+static bool destroy_sampler(LsmLinuxMonitorBackendState *state)
 {
-    if (!state || !state->sampler_state) return;
+    if (!state || !state->sampler_state) return true;
     LsmLinuxSamplerState *sampler = state->sampler_state;
     if (sampler->thread_started) {
         (void)pthread_mutex_lock(&sampler->mutex);
         sampler->stop_requested = true;
         (void)pthread_cond_signal(&sampler->condition);
         (void)pthread_mutex_unlock(&sampler->mutex);
-        (void)pthread_join(sampler->thread, NULL);
+
+        struct timespec deadline;
+        int join_result = clock_gettime(CLOCK_REALTIME, &deadline);
+        if (join_result == 0) {
+            deadline.tv_nsec += LSM_SAMPLER_SHUTDOWN_WAIT_MS * 1000000L;
+            if (deadline.tv_nsec >= 1000000000L) {
+                deadline.tv_sec += deadline.tv_nsec / 1000000000L;
+                deadline.tv_nsec %= 1000000000L;
+            }
+            join_result = pthread_timedjoin_np(
+                sampler->thread, NULL, &deadline);
+        } else {
+            join_result = errno ? errno : EINVAL;
+        }
+
+        if (join_result != 0) {
+            /* A native collector can be stuck inside an uncancellable kernel
+             * or device call. Hand ownership to the detached worker instead of
+             * making GTK shutdown wait forever. If it later returns it performs
+             * complete backend cleanup itself; process exit safely terminates
+             * it otherwise. */
+            (void)pthread_mutex_lock(&sampler->mutex);
+            sampler->detached_cleanup = true;
+            (void)pthread_mutex_unlock(&sampler->mutex);
+            (void)pthread_detach(sampler->thread);
+            return false;
+        }
         sampler->thread_started = false;
     }
 
@@ -137,6 +192,7 @@ static void destroy_sampler(LsmLinuxMonitorBackendState *state)
     (void)pthread_mutex_destroy(&sampler->mutex);
     free(sampler);
     state->sampler_state = NULL;
+    return true;
 }
 
 bool lsm_monitor_platform_init(LsmMonitor *monitor)
@@ -260,7 +316,10 @@ void lsm_monitor_platform_destroy(LsmMonitor *monitor)
 
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (state) {
-        destroy_sampler(state);
+        if (!destroy_sampler(state)) {
+            monitor->backend_state = NULL;
+            return;
+        }
         lsm_wifi_metadata_destroy(state->wifi_metadata);
         state->wifi_metadata = NULL;
         lsm_sources_destroy(state->system_sources);

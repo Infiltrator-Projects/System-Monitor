@@ -23,7 +23,9 @@
 
 #include <stdio.h>
 
-typedef struct LsmProcessBackend LsmProcessBackend;
+typedef struct LsmProcessScanner LsmProcessScanner;
+typedef struct LsmProcessRecorder LsmProcessRecorder;
+typedef struct LsmHistorySaveCoordinator LsmHistorySaveCoordinator;
 typedef struct LsmWifiMetadata LsmWifiMetadata;
 typedef struct LsmApplicationCatalog LsmApplicationCatalog;
 
@@ -374,6 +376,8 @@ typedef struct {
     GtkWidget *processes_end_button;
     GtkWidget *processes_count_label;
     gboolean processes_model_dirty;
+    gboolean processes_structure_valid;
+    uint64_t processes_structure_signature;
 } LsmProcessesState;
 
 /** Process snapshot, selection, filtering and recording shared by process pages. */
@@ -390,7 +394,7 @@ typedef struct {
     char selected_group_name[LSM_NAME_LEN];
     LsmProcessId recording_pid;
     LsmProcessInstanceId recording_instance_id;
-    FILE *record_file;
+    LsmProcessRecorder *recorder;
     char record_path[LSM_PATH_LEN];
 } LsmProcessWorkspaceState;
 
@@ -409,6 +413,8 @@ typedef struct {
     gboolean details_tree_mode;
     gboolean details_tree_initialized;
     gboolean details_model_dirty;
+    gboolean details_structure_valid;
+    uint64_t details_structure_signature;
     gboolean process_heatmap;
 } LsmDetailsState;
 
@@ -426,7 +432,12 @@ typedef struct {
     guint history_save_timer;
     guint history_generation;
     guint history_entry_count;
+    guint history_mutation_generation;
+    guint history_save_generation;
+    LsmHistorySaveCoordinator *history_save_coordinator;
     gboolean history_dirty;
+    gboolean history_save_pending;
+    gboolean history_save_again;
     gboolean history_save_error_reported;
 } LsmHistoryState;
 
@@ -498,7 +509,7 @@ typedef struct {
 struct LsmApp {
     GtkApplication *application;
     LsmMonitor monitor;
-    LsmProcessBackend *process_backend;
+    LsmProcessScanner *process_scanner;
     LsmShellState shell;
     LsmRuntimeState runtime;
     LsmPerformanceState performance;

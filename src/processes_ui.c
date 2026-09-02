@@ -312,6 +312,57 @@ static GPtrArray *collect_groups(LsmApp *app)
     return groups;
 }
 
+static uint64_t grouped_signature_text(uint64_t hash, const char *text)
+{
+    const unsigned char *cursor =
+        (const unsigned char *)(text ? text : "");
+    while (*cursor) {
+        hash ^= *cursor++;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t grouped_structure_signature(
+    const LsmApp *app, const GPtrArray *groups)
+{
+    uint64_t xor_value = UINT64_C(0x243f6a8885a308d3);
+    uint64_t sum_value = groups
+        ? (uint64_t)groups->len * UINT64_C(0x9e3779b185ebca87)
+        : 0U;
+    if (!app || !groups) return xor_value ^ sum_value;
+
+    for (guint group_index = 0U; group_index < groups->len; group_index++) {
+        const ProcessGroup *group = g_ptr_array_index(groups, group_index);
+        uint64_t group_hash = UINT64_C(14695981039346656037);
+        group_hash ^= (uint64_t)group->category;
+        group_hash *= UINT64_C(1099511628211);
+        group_hash = grouped_signature_text(group_hash, group->key);
+        group_hash = grouped_signature_text(group_hash, group->name);
+        group_hash = grouped_signature_text(group_hash, group->icon);
+        uint64_t child_xor = 0U;
+        uint64_t child_sum = 0U;
+        for (size_t child = 0U; child < group->count; child++) {
+            const LsmProcessInfo *process =
+                &app->process.process_snapshot[group->indices[child]];
+            uint64_t identity =
+                ((uint64_t)process->pid * UINT64_C(0x94d049bb133111eb)) ^
+                process->instance_id;
+            const unsigned shift =
+                (unsigned)(process->pid % 63U) + 1U;
+            identity = (identity << shift) |
+                       (identity >> (64U - shift));
+            child_xor ^= identity;
+            child_sum += identity * UINT64_C(0xbf58476d1ce4e5b9);
+        }
+        group_hash ^= child_xor;
+        group_hash += child_sum;
+        xor_value ^= group_hash;
+        sum_value += group_hash * UINT64_C(0x94d049bb133111eb);
+    }
+    return xor_value ^ sum_value;
+}
+
 /* Cell-data callbacks format already-aggregated values. They do not rescan
  * processes, keeping scrolling/sorting detached from collection cost. */
 static void grouped_cell_data(GtkTreeViewColumn *column,
@@ -499,18 +550,14 @@ static void collect_expanded_group(GtkTreeView *tree, GtkTreePath *path,
         g_free(key);
 }
 
-static void append_process_child(LsmApp *app, const ProcessGroup *group,
-                                 size_t group_index, GtkTreeIter *parent,
-                                 LsmProcessId desired_pid,
-                                 LsmProcessInstanceId desired_instance_id)
+static void set_process_child_row(LsmApp *app,
+                                  const ProcessGroup *group,
+                                  const LsmProcessInfo *process,
+                                  GtkTreeIter *iter)
 {
-    const LsmProcessInfo *process =
-        &app->process.process_snapshot[group->indices[group_index]];
-    GtkTreeIter child;
     const double disk = process->read_bytes_per_sec +
                         process->write_bytes_per_sec;
-    gtk_tree_store_append(app->processes.processes_store, &child, parent);
-    gtk_tree_store_set(app->processes.processes_store, &child,
+    gtk_tree_store_set(app->processes.processes_store, iter,
         GROUPED_COL_ICON, group->icon,
         GROUPED_COL_NAME, process->name,
         GROUPED_COL_STATUS, process->state,
@@ -526,19 +573,11 @@ static void append_process_child(LsmApp *app, const ProcessGroup *group,
         GROUPED_COL_KIND, PROCESS_ROW_PROCESS,
         GROUPED_COL_KEY, group->key,
         -1);
-    if (desired_pid == process->pid &&
-        desired_instance_id == process->instance_id)
-        select_iter(GTK_TREE_VIEW(app->processes.processes_tree),
-                    GTK_TREE_MODEL(app->processes.processes_store), &child);
 }
 
-static void append_group(LsmApp *app, const ProcessGroup *group,
-                         GtkTreeIter *category, GHashTable *expanded,
-                         LsmProcessId desired_pid,
-                         LsmProcessInstanceId desired_instance_id,
-                         const char *desired_group)
+static void set_group_row(LsmApp *app, const ProcessGroup *group,
+                          GtkTreeIter *iter)
 {
-    GtkTreeIter group_iter;
     char name[LSM_NAME_LEN + 32U];
     if (group->count > 1U)
         snprintf(name, sizeof(name), "%s (%zu)", group->name, group->count);
@@ -549,8 +588,7 @@ static void append_group(LsmApp *app, const ProcessGroup *group,
                          ? "Efficiency mode" : "";
     const LsmProcessInfo *representative =
         &app->process.process_snapshot[group->indices[0]];
-    gtk_tree_store_append(app->processes.processes_store, &group_iter, category);
-    gtk_tree_store_set(app->processes.processes_store, &group_iter,
+    gtk_tree_store_set(app->processes.processes_store, iter,
         GROUPED_COL_ICON, group->icon,
         GROUPED_COL_NAME, name,
         GROUPED_COL_STATUS, status,
@@ -566,6 +604,33 @@ static void append_group(LsmApp *app, const ProcessGroup *group,
         GROUPED_COL_KIND, PROCESS_ROW_GROUP,
         GROUPED_COL_KEY, group->key,
         -1);
+}
+
+static void append_process_child(LsmApp *app, const ProcessGroup *group,
+                                 size_t group_index, GtkTreeIter *parent,
+                                 LsmProcessId desired_pid,
+                                 LsmProcessInstanceId desired_instance_id)
+{
+    const LsmProcessInfo *process =
+        &app->process.process_snapshot[group->indices[group_index]];
+    GtkTreeIter child;
+    gtk_tree_store_append(app->processes.processes_store, &child, parent);
+    set_process_child_row(app, group, process, &child);
+    if (desired_pid == process->pid &&
+        desired_instance_id == process->instance_id)
+        select_iter(GTK_TREE_VIEW(app->processes.processes_tree),
+                    GTK_TREE_MODEL(app->processes.processes_store), &child);
+}
+
+static void append_group(LsmApp *app, const ProcessGroup *group,
+                         GtkTreeIter *category, GHashTable *expanded,
+                         LsmProcessId desired_pid,
+                         LsmProcessInstanceId desired_instance_id,
+                         const char *desired_group)
+{
+    GtkTreeIter group_iter;
+    gtk_tree_store_append(app->processes.processes_store, &group_iter, category);
+    set_group_row(app, group, &group_iter);
 
     if (group->count > 1U) {
         for (size_t index = 0U; index < group->count; index++)
@@ -575,6 +640,13 @@ static void append_group(LsmApp *app, const ProcessGroup *group,
             expand_iter(GTK_TREE_VIEW(app->processes.processes_tree),
                         GTK_TREE_MODEL(app->processes.processes_store), &group_iter);
     }
+    char name[LSM_NAME_LEN + 32U];
+    if (group->count > 1U)
+        snprintf(name, sizeof(name), "%s (%zu)", group->name, group->count);
+    else
+        g_strlcpy(name, group->name, sizeof(name));
+    const LsmProcessInfo *representative =
+        &app->process.process_snapshot[group->indices[0]];
     if (desired_group && *desired_group &&
         strcmp(desired_group, name) == 0)
         select_iter(GTK_TREE_VIEW(app->processes.processes_tree),
@@ -586,9 +658,111 @@ static void append_group(LsmApp *app, const ProcessGroup *group,
                     GTK_TREE_MODEL(app->processes.processes_store), &group_iter);
 }
 
+static gboolean update_group_children(LsmApp *app, const ProcessGroup *group,
+                                      GHashTable *pid_index,
+                                      GtkTreeIter *group_iter)
+{
+    GtkTreeModel *model = GTK_TREE_MODEL(app->processes.processes_store);
+    GtkTreeIter child;
+    const gboolean has_children =
+        gtk_tree_model_iter_children(model, &child, group_iter);
+    if (group->count <= 1U) return !has_children;
+    if (!has_children) return FALSE;
+
+    size_t updated = 0U;
+    do {
+        guint64 pid = 0U;
+        gtk_tree_model_get(model, &child, GROUPED_COL_PID, &pid, -1);
+        if (pid == 0U || pid > UINT_MAX) return FALSE;
+        gpointer value = g_hash_table_lookup(
+            pid_index, GUINT_TO_POINTER((guint)pid));
+        if (!value) return FALSE;
+        const size_t process_index =
+            (size_t)(GPOINTER_TO_UINT(value) - 1U);
+        set_process_child_row(
+            app, group, &app->process.process_snapshot[process_index], &child);
+        updated++;
+    } while (gtk_tree_model_iter_next(model, &child));
+    return updated == group->count;
+}
+
+static gboolean update_grouped_model_values(LsmApp *app, GPtrArray *groups)
+{
+    if (!app || !groups || !app->processes.processes_store) return FALSE;
+    GHashTable *group_index =
+        g_hash_table_new(g_str_hash, g_str_equal);
+    GHashTable *pid_index =
+        g_hash_table_new(g_direct_hash, g_direct_equal);
+    if (!group_index || !pid_index) {
+        if (group_index) g_hash_table_destroy(group_index);
+        if (pid_index) g_hash_table_destroy(pid_index);
+        return FALSE;
+    }
+
+    for (guint index = 0U; index < groups->len; index++) {
+        ProcessGroup *group = g_ptr_array_index(groups, index);
+        g_hash_table_insert(group_index, group->key, group);
+    }
+    for (size_t index = 0U;
+         index < app->process.process_snapshot_count; index++) {
+        const LsmProcessId pid =
+            app->process.process_snapshot[index].pid;
+        if (pid == 0U || pid > UINT_MAX || index >= UINT_MAX) continue;
+        g_hash_table_insert(pid_index,
+                            GUINT_TO_POINTER((guint)pid),
+                            GUINT_TO_POINTER((guint)index + 1U));
+    }
+
+    GtkTreeModel *model = GTK_TREE_MODEL(app->processes.processes_store);
+    GtkTreeIter category;
+    gboolean valid_category =
+        gtk_tree_model_get_iter_first(model, &category);
+    size_t updated_groups = 0U;
+    while (valid_category) {
+        gint kind = PROCESS_ROW_PROCESS;
+        gtk_tree_model_get(model, &category,
+                           GROUPED_COL_KIND, &kind, -1);
+        if (kind != PROCESS_ROW_CATEGORY) {
+            g_hash_table_destroy(group_index);
+            g_hash_table_destroy(pid_index);
+            return FALSE;
+        }
+
+        GtkTreeIter group_iter;
+        gboolean valid_group =
+            gtk_tree_model_iter_children(model, &group_iter, &category);
+        while (valid_group) {
+            char *key = NULL;
+            gtk_tree_model_get(model, &group_iter,
+                               GROUPED_COL_KEY, &key, -1);
+            ProcessGroup *group = key
+                ? g_hash_table_lookup(group_index, key) : NULL;
+            g_free(key);
+            if (!group) {
+                g_hash_table_destroy(group_index);
+                g_hash_table_destroy(pid_index);
+                return FALSE;
+            }
+            set_group_row(app, group, &group_iter);
+            if (!update_group_children(app, group, pid_index, &group_iter)) {
+                g_hash_table_destroy(group_index);
+                g_hash_table_destroy(pid_index);
+                return FALSE;
+            }
+            updated_groups++;
+            valid_group = gtk_tree_model_iter_next(model, &group_iter);
+        }
+        valid_category = gtk_tree_model_iter_next(model, &category);
+    }
+
+    g_hash_table_destroy(group_index);
+    g_hash_table_destroy(pid_index);
+    return updated_groups == groups->len;
+}
+
 /* Model rebuilds preserve the user-visible selection and expanded groups by
  * stable process/group identity rather than by transient GtkTreePath values. */
-static void rebuild_grouped_model(LsmApp *app)
+static void rebuild_grouped_model(LsmApp *app, GPtrArray *groups)
 {
     const LsmProcessId desired_pid = app->process.selected_pid;
     const LsmProcessInstanceId desired_instance_id =
@@ -601,7 +775,6 @@ static void rebuild_grouped_model(LsmApp *app)
     gtk_tree_view_map_expanded_rows(
         GTK_TREE_VIEW(app->processes.processes_tree), collect_expanded_group, expanded);
 
-    GPtrArray *groups = collect_groups(app);
     gtk_tree_store_clear(app->processes.processes_store);
     if (!groups) {
         g_hash_table_destroy(expanded);
@@ -658,7 +831,6 @@ static void rebuild_grouped_model(LsmApp *app)
         category_groups[PROCESS_CATEGORY_BACKGROUND],
         category_groups[PROCESS_CATEGORY_SYSTEM], visible_processes);
 
-    g_ptr_array_free(groups, TRUE);
     g_hash_table_destroy(expanded);
 }
 
@@ -673,9 +845,22 @@ gboolean lsm_processes_page_visible(const LsmApp *app)
 
 void lsm_processes_present_snapshot(LsmApp *app)
 {
-    if (!app || !app->processes.processes_model_dirty || !app->processes.processes_store)
+    if (!app || !app->processes.processes_model_dirty ||
+        !app->processes.processes_store)
         return;
-    rebuild_grouped_model(app);
+    GPtrArray *groups = collect_groups(app);
+    if (!groups) return;
+
+    const uint64_t signature =
+        grouped_structure_signature(app, groups);
+    if (!app->processes.processes_structure_valid ||
+        app->processes.processes_structure_signature != signature ||
+        !update_grouped_model_values(app, groups)) {
+        rebuild_grouped_model(app, groups);
+        app->processes.processes_structure_signature = signature;
+        app->processes.processes_structure_valid = TRUE;
+    }
+    g_ptr_array_free(groups, TRUE);
     app->processes.processes_model_dirty = FALSE;
 }
 
@@ -788,7 +973,7 @@ static void grouped_selection_changed(GtkTreeSelection *selection,
     if (app->details.process_record_menu_item)
         gtk_widget_set_sensitive(app->details.process_record_menu_item,
             (valid && app->process.selected_group_count == 0U) ||
-            app->process.record_file != NULL);
+            app->process.recorder != NULL);
     g_free(name);
 }
 
@@ -796,6 +981,7 @@ static void grouped_search_changed(GtkEditable *editable, gpointer user_data)
 {
     (void)editable;
     LsmApp *app = user_data;
+    app->processes.processes_structure_valid = FALSE;
     app->processes.processes_model_dirty = TRUE;
     lsm_processes_present_snapshot(app);
 }

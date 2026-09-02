@@ -36,6 +36,16 @@ static gboolean write_oversized_history(const char *directory)
         fclose(file);
         return FALSE;
     }
+    for (unsigned index = 0U; index < 20000U; index++) {
+        if (fputc('X', file) == EOF) {
+            fclose(file);
+            return FALSE;
+        }
+    }
+    if (fputc('\n', file) == EOF) {
+        fclose(file);
+        return FALSE;
+    }
     for (unsigned index = 0U; index < OVERSIZED_HISTORY_ENTRIES; index++) {
         if (fprintf(file,
                 "uid:1000|/persist/%04u\tapp-%04u\tuser\t/persist/%04u"

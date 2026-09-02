@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file process_scan_benchmark.c
- * @brief Informational benchmark for the retained native process scanner.
+ * @brief Informational benchmarks for base and enriched native process scans.
  *
- * This developer benchmark deliberately has no pass/fail timing threshold:
- * procfs cost depends on process count, storage pressure, namespaces and host
- * scheduling. It reports a stable workload so release engineers can compare
- * revisions on the same machine without turning environmental noise into a
- * portability failure.
+ * These developer benchmarks deliberately have no pass/fail timing threshold:
+ * procfs, NSS and DRM costs depend on process count, identity services, device
+ * state, namespaces and host scheduling. Reporting both the ordinary snapshot
+ * and the most expensive Details/Processes enrichment makes regressions visible
+ * without turning environmental noise into a portability failure.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -16,15 +16,14 @@
 #include "process_backend.h"
 
 #include <stdbool.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
 
 #define LSM_BENCHMARK_WARMUP_SCANS 5U
-#define LSM_BENCHMARK_MEASURED_SCANS 100U
+#define LSM_BENCHMARK_BASE_SCANS 100U
+#define LSM_BENCHMARK_ENRICHED_SCANS 25U
 
 static double monotonic_seconds(void)
 {
@@ -34,47 +33,58 @@ static double monotonic_seconds(void)
            (double)time_value.tv_nsec / 1000000000.0;
 }
 
-static bool run_scan(LsmProcessBackend *backend, size_t *row_count)
+static size_t run_scan(LsmProcessBackend *backend, unsigned flags)
 {
     LsmProcessInfo *processes = NULL;
-    const size_t count = lsm_process_scan(
-        backend, &processes, LSM_PROCESS_SCAN_NONE);
+    const size_t count = lsm_process_scan(backend, &processes, flags);
     lsm_process_list_free(processes);
-    if (row_count) *row_count = count;
-    return processes != NULL || count > 0U;
+    return count;
 }
 
-int main(void)
+static bool benchmark_configuration(const char *name, unsigned flags,
+                                    unsigned measured_scans)
 {
     LsmProcessBackend *backend = lsm_process_backend_create();
     if (!backend) {
-        fputs("Unable to create process backend.\n", stderr);
-        return EXIT_FAILURE;
+        fprintf(stderr, "Unable to create %s process backend.\n", name);
+        return false;
     }
 
-    size_t rows = 0U;
     for (unsigned index = 0U; index < LSM_BENCHMARK_WARMUP_SCANS; index++)
-        (void)run_scan(backend, &rows);
+        (void)run_scan(backend, flags);
 
     const double started = monotonic_seconds();
     size_t total_rows = 0U;
-    for (unsigned index = 0U; index < LSM_BENCHMARK_MEASURED_SCANS; index++) {
-        (void)run_scan(backend, &rows);
-        total_rows += rows;
-    }
+    for (unsigned index = 0U; index < measured_scans; index++)
+        total_rows += run_scan(backend, flags);
     const double elapsed = monotonic_seconds() - started;
     lsm_process_backend_destroy(backend);
 
     if (!(elapsed > 0.0)) {
-        fputs("Monotonic benchmark clock did not advance.\n", stderr);
-        return EXIT_FAILURE;
+        fprintf(stderr, "%s benchmark clock did not advance.\n", name);
+        return false;
     }
 
-    printf("Process scan benchmark: scans=%u, mean rows=%.1f, "
+    printf("Process scan benchmark [%s]: scans=%u, mean rows=%.1f, "
            "total=%.3f ms, mean=%.3f ms/scan\n",
-           LSM_BENCHMARK_MEASURED_SCANS,
-           (double)total_rows / (double)LSM_BENCHMARK_MEASURED_SCANS,
+           name, measured_scans,
+           (double)total_rows / (double)measured_scans,
            elapsed * 1000.0,
-           elapsed * 1000.0 / (double)LSM_BENCHMARK_MEASURED_SCANS);
+           elapsed * 1000.0 / (double)measured_scans);
+    return true;
+}
+
+int main(void)
+{
+    const unsigned enriched =
+        LSM_PROCESS_SCAN_EXECUTABLE |
+        LSM_PROCESS_SCAN_HANDLE_COUNT |
+        LSM_PROCESS_SCAN_GPU;
+    if (!benchmark_configuration(
+            "base", LSM_PROCESS_SCAN_NONE, LSM_BENCHMARK_BASE_SCANS))
+        return EXIT_FAILURE;
+    if (!benchmark_configuration(
+            "enriched", enriched, LSM_BENCHMARK_ENRICHED_SCANS))
+        return EXIT_FAILURE;
     return EXIT_SUCCESS;
 }

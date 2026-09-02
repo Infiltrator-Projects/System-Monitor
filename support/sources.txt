@@ -27,6 +27,8 @@ performance_present.c
 details_page.c
 duration_format.c
 process_actions.c
+process_recorder.c
+process_scanner.c
 processes_ui.c
 process_export.c
 application_catalog.c

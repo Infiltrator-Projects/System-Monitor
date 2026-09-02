@@ -39,7 +39,7 @@ static gboolean process_pages_active(const LsmApp *app)
 static guint effective_process_refresh_interval(const LsmApp *app)
 {
     const guint foreground = process_refresh_interval(app);
-    if (process_pages_active(app) || app->process.record_file)
+    if (process_pages_active(app) || app->process.recorder)
         return foreground;
     return foreground < LSM_PROCESS_UPDATE_INTERVAL_MS
         ? LSM_PROCESS_UPDATE_INTERVAL_MS : foreground;

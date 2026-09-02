@@ -23,7 +23,7 @@
 #include "monitor.h"
 #include "performance.h"
 #include "preferences.h"
-#include "process_backend.h"
+#include "process_scanner.h"
 #include "process_inspector.h"
 #include "processes_ui.h"
 #include "services.h"
@@ -71,13 +71,20 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
         fputs("Unable to initialise the monitoring backend\n", stderr);
         return;
     }
-    app->process_backend = lsm_process_backend_create();
-    if (!app->process_backend) {
-        fputs("Unable to allocate process backend\n", stderr);
+    app->process_scanner = lsm_process_scanner_create();
+    if (!app->process_scanner) {
+        fputs("Unable to start process scanner\n", stderr);
         lsm_monitor_destroy(&app->monitor);
         return;
     }
     app->process.application_catalog = lsm_application_catalog_create();
+    if (!app->process.application_catalog) {
+        fputs("Unable to allocate application catalogue\n", stderr);
+        lsm_process_scanner_destroy(app->process_scanner);
+        app->process_scanner = NULL;
+        lsm_monitor_destroy(&app->monitor);
+        return;
+    }
 #ifdef LSM_TEST_14_CORES
     app->monitor.cpu.logical_cores = 14;
     app->monitor.cpu.physical_cores = 12;
@@ -203,11 +210,11 @@ void lsm_app_shutdown(LsmApp *app)
     lsm_startup_destroy(app);
     lsm_processes_destroy(app);
     lsm_details_destroy(app);
+    lsm_process_scanner_destroy(app->process_scanner);
+    app->process_scanner = NULL;
     lsm_process_list_free(app->process.process_snapshot);
     app->process.process_snapshot = NULL;
     app->process.process_snapshot_count = 0;
-    lsm_process_backend_destroy(app->process_backend);
-    app->process_backend = NULL;
     lsm_application_catalog_destroy(app->process.application_catalog);
     app->process.application_catalog = NULL;
     lsm_process_group_selection_clear(app);

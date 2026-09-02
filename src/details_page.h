@@ -82,12 +82,13 @@ void lsm_process_record_set(LsmApp *app, gboolean active);
 /**
  * Append one current sample to the active process recording.
  *
- * Write, flush and stream-close failures stop recording instead of silently
+ * The row is copied into the detached recording writer. Any asynchronous
+ * write failure is detected on the next append and stops recording rather than
  * leaving the interface in a false recording state.
  *
- * @param [in,out] app Application containing the recording stream.
+ * @param [in,out] app Application containing recording state.
  * @param [in] process Current process sample matching the recorded instance.
- * @return TRUE when the row and flush completed; FALSE otherwise.
+ * @return TRUE when the row was queued; FALSE after a writer failure.
  */
 gboolean lsm_process_record_append(LsmApp *app,
                                    const LsmProcessInfo *process);
@@ -116,7 +117,7 @@ void lsm_process_filters_load(LsmApp *app);
  */
 void lsm_process_filters_dialog(LsmApp *app);
 /**
- * Stop process CSV recording and release its open file.
+ * Stop process CSV recording and let the detached writer drain/close it.
  *
  * @param [in,out] app Application containing recording state.
  */
