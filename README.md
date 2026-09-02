@@ -80,7 +80,7 @@ make dist
 make release
 ```
 
-`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, coverage floors, lifecycle stability, package boundaries and installer safety. CI also runs CMake/CTest and a required 32-bit compile check.
+`make check` covers strict warnings, source/licence policy, portability checks, static analysis where supported, parser/backend tests, hardware fixtures, process controls, a 65% minimum line-coverage floor across 13 selected deterministic core modules, lifecycle stability, package boundaries and installer safety. The coverage result is explicitly scoped and is not presented as a whole-application percentage. CI also runs CMake/CTest and a required 32-bit compile check.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 

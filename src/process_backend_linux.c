@@ -1039,14 +1039,74 @@ void lsm_process_backend_destroy(LsmProcessBackend *backend)
     free(backend);
 }
 
+static bool signal_with_pidfd(LsmProcessId process_id,
+                              LsmProcessInstanceId instance_id,
+                              int signal_number, bool *unsupported)
+{
+    if (unsupported) *unsupported = false;
+#if defined(SYS_pidfd_open) && defined(SYS_pidfd_send_signal)
+    pid_t pid = 0;
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1 || signal_number <= 0) {
+        errno = EINVAL;
+        return false;
+    }
+
+    const long opened = syscall(SYS_pidfd_open, pid, 0U);
+    if (opened < 0) {
+        if (errno == ENOSYS && unsupported) *unsupported = true;
+        return false;
+    }
+    const int pidfd = (int)opened;
+
+    /* Opening a pidfd closes the signal-time PID-reuse race only after the
+     * numeric /proc identity has been checked again. If the original process
+     * exited before pidfd_open(), this second check rejects a reused PID. */
+    if (!process_identity_pid(process_id, instance_id, &pid)) {
+        const int saved_errno = errno;
+        (void)close(pidfd);
+        errno = saved_errno;
+        return false;
+    }
+
+    const long result = syscall(
+        SYS_pidfd_send_signal, pidfd, signal_number, NULL, 0U);
+    const int saved_errno = result == 0 ? 0 : errno;
+    (void)close(pidfd);
+    if (result == 0) return true;
+    errno = saved_errno;
+    if (errno == ENOSYS && unsupported) *unsupported = true;
+    return false;
+#else
+    (void)process_id;
+    (void)instance_id;
+    (void)signal_number;
+    if (unsupported) *unsupported = true;
+    errno = ENOSYS;
+    return false;
+#endif
+}
+
 bool lsm_process_control(LsmProcessId process_id,
                          LsmProcessInstanceId instance_id,
                          LsmProcessControl action)
 {
-    pid_t pid = 0;
     const int signal_number = signal_from_control(action);
+    if (signal_number <= 0) {
+        errno = EINVAL;
+        return false;
+    }
+
+    bool pidfd_unsupported = false;
+    if (signal_with_pidfd(
+            process_id, instance_id, signal_number, &pidfd_unsupported))
+        return true;
+    if (!pidfd_unsupported) return false;
+
+    /* Older kernels retain the existing validated numeric-PID fallback. */
+    pid_t pid = 0;
     if (!process_identity_pid(process_id, instance_id, &pid)) return false;
-    if (pid <= 1 || signal_number <= 0) {
+    if (pid <= 1) {
         errno = EINVAL;
         return false;
     }

@@ -598,6 +598,9 @@ benchmark: runtime-stability-smoke process-scan-benchmark
 
 # Sanitizers are a developer/CI gate rather than a universal local-build
 # requirement because some supported toolchains do not ship sanitizer runtimes.
+# The full GTK/GLib lifecycle fixture keeps leak accounting disabled because
+# those libraries retain documented process-global caches. The six dependency-
+# light fixtures below must also pass LeakSanitizer with leak detection enabled.
 sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
@@ -611,7 +614,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/process_grouping_smoke.c src/process_grouping.c -lm \
 		-o $(BUILD_DIR)/process-grouping-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/process-grouping-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
@@ -619,7 +622,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/process_gpu_smoke.c src/process_gpu.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-gpu-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/process-gpu-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
@@ -627,7 +630,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/disk-accounting-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/disk-accounting-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
@@ -635,7 +638,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/cpu-accounting-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/cpu-accounting-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
@@ -643,7 +646,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/smbios_memory_smoke.c src/smbios_memory.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/smbios-memory-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/smbios-memory-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
@@ -651,7 +654,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/storage-metadata-sanitized
-	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/storage-metadata-sanitized
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
@@ -661,6 +664,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/application-catalog-sanitized
+	@echo "ASan/UBSan passed; LeakSanitizer also passed on six deterministic core fixtures."
 
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
@@ -809,10 +813,10 @@ preferences-smoke: | $(BUILD_DIR)
 		-o $(BUILD_DIR)/preferences-smoke
 	./$(BUILD_DIR)/preferences-smoke
 
-# Instrument deterministic accounting, parsing, selection and grouping modules.
-# Each listed module must retain at least 65 percent line coverage in its smoke
-# fixture. This gate intentionally complements, rather than substitutes for,
-# the broader behaviour and runtime-stability tests above.
+# Instrument deterministic accounting, parsing, selection, formatting and
+# cadence modules. Each listed module must retain at least 65 percent line
+# coverage in its smoke fixture. The summary explicitly reports this selected
+# scope rather than presenting it as a whole-application coverage percentage.
 coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	rm -rf $(COVERAGE_DIR)
 	mkdir -p $(COVERAGE_DIR)
@@ -839,7 +843,11 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_grouping.c -o $(COVERAGE_DIR)/process_grouping.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c -lm -o $(COVERAGE_DIR)/process-grouping-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/duration_format.c -o $(COVERAGE_DIR)/duration_format.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/refresh_policy.c -o $(COVERAGE_DIR)/refresh_policy.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/mountinfo-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/duration_format_smoke.c $(COVERAGE_DIR)/duration_format.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/duration-format-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c src/metric_format.c $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
 	$(COVERAGE_DIR)/cpu-smoke
 	$(COVERAGE_DIR)/disk-smoke
 	$(COVERAGE_DIR)/process-gpu-smoke
@@ -851,8 +859,11 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/performance-selection-smoke
 	$(COVERAGE_DIR)/process-grouping-smoke
 	$(COVERAGE_DIR)/mountinfo-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c > coverage.txt
-	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; checked++; file="" } END { if (checked != 11) failed=1; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	$(COVERAGE_DIR)/duration-format-smoke
+	$(COVERAGE_DIR)/refresh-policy-smoke
+	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/duration_format.c ../../src/refresh_policy.c > coverage.txt
+	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 13) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	@echo "Coverage scope: 13 deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."
 
 task-manager-layout-smoke: | $(BUILD_DIR)
