@@ -177,7 +177,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(tr -d '[:space:]' < VERSION)"
+          VERSION="$(tr -d '[:space:]' < support/VERSION)"
           test -n "$VERSION"
           payload="$(jq -nc --arg repository "$GITHUB_REPOSITORY" --arg sha "$RELEASE_SHA" \
             '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
