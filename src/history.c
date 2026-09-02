@@ -106,7 +106,7 @@ static gboolean history_remove_oldest(LsmApp *app)
     GHashTableIter iterator;
     gpointer key = NULL;
     gpointer value = NULL;
-    const char *oldest_key = NULL;
+    gpointer oldest_key = NULL;
     int64_t oldest_last_seen = 0;
     int64_t oldest_first_seen = 0;
     gboolean found = FALSE;
@@ -125,7 +125,7 @@ static gboolean history_remove_oldest(LsmApp *app)
     }
     if (!found) return FALSE;
     const guint removed = g_hash_table_foreach_remove(
-        app->history.app_history, remove_history_key, (gpointer)oldest_key);
+        app->history.app_history, remove_history_key, oldest_key);
     if (removed == 0U) return FALSE;
     app->history.history_entry_count -=
         removed > app->history.history_entry_count
