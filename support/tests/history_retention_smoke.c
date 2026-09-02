@@ -86,33 +86,37 @@ int main(void)
         return fail("unable to create oversized persisted history");
     fputs("history retention smoke: oversized load\n", stderr);
 
-    LsmApp persisted = {0};
-    if (!lsm_history_test_init(&persisted, directory))
+    LsmApp *persisted = calloc(1U, sizeof(*persisted));
+    if (!persisted) return fail("unable to allocate persisted-history app");
+    if (!lsm_history_test_init(persisted, directory))
         return fail("unable to initialise persisted history");
-    if (lsm_history_test_retained_count(&persisted) != TEST_HISTORY_LIMIT)
+    if (lsm_history_test_retained_count(persisted) != TEST_HISTORY_LIMIT)
         return fail("oversized persisted history was not bounded during load");
-    if (lsm_history_test_contains(&persisted, "uid:1000|/persist/0000"))
+    if (lsm_history_test_contains(persisted, "uid:1000|/persist/0000"))
         return fail("oldest persisted identity survived bounded load");
-    if (!lsm_history_test_contains(&persisted, "uid:1000|/persist/4999"))
+    if (!lsm_history_test_contains(persisted, "uid:1000|/persist/4999"))
         return fail("newest persisted identity was not retained");
 
     fputs("history retention smoke: bounded save\n", stderr);
-    lsm_history_save(&persisted);
+    lsm_history_save(persisted);
     unsigned persisted_rows = 0U;
     if (!count_persisted_rows(directory, &persisted_rows) ||
         persisted_rows != TEST_HISTORY_LIMIT)
         return fail("bounded history was not durably rewritten");
-    lsm_history_test_dispose(&persisted);
+    lsm_history_test_dispose(persisted);
+    free(persisted);
 
     fputs("history retention smoke: reload\n", stderr);
-    LsmApp reloaded = {0};
-    if (!lsm_history_test_init(&reloaded, directory))
+    LsmApp *reloaded = calloc(1U, sizeof(*reloaded));
+    if (!reloaded) return fail("unable to allocate reload app");
+    if (!lsm_history_test_init(reloaded, directory))
         return fail("unable to reload bounded history");
-    if (lsm_history_test_retained_count(&reloaded) != TEST_HISTORY_LIMIT ||
-        lsm_history_test_contains(&reloaded, "uid:1000|/persist/0000") ||
-        !lsm_history_test_contains(&reloaded, "uid:1000|/persist/4999"))
+    if (lsm_history_test_retained_count(reloaded) != TEST_HISTORY_LIMIT ||
+        lsm_history_test_contains(reloaded, "uid:1000|/persist/0000") ||
+        !lsm_history_test_contains(reloaded, "uid:1000|/persist/4999"))
         return fail("bounded history did not survive save/reload");
-    lsm_history_test_dispose(&reloaded);
+    lsm_history_test_dispose(reloaded);
+    free(reloaded);
 
     char history_path[LSM_PATH_LEN];
     snprintf(history_path, sizeof(history_path), "%s/app-history.tsv", directory);
@@ -120,8 +124,9 @@ int main(void)
         return fail("unable to reset persistence fixture");
 
     fputs("history retention smoke: live 4097 ingest\n", stderr);
-    LsmApp live = {0};
-    if (!lsm_history_test_init(&live, directory))
+    LsmApp *live = calloc(1U, sizeof(*live));
+    if (!live) return fail("unable to allocate live-history app");
+    if (!lsm_history_test_init(live, directory))
         return fail("unable to initialise live history");
 
     LsmProcessInfo *processes = calloc(
@@ -130,27 +135,28 @@ int main(void)
     for (unsigned index = 0U; index < LIVE_HISTORY_ENTRIES; index++)
         fill_live_process(&processes[index], index);
 
-    lsm_app_history_ingest(&live, processes, LIVE_HISTORY_ENTRIES);
+    lsm_app_history_ingest(live, processes, LIVE_HISTORY_ENTRIES);
     fputs("history retention smoke: live 4097 ingested\n", stderr);
-    if (lsm_history_test_retained_count(&live) != LIVE_HISTORY_ENTRIES)
+    if (lsm_history_test_retained_count(live) != LIVE_HISTORY_ENTRIES)
         return fail("currently-live identity was evicted at the retention boundary");
 
     LsmProcessInfo survivor = processes[LIVE_HISTORY_ENTRIES - 1U];
     free(processes);
     fputs("history retention smoke: contract live set\n", stderr);
-    lsm_app_history_ingest(&live, &survivor, 1U);
+    lsm_app_history_ingest(live, &survivor, 1U);
     fputs("history retention smoke: contracted\n", stderr);
-    if (lsm_history_test_retained_count(&live) != TEST_HISTORY_LIMIT)
+    if (lsm_history_test_retained_count(live) != TEST_HISTORY_LIMIT)
         return fail("inactive identities were not pruned after live-set contraction");
-    if (!lsm_history_test_contains(&live, "uid:1000|/live/4096"))
+    if (!lsm_history_test_contains(live, "uid:1000|/live/4096"))
         return fail("live application history was not protected from eviction");
 
-    lsm_history_save(&live);
+    lsm_history_save(live);
     if (!count_persisted_rows(directory, &persisted_rows) ||
         persisted_rows != TEST_HISTORY_LIMIT)
         return fail("post-pruning history did not persist at the bounded size");
 
-    lsm_history_test_dispose(&live);
+    lsm_history_test_dispose(live);
+    free(live);
     if (unlink(history_path) != 0 || rmdir(directory) != 0)
         return fail("fixture cleanup failed");
 

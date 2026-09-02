@@ -52,13 +52,34 @@ void lsm_history_save(LsmApp *app);
 void lsm_history_destroy(LsmApp *app);
 
 #ifdef LSM_HISTORY_TEST_API
-/** Initialise history state without constructing GTK widgets for regression tests. */
+/**
+ * Initialise non-visual history state for the deterministic retention fixture.
+ *
+ * @param [in,out] app Zero-initialised application state owned by the fixture.
+ * @param [in] config_dir Temporary configuration directory used by the fixture.
+ * @return TRUE when history state and its persistence path were initialised.
+ */
 gboolean lsm_history_test_init(LsmApp *app, const char *config_dir);
-/** Return the retained application-identity count for regression assertions. */
+/**
+ * Return the number of retained application identities.
+ *
+ * @param [in] app Initialised fixture application.
+ * @return Current retained application-identity count.
+ */
 guint lsm_history_test_retained_count(const LsmApp *app);
-/** Report whether a retained history key exists for regression assertions. */
+/**
+ * Test whether one application-history identity is retained.
+ *
+ * @param [in] app Initialised fixture application.
+ * @param [in] key Complete persisted application-history key.
+ * @return TRUE when @p key is present in retained history.
+ */
 gboolean lsm_history_test_contains(const LsmApp *app, const char *key);
-/** Release test-owned history state without performing an implicit save. */
+/**
+ * Release fixture-owned history state without performing an implicit save.
+ *
+ * @param [in,out] app Fixture application whose history state is released.
+ */
 void lsm_history_test_dispose(LsmApp *app);
 #endif
 
