@@ -84,6 +84,7 @@ int main(void)
 
     if (!write_oversized_history(directory))
         return fail("unable to create oversized persisted history");
+    fputs("history retention smoke: oversized load\n", stderr);
 
     LsmApp persisted = {0};
     if (!lsm_history_test_init(&persisted, directory))
@@ -95,6 +96,7 @@ int main(void)
     if (!lsm_history_test_contains(&persisted, "uid:1000|/persist/4999"))
         return fail("newest persisted identity was not retained");
 
+    fputs("history retention smoke: bounded save\n", stderr);
     lsm_history_save(&persisted);
     unsigned persisted_rows = 0U;
     if (!count_persisted_rows(directory, &persisted_rows) ||
@@ -102,6 +104,7 @@ int main(void)
         return fail("bounded history was not durably rewritten");
     lsm_history_test_dispose(&persisted);
 
+    fputs("history retention smoke: reload\n", stderr);
     LsmApp reloaded = {0};
     if (!lsm_history_test_init(&reloaded, directory))
         return fail("unable to reload bounded history");
@@ -116,6 +119,7 @@ int main(void)
     if (unlink(history_path) != 0)
         return fail("unable to reset persistence fixture");
 
+    fputs("history retention smoke: live 4097 ingest\n", stderr);
     LsmApp live = {0};
     if (!lsm_history_test_init(&live, directory))
         return fail("unable to initialise live history");
@@ -127,12 +131,15 @@ int main(void)
         fill_live_process(&processes[index], index);
 
     lsm_app_history_ingest(&live, processes, LIVE_HISTORY_ENTRIES);
+    fputs("history retention smoke: live 4097 ingested\n", stderr);
     if (lsm_history_test_retained_count(&live) != LIVE_HISTORY_ENTRIES)
         return fail("currently-live identity was evicted at the retention boundary");
 
     LsmProcessInfo survivor = processes[LIVE_HISTORY_ENTRIES - 1U];
     free(processes);
+    fputs("history retention smoke: contract live set\n", stderr);
     lsm_app_history_ingest(&live, &survivor, 1U);
+    fputs("history retention smoke: contracted\n", stderr);
     if (lsm_history_test_retained_count(&live) != TEST_HISTORY_LIMIT)
         return fail("inactive identities were not pruned after live-set contraction");
     if (!lsm_history_test_contains(&live, "uid:1000|/live/4096"))

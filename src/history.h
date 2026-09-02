@@ -52,9 +52,13 @@ void lsm_history_save(LsmApp *app);
 void lsm_history_destroy(LsmApp *app);
 
 #ifdef LSM_HISTORY_TEST_API
+/** Initialise history state without constructing GTK widgets for regression tests. */
 gboolean lsm_history_test_init(LsmApp *app, const char *config_dir);
+/** Return the retained application-identity count for regression assertions. */
 guint lsm_history_test_retained_count(const LsmApp *app);
+/** Report whether a retained history key exists for regression assertions. */
 gboolean lsm_history_test_contains(const LsmApp *app, const char *key);
+/** Release test-owned history state without performing an implicit save. */
 void lsm_history_test_dispose(LsmApp *app);
 #endif
 
