@@ -88,7 +88,7 @@ int main(void)
                "N/A") != 0)
         return 24;
     if (strcmp(lsm_metric_format_network_pair(
-                   250000.0L, 1000000.0L, false, text, sizeof(text)),
+                   300000.0L, 1000000.0L, false, text, sizeof(text)),
                "S:0.3 R:1.0 MB/s") != 0)
         return 25;
     if (strcmp(lsm_metric_format_network_pair(
