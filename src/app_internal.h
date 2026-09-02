@@ -17,6 +17,7 @@
 #include "app_config.h"
 #include "graph.h"
 #include "gpu_metrics.h"
+#include "filesystem_inventory.h"
 #include "monitor_types.h"
 #include "performance_selection.h"
 
@@ -433,6 +434,10 @@ typedef struct {
     GtkWidget *filesystem_search;
     GtkWidget *filesystem_show_all;
     GtkWidget *filesystem_count_label;
+    LsmFilesystemInfo *filesystem_snapshot;
+    size_t filesystem_snapshot_count;
+    gboolean refresh_pending;
+    gboolean refresh_again;
 } LsmFilesystemState;
 
 /** Startup Applications page state. */

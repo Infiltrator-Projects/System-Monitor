@@ -5,8 +5,9 @@
  *
  * Mount membership comes from /proc/self/mountinfo because it is namespace
  * aware and preserves the source and filesystem type required by the GUI.
- * Capacity is read independently for each mount so one stale network mount or
- * permission failure cannot invalidate the rest of the snapshot.
+ * Capacity is read independently for each mount so one failed query does not
+ * discard other records. Because statvfs(3) on remote mounts can block, GUI
+ * callers isolate this collector from the presentation thread.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith

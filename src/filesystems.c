@@ -35,6 +35,19 @@ enum {
     FS_COL_USE_PERCENT
 };
 
+typedef struct {
+    LsmFilesystemInfo *items;
+    size_t count;
+} FilesystemRefreshResult;
+
+static void filesystem_refresh_result_free(gpointer data)
+{
+    FilesystemRefreshResult *result = data;
+    if (!result) return;
+    lsm_filesystem_inventory_free(result->items);
+    g_free(result);
+}
+
 static bool filesystem_matches_search(const LsmFilesystemInfo *item,
                                       const char *search)
 {
@@ -82,10 +95,31 @@ static void add_column(GtkWidget *tree, const char *title, int model_column,
     gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
 }
 
+static void present_filesystem_snapshot(LsmApp *app)
+{
+    if (!app || !app->filesystem.filesystem_store) return;
+    gtk_list_store_clear(app->filesystem.filesystem_store);
+    const char *search = app->filesystem.filesystem_search ?
+        gtk_entry_get_text(GTK_ENTRY(app->filesystem.filesystem_search)) : "";
+    size_t visible_count = 0U;
+    for (size_t index = 0U;
+         index < app->filesystem.filesystem_snapshot_count; index++) {
+        const LsmFilesystemInfo *item =
+            &app->filesystem.filesystem_snapshot[index];
+        if (!app->runtime.show_all_filesystems && !item->normally_visible)
+            continue;
+        if (!filesystem_matches_search(item, search)) continue;
+        append_filesystem(app, item);
+        visible_count++;
+    }
+    lsm_ui_set_label_text(app->filesystem.filesystem_count_label,
+                          "File systems: %zu", visible_count);
+}
+
 static void search_changed(GtkEditable *editable, gpointer user_data)
 {
     (void)editable;
-    lsm_filesystems_refresh(user_data);
+    present_filesystem_snapshot(user_data);
 }
 
 static void show_all_toggled(GtkToggleButton *button, gpointer user_data)
@@ -93,7 +127,49 @@ static void show_all_toggled(GtkToggleButton *button, gpointer user_data)
     LsmApp *app = user_data;
     app->runtime.show_all_filesystems = gtk_toggle_button_get_active(button);
     lsm_preferences_save(app);
-    lsm_filesystems_refresh(app);
+    present_filesystem_snapshot(app);
+}
+
+static void filesystem_refresh_worker(GTask *task, gpointer source_object,
+                                      gpointer task_data,
+                                      GCancellable *cancellable)
+{
+    (void)source_object;
+    (void)task_data;
+    (void)cancellable;
+    FilesystemRefreshResult *result = g_new0(FilesystemRefreshResult, 1U);
+    result->count = lsm_filesystem_inventory_collect(&result->items);
+    g_task_return_pointer(task, result, filesystem_refresh_result_free);
+}
+
+static void filesystem_refresh_complete(GObject *source_object,
+                                        GAsyncResult *async_result,
+                                        gpointer user_data)
+{
+    (void)user_data;
+    FilesystemRefreshResult *result = g_task_propagate_pointer(
+        G_TASK(async_result), NULL);
+    LsmApp *app = source_object ?
+        g_object_get_data(source_object, "lsm-filesystem-app") : NULL;
+    if (!app) {
+        filesystem_refresh_result_free(result);
+        return;
+    }
+
+    app->filesystem.refresh_pending = FALSE;
+    if (result) {
+        lsm_filesystem_inventory_free(app->filesystem.filesystem_snapshot);
+        app->filesystem.filesystem_snapshot = result->items;
+        app->filesystem.filesystem_snapshot_count = result->count;
+        result->items = NULL;
+        filesystem_refresh_result_free(result);
+        present_filesystem_snapshot(app);
+    }
+
+    if (app->filesystem.refresh_again && !app->runtime.shutting_down) {
+        app->filesystem.refresh_again = FALSE;
+        lsm_filesystems_refresh(app);
+    }
 }
 
 void lsm_filesystems_build(LsmApp *app, GtkWidget *container)
@@ -118,6 +194,8 @@ void lsm_filesystems_build(LsmApp *app, GtkWidget *container)
     app->filesystem.filesystem_store = gtk_list_store_new(FILESYSTEM_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    g_object_set_data(G_OBJECT(app->filesystem.filesystem_store),
+                      "lsm-filesystem-app", app);
     app->filesystem.filesystem_tree = gtk_tree_view_new_with_model(
         GTK_TREE_MODEL(app->filesystem.filesystem_store));
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(app->filesystem.filesystem_tree), TRUE);
@@ -152,30 +230,33 @@ void lsm_filesystems_build(LsmApp *app, GtkWidget *container)
 
 void lsm_filesystems_refresh(LsmApp *app)
 {
-    if (!app || !app->filesystem.filesystem_store) return;
-    gtk_list_store_clear(app->filesystem.filesystem_store);
-    const char *search = app->filesystem.filesystem_search ?
-        gtk_entry_get_text(GTK_ENTRY(app->filesystem.filesystem_search)) : "";
-
-    LsmFilesystemInfo *items = NULL;
-    const size_t count = lsm_filesystem_inventory_collect(&items);
-    size_t visible_count = 0U;
-    for (size_t index = 0U; index < count; index++) {
-        if (!app->runtime.show_all_filesystems && !items[index].normally_visible)
-            continue;
-        if (!filesystem_matches_search(&items[index], search)) continue;
-        append_filesystem(app, &items[index]);
-        visible_count++;
+    if (!app || !app->filesystem.filesystem_store || app->runtime.shutting_down)
+        return;
+    if (app->filesystem.refresh_pending) {
+        app->filesystem.refresh_again = TRUE;
+        return;
     }
-    lsm_filesystem_inventory_free(items);
-    lsm_ui_set_label_text(app->filesystem.filesystem_count_label, "File systems: %zu",
-                          visible_count);
+
+    app->filesystem.refresh_pending = TRUE;
+    GTask *task = g_task_new(G_OBJECT(app->filesystem.filesystem_store), NULL,
+                             filesystem_refresh_complete, NULL);
+    g_task_run_in_thread(task, filesystem_refresh_worker);
+    g_object_unref(task);
 }
 
 void lsm_filesystems_destroy(LsmApp *app)
 {
     if (!app) return;
-    if (app->filesystem.filesystem_store) g_object_unref(app->filesystem.filesystem_store);
+    if (app->filesystem.filesystem_store) {
+        g_object_set_data(G_OBJECT(app->filesystem.filesystem_store),
+                          "lsm-filesystem-app", NULL);
+        g_object_unref(app->filesystem.filesystem_store);
+    }
+    lsm_filesystem_inventory_free(app->filesystem.filesystem_snapshot);
+    app->filesystem.filesystem_snapshot = NULL;
+    app->filesystem.filesystem_snapshot_count = 0U;
+    app->filesystem.refresh_pending = FALSE;
+    app->filesystem.refresh_again = FALSE;
     app->filesystem.filesystem_store = NULL;
     app->filesystem.filesystem_tree = NULL;
     app->filesystem.filesystem_search = NULL;

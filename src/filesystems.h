@@ -21,7 +21,7 @@
 void lsm_filesystems_build(LsmApp *app, GtkWidget *container);
 
 /**
- * Re-read mountinfo and filesystem-capacity data into the visible model.
+ * Request a background mount/capacity snapshot and present it when complete.
  *
  * @param [in,out] app Owning application state.
  */

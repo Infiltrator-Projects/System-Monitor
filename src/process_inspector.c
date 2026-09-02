@@ -5,10 +5,10 @@
  *
  * The inspector is deliberately non-modal: the main monitor continues sampling
  * while the window displays live CPU, memory and I/O values. Expensive procfs
- * inventories are refreshed only on explicit user request, while the compact
- * overview and performance graph update once per second from the application's
- * retained process snapshot. This separation avoids turning an inspection
- * window into a second full process scanner.
+ * inventories are refreshed only on explicit user request and collected on a
+ * worker thread, while the compact overview and performance graph update once
+ * per second from the application's retained process snapshot. This separation
+ * avoids blocking GTK or turning an inspector into a second process scanner.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -56,7 +56,39 @@ typedef struct {
     unsigned descriptor_count;
     LsmGraph *performance_graph;
     guint refresh_timer;
+    gboolean inventory_pending;
 } ProcessInspector;
+
+typedef struct {
+    LsmProcessId pid;
+    LsmProcessInstanceId instance_id;
+} ProcessInventoryRequest;
+
+typedef struct {
+    LsmProcessId pid;
+    LsmProcessInstanceId instance_id;
+    gboolean identity_valid;
+    char executable[LSM_PATH_LEN];
+    unsigned descriptor_count;
+    LsmOpenFileInfo *open_files;
+    size_t open_file_count;
+    LsmMemoryMapInfo *maps;
+    size_t map_count;
+    LsmThreadInfo *threads;
+    size_t thread_count;
+} ProcessInventoryResult;
+
+typedef struct {
+    char *path;
+} FileUsersRequest;
+
+typedef struct {
+    char *path;
+    LsmFileUserInfo *items;
+    size_t count;
+} FileUsersResult;
+
+#define LSM_INSPECTOR_OBJECT_KEY "lsm-process-inspector"
 
 /* Every inspector operation revalidates the process instance token. A
  * recycled process identifier must never redirect an existing inspector to a
@@ -228,11 +260,20 @@ static GtkWidget *build_performance_page(ProcessInspector *inspector)
 /* Inventory reads are deliberately on-demand. They can be large and may race
  * with process churn, so each category reports partial/unavailable results
  * without invalidating the one-second summary. */
-static void populate_open_files(ProcessInspector *inspector)
+static void process_inventory_result_free(gpointer data)
+{
+    ProcessInventoryResult *result = data;
+    if (!result) return;
+    lsm_process_inspection_free(result->open_files);
+    lsm_process_inspection_free(result->maps);
+    lsm_process_inspection_free(result->threads);
+    g_free(result);
+}
+
+static void present_open_files(ProcessInspector *inspector,
+                               const LsmOpenFileInfo *items, size_t count)
 {
     gtk_list_store_clear(inspector->open_files_store);
-    LsmOpenFileInfo *items = NULL;
-    const size_t count = lsm_process_inspection_open_files(inspector->pid, &items);
     for (size_t index = 0U; index < count; index++) {
         GtkTreeIter iterator;
         char descriptor[32];
@@ -249,14 +290,12 @@ static void populate_open_files(ProcessInspector *inspector)
     else
         lsm_ui_set_label_text(inspector->open_files_status,
             "No readable descriptors — the process may have exited or access may be restricted");
-    lsm_process_inspection_free(items);
 }
 
-static void populate_maps(ProcessInspector *inspector)
+static void present_maps(ProcessInspector *inspector,
+                         const LsmMemoryMapInfo *items, size_t count)
 {
     gtk_list_store_clear(inspector->maps_store);
-    LsmMemoryMapInfo *items = NULL;
-    const size_t count = lsm_process_inspection_memory_maps(inspector->pid, &items);
     for (size_t index = 0U; index < count; index++) {
         GtkTreeIter iterator;
         char range[64], offset[32], inode[32], size[64];
@@ -282,14 +321,12 @@ static void populate_maps(ProcessInspector *inspector)
     else
         lsm_ui_set_label_text(inspector->maps_status,
             "Memory map unavailable — the process may have exited or access may be restricted");
-    lsm_process_inspection_free(items);
 }
 
-static void populate_threads(ProcessInspector *inspector)
+static void present_threads(ProcessInspector *inspector,
+                            const LsmThreadInfo *items, size_t count)
 {
     gtk_list_store_clear(inspector->threads_store);
-    LsmThreadInfo *items = NULL;
-    const size_t count = lsm_process_inspection_threads(inspector->pid, &items);
     for (size_t index = 0U; index < count; index++) {
         GtkTreeIter iterator;
         char tid[32];
@@ -297,7 +334,8 @@ static void populate_threads(ProcessInspector *inspector)
                  (unsigned long long)items[index].tid);
         gtk_list_store_append(inspector->threads_store, &iterator);
         gtk_list_store_set(inspector->threads_store, &iterator,
-                           0, tid, 1, items[index].name, 2, items[index].state, -1);
+                           0, tid, 1, items[index].name,
+                           2, items[index].state, -1);
     }
     if (count != 0U)
         lsm_ui_set_label_text(inspector->threads_status, "%zu thread%s", count,
@@ -305,7 +343,6 @@ static void populate_threads(ProcessInspector *inspector)
     else
         lsm_ui_set_label_text(inspector->threads_status,
                               "Thread information unavailable");
-    lsm_process_inspection_free(items);
 }
 
 static void populate_family(ProcessInspector *inspector)
@@ -345,42 +382,112 @@ static void populate_family(ProcessInspector *inspector)
         child_count == 1U ? "" : "ren");
 }
 
-static void refresh_inventories(ProcessInspector *inspector)
+static void mark_inventory_unavailable(ProcessInspector *inspector)
 {
-    if (!inspector_identity_current(inspector)) {
-        gtk_list_store_clear(inspector->open_files_store);
-        gtk_list_store_clear(inspector->maps_store);
-        gtk_list_store_clear(inspector->threads_store);
-        gtk_list_store_clear(inspector->family_store);
-        lsm_ui_set_label_text(inspector->open_files_status,
-                              "Process exited or PID was reused");
-        lsm_ui_set_label_text(inspector->maps_status,
-                              "Process exited or PID was reused");
-        lsm_ui_set_label_text(inspector->threads_status,
-                              "Process exited or PID was reused");
-        lsm_ui_set_label_text(inspector->family_status,
-                              "Process exited or PID was reused");
+    if (!inspector) return;
+    gtk_list_store_clear(inspector->open_files_store);
+    gtk_list_store_clear(inspector->maps_store);
+    gtk_list_store_clear(inspector->threads_store);
+    gtk_list_store_clear(inspector->family_store);
+    lsm_ui_set_label_text(inspector->open_files_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->maps_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->threads_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->family_status,
+                          "Process exited or PID was reused");
+}
+
+static void process_inventory_worker(GTask *task, gpointer source_object,
+                                     gpointer task_data,
+                                     GCancellable *cancellable)
+{
+    (void)source_object;
+    (void)cancellable;
+    const ProcessInventoryRequest *request = task_data;
+    ProcessInventoryResult *result = g_new0(ProcessInventoryResult, 1U);
+    result->pid = request->pid;
+    result->instance_id = request->instance_id;
+    if (!lsm_process_inspection_identity_matches(
+            request->pid, request->instance_id)) {
+        g_task_return_pointer(task, result, process_inventory_result_free);
         return;
     }
-    const LsmProcessInfo *snapshot = snapshot_process(inspector->app,
-        inspector->pid, inspector->instance_id);
-    inspector->executable[0] = '\0';
-    inspector->descriptor_count = 0U;
-    if (snapshot) {
-        LsmProcessInfo details = *snapshot;
-        if (lsm_process_enrich(details.pid, &details,
-                LSM_PROCESS_SCAN_EXECUTABLE |
-                LSM_PROCESS_SCAN_HANDLE_COUNT)) {
-            lsm_copy_string(
-                inspector->executable, sizeof(inspector->executable),
-                details.executable);
-            inspector->descriptor_count = details.handle_count;
-        }
+
+    LsmProcessInfo details = {0};
+    details.pid = request->pid;
+    if (lsm_process_enrich(details.pid, &details,
+            LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT)) {
+        lsm_copy_string(result->executable, sizeof(result->executable),
+                        details.executable);
+        result->descriptor_count = details.handle_count;
     }
-    populate_open_files(inspector);
-    populate_maps(inspector);
-    populate_threads(inspector);
+    result->open_file_count = lsm_process_inspection_open_files(
+        request->pid, &result->open_files);
+    result->map_count = lsm_process_inspection_memory_maps(
+        request->pid, &result->maps);
+    result->thread_count = lsm_process_inspection_threads(
+        request->pid, &result->threads);
+    result->identity_valid = lsm_process_inspection_identity_matches(
+        request->pid, request->instance_id);
+    g_task_return_pointer(task, result, process_inventory_result_free);
+}
+
+static void process_inventory_complete(GObject *source_object,
+                                       GAsyncResult *async_result,
+                                       gpointer user_data)
+{
+    (void)user_data;
+    ProcessInventoryResult *result = g_task_propagate_pointer(
+        G_TASK(async_result), NULL);
+    ProcessInspector *inspector = source_object ?
+        g_object_get_data(source_object, LSM_INSPECTOR_OBJECT_KEY) : NULL;
+    if (!inspector) {
+        process_inventory_result_free(result);
+        return;
+    }
+    inspector->inventory_pending = FALSE;
+    if (!result || !result->identity_valid ||
+        result->pid != inspector->pid ||
+        result->instance_id != inspector->instance_id) {
+        mark_inventory_unavailable(inspector);
+        process_inventory_result_free(result);
+        return;
+    }
+
+    lsm_copy_string(inspector->executable, sizeof(inspector->executable),
+                    result->executable);
+    inspector->descriptor_count = result->descriptor_count;
+    present_open_files(inspector, result->open_files, result->open_file_count);
+    present_maps(inspector, result->maps, result->map_count);
+    present_threads(inspector, result->threads, result->thread_count);
     populate_family(inspector);
+    process_inventory_result_free(result);
+}
+
+static void refresh_inventories(ProcessInspector *inspector)
+{
+    if (!inspector || inspector->inventory_pending) return;
+    if (!inspector_identity_current(inspector)) {
+        mark_inventory_unavailable(inspector);
+        return;
+    }
+
+    inspector->inventory_pending = TRUE;
+    lsm_ui_set_label_text(inspector->open_files_status, "Refreshing…");
+    lsm_ui_set_label_text(inspector->maps_status, "Refreshing…");
+    lsm_ui_set_label_text(inspector->threads_status, "Refreshing…");
+    populate_family(inspector);
+
+    ProcessInventoryRequest *request = g_new0(ProcessInventoryRequest, 1U);
+    request->pid = inspector->pid;
+    request->instance_id = inspector->instance_id;
+    GTask *task = g_task_new(G_OBJECT(inspector->window), NULL,
+                             process_inventory_complete, NULL);
+    g_task_set_task_data(task, request, g_free);
+    g_task_run_in_thread(task, process_inventory_worker);
+    g_object_unref(task);
 }
 
 static void set_large_metric(GtkWidget *label, const char *text)
@@ -471,8 +578,8 @@ static gboolean inspector_update(gpointer user_data)
 
 static void inspector_destroy(GtkWidget *widget, gpointer user_data)
 {
-    (void)widget;
     ProcessInspector *inspector = user_data;
+    g_object_set_data(G_OBJECT(widget), LSM_INSPECTOR_OBJECT_KEY, NULL);
     if (inspector->refresh_timer) g_source_remove(inspector->refresh_timer);
     if (inspector->performance_graph) lsm_graph_free(inspector->performance_graph);
     if (inspector->open_files_store) g_object_unref(inspector->open_files_store);
@@ -485,9 +592,7 @@ static void inspector_destroy(GtkWidget *widget, gpointer user_data)
 static void refresh_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;
-    ProcessInspector *inspector = user_data;
-    refresh_inventories(inspector);
-    (void)inspector_update(inspector);
+    refresh_inventories(user_data);
 }
 
 /* Controls express neutral actions; the selected platform backend translates
@@ -730,6 +835,8 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
 
     gtk_box_pack_start(GTK_BOX(outer), build_control_bar(inspector),
                        FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(inspector->window), LSM_INSPECTOR_OBJECT_KEY,
+                      inspector);
     g_signal_connect(inspector->window, "destroy",
                      G_CALLBACK(inspector_destroy), inspector);
     refresh_inventories(inspector);
@@ -739,13 +846,13 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
     gtk_widget_show_all(inspector->window);
 }
 
-/* Exact-file ownership is an explicit diagnostic operation rather than a
- * background scan because its cost grows with process and open-resource count. */
-static void show_file_users_results(LsmApp *app, const char *path,
+/* Exact-file ownership is explicit user work, but the /proc walk runs on a
+ * worker because its cost grows with process and open-resource count. */
+static void show_file_users_results(GtkWindow *parent, const char *path,
                                     LsmFileUserInfo *items, size_t count)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Processes using file",
-        GTK_WINDOW(app->shell.window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        parent, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Close", GTK_RESPONSE_CLOSE, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 820, 520);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -784,6 +891,50 @@ static void show_file_users_results(LsmApp *app, const char *path,
     g_object_unref(store);
 }
 
+static void file_users_result_free(gpointer data)
+{
+    FileUsersResult *result = data;
+    if (!result) return;
+    g_free(result->path);
+    lsm_process_inspection_free(result->items);
+    g_free(result);
+}
+
+static void file_users_request_free(gpointer data)
+{
+    FileUsersRequest *request = data;
+    if (!request) return;
+    g_free(request->path);
+    g_free(request);
+}
+
+static void file_users_worker(GTask *task, gpointer source_object,
+                              gpointer task_data, GCancellable *cancellable)
+{
+    (void)source_object;
+    (void)cancellable;
+    const FileUsersRequest *request = task_data;
+    FileUsersResult *result = g_new0(FileUsersResult, 1U);
+    result->path = g_strdup(request->path);
+    result->count = lsm_process_inspection_find_file_users(
+        request->path, &result->items);
+    g_task_return_pointer(task, result, file_users_result_free);
+}
+
+static void file_users_complete(GObject *source_object,
+                                GAsyncResult *async_result,
+                                gpointer user_data)
+{
+    (void)user_data;
+    FileUsersResult *result = g_task_propagate_pointer(
+        G_TASK(async_result), NULL);
+    if (result && source_object &&
+        gtk_widget_get_mapped(GTK_WIDGET(source_object)))
+        show_file_users_results(GTK_WINDOW(source_object), result->path,
+                                result->items, result->count);
+    file_users_result_free(result);
+}
+
 void lsm_process_file_users_show(LsmApp *app)
 {
     if (!app) return;
@@ -797,9 +948,12 @@ void lsm_process_file_users_show(LsmApp *app)
     char *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
     gtk_widget_destroy(chooser);
     if (!path) return;
-    LsmFileUserInfo *items = NULL;
-    const size_t count = lsm_process_inspection_find_file_users(path, &items);
-    show_file_users_results(app, path, items, count);
-    lsm_process_inspection_free(items);
-    g_free(path);
+
+    FileUsersRequest *request = g_new0(FileUsersRequest, 1U);
+    request->path = path;
+    GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
+                             file_users_complete, NULL);
+    g_task_set_task_data(task, request, file_users_request_free);
+    g_task_run_in_thread(task, file_users_worker);
+    g_object_unref(task);
 }

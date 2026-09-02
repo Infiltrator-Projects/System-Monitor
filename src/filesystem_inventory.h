@@ -50,6 +50,8 @@ typedef struct {
  *         the namespace contains no parseable mounts.
  * Complexity: O(M log M), where M is the number of mountinfo records.
  * Thread safety: safe for concurrent callers; the function retains no globals.
+ * Blocking: statvfs(3) may wait on stale remote filesystems, so interactive
+ * callers should execute collection away from their presentation thread.
  */
 size_t lsm_filesystem_inventory_collect(LsmFilesystemInfo **out_items);
 
