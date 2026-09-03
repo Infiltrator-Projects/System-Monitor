@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
       - name: Check out source and Common
@@ -147,8 +147,8 @@ jobs:
           dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
 
   local-native:
-    name: Hosted Linux / native verification
-    runs-on: ubuntu-24.04
+    name: Local Linux / native verification
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
       - name: Check out source and Common
