@@ -45,7 +45,16 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
 
 void lsm_app_shell_apply_css(void)
 {
+    /* Infiltrator Design v1: MBLINK is the reference implementation. The
+     * application keeps its native GTK colour semantics while sharing the MB
+     * Corpo typography roles with the rest of the project family. */
     static const char css[] =
+        "* { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
+        "headerbar .title, .titlebar .title {"
+        " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\", Sans;"
+        " font-weight: 400;"
+        "}"
+        "button, treeview header button, notebook tab { font-weight: 700; }"
         "#lsm-side-button:checked {"
         " background-color: alpha(@theme_selected_bg_color, 0.28);"
         " border-color: @theme_selected_bg_color;"
