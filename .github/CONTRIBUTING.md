@@ -2,11 +2,12 @@
 
 # Contributing to System Monitor
 
-System Monitor is a native C project with explicit boundaries between GTK presentation, platform-neutral models, Linux backends and Common.
+System Monitor's installed application is native C17/GTK 3. Developer-only tooling may use C++17 where its standard library materially improves safety or maintainability. The project keeps explicit boundaries between GTK presentation, platform-neutral models, Linux backends and Common.
 
 ## Engineering rules
 
-- Target ISO C17; prefer older standard constructs when they are equally clear.
+- Target ISO C17 for the installed application; prefer older standard constructs when they are equally clear.
+- Use ISO C++17 only in developer tooling where it provides a concrete correctness, safety or maintainability benefit; do not add a C++ runtime dependency to the installed application merely for convenience.
 - Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
 - Keep GTK types out of reusable accounting, parsing and model layers.
 - Prefer direct native interfaces over command orchestration for telemetry.
