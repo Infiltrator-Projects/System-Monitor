@@ -249,9 +249,14 @@ static void update_load_average(LsmCpuInfo *cpu)
 }
 
 typedef struct {
-    char **current_paths;
-    char **maximum_paths;
+    char *current_path;
+    char *maximum_path;
+} LsmCpuFrequencyPath;
+
+typedef struct {
+    LsmCpuFrequencyPath *paths;
     size_t count;
+    size_t capacity;
 } LsmCpuFrequencySource;
 
 /* cpufreq paths are discovered once and reused rather than rescanned. */
@@ -259,11 +264,10 @@ static void destroy_cpu_frequency_source(LsmCpuFrequencySource *source)
 {
     if (!source) return;
     for (size_t index = 0U; index < source->count; index++) {
-        free(source->current_paths[index]);
-        free(source->maximum_paths[index]);
+        free(source->paths[index].current_path);
+        free(source->paths[index].maximum_path);
     }
-    free(source->current_paths);
-    free(source->maximum_paths);
+    free(source->paths);
     free(source);
 }
 
@@ -272,17 +276,9 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
     DIR *directory = opendir("/sys/devices/system/cpu/cpufreq");
     if (!directory) return NULL;
 
-    size_t capacity = 16U;
     LsmCpuFrequencySource *source = calloc(1U, sizeof(*source));
     if (!source) {
         closedir(directory);
-        return NULL;
-    }
-    source->current_paths = calloc(capacity, sizeof(*source->current_paths));
-    source->maximum_paths = calloc(capacity, sizeof(*source->maximum_paths));
-    if (!source->current_paths || !source->maximum_paths) {
-        closedir(directory);
-        destroy_cpu_frequency_source(source);
         return NULL;
     }
 
@@ -290,20 +286,6 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
     while ((entry = readdir(directory))) {
         if (strncmp(entry->d_name, "policy", 6U) != 0 ||
             !isdigit((unsigned char)entry->d_name[6])) continue;
-        if (source->count == capacity) {
-            const size_t next = capacity * 2U;
-            char **current = realloc(source->current_paths, next * sizeof(*current));
-            if (!current) break;
-            source->current_paths = current;
-            char **maximum = realloc(source->maximum_paths, next * sizeof(*maximum));
-            if (!maximum) break;
-            source->maximum_paths = maximum;
-            memset(source->current_paths + capacity, 0,
-                   (next - capacity) * sizeof(*source->current_paths));
-            memset(source->maximum_paths + capacity, 0,
-                   (next - capacity) * sizeof(*source->maximum_paths));
-            capacity = next;
-        }
 
         char current[LSM_PATH_LEN];
         char maximum[LSM_PATH_LEN];
@@ -323,17 +305,23 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
             if (maximum_written < 0 || (size_t)maximum_written >= sizeof(maximum))
                 continue;
         }
-        source->current_paths[source->count] = strdup(current);
-        source->maximum_paths[source->count] = strdup(maximum);
-        if (!source->current_paths[source->count] ||
-            !source->maximum_paths[source->count]) {
-            free(source->current_paths[source->count]);
-            free(source->maximum_paths[source->count]);
-            source->current_paths[source->count] = NULL;
-            source->maximum_paths[source->count] = NULL;
+        LsmCpuFrequencyPath candidate = {
+            .current_path = strdup(current),
+            .maximum_path = strdup(maximum)
+        };
+        if (!candidate.current_path || !candidate.maximum_path) {
+            free(candidate.current_path);
+            free(candidate.maximum_path);
             break;
         }
-        source->count++;
+        if (!lsm_array_reserve((void **)&source->paths, &source->capacity,
+                               sizeof(*source->paths), source->count + 1U,
+                               16U)) {
+            free(candidate.current_path);
+            free(candidate.maximum_path);
+            break;
+        }
+        source->paths[source->count++] = candidate;
     }
     closedir(directory);
     if (source->count == 0U) {
@@ -357,8 +345,9 @@ static double read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum)
         double total_khz = 0.0;
         unsigned count = 0U;
         for (size_t index = 0U; index < source->count; index++) {
-            const char *path = maximum ? source->maximum_paths[index]
-                                       : source->current_paths[index];
+            const char *path = maximum
+                ? source->paths[index].maximum_path
+                : source->paths[index].current_path;
             const uint64_t khz = lsm_read_u64_or_zero(path);
             if (!khz) continue;
             total_khz += (double)khz;

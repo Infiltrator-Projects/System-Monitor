@@ -48,7 +48,12 @@ int main(void)
     char path[32];
     assert(lsm_join_path(path, sizeof(path), "/sys/", "device"));
     assert(strcmp(path, "/sys/device") == 0);
+    assert(lsm_join_path(path, sizeof(path), "/sys", "/device"));
+    assert(strcmp(path, "/sys/device") == 0);
+    assert(lsm_join_path(path, sizeof(path), "/sys/", "/device"));
+    assert(strcmp(path, "/sys/device") == 0);
     assert(!lsm_join_path(path, 4, "/sys/", "device"));
+    assert(path[0] == '\0');
 
     char resolved[512];
     assert(lsm_realpath_copy(".", resolved, sizeof(resolved)));

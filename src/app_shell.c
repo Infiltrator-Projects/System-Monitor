@@ -71,6 +71,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     if (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM) {
         gtk_css_provider_load_from_data(
             app->shell.theme_provider, lsm_base_css, -1, NULL);
+        if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
         return;
     }
 
@@ -166,6 +167,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     if (written < 0 || (size_t)written >= sizeof(css)) return;
     gtk_css_provider_load_from_data(
         app->shell.theme_provider, css, written, NULL);
+    if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
 }
 
 /* Window and tab lifecycle. Expensive pages refresh on demand as well as by

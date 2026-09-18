@@ -34,7 +34,7 @@
 #define lsm_clamp_double infiltratr_clamp_double
 #define lsm_realpath_copy infiltratr_realpath_copy
 #define lsm_path_basename infiltratr_path_basename
-#define lsm_join_path infiltratr_path_concat
+#define lsm_join_path infiltratr_path_join
 #define lsm_read_text_file infiltratr_read_text_file
 #define lsm_read_u64_file infiltratr_read_u64_file
 #define lsm_read_u64_or_zero infiltratr_read_u64_or_zero

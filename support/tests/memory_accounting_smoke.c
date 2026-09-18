@@ -69,6 +69,9 @@ int main(void)
     assert(memory.committed_bytes == (8ULL << 30U));
     assert(memory.kernel_nonreclaimable_bytes == (3ULL << 20U));
 
+    replace_file(path, "MemAvailable: 18446744073709551615 kB\n");
+    assert(!lsm_memory_accounting_read(path, &memory, false));
+
     assert(unlink(path) == 0);
     puts("Memory accounting smoke test passed.");
     return 0;

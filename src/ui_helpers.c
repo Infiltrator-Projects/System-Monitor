@@ -86,16 +86,23 @@ GdkRGBA lsm_ui_background_colour(GtkWidget *widget)
 
     GtkStyleContext *style = gtk_widget_get_style_context(widget);
     GdkRGBA theme_background;
-    if (gtk_style_context_lookup_color(style, "theme_bg_color", &theme_background) ||
-        gtk_style_context_lookup_color(style, "window_bg_color", &theme_background))
+    const gboolean common_background =
+        gtk_style_context_lookup_color(style, "lsm_background",
+                                       &theme_background);
+    if (common_background ||
+        gtk_style_context_lookup_color(style, "theme_bg_color",
+                                       &theme_background) ||
+        gtk_style_context_lookup_color(style, "window_bg_color",
+                                       &theme_background))
         background = theme_background;
 
     const double luminance = 0.2126 * background.red +
                              0.7152 * background.green +
                              0.0722 * background.blue;
-    /* Some dark themes publish an almost-black DrawingArea colour. Graphs use
-     * the surrounding panel tone so grid lines remain distinguishable. */
-    if (luminance < 0.08) {
+    /* Follow-system mode retains the historical guard against GTK themes that
+     * expose an unusably black DrawingArea colour. A forced Common theme must
+     * preserve its semantic background exactly, including Common Night. */
+    if (!common_background && luminance < 0.08) {
         background.red = 0.17;
         background.green = 0.17;
         background.blue = 0.19;

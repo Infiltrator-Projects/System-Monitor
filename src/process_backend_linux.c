@@ -175,23 +175,6 @@ static bool parse_proc_pid(const char *name, pid_t *pid)
     return true;
 }
 
-static bool read_whole_file(const char *path, char *buffer, size_t size)
-{
-    if (!path || !buffer || size < 2U) return false;
-    buffer[0] = '\0';
-    const int descriptor = open(path, O_RDONLY | O_CLOEXEC);
-    if (descriptor < 0) return false;
-
-    ssize_t length;
-    do {
-        length = read(descriptor, buffer, size - 1U);
-    } while (length < 0 && errno == EINTR);
-    (void)close(descriptor);
-    if (length <= 0) return false;
-    buffer[(size_t)length] = '\0';
-    return true;
-}
-
 static bool parse_prefixed_u64(const char *line, const char *prefix,
                                uint64_t *value)
 {
@@ -270,7 +253,8 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     *native_stat = (LinuxProcessStat){0};
     char path[128], text[8192];
     snprintf(path, sizeof(path), "/proc/%d/stat", pid);
-    if (!read_whole_file(path, text, sizeof(text))) return false;
+    if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
+        INFILTRATR_IO_OK) return false;
 
     char *left = strchr(text, '(');
     char *right = strrchr(text, ')');
@@ -419,7 +403,8 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
     char path[128];
     char text[4096];
     (void)snprintf(path, sizeof(path), "/proc/%d/status", pid);
-    if (!read_whole_file(path, text, sizeof(text))) return;
+    if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
+        INFILTRATR_IO_OK) return;
 
     uint64_t voluntary = 0U;
     uint64_t involuntary = 0U;
@@ -490,7 +475,8 @@ static void read_process_io(pid_t pid, LsmProcessInfo *process)
     char path[128];
     char text[1024];
     (void)snprintf(path, sizeof(path), "/proc/%d/io", pid);
-    if (!read_whole_file(path, text, sizeof(text))) return;
+    if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
+        INFILTRATR_IO_OK) return;
 
     char *line = text;
     while (*line) {

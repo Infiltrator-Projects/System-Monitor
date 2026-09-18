@@ -41,8 +41,11 @@ static bool parse_quantity(char *line, char **key, uint64_t *bytes)
         if (*cursor) return false;
     }
 
+    uint64_t converted = 0U;
+    if (!infiltratr_u64_multiply_checked(parsed, multiplier, &converted))
+        return false;
     *key = line;
-    *bytes = lsm_u64_multiply_saturating(parsed, multiplier);
+    *bytes = converted;
     return true;
 }
 
