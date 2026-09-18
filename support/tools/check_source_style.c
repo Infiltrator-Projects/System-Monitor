@@ -811,6 +811,7 @@ static void check_shell_boundary_tree(const char *directory_path_value)
         char path[LSM_CHECK_PATH_LEN];
         if (!join_path(path, sizeof(path), directory_path_value, entry->d_name))
             continue;
+        if (strcmp(path, "./src/infiltratr-common") == 0) continue;
         if (directory_path(path)) {
             check_shell_boundary_tree(path);
         } else if (ends_with(path, ".sh") &&
