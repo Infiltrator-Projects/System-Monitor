@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file refresh_policy.h
- * @brief Pure cadence and deferred-presentation policy.
+ * @brief Shared cadence plus System Monitor deferred-presentation policy.
  *
- * These functions contain no clock access and no GTK state. Callers supply
- * their current state, making edge cases deterministic and independently
- * testable. A missing or invalid time baseline intentionally means "due now" so
- * recovery cannot leave a category permanently frozen.
+ * Generic monotonic interval policy is owned by Infiltratr Common. System
+ * Monitor retains only the page-presentation decision that depends on its UI.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -16,16 +14,10 @@
 #define LINUX_SYSTEM_MONITOR_REFRESH_POLICY_H
 
 #include <stdbool.h>
+#include <infiltratr/timing.h>
 
-/**
- * Decide whether an interval has elapsed.
- *
- * @param now Current monotonic time in seconds.
- * @param last Monotonic time of the previous successful refresh.
- * @param interval Required interval in seconds.
- * @return true when due or when any input cannot form a safe baseline.
- */
-bool lsm_refresh_interval_due(double now, double last, double interval);
+/** Use Common's tested interval policy without a local trampoline function. */
+#define lsm_refresh_interval_due infiltratr_interval_due
 
 /**
  * Decide whether a dirty page model should be presented immediately.

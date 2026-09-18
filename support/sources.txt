@@ -58,7 +58,6 @@ bluetooth_battery.c
 bluetooth_traffic.c
 logitech_hidpp.c
 logitech_hidpp_protocol.c
-common.c
 memory_hardware.c
 smbios_memory.c
 nvml.c

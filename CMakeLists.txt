@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.15.3")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.15.3")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "7838188eb3e5293ab37851f25cfe60fa28aa11ec")
+set(INFILTRATR_COMMON_TAG "v1.19.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "9b6e92ef135f7e4bc0af809975a619aa20a2eaa3")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -152,7 +152,7 @@ set(LSM_HARDWARE_MONITOR_SOURCES
     src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
     src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c
     src/logitech_hidpp.c
-    src/logitech_hidpp_protocol.c src/common.c src/memory_hardware.c
+    src/logitech_hidpp_protocol.c  src/memory_hardware.c
     src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c
     src/system_sources.c
     src/pci_names.c src/pci_names_data.c)
@@ -278,38 +278,38 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-bluetooth-traffic-smoke
         support/tests/bluetooth_traffic_smoke.c src/bluetooth_traffic.c)
     add_executable(lsm-bundled-pci-smoke support/tests/bundled_pci_smoke.c
-        src/pci_names.c src/pci_names_data.c src/common.c)
-    add_executable(lsm-common-smoke support/tests/common_smoke.c src/common.c)
+        src/pci_names.c src/pci_names_data.c )
+    add_executable(lsm-common-smoke support/tests/common_smoke.c )
     add_executable(lsm-cpu-direct-smoke support/tests/cpu_direct_smoke.c
-        src/cpu_direct.c src/common.c)
+        src/cpu_direct.c )
     add_executable(lsm-dbus-models-smoke support/tests/dbus_models_smoke.c
-        src/ui_helpers.c src/common.c)
+        src/ui_helpers.c )
     add_executable(lsm-duration-format-smoke
         support/tests/duration_format_smoke.c src/duration_format.c)
     add_executable(lsm-efficiency-smoke support/tests/efficiency_smoke.c
-        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-glibc-abi-smoke support/tests/glibc_abi_smoke.c
         support/tools/glibc_abi.c)
     target_include_directories(lsm-glibc-abi-smoke PRIVATE support/tools)
     add_executable(lsm-hardware-topology-smoke
         support/tests/hardware_topology_smoke.c src/hardware_topology.c
-        src/common.c)
+        )
     add_executable(lsm-logitech-hidpp-smoke
         support/tests/logitech_hidpp_smoke.c src/logitech_hidpp.c
-        src/logitech_hidpp_protocol.c src/common.c)
+        src/logitech_hidpp_protocol.c )
     add_executable(lsm-mountinfo-smoke support/tests/mountinfo_smoke.c
         src/mountinfo.c)
     add_library(lsm-mock-nvml SHARED support/tests/mock_nvml.c)
     set_target_properties(lsm-mock-nvml PROPERTIES OUTPUT_NAME "nvidia-ml-test")
     target_link_libraries(lsm-mock-nvml PRIVATE lsm-developer-tool-policy)
     add_executable(lsm-nvml-smoke support/tests/nvml_smoke.c
-        src/nvml.c src/common.c)
+        src/nvml.c )
     add_dependencies(lsm-nvml-smoke lsm-mock-nvml)
     add_executable(lsm-preferences-smoke support/tests/preferences_smoke.c
         src/preferences.c src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c)
     add_executable(lsm-process-management-smoke
         support/tests/process_management_smoke.c ${LSM_PROCESS_CORE_SOURCES}
-        ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+        ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-quality-policy-smoke support/tests/quality_policy_smoke.c
         src/metric_format.c src/refresh_policy.c)
     add_executable(lsm-sample-history-smoke support/tests/sample_history_smoke.c
@@ -319,17 +319,17 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-ui-update-smoke support/tests/ui_update_smoke.c
         src/ui_helpers.c)
     add_executable(lsm-wifi-metadata-smoke support/tests/wifi_metadata_smoke.c
-        src/wifi_metadata.c src/common.c)
+        src/wifi_metadata.c )
     add_executable(lsm-intel-gpu-smoke support/tests/intel_gpu_smoke.c
-        src/intel_gpu.c src/common.c)
+        src/intel_gpu.c )
     add_executable(lsm-infiltratr-common-smoke
         "${INFILTRATR_COMMON_DIR}/tests/core_smoke.c")
     add_executable(lsm-project-info-smoke
         support/tests/project_info_smoke.c src/project_info.c)
     add_executable(lsm-npu-telemetry-smoke support/tests/npu_telemetry_smoke.c
-        src/npu_telemetry.c src/common.c)
+        src/npu_telemetry.c )
     add_executable(lsm-memory-accounting-smoke
-        support/tests/memory_accounting_smoke.c src/memory_accounting.c src/common.c)
+        support/tests/memory_accounting_smoke.c src/memory_accounting.c )
     add_executable(lsm-performance-navigation-smoke
         support/tests/performance_navigation_smoke.c src/performance_selection.c)
     add_executable(lsm-monitor-platform-smoke
@@ -344,44 +344,44 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         support/tests/process_grouping_smoke.c src/process_grouping.c
         src/process_model.c)
     add_executable(lsm-process-gpu-smoke
-        support/tests/process_gpu_smoke.c src/process_gpu.c src/common.c)
+        support/tests/process_gpu_smoke.c src/process_gpu.c )
     add_executable(lsm-disk-accounting-smoke
-        support/tests/disk_accounting_smoke.c src/disk_accounting.c src/common.c)
+        support/tests/disk_accounting_smoke.c src/disk_accounting.c )
     add_executable(lsm-cpu-accounting-smoke
-        support/tests/cpu_accounting_smoke.c src/cpu_accounting.c src/common.c)
+        support/tests/cpu_accounting_smoke.c src/cpu_accounting.c )
     add_executable(lsm-smbios-memory-smoke
         support/tests/smbios_memory_smoke.c src/smbios_memory.c)
     add_executable(lsm-storage-metadata-smoke
-        support/tests/storage_metadata_smoke.c src/storage_metadata.c src/common.c)
+        support/tests/storage_metadata_smoke.c src/storage_metadata.c )
     add_executable(lsm-system-sources-smoke
         support/tests/system_sources_smoke.c src/system_sources.c src/storage_metadata.c
-        src/mountinfo.c src/pci_names.c src/pci_names_data.c src/common.c)
+        src/mountinfo.c src/pci_names.c src/pci_names_data.c )
     add_executable(lsm-system-snapshot-smoke
         support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c 
         src/metric_format.c)
     add_executable(lsm-process-export-smoke
         support/tests/process_export_smoke.c src/process_export.c src/process_model.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c src/ui_helpers.c)
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c  src/ui_helpers.c)
     add_executable(lsm-task-manager-layout-smoke
         support/tests/task_manager_layout_smoke.c)
     add_executable(lsm-process-inspection-smoke support/tests/process_inspection_smoke.c
-        src/process_inspection.c src/common.c)
+        src/process_inspection.c )
     add_executable(lsm-filesystem-inventory-smoke
         support/tests/filesystem_inventory_smoke.c src/filesystem_inventory.c
-        src/mountinfo.c src/common.c)
+        src/mountinfo.c )
     add_executable(lsm-history-retention-smoke
         support/tests/history_retention_smoke.c src/history.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/common.c
+        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c 
         src/duration_format.c src/ui_helpers.c)
     target_compile_definitions(lsm-history-retention-smoke PRIVATE
         LSM_HISTORY_TEST_API)
     add_executable(lsm-async-workers-smoke
         support/tests/async_workers_smoke.c src/process_scanner.c
         src/process_recorder.c ${LSM_PROCESS_CORE_SOURCES}
-        ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+        ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-process-scan-benchmark support/tests/process_scan_benchmark.c
-        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} src/common.c)
+        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-runtime-stability-smoke support/tests/runtime_stability_smoke.c
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})

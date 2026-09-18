@@ -137,13 +137,6 @@ bool lsm_logitech_hidpp_find_device(const char *power_supply_path,
     return found;
 }
 
-static double monotonic_seconds(void)
-{
-    struct timespec value;
-    if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return 0.0;
-    return (double)value.tv_sec + (double)value.tv_nsec / 1000000000.0;
-}
-
 static int remaining_timeout_ms(const struct timespec *deadline)
 {
     struct timespec now;
@@ -424,7 +417,7 @@ static void *hidpp_worker(void *user_data)
                 continue;
             }
             double wait_seconds = LSM_HIDPP_REFRESH_SECONDS;
-            selected = find_due_slot_locked(monotonic_seconds(),
+            selected = find_due_slot_locked(lsm_monotonic_seconds(),
                                             &wait_seconds);
             if (selected < 0)
                 timed_worker_wait_locked(wait_seconds);
@@ -442,7 +435,7 @@ static void *hidpp_worker(void *user_data)
          * seconds, while topology updates and UI snapshots must stay fast. */
         LsmHidppDeviceSlot request = hidpp_state.devices[selected];
         hidpp_state.devices[selected].next_query_monotonic =
-            monotonic_seconds() + LSM_HIDPP_RETRY_SECONDS;
+            lsm_monotonic_seconds() + LSM_HIDPP_RETRY_SECONDS;
         const int cancel_fd = hidpp_state.cancel_pipe[0];
         pthread_mutex_unlock(&hidpp_state.mutex);
 
@@ -456,7 +449,7 @@ static void *hidpp_worker(void *user_data)
         if (slot && !hidpp_state.stop_requested) {
             const double interval = success
                 ? LSM_HIDPP_REFRESH_SECONDS : LSM_HIDPP_RETRY_SECONDS;
-            slot->next_query_monotonic = monotonic_seconds() + interval;
+            slot->next_query_monotonic = lsm_monotonic_seconds() + interval;
             if (success) {
                 slot->feature_id = request.feature_id;
                 slot->feature_index = request.feature_index;

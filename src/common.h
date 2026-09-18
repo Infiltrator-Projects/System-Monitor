@@ -1,16 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file common.h
- * @brief Stable application facade over the shared Infiltratr Common library.
+ * @brief Stable System Monitor names mapped directly to Infiltratr Common.
  *
- * This compatibility surface preserves established `lsm_` call sites while
- * the reusable implementation lives in `src/infiltratr-common`. That keeps
- * collectors stable and lets Calendar Plus and future C programs consume the
- * same tested code without adopting Linux System Monitor naming.
- *
- * Unless stated otherwise, functions are re-entrant and do not retain pointers
- * supplied by the caller. Output buffers are always NUL-terminated when their
- * size is non-zero.
+ * This header keeps established lsm_ call sites readable while eliminating
+ * the former wrapper translation unit. Reusable implementation and contracts
+ * are owned entirely by the pinned Infiltratr Common library.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -19,282 +14,38 @@
 #ifndef LINUX_SYSTEM_MONITOR_COMMON_H
 #define LINUX_SYSTEM_MONITOR_COMMON_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
+#include <infiltratr/arithmetic.h>
 #include <infiltratr/core.h>
+#include <infiltratr/posix.h>
+#include <infiltratr/posix_path.h>
+#include <infiltratr/token.h>
 
-/** Return the compile-time element count of a true C array. */
 #define LSM_ARRAY_LENGTH(array) INFILTRATR_ARRAY_LENGTH(array)
 
-/**
- * Copy a possibly-null string into a fixed-size destination.
- *
- * The value is truncated when necessary. Source and destination may overlap;
- * Common preserves memmove-style copy semantics while always terminating a
- * non-empty destination buffer.
- *
- * @param destination Writable output buffer.
- * @param size Capacity of @p destination in bytes.
- * @param source NUL-terminated source string, or NULL for an empty string.
- */
-void lsm_copy_string(char *destination, size_t size, const char *source);
-
-/**
- * Remove leading and trailing C-locale whitespace in place.
- *
- * @param text Mutable NUL-terminated string, or NULL.
- */
-void lsm_trim(char *text);
-
-/**
- * Remove trailing carriage-return and line-feed characters in place.
- *
- * @param text Mutable NUL-terminated string, or NULL.
- */
-void lsm_trim_line_end(char *text);
-
-/**
- * Compare two possibly-null strings for equality.
- *
- * @param left First string, or NULL.
- * @param right Second string, or NULL.
- * @return true when both are NULL or contain the same bytes.
- */
-bool lsm_string_equal(const char *left, const char *right);
-
-/**
- * Test whether a string begins with a prefix.
- *
- * @param text String to inspect, or NULL.
- * @param prefix Prefix to match, or NULL.
- * @return true only when both inputs are non-null and the prefix matches.
- */
-bool lsm_string_starts_with(const char *text, const char *prefix);
-
-/**
- * Test whether a string ends with a suffix.
- *
- * @param text String to inspect, or NULL.
- * @param suffix Suffix to match, or NULL.
- * @return true only when both inputs are non-null and the suffix matches.
- */
-bool lsm_string_ends_with(const char *text, const char *suffix);
-
-/**
- * Parse a complete unsigned value in base 0 or a base from 2 through 36.
- *
- * @param text Text to parse.
- * @param base Numeric base; zero enables conventional C prefixes.
- * @param value Receives the parsed value on success.
- * @return true only for complete, non-negative, in-range input.
- */
-bool lsm_parse_u64(const char *text, unsigned int base, uint64_t *value);
-
-/**
- * Parse one unsigned field from structured text and advance its cursor.
- *
- * Leading whitespace is skipped, signs are rejected and trailing record text
- * is left unconsumed. Failure preserves both caller outputs.
- *
- * @param cursor Points to the current text cursor and receives the first
- *               unconsumed byte on success.
- * @param base Numeric base; zero enables conventional C prefixes.
- * @param value Receives the parsed value on success.
- * @return true when one unsigned field was parsed without overflow.
- */
-bool lsm_parse_u64_token(const char **cursor, unsigned int base,
-                         uint64_t *value);
-
-/**
- * Ensure a caller-owned contiguous array can hold the requested element count.
- *
- * The shared implementation performs geometric growth and rejects allocation
- * size overflow before reallocating. Pointer and capacity remain unchanged on
- * failure.
- *
- * @param array Address of the caller's array pointer.
- * @param capacity Address of the current element capacity.
- * @param element_size Size of one array element in bytes.
- * @param required Minimum required element count.
- * @param initial_capacity First capacity used for an empty array.
- * @return true when the existing or grown array can hold @p required elements.
- */
-bool lsm_array_reserve(void **array, size_t *capacity, size_t element_size,
-                       size_t required, size_t initial_capacity);
-
-/**
- * Clamp a floating-point value to inclusive bounds.
- *
- * @param value Value to constrain.
- * @param lower Inclusive lower bound.
- * @param upper Inclusive upper bound.
- * @return The bounded value; invalid bounds or NAN leave @p value unchanged.
- */
-double lsm_clamp_double(double value, double lower, double upper);
-
-/**
- * Resolve a path into caller-owned storage.
- *
- * @param path Existing path to resolve.
- * @param destination Writable output buffer.
- * @param size Capacity of @p destination in bytes.
- * @return true when realpath(3) succeeded and the result fitted completely.
- */
-bool lsm_realpath_copy(const char *path, char *destination, size_t size);
-
-/**
- * Return the final lexical component of a POSIX path.
- *
- * The returned pointer aliases @p path. NULL and paths ending in a slash map
- * to an empty final component.
- *
- * @param path POSIX path, or NULL.
- * @return Pointer to the final component or a shared empty string.
- */
-const char *lsm_path_basename(const char *path);
-
-/**
- * Concatenate a base path and suffix without implicit separators.
- *
- * @param destination Writable output buffer.
- * @param size Capacity of @p destination in bytes.
- * @param base First NUL-terminated component.
- * @param suffix Second NUL-terminated component.
- * @return true when the complete result fitted; false leaves an empty output.
- */
-bool lsm_join_path(char *destination, size_t size,
-                   const char *base, const char *suffix);
-
-/**
- * Read a small text attribute using one open/read/close sequence.
- *
- * This function is intended for procfs, sysfs and similarly small pseudo-files.
- * It avoids stdio buffering and heap allocation, reads at most @p size - 1
- * bytes, terminates the result and removes a trailing CR/LF sequence.
- *
- * @param path File to read.
- * @param buffer Writable output buffer.
- * @param size Capacity of @p buffer in bytes; must be at least two.
- * @return true when at least one byte was read successfully.
- */
-bool lsm_read_text_file(const char *path, char *buffer, size_t size);
-
-/**
- * Read a complete unsigned base-10 integer from a small text file.
- *
- * Leading and trailing whitespace is accepted. Signs, overflow and trailing
- * non-whitespace characters are rejected.
- *
- * @param path File to parse.
- * @param value Receives the parsed value on success.
- * @return true only for a complete, in-range unsigned decimal value.
- */
-bool lsm_read_u64_file(const char *path, uint64_t *value);
-
-/**
- * Read an unsigned value, returning zero when unavailable or invalid.
- *
- * Use this only where zero and unavailable are intentionally equivalent. Live
- * metrics that must distinguish a genuine zero should call lsm_read_u64_file().
- *
- * @param path File to parse.
- * @return Parsed value, or zero on failure.
- */
-uint64_t lsm_read_u64_or_zero(const char *path);
-
-/**
- * Read a finite floating-point value from a small text file.
- *
- * @param path File to parse.
- * @param value Receives the finite parsed value on success.
- * @return true only when the complete text represents a finite number.
- */
-bool lsm_read_double_file(const char *path, double *value);
-
-/**
- * Read a floating-point value, returning NAN when unavailable or invalid.
- *
- * @param path File to parse.
- * @return Parsed finite value, or NAN on failure.
- */
-double lsm_read_double_or_nan(const char *path);
-
-/**
- * Add two unsigned quantities without allowing wraparound.
- *
- * @param [in] left First operand.
- * @param [in] right Second operand.
- * @return Exact sum, or UINT64_MAX when the mathematical result is larger.
- */
-uint64_t lsm_u64_add_saturating(uint64_t left, uint64_t right);
-
-/**
- * Multiply two unsigned quantities without allowing wraparound.
- *
- * @param [in] left First operand.
- * @param [in] right Second operand.
- * @return Exact product, or UINT64_MAX when the mathematical result is larger.
- */
-uint64_t lsm_u64_multiply_saturating(uint64_t left, uint64_t right);
-
-/**
- * Calculate a bounded percentage from unsigned quantities.
- *
- * @param [in] part Numerator.
- * @param [in] whole Denominator.
- * @return Percentage in the inclusive range 0..100, or zero when @p whole is
- *         zero.
- */
-double lsm_percent_u64(uint64_t part, uint64_t whole);
-
-/**
- * Convert a monotonic unsigned-counter delta into a rate.
- *
- * Counter rollback, a non-positive or non-finite interval, and a non-finite
- * scale are rejected rather than being converted into spikes.
- *
- * @param [in] current Current counter value.
- * @param [in] previous Previous counter value.
- * @param [in] units_per_count Units represented by one counter increment.
- * @param [in] elapsed_seconds Monotonic interval between the samples.
- * @param [out] rate Receives units per second on success, or zero on failure.
- * @return true when the rate was calculated from a valid monotonic interval.
- */
-bool lsm_u64_counter_rate(uint64_t current, uint64_t previous,
-                          long double units_per_count,
-                          double elapsed_seconds, double *rate);
-
-/**
- * Return CLOCK_MONOTONIC as fractional seconds.
- *
- * @return Monotonic seconds, or 0.0 when the clock query fails.
- */
-double lsm_monotonic_seconds(void);
-
-/**
- * Format a byte count using traditional binary-scaled labels.
- *
- * @param bytes Quantity to format.
- * @param buffer Writable output buffer.
- * @param buffer_size Capacity of @p buffer in bytes.
- * @return @p buffer for convenient expression chaining.
- */
-char *lsm_format_bytes(uint64_t bytes, char *buffer, size_t buffer_size);
-
-/**
- * Format a byte-per-second rate using traditional binary-scaled labels.
- *
- * Negative and non-finite rates are normalised to zero because they represent
- * invalid counter deltas rather than meaningful throughput.
- *
- * @param bytes_per_second Rate to format.
- * @param buffer Writable output buffer.
- * @param buffer_size Capacity of @p buffer in bytes.
- * @return @p buffer for convenient expression chaining.
- */
-char *lsm_format_rate(double bytes_per_second, char *buffer,
-                      size_t buffer_size);
+#define lsm_copy_string infiltratr_copy_string
+#define lsm_trim infiltratr_trim
+#define lsm_trim_line_end infiltratr_trim_line_end
+#define lsm_string_equal infiltratr_string_equal
+#define lsm_string_starts_with infiltratr_string_starts_with
+#define lsm_string_ends_with infiltratr_string_ends_with
+#define lsm_parse_u64 infiltratr_parse_u64
+#define lsm_parse_u64_token infiltratr_parse_u64_token
+#define lsm_array_reserve infiltratr_array_reserve
+#define lsm_clamp_double infiltratr_clamp_double
+#define lsm_realpath_copy infiltratr_realpath_copy
+#define lsm_path_basename infiltratr_path_basename
+#define lsm_join_path infiltratr_path_concat
+#define lsm_read_text_file infiltratr_read_text_file
+#define lsm_read_u64_file infiltratr_read_u64_file
+#define lsm_read_u64_or_zero infiltratr_read_u64_or_zero
+#define lsm_read_double_file infiltratr_read_double_file
+#define lsm_read_double_or_nan infiltratr_read_double_or_nan
+#define lsm_u64_add_saturating infiltratr_u64_add_saturating
+#define lsm_u64_multiply_saturating infiltratr_u64_multiply_saturating
+#define lsm_percent_u64 infiltratr_percent_u64
+#define lsm_u64_counter_rate infiltratr_u64_counter_rate
+#define lsm_monotonic_seconds infiltratr_monotonic_seconds
+#define lsm_format_bytes infiltratr_format_bytes
+#define lsm_format_rate infiltratr_format_rate
 
 #endif
