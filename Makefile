@@ -468,9 +468,9 @@ sample-history-smoke: | $(BUILD_DIR)
 		src/sample_history.c -o $(BUILD_DIR)/sample-history-smoke
 	./$(BUILD_DIR)/sample-history-smoke
 
-monitor-platform-smoke: | $(BUILD_DIR)
+monitor-platform-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/monitor_platform_smoke.c \
-		src/monitor.c -o $(BUILD_DIR)/monitor-platform-smoke
+		src/monitor.c $(INFILTRATR_COMMON_ARCHIVE) -o $(BUILD_DIR)/monitor-platform-smoke
 	./$(BUILD_DIR)/monitor-platform-smoke
 
 backend-smoke: backend-check
