@@ -119,6 +119,14 @@ int main(void)
     assert(strcmp(lsm_format_rate(NAN, quantity, sizeof(quantity)),
                   "0 B/s") == 0);
     assert(lsm_u64_add_saturating(UINT64_MAX, 1U) == UINT64_MAX);
+    uint64_t checked_u64 = 0U;
+    assert(lsm_u64_multiply_checked(1024U, 1024U, &checked_u64));
+    assert(checked_u64 == (1ULL << 20U));
+    assert(!lsm_u64_multiply_checked(UINT64_MAX, 2U, &checked_u64));
+    size_t checked_size = 0U;
+    assert(lsm_size_multiply_checked(16U, sizeof(uint64_t), &checked_size));
+    assert(checked_size == 16U * sizeof(uint64_t));
+    assert(!lsm_size_multiply_checked(SIZE_MAX, 2U, &checked_size));
     assert(lsm_u64_multiply_saturating(UINT64_MAX, 2U) == UINT64_MAX);
     assert(lsm_u64_multiply_saturating(1024U, 1024U) == (1ULL << 20U));
     assert(fabs(lsm_percent_u64(1U, 8U) - 12.5) < 0.000001);

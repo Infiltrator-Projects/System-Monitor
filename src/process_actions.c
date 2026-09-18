@@ -14,6 +14,7 @@
 #include "details_page.h"
 #include "app_internal.h"
 #include "atomic_file.h"
+#include "common.h"
 #include "process_backend.h"
 #include "process_inspector.h"
 #include "process_recorder.h"
@@ -627,48 +628,46 @@ void lsm_processes_end_selected(LsmApp *app)
     const LsmProcessInstanceId selected_instance_id =
         app->process.selected_instance_id;
     const size_t group_count = app->process.selected_group_count;
-    LsmProcessId *group_pids = NULL;
-    LsmProcessInstanceId *group_instance_ids = NULL;
+    typedef struct {
+        LsmProcessId pid;
+        LsmProcessInstanceId instance_id;
+    } SelectedProcess;
+    SelectedProcess *group = NULL;
     if (group_count > 1U) {
         if (!app->process.selected_group_pids ||
-            !app->process.selected_group_instance_ids ||
-            group_count > SIZE_MAX / sizeof(*group_pids) ||
-            group_count > SIZE_MAX / sizeof(*group_instance_ids))
+            !app->process.selected_group_instance_ids)
             return;
-        group_pids = malloc(group_count * sizeof(*group_pids));
-        group_instance_ids = malloc(
-            group_count * sizeof(*group_instance_ids));
-        if (!group_pids || !group_instance_ids) {
-            free(group_pids);
-            free(group_instance_ids);
+        size_t group_bytes = 0U;
+        if (!lsm_size_multiply_checked(
+                group_count, sizeof(*group), &group_bytes))
             return;
+        group = malloc(group_bytes);
+        if (!group) return;
+        for (size_t index = 0U; index < group_count; index++) {
+            group[index].pid = app->process.selected_group_pids[index];
+            group[index].instance_id =
+                app->process.selected_group_instance_ids[index];
         }
-        memcpy(group_pids, app->process.selected_group_pids,
-               group_count * sizeof(*group_pids));
-        memcpy(group_instance_ids, app->process.selected_group_instance_ids,
-               group_count * sizeof(*group_instance_ids));
     }
 
     if (!confirm_end(app, FALSE)) {
-        free(group_pids);
-        free(group_instance_ids);
+        free(group);
         return;
     }
     if (group_count > 1U) {
         size_t failures = 0U;
         char last_error[160] = "Unknown process backend error";
         for (size_t index = 0U; index < group_count; index++) {
-            const LsmProcessId pid = group_pids[index];
+            const LsmProcessId pid = group[index].pid;
             if (pid <= 1U) continue;
             if (!lsm_process_control(
-                    pid, group_instance_ids[index],
+                    pid, group[index].instance_id,
                     LSM_PROCESS_CONTROL_TERMINATE) && errno != ESRCH) {
                 failures++;
                 lsm_process_error_message(last_error, sizeof(last_error));
             }
         }
-        free(group_pids);
-        free(group_instance_ids);
+        free(group);
         if (failures > 0U)
             lsm_ui_show_error(GTK_WINDOW(app->shell.window),
                 "Unable to end every process in the task",

@@ -178,11 +178,10 @@ static bool parse_proc_pid(const char *name, pid_t *pid)
 static bool parse_prefixed_u64(const char *line, const char *prefix,
                                uint64_t *value)
 {
-    const size_t prefix_length = strlen(prefix);
     if (!line || !prefix || !value ||
-        strncmp(line, prefix, prefix_length) != 0)
+        !lsm_string_starts_with(line, prefix))
         return false;
-    const char *cursor = line + prefix_length;
+    const char *cursor = line + strlen(prefix);
     return lsm_parse_u64_token(&cursor, 10U, value);
 }
 
@@ -417,10 +416,11 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
         if (parse_prefixed_u64(line, "Uid:", &value)) {
             native_status->uid = (uid_t)value;
             native_status->uid_available = true;
-        } else if (parse_prefixed_u64(line, "VmRSS:", &value))
-            process->rss_bytes =
-                lsm_u64_multiply_saturating(value, 1024U);
-        else if (parse_prefixed_u64(line, "Threads:", &value))
+        } else if (parse_prefixed_u64(line, "VmRSS:", &value)) {
+            uint64_t rss_bytes = 0U;
+            process->rss_bytes = lsm_u64_multiply_checked(
+                value, 1024U, &rss_bytes) ? rss_bytes : 0U;
+        } else if (parse_prefixed_u64(line, "Threads:", &value))
             process->threads = value <= UINT_MAX ? (unsigned)value : UINT_MAX;
         else if (parse_prefixed_u64(line, "voluntary_ctxt_switches:", &value))
             voluntary = value;
@@ -1001,9 +1001,11 @@ LsmProcessBackend *lsm_process_backend_create(void)
 
     const long page_size = sysconf(_SC_PAGESIZE);
     const long pages = sysconf(_SC_PHYS_PAGES);
-    backend->total_memory_bytes = page_size > 0 && pages > 0
-        ? lsm_u64_multiply_saturating(
-            (uint64_t)page_size, (uint64_t)pages) : 0U;
+    backend->total_memory_bytes = 0U;
+    if (page_size > 0 && pages > 0)
+        (void)lsm_u64_multiply_checked(
+            (uint64_t)page_size, (uint64_t)pages,
+            &backend->total_memory_bytes);
     backend->ticks_per_second = sysconf(_SC_CLK_TCK);
     backend->boot_time_epoch = read_boot_time();
     backend->current_uid = getuid();

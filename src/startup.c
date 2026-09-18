@@ -150,14 +150,14 @@ static void scan_directory(const char *directory, gboolean user_entry,
 
     struct dirent *item;
     while ((item = readdir(dir))) {
-        size_t length = strlen(item->d_name);
-        if (length < 9 ||
-            strcmp(item->d_name + length - 8, ".desktop") != 0)
+        if (strlen(item->d_name) <= sizeof(".desktop") - 1U ||
+            !lsm_string_ends_with(item->d_name, ".desktop"))
             continue;
         if (find_entry(*entries, *count, item->d_name) >= 0) continue;
 
         char path[LSM_PATH_LEN];
-        snprintf(path, sizeof(path), "%s/%s", directory, item->d_name);
+        if (!lsm_join_path(path, sizeof(path), directory, item->d_name))
+            continue;
         StartupEntry entry;
         if (load_startup_entry(path, item->d_name, user_entry, &entry))
             append_entry(entries, count, capacity, &entry);
@@ -171,9 +171,9 @@ static StartupEntry *collect_entries(size_t *out_count)
     StartupEntry *entries = NULL;
     size_t count = 0, capacity = 0;
     char user_directory[LSM_PATH_LEN];
-    snprintf(user_directory, sizeof(user_directory), "%s/autostart",
-             g_get_user_config_dir());
-    scan_directory(user_directory, TRUE, &entries, &count, &capacity);
+    if (lsm_join_path(user_directory, sizeof(user_directory),
+                      g_get_user_config_dir(), "autostart"))
+        scan_directory(user_directory, TRUE, &entries, &count, &capacity);
 
     const char *xdg_dirs = getenv("XDG_CONFIG_DIRS");
     if (!xdg_dirs || !*xdg_dirs) xdg_dirs = "/etc/xdg";
@@ -183,8 +183,8 @@ static StartupEntry *collect_entries(size_t *out_count)
         for (char *dir = strtok_r(copy, ":", &save); dir;
              dir = strtok_r(NULL, ":", &save)) {
             char path[LSM_PATH_LEN];
-            snprintf(path, sizeof(path), "%s/autostart", dir);
-            scan_directory(path, FALSE, &entries, &count, &capacity);
+            if (lsm_join_path(path, sizeof(path), dir, "autostart"))
+                scan_directory(path, FALSE, &entries, &count, &capacity);
         }
         free(copy);
     }
@@ -230,8 +230,13 @@ static gboolean write_startup_override(const char *source_path,
     if (!data) return FALSE;
 
     char directory[LSM_PATH_LEN];
-    snprintf(directory, sizeof(directory), "%s/autostart",
-             g_get_user_config_dir());
+    if (!lsm_join_path(directory, sizeof(directory),
+                       g_get_user_config_dir(), "autostart")) {
+        g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_NAMETOOLONG,
+                    "Startup configuration path is too long");
+        g_free(data);
+        return FALSE;
+    }
     if (g_mkdir_with_parents(directory, 0755) != 0) {
         g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
                     "Unable to create %s: %s", directory, g_strerror(errno));

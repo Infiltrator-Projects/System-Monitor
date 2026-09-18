@@ -82,17 +82,14 @@ static bool read_metadata(const char *data_root,
     static const char partition_type_prefix[] = "E:ID_PART_ENTRY_TYPE=";
     char line[512];
     while (fgets(line, sizeof(line), file)) {
-        if (strncmp(line, filesystem_prefix,
-                    sizeof(filesystem_prefix) - 1U) == 0) {
+        if (lsm_string_starts_with(line, filesystem_prefix)) {
             capture_property(metadata->filesystem,
                              sizeof(metadata->filesystem),
                              line + sizeof(filesystem_prefix) - 1U);
-        } else if (strncmp(line, version_prefix,
-                           sizeof(version_prefix) - 1U) == 0) {
+        } else if (lsm_string_starts_with(line, version_prefix)) {
             capture_property(metadata->version, sizeof(metadata->version),
                              line + sizeof(version_prefix) - 1U);
-        } else if (strncmp(line, partition_type_prefix,
-                           sizeof(partition_type_prefix) - 1U) == 0) {
+        } else if (lsm_string_starts_with(line, partition_type_prefix)) {
             capture_property(metadata->partition_type,
                              sizeof(metadata->partition_type),
                              line + sizeof(partition_type_prefix) - 1U);

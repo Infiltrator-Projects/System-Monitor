@@ -77,6 +77,12 @@ static bool source_path(char *destination, size_t size,
     return lsm_join_path(destination, size, root, suffix);
 }
 
+static uint64_t sector_count_bytes(uint64_t sectors)
+{
+    uint64_t bytes = 0U;
+    return lsm_u64_multiply_checked(sectors, 512U, &bytes) ? bytes : 0U;
+}
+
 static bool child_path(char *destination, size_t size,
                        const char *base, const char *name,
                        const char *suffix)
@@ -156,9 +162,8 @@ static uint64_t direct_block_size(const LsmSystemSources *sources,
 {
     if (!sources || !name || !*name) return 0U;
     char path[LSM_PATH_LEN];
-    const int written = snprintf(path, sizeof(path), "%s/%s",
-                                 sources->dev_root, name);
-    if (written < 0 || (size_t)written >= sizeof(path)) return 0U;
+    if (!lsm_join_path(path, sizeof(path), sources->dev_root, name))
+        return 0U;
     const int descriptor = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (descriptor < 0) return 0U;
     uint64_t bytes = 0U;
@@ -169,9 +174,12 @@ static uint64_t direct_block_size(const LsmSystemSources *sources,
 
 static bool ignored_block_name(const char *name)
 {
-    return !name || strncmp(name, "loop", 4) == 0 || strncmp(name, "ram", 3) == 0 ||
-           strncmp(name, "zram", 4) == 0 || strncmp(name, "fd", 2) == 0 ||
-           strncmp(name, "sr", 2) == 0 || strncmp(name, "dm-", 3) == 0;
+    return !name || lsm_string_starts_with(name, "loop") ||
+           lsm_string_starts_with(name, "ram") ||
+           lsm_string_starts_with(name, "zram") ||
+           lsm_string_starts_with(name, "fd") ||
+           lsm_string_starts_with(name, "sr") ||
+           lsm_string_starts_with(name, "dm-");
 }
 
 static bool directory_entry(const char *path)
@@ -591,8 +599,8 @@ static void read_block_characteristics(const char *root, const char *name,
         access(path, R_OK) == 0) {
         lsm_copy_string(record->media_type, sizeof(record->media_type),
                         lsm_read_u64_or_zero(path) == 0U ? "SSD" : "HDD");
-    } else if (strncmp(name, "nvme", 4U) == 0 ||
-               strncmp(name, "mmcblk", 6U) == 0) {
+    } else if (lsm_string_starts_with(name, "nvme") ||
+               lsm_string_starts_with(name, "mmcblk")) {
         lsm_copy_string(record->media_type, sizeof(record->media_type), "SSD");
     } else {
         lsm_copy_string(record->media_type, sizeof(record->media_type), "N/A");
@@ -601,11 +609,11 @@ static void read_block_characteristics(const char *root, const char *name,
     char canonical[LSM_PATH_LEN] = "";
     (void)lsm_realpath_copy(device_path, canonical, sizeof(canonical));
     const char *connection = NULL;
-    if (strncmp(name, "nvme", 4U) == 0 || strstr(canonical, "/nvme"))
+    if (lsm_string_starts_with(name, "nvme") || strstr(canonical, "/nvme"))
         connection = "NVMe";
-    else if (strncmp(name, "mmcblk", 6U) == 0 || strstr(canonical, "/mmc"))
+    else if (lsm_string_starts_with(name, "mmcblk") || strstr(canonical, "/mmc"))
         connection = "MMC";
-    else if (strncmp(name, "vd", 2U) == 0 || strstr(canonical, "/virtio"))
+    else if (lsm_string_starts_with(name, "vd") || strstr(canonical, "/virtio"))
         connection = "VirtIO";
     else if (strstr(canonical, "/usb"))
         connection = "USB";
@@ -655,8 +663,7 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
         record->size_bytes = direct_block_size(sources, entry->d_name);
         if (!record->size_bytes &&
             child_path(path, sizeof(path), root, entry->d_name, "/size"))
-            record->size_bytes = lsm_u64_multiply_saturating(
-                lsm_read_u64_or_zero(path), 512U);
+            record->size_bytes = sector_count_bytes(lsm_read_u64_or_zero(path));
 
         char vendor[LSM_NAME_LEN] = "";
         char model[LSM_NAME_LEN] = "";
@@ -669,7 +676,7 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
         /* MMC/SD cards expose the CID product name through device/name rather
          * than the SCSI-style device/model attribute used by SATA/NVMe paths.
          * Prefer that native kernel identity before falling back to mmcblkN. */
-        if (!model[0] && strncmp(entry->d_name, "mmcblk", 6U) == 0 &&
+        if (!model[0] && lsm_string_starts_with(entry->d_name, "mmcblk") &&
             child_path(path, sizeof(path), root, entry->d_name, "/device/name")) {
             (void)lsm_read_text_file(path, model, sizeof(model));
             lsm_trim(model);
@@ -848,15 +855,14 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
             if (strcmp(mounts[mount_index].block_name, entry->d_name) != 0) continue;
             has_mount = true;
             char device[LSM_PATH_LEN];
-            const int written = snprintf(device, sizeof(device), "%s/%s",
-                                         sources->dev_root, entry->d_name);
-            if (written < 0 || (size_t)written >= sizeof(device)) continue;
+            if (!lsm_join_path(device, sizeof(device),
+                               sources->dev_root, entry->d_name))
+                continue;
             char size_path[LSM_PATH_LEN];
             uint64_t size_bytes = direct_block_size(sources, entry->d_name);
             if (!size_bytes &&
                 child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
-                size_bytes = lsm_u64_multiply_saturating(
-                    lsm_read_u64_or_zero(size_path), 512U);
+                size_bytes = sector_count_bytes(lsm_read_u64_or_zero(size_path));
             count = append_partition_record(
                 records, count, capacity, device, mounts[mount_index].target,
                 mounts[mount_index].filesystem, parent_name, size_bytes, true);
@@ -864,15 +870,14 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
 
         if (!is_partition || has_mount) continue;
         char device[LSM_PATH_LEN];
-        const int written = snprintf(device, sizeof(device), "%s/%s",
-                                     sources->dev_root, entry->d_name);
-        if (written < 0 || (size_t)written >= sizeof(device)) continue;
+        if (!lsm_join_path(device, sizeof(device),
+                           sources->dev_root, entry->d_name))
+            continue;
         char size_path[LSM_PATH_LEN];
         uint64_t size_bytes = direct_block_size(sources, entry->d_name);
         if (!size_bytes &&
             child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
-            size_bytes = lsm_u64_multiply_saturating(
-                lsm_read_u64_or_zero(size_path), 512U);
+            size_bytes = sector_count_bytes(lsm_read_u64_or_zero(size_path));
         char filesystem[64] = "";
         (void)filesystem_label_from_device_database(
             sources, entry->d_name, filesystem, sizeof(filesystem));

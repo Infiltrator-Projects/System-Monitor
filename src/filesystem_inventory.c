@@ -49,7 +49,7 @@ static bool filesystem_default_visible(const LsmMountInfoEntry *entry)
 {
     if (!entry) return false;
     if (strcmp(entry->target, "/") == 0) return true;
-    if (strncmp(entry->source, "/dev/", 5U) == 0) return true;
+    if (lsm_string_starts_with(entry->source, "/dev/")) return true;
     return filesystem_type_is_desktop_storage(entry->filesystem);
 }
 
@@ -70,12 +70,16 @@ static void collect_capacity(LsmFilesystemInfo *item)
 
     const uint64_t block_size = information.f_frsize ?
         (uint64_t)information.f_frsize : (uint64_t)information.f_bsize;
-    const uint64_t total = lsm_u64_multiply_saturating(
-        (uint64_t)information.f_blocks, block_size);
-    const uint64_t free_all = lsm_u64_multiply_saturating(
-        (uint64_t)information.f_bfree, block_size);
-    const uint64_t available = lsm_u64_multiply_saturating(
-        (uint64_t)information.f_bavail, block_size);
+    uint64_t total = 0U;
+    uint64_t free_all = 0U;
+    uint64_t available = 0U;
+    if (!lsm_u64_multiply_checked(
+            (uint64_t)information.f_blocks, block_size, &total) ||
+        !lsm_u64_multiply_checked(
+            (uint64_t)information.f_bfree, block_size, &free_all) ||
+        !lsm_u64_multiply_checked(
+            (uint64_t)information.f_bavail, block_size, &available))
+        return;
 
     item->capacity_available = true;
     item->total_bytes = total;

@@ -50,8 +50,9 @@ static void read_os_name(char *buffer, size_t size)
     if (!file) return;
     char line[512];
     while (fgets(line, sizeof(line), file)) {
-        if (strncmp(line, "PRETTY_NAME=", 12U) != 0) continue;
-        char *value = line + 12U;
+        static const char prefix[] = "PRETTY_NAME=";
+        if (!lsm_string_starts_with(line, prefix)) continue;
+        char *value = line + sizeof(prefix) - 1U;
         lsm_trim_line_end(value);
         const size_t length = strlen(value);
         if (length >= 2U && value[0] == '"' && value[length - 1U] == '"') {

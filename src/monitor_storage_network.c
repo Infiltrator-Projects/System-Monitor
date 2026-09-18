@@ -100,12 +100,16 @@ static void append_partition(LsmDiskInfo *disk, const char *device,
     if (!mounted || !mount_point || !*mount_point) return;
     struct statvfs information;
     if (statvfs(mount_point, &information) != 0) return;
-    const uint64_t block_size = information.f_frsize ? information.f_frsize : information.f_bsize;
-    const uint64_t total = lsm_u64_multiply_saturating(
-        (uint64_t)information.f_blocks, block_size);
-    const uint64_t free_bytes = lsm_u64_multiply_saturating(
-        (uint64_t)information.f_bfree, block_size);
-    const uint64_t used = total >= free_bytes ? total - free_bytes : 0;
+    const uint64_t block_size = information.f_frsize ?
+        (uint64_t)information.f_frsize : (uint64_t)information.f_bsize;
+    uint64_t total = 0U;
+    uint64_t free_bytes = 0U;
+    if (!lsm_u64_multiply_checked(
+            (uint64_t)information.f_blocks, block_size, &total) ||
+        !lsm_u64_multiply_checked(
+            (uint64_t)information.f_bfree, block_size, &free_bytes))
+        return;
+    const uint64_t used = total >= free_bytes ? total - free_bytes : 0U;
     partition->total_bytes = total;
     partition->used_bytes = used;
     partition->used_percent = total > 0
