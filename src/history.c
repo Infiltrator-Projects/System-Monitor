@@ -76,6 +76,11 @@ typedef struct {
     int64_t last_seen;
 } LsmHistoryPersistEntry;
 
+/* Persistence workers receive immutable snapshots and may finish out of order.
+ * The generation watermark prevents an older request from overwriting a newer
+ * scheduled state, while write_mutex serialises the final durable publication.
+ * Reference counting lets detached GTask work outlive the initiating callback
+ * without retaining the whole application object. */
 struct LsmHistorySaveCoordinator {
     pthread_mutex_t write_mutex;
     atomic_uint references;
@@ -601,6 +606,10 @@ static int history_save_checked_sync(LsmApp *app)
     return failure;
 }
 
+/* Only one asynchronous save is launched at a time. Save requests arriving
+ * while it is pending set history_save_again, coalescing bursts without losing
+ * the requirement to persist the newest generation after the current task
+ * exits. */
 void lsm_history_save(LsmApp *app)
 {
     if (!app || !app->history.history_dirty) return;

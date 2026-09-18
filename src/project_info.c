@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file project_info.c
- * @brief Single source of truth for Linux System Monitor release identity.
+ * @brief Single source of truth for System Monitor release identity.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith

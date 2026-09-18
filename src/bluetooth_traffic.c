@@ -109,6 +109,9 @@ static void address_string(const bdaddr_t *address, char *buffer, size_t size)
         address->b[2], address->b[1], address->b[0]);
 }
 
+/* Security invariant: CAP_NET_RAW is needed only to create and bind the HCI
+ * monitor socket. Clearing the effective, permitted and inheritable capability
+ * sets is mandatory before GTK or any monitoring worker is allowed to start. */
 static bool drop_all_capabilities(void)
 {
 #if defined(SYS_capset)
@@ -176,6 +179,10 @@ bool lsm_bluetooth_traffic_parse_monitor(
     return true;
 }
 
+/* HCI connection handles are controller-local and reusable. A slot is keyed by
+ * controller plus handle while live; refresh_connections binds that handle to
+ * its remote address and resets counters when the kernel reuses it for another
+ * device. Callers hold capture_state.mutex for the complete lookup/update. */
 static LsmBluetoothLinkCounter *link_for_handle_locked(
     uint16_t controller, uint16_t handle)
 {
@@ -220,6 +227,9 @@ static void account_packet(const LsmBluetoothMonitorPacket *packet)
     (void)pthread_mutex_unlock(&capture_state.mutex);
 }
 
+/* recv(2) may block until the socket timeout or shutdown. The reader copies the
+ * descriptor and stop flag under the mutex, then releases the mutex before I/O
+ * so refresh/read calls cannot be stalled behind the kernel receive path. */
 static void *monitor_reader(void *unused)
 {
     (void)unused;
@@ -281,6 +291,9 @@ LsmBluetoothTrafficStartResult lsm_bluetooth_traffic_start(void)
                      sizeof(address)) == 0;
     }
 
+    /* Ordering is security-critical: acquire the read-only monitor endpoint
+     * first, then discard capabilities before publishing the descriptor or
+     * starting the reader thread. */
     if (!drop_all_capabilities()) {
         if (descriptor >= 0) (void)close(descriptor);
         return LSM_BLUETOOTH_TRAFFIC_SECURITY_FAILURE;

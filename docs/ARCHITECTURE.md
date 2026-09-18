@@ -2,7 +2,7 @@
 
 # Architecture
 
-Linux System Monitor separates presentation, platform-neutral state, platform backends and reusable Common primitives.
+System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. The separation is a correctness boundary: GTK should consume completed state, while collectors retain the operating-system knowledge and mutable baselines required to produce it.
 
 ## Structure
 
@@ -17,39 +17,57 @@ Linux backend and collectors
         ↓
 procfs / sysfs / ioctls / D-Bus / optional driver APIs
 
-Infiltratr Common
+Common 1.19.2
         ↓
 shared parsing / formatting / timing / path / durable-I/O / allocation primitives
 ```
 
-GTK consumes completed snapshots and model state. It should not need to know which Linux path, ioctl or driver produced a metric.
+GTK consumes snapshots and application models. Presentation code should not need to know which Linux path, ioctl, D-Bus interface or driver supplied a metric.
 
 ## Contracts and ownership
 
-Public monitor and process structures are plain C data with explicit availability. Native implementation details such as file descriptors, driver handles, Linux paths and retained counter baselines stay below those contracts.
+Public monitor and process structures are plain C data with explicit availability. Native details such as file descriptors, driver handles, Linux paths, worker synchronization and retained counter baselines remain below those contracts.
 
-The Linux backend owns Linux-specific retained state and collector lifetimes. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths. Device-oriented state should be retained by stable identity where possible so topology changes do not corrupt baselines or leak resources.
+The Linux backend owns Linux-specific retained state and collector lifetimes. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths. Device-oriented state is reconciled by stable identity where possible so topology changes cannot silently transfer baselines between different devices.
 
-Optional telemetry degrades independently. A failed read must not silently preserve stale availability or invalidate unrelated metrics.
+Ownership is intentionally visible at API boundaries. Caller-owned buffers, returned heap objects, borrowed data and subsystem-owned resources are documented rather than inferred from implementation details.
 
-## Collection and presentation
+## Concurrency and snapshot consistency
 
-Collection modules read and interpret operating-system or driver state. Presentation modules format snapshots for GTK widgets and graphs. Expensive discovery work should stay off high-frequency paths and off the GTK main thread where practical.
+GTK object ownership remains on the GTK main thread. Work that can block on procfs, NSS, D-Bus, device I/O or durable persistence is moved to bounded workers where practical. Workers exchange plain data or immutable request snapshots with the application rather than sharing GTK objects.
 
-Process collection follows the same rule: platform-neutral process records and controls remain distinct from Linux `/proc`, signals, scheduler operations, affinity masks and user IDs.
+A completed process or hardware sample is published as a coherent unit. Presentation code may display metrics with different collection cadences, but a value is not reported as newly available until the collector has established it for that sample. Topology generations and stable identities distinguish device replacement from ordinary metric refresh.
 
-## Infiltratr Common
+Asynchronous persistence uses immutable save requests and generation ordering. An older worker is not allowed to overwrite a newer scheduled application-history generation. Shutdown paths either join owned workers or use explicit detached-lifetime/reference rules so state cannot be freed while it is still reachable.
 
-`src/infiltratr-common` is pinned to one exact Common release commit. Common owns reusable mechanisms; System Monitor owns product and hardware policy.
+## Failure model
 
-Use Common when its contract is at least as strong as the local requirement. Do not weaken a Linux-specific contract merely to replace it with a broader generic helper, and do not modify the Common repository from this project.
+Optional telemetry fails independently. A failed read clears or withholds that metric's availability and must not invalidate unrelated data. A numeric zero is never used as a substitute for "unavailable" when zero is itself a valid measurement.
 
-## Privilege boundary
+Cumulative counters are accepted only across a valid identity and monotonic sampling interval. Rollback, reset, device replacement or invalid elapsed time breaks the baseline; the next valid sample establishes a new baseline instead of producing a fabricated spike.
 
-The installed product is one GUI executable. It has no project-owned privileged helper or daemon.
+Malformed external data is rejected or skipped at the narrowest practical boundary. Parsers bound allocation and numeric conversion, path construction is checked, and partial native-interface failure is represented explicitly rather than hidden by guessed values.
 
-The Debian package grants only the capability required for the read-only Bluetooth HCI monitor path. Startup drops all capabilities before normal GTK and monitoring work continues. Other privileged information must degrade to unavailable rather than triggering implicit elevation.
+## Common
+
+`src/infiltratr-common` is pinned to one exact Common release commit. Common owns reusable mechanisms; System Monitor owns application, Linux and hardware policy.
+
+Use Common when its contract is at least as strong as the local requirement. Do not weaken a Linux-specific parser, timing rule or hardware contract merely to replace it with a broader generic helper, and do not modify the Common repository from this project.
+
+## Security and trust model
+
+The installed product is one GUI executable with no project-owned privileged helper or daemon. Local kernel, driver, D-Bus and configuration data is treated as external input: it may disappear during a read, contain unsupported values or be inaccessible to the current user.
+
+The Debian package grants only the capability required to bind the read-only Bluetooth HCI monitor channel. That endpoint is acquired during bootstrap and the process clears its effective, permitted and inheritable capability sets before GTK or monitoring workers start. Failure to drop those capabilities aborts startup. No HCI command, reset or controller reconfiguration is issued through the monitor path.
+
+Process-control operations use the native operating-system permission model. Optional vendor libraries are loaded in-process only when present; failure to load them cannot make the core monitor unusable. Information requiring unavailable privilege degrades to unavailable rather than triggering implicit elevation.
+
+## Verification and assurance
+
+Correctness is enforced at several levels rather than by one end-to-end test. Parser and accounting tests exercise deterministic fixtures; lifecycle and worker tests cover shutdown and repeated refresh; topology tests verify stable identity; hardware tests validate known units and discontinuity handling; runtime stability checks look for descriptor, thread and memory-growth regressions.
+
+Both Make and CMake build the same application and exact Common pin. CI compiles with the repository warning policy, runs CTest and Make verification, exercises sanitizers and 32-bit compilation, validates generated Doxygen documentation with warnings treated as errors, and constructs the release packages before publication.
 
 ## Build contract
 
-Make and CMake build the same application and exact Common pin. CI exercises both paths, tests, sanitizers, 32-bit compilation and package construction. Direct `make install` is disabled; installation is owned by the package or native installer.
+Direct `make install` is disabled. Installation is owned by the Debian package or native installer. A release is published only from the exact tested `main` commit, and published tags/assets are treated as immutable.

@@ -64,7 +64,7 @@ make
 ./build/linux-system-monitor
 ```
 
-Run `make check` for the project verification suite. CI also exercises CMake/CTest, sanitizers, 32-bit compilation and release-package construction.
+Run `make check` for the project verification suite. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 

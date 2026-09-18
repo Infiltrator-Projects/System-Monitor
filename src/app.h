@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app.h
- * @brief Opaque lifetime boundary for the Linux System Monitor application.
+ * @brief Opaque lifetime boundary for the System Monitor application.
  *
  * Feature modules receive LsmApp pointers through their own interfaces; the
  * concrete GTK/state layout is private to app_internal.h. Keeping this public

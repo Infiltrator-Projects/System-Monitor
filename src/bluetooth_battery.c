@@ -48,6 +48,9 @@ static LsmBluetoothBatteryState bluetooth_state = {
     .mutex = PTHREAD_MUTEX_INITIALIZER
 };
 
+/* Refresh deadlines represent elapsed time, not civil time. CLOCK_MONOTONIC
+ * prevents NTP/manual wall-clock corrections from shortening or extending the
+ * worker's timed waits. The caller holds bluetooth_state.mutex. */
 static bool ensure_condition_locked(void)
 {
     if (bluetooth_state.condition_initialized) return true;

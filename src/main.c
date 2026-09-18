@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file main.c
- * @brief Linux-System-Monitor executable entry point.
+ * @brief System Monitor executable entry point.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith

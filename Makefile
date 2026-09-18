@@ -140,7 +140,7 @@ LDLIBS += $(GTK_LIBS) -lm -ldl
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
 	bundled-pci-smoke startup-smoke dbus-models-smoke common-smoke infiltratr-common-smoke project-info-smoke cpu-direct-smoke \
-	intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke runtime-stability-smoke process-scan-benchmark sanitizer-check analyzer-check clang-doc-check docs-check docs benchmark installer-check native-installer dist deb \
+	intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke runtime-stability-smoke process-scan-benchmark sanitizer-check analyzer-check clang-doc-check doxygen-check docs-check docs benchmark installer-check native-installer dist deb \
 	application-catalog-smoke process-grouping-smoke task-manager-layout-smoke \
 	process-gpu-smoke disk-accounting-smoke cpu-accounting-smoke \
 system-snapshot-smoke process-export-smoke preferences-smoke glibc-abi-smoke coverage-check release
@@ -345,16 +345,23 @@ clang-doc-check: | $(BUILD_DIR)
 		echo "Clang is unavailable; documentation syntax gate skipped."; \
 	fi
 
-docs-check: style-check clang-doc-check
+doxygen-check:
 	@test -f support/Doxyfile
-	@echo "Single-manual documentation and source contracts passed."
+	@if command -v $(DOXYGEN) >/dev/null 2>&1; then \
+		$(DOXYGEN) support/Doxyfile; \
+		echo "Doxygen generated-reference contract passed."; \
+	else \
+		echo "Doxygen is unavailable; generated-reference gate skipped."; \
+	fi
+
+docs-check: style-check clang-doc-check doxygen-check
+	@echo "Maintained documentation and source contracts passed."
 
 docs: docs-check
 	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
-		echo "Doxygen is required only to generate the optional HTML reference."; \
+		echo "Doxygen is required to generate the HTML reference."; \
 		exit 1; \
 	}
-	$(DOXYGEN) support/Doxyfile
 	@echo "Documentation generated in build/docs/html/index.html"
 
 # Compile every translation unit under the project's strongest portable GCC

@@ -3,7 +3,7 @@
  * @file pci_names.h
  * @brief In-process PCI vendor and device-name lookup.
  *
- * Linux-System-Monitor uses this module directly from its normal backend.
+ * System Monitor uses this module directly from its normal backend.
  * No helper executable, lspci, pciutils or lshw process is involved.
  *
  * @author Shannon Smith

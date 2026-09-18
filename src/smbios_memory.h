@@ -4,7 +4,7 @@
  * @brief Minimal native SMBIOS Type-17 memory-device reader.
  *
  * The parser reads the kernel-exported DMI table directly.  It deliberately
- * implements only the fields Linux-System-Monitor displays, avoiding a
+ * implements only the fields System Monitor displays, avoiding a
  * dependency on dmidecode while keeping the privileged surface very small.
  *
  * @author Shannon Smith

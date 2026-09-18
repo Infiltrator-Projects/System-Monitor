@@ -5,7 +5,7 @@
  *
  * New glibc headers redirect ordinary C17 parsing calls to C23-only symbol
  * versions whenever _GNU_SOURCE is enabled.  Those implementations are not
- * required by Linux-System-Monitor and unnecessarily prevent a binary built on
+ * required by System Monitor and unnecessarily prevent a binary built on
  * a current distribution from running with glibc 2.34-2.37.  This header is
  * force-included before the normal system headers and retains the established
  * C17 scanf/strto ABI while leaving every other GNU/POSIX interface enabled.

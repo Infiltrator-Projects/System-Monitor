@@ -2,7 +2,7 @@
 
 # Code of Conduct
 
-Linux System Monitor is an open-source engineering project. Contributors, users and maintainers are expected to keep project spaces professional, constructive and focused on the work.
+System Monitor is an open-source engineering project. Contributors, users and maintainers are expected to keep project spaces professional, constructive and focused on the work.
 
 ## Expected conduct
 
@@ -18,7 +18,7 @@ Portability, data correctness, privilege boundaries and hardware safety concerns
 
 ## Scope
 
-This code applies to repository issues, pull requests, reviews, discussions, project documentation and other spaces operated for Linux System Monitor. It also applies when someone is representing the project in an official capacity.
+This code applies to repository issues, pull requests, reviews, discussions, project documentation and other spaces operated for System Monitor. It also applies when someone is representing the project in an official capacity.
 
 ## Enforcement
 

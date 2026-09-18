@@ -2,29 +2,48 @@
 
 # Hardware collection
 
-Linux System Monitor reports hardware values only when the active native interface establishes both the value and its meaning. Unknown units, stale reads and unsupported capabilities are unavailable rather than guessed.
+System Monitor reports hardware values only when the active native interface establishes both the value and its meaning. Unknown units, stale reads and unsupported capabilities are unavailable rather than guessed.
+
+## Evidence hierarchy
+
+A collector should prefer evidence in this order:
+
+1. a documented kernel or driver ABI whose field and unit semantics are explicit;
+2. a documented native operating-system interface that exposes equivalent semantics;
+3. a conservative project fallback whose interpretation is independently verifiable;
+4. unavailable, when the source cannot establish both identity and meaning.
+
+A convenient file name, vendor convention or plausible numeric range is not enough to promote a field into telemetry. Vendor-specific support belongs behind capability checks and should not weaken a generic device path.
 
 ## Availability and sampling
 
 Optional metrics keep availability separate from numeric storage, so zero remains a valid reading. Collectors clear per-sample availability before refresh. Failed reads do not preserve stale values.
 
-Cumulative counters reset their baseline after rollback, failed reads or device replacement so recovery cannot create false spikes. Discovery may run more slowly than telemetry; retained contexts keep resolved paths and baselines between samples.
+Discovery may run more slowly than telemetry. Retained contexts keep resolved paths, driver handles and cumulative baselines between samples, while topology reconciliation determines whether that retained state still belongs to the same device.
+
+## Counter discontinuities
+
+Rates are derived only from cumulative counters that belong to the same stable identity and are separated by a valid positive monotonic interval. Any of the following breaks the baseline: counter rollback, device replacement, failed source read, invalid elapsed time, or a backend-specific reset indication.
+
+A discontinuity publishes no synthetic rate for that interval. The current cumulative value becomes the next baseline. This rule prevents wrap/reset/re-enumeration events from appearing as impossible throughput or utilisation spikes.
+
+Saturating arithmetic is used where an aggregate can legitimately exceed an intermediate integer range. Overflow is not allowed to wrap into a smaller plausible-looking measurement.
 
 ## CPU and memory
 
 CPU and memory data comes from Linux procfs/sysfs, CPUID where applicable, `sysinfo` and retained accounting state. Linux scheduler counters, frequency-source paths and baselines remain private to the backend.
 
-Missing frequency or temperature data must not invalidate independently collected CPU utilisation or memory values.
+Missing frequency or temperature data must not invalidate independently collected CPU utilisation or memory values. Memory quantities derived from Linux `kB` interfaces use exactly 1024 bytes per KB.
 
 ## Storage and filesystems
 
 Disk inventory, activity and filesystem state use native Linux metadata. Retained accounting state is separate from public snapshots and is reconciled against current device identity.
 
-Incomplete devices are not assigned invented filesystem or hardware metadata.
+Linux diskstats sector accounting follows the documented 512-byte accounting unit rather than assuming the device's physical or logical block size. Incomplete devices are not assigned invented filesystem or hardware metadata.
 
 ## Network and wireless
 
-Network counters are converted to rates using monotonic elapsed time; rollback or invalid timing is rejected.
+Network counters are converted to rates using monotonic elapsed time; rollback or invalid timing is rejected. Link utilisation is exposed only when a meaningful negotiated link rate is also known.
 
 Wireless metadata uses native Linux interfaces when supported by the driver. Short-lived caches are invalidated after failed refreshes rather than kept indefinitely.
 
@@ -32,9 +51,9 @@ Wireless metadata uses native Linux interfaces when supported by the driver. Sho
 
 BlueZ supplies controller/device identity and connection state. Connected remote devices can appear as individual Performance entries keyed by controller and Bluetooth address.
 
-Exact per-device throughput uses Linux's read-only HCI monitor channel. Packet controller, direction and connection handle are combined with a read-only connection snapshot to attribute payload bytes to the matching remote device.
+Exact per-device throughput uses Linux's read-only HCI monitor channel. Packet controller, direction and connection handle are combined with a read-only connection snapshot to attribute payload bytes to the matching remote device. HCI connection handles are controller-local and reusable, so a handle associated with a different remote address resets its retained counters.
 
-Binding the monitor channel requires `CAP_NET_RAW`. The packaged executable carries only that file capability, opens the monitor channel during startup and then clears its capability set before normal GTK or monitoring workers start. No HCI commands, resets or controller reconfiguration are issued through this path.
+Binding the monitor channel requires `CAP_NET_RAW`. The packaged executable carries only that file capability, opens the monitor channel during startup and then clears its process capability sets before normal GTK or monitoring workers start. No HCI commands, resets or controller reconfiguration are issued through this path.
 
 Without the capability or monitor interface, Bluetooth identity remains available and traffic is shown as unavailable. Failure to drop capabilities aborts startup.
 
@@ -56,6 +75,8 @@ Unknown accelerator drivers expose only attributes whose names and interface est
 
 System and peripheral batteries use Linux power-supply interfaces, with direct device-specific enrichment where available. Logitech HID++ may provide authoritative peripheral battery values. Bluetooth battery data may use in-process GLib/D-Bus sources.
 
+Timed peripheral workers use monotonic deadlines so wall-clock corrections cannot distort refresh or retry cadence.
+
 ## Units
 
 Storage and memory use traditional binary-sized labels:
@@ -69,4 +90,6 @@ Network rates and negotiated link speeds use decimal 1000-based scaling. Driver-
 
 ## Adding hardware support
 
-New support should establish a stable identity, a native interface with known semantics, explicit availability, safe retained state and deterministic tests. Keep expensive discovery away from high-frequency sampling, reset cumulative baselines after discontinuity, and do not add shell-command providers or vendor guesses merely to fill a field.
+New support should establish a stable identity, a native interface with known semantics, explicit availability, safe retained state and deterministic tests. Evidence for units and field meaning should be traceable to an ABI, interface specification or reproducible fixture.
+
+Keep expensive discovery away from high-frequency sampling, reset cumulative baselines after discontinuity, and do not add shell-command providers or vendor guesses merely to fill a field.

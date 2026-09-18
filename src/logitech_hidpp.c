@@ -70,6 +70,9 @@ static LsmHidppWorkerState hidpp_state = {
     .cancel_pipe = {-1, -1}
 };
 
+/* HID++ retry/refresh deadlines are elapsed-time policy. CLOCK_MONOTONIC keeps
+ * those waits independent of wall-clock adjustments. The caller holds the
+ * worker mutex while initialising the condition variable exactly once. */
 static bool ensure_worker_condition_locked(void)
 {
     if (hidpp_state.condition_initialized) return true;
