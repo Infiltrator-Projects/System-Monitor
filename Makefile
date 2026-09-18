@@ -888,7 +888,7 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/performance_selection.c -o $(COVERAGE_DIR)/performance_selection.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/performance_navigation_smoke.c $(COVERAGE_DIR)/performance_selection.o -o $(COVERAGE_DIR)/performance-selection-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_grouping.c -o $(COVERAGE_DIR)/process_grouping.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c -lm -o $(COVERAGE_DIR)/process-grouping-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-grouping-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_direct.c -o $(COVERAGE_DIR)/cpu_direct.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/refresh_policy.c -o $(COVERAGE_DIR)/refresh_policy.o
