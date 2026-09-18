@@ -870,19 +870,18 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	rm -rf $(COVERAGE_DIR)
 	mkdir -p $(COVERAGE_DIR)
 	ln -s ../../src $(COVERAGE_DIR)/src
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c  -o $(COVERAGE_DIR)/common.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_accounting.c -o $(COVERAGE_DIR)/cpu_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/cpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_accounting_smoke.c $(COVERAGE_DIR)/cpu_accounting.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/cpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/disk_accounting.c -o $(COVERAGE_DIR)/disk_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/disk-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/disk_accounting_smoke.c $(COVERAGE_DIR)/disk_accounting.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/disk-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_gpu.c -o $(COVERAGE_DIR)/process_gpu.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-gpu-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_gpu_smoke.c $(COVERAGE_DIR)/process_gpu.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-gpu-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/storage_metadata.c -o $(COVERAGE_DIR)/storage_metadata.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/storage_metadata_smoke.c $(COVERAGE_DIR)/storage_metadata.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/storage-metadata-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/smbios_memory.c -o $(COVERAGE_DIR)/smbios_memory.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/smbios_memory_smoke.c $(COVERAGE_DIR)/smbios_memory.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/smbios-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/memory_accounting.c -o $(COVERAGE_DIR)/memory_accounting.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/memory_accounting_smoke.c $(COVERAGE_DIR)/memory_accounting.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/memory-accounting-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/sample_history.c -o $(COVERAGE_DIR)/sample_history.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/sample_history_smoke.c $(COVERAGE_DIR)/sample_history.o -o $(COVERAGE_DIR)/sample-history-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/gpu_metrics.c -o $(COVERAGE_DIR)/gpu_metrics.o
@@ -900,8 +899,8 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/mountinfo-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/duration_format_smoke.c $(COVERAGE_DIR)/duration_format.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/duration-format-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c $(COVERAGE_DIR)/metric_format.o $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/filesystem_inventory_smoke.c $(COVERAGE_DIR)/filesystem_inventory.o $(COVERAGE_DIR)/mountinfo.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/filesystem-inventory-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_inspection_smoke.c $(COVERAGE_DIR)/process_inspection.o $(COVERAGE_DIR)/common.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-inspection-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/filesystem_inventory_smoke.c $(COVERAGE_DIR)/filesystem_inventory.o $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/filesystem-inventory-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_inspection_smoke.c $(COVERAGE_DIR)/process_inspection.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-inspection-smoke
 	$(COVERAGE_DIR)/cpu-smoke
 	$(COVERAGE_DIR)/disk-smoke
 	$(COVERAGE_DIR)/process-gpu-smoke
