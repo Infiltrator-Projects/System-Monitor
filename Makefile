@@ -809,10 +809,10 @@ application-catalog-smoke: | $(BUILD_DIR)
 		-l:libglib-2.0.so.0 -o $(BUILD_DIR)/application-catalog-smoke
 	./$(BUILD_DIR)/application-catalog-smoke
 
-process-grouping-smoke: | $(BUILD_DIR)
+process-grouping-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/process_grouping_smoke.c src/process_grouping.c src/process_model.c \
-		-lm -o $(BUILD_DIR)/process-grouping-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-grouping-smoke
 	./$(BUILD_DIR)/process-grouping-smoke
 
 process-gpu-smoke: | $(BUILD_DIR)
