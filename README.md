@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.32 ([version file](support/VERSION))\
+**Current source version:** 1.0.33 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -87,4 +87,4 @@ Contribution guidance lives in [CONTRIBUTING.md](.github/CONTRIBUTING.md). Secur
 
 Copyright © 2016 Shannon Smith.
 
-Shannon Smith-owned source and documentation are licensed under GPL-3.0-or-later. Retained third-party notices for the SysMonTask icon and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`.
+Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`.

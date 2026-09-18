@@ -23,8 +23,8 @@
 
 #define LSM_PROJECT_COMMENTS                                                   \
     "A native C/GTK Linux system monitor authored by Shannon Smith. "          \
-    "Inspired by SysMonTask; third-party artwork and data are identified in " \
-    "THIRD_PARTY_NOTICES."
+    "Inspired by SysMonTask; retained third-party ancestry and data are "     \
+    "identified in THIRD_PARTY_NOTICES."
 
 #define LSM_PROJECT_INFO_INITIALIZER(BUILD_LABEL)                              \
     {                                                                          \
