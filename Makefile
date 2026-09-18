@@ -892,12 +892,12 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_direct.c -o $(COVERAGE_DIR)/cpu_direct.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/refresh_policy.c -o $(COVERAGE_DIR)/refresh_policy.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/wifi_metadata.c -o $(COVERAGE_DIR)/wifi_metadata.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/npu_telemetry.c -o $(COVERAGE_DIR)/npu_telemetry.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/filesystem_inventory.c -o $(COVERAGE_DIR)/filesystem_inventory.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_inspection.c -o $(COVERAGE_DIR)/process_inspection.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/mountinfo-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_direct_smoke.c $(COVERAGE_DIR)/cpu_direct.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/cpu-direct-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/wifi_metadata_smoke.c $(COVERAGE_DIR)/wifi_metadata.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/wifi-metadata-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/npu_telemetry_smoke.c $(COVERAGE_DIR)/npu_telemetry.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/npu-telemetry-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/filesystem_inventory_smoke.c $(COVERAGE_DIR)/filesystem_inventory.o $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_inspection_smoke.c $(COVERAGE_DIR)/process_inspection.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-inspection-smoke
@@ -913,11 +913,11 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/process-grouping-smoke
 	$(COVERAGE_DIR)/mountinfo-smoke
 	$(COVERAGE_DIR)/cpu-direct-smoke
-	$(COVERAGE_DIR)/wifi-metadata-smoke
+	$(COVERAGE_DIR)/npu-telemetry-smoke
 	$(COVERAGE_DIR)/refresh-policy-smoke
 	$(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(COVERAGE_DIR)/process-inspection-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/wifi_metadata.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
+	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/npu_telemetry.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
 	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 16) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
 	@echo "Coverage scope: 16 deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."
