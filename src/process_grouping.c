@@ -9,6 +9,8 @@
  */
 #include "process_grouping.h"
 
+#include "common.h"
+
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -28,10 +30,8 @@ void lsm_process_group_metrics_add(LsmProcessGroupMetrics *metrics,
     const bool first = metrics->process_count == 0U;
     metrics->cpu_percent =
         positive_finite_sum(metrics->cpu_percent, process->cpu_percent);
-    if (UINT64_MAX - metrics->memory_bytes < process->rss_bytes)
-        metrics->memory_bytes = UINT64_MAX;
-    else
-        metrics->memory_bytes += process->rss_bytes;
+    metrics->memory_bytes = lsm_u64_add_saturating(
+        metrics->memory_bytes, process->rss_bytes);
     metrics->disk_bytes_per_sec = positive_finite_sum(
         metrics->disk_bytes_per_sec, process->read_bytes_per_sec);
     metrics->disk_bytes_per_sec = positive_finite_sum(

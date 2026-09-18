@@ -113,9 +113,11 @@ bool lsm_cpu_accounting_read(const char *path,
     char buffer[4096];
     while (fgets(buffer, sizeof(buffer), file)) {
         const size_t chunk = strlen(buffer);
-        if (length > SIZE_MAX - chunk - 1U ||
+        size_t required = 0U;
+        if (!lsm_size_add_checked(length, chunk, &required) ||
+            !lsm_size_add_checked(required, 1U, &required) ||
             !lsm_array_reserve((void **)&text, &capacity, sizeof(*text),
-                               length + chunk + 1U, 8192U)) {
+                               required, 8192U)) {
             free(text);
             fclose(file);
             return false;

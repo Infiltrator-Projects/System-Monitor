@@ -44,11 +44,14 @@ static bool power_supply_online(void)
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         if (entry->d_name[0] == '.') continue;
-        char path[LSM_PATH_LEN], type[64] = "";
-        snprintf(path, sizeof(path), "%s/%s/type", root, entry->d_name);
-        if (!lsm_read_text_file(path, type, sizeof(type)) || strcmp(type, "Battery") == 0)
+        char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
+        if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
+            !lsm_join_path(path, sizeof(path), base, "type") ||
+            !lsm_read_text_file(path, type, sizeof(type)) ||
+            strcmp(type, "Battery") == 0)
             continue;
-        snprintf(path, sizeof(path), "%s/%s/online", root, entry->d_name);
+        if (!lsm_join_path(path, sizeof(path), base, "online"))
+            continue;
         if (lsm_read_u64_or_zero(path) != 0) {
             online = true;
             break;
@@ -62,14 +65,11 @@ static double battery_energy_wh(const char *base, const char *energy_name,
                                 const char *charge_name, double voltage_volts)
 {
     char path[LSM_PATH_LEN];
-    char suffix[64];
-    snprintf(suffix, sizeof(suffix), "/%s", energy_name);
     uint64_t micro = 0;
-    if (lsm_join_path(path, sizeof(path), base, suffix) &&
+    if (lsm_join_path(path, sizeof(path), base, energy_name) &&
         lsm_read_u64_file(path, &micro)) return (double)micro / 1000000.0;
 
-    snprintf(suffix, sizeof(suffix), "/%s", charge_name);
-    if (lsm_join_path(path, sizeof(path), base, suffix) &&
+    if (lsm_join_path(path, sizeof(path), base, charge_name) &&
         lsm_read_u64_file(path, &micro) && voltage_volts > 0.0)
         return ((double)micro / 1000000.0) * voltage_volts;
     return NAN;
@@ -435,9 +435,10 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
         while ((entry = readdir(directory)) &&
                monitor->battery_count < LSM_MAX_BATTERIES) {
             if (entry->d_name[0] == '.') continue;
-            char path[LSM_PATH_LEN], type[64] = "";
-            snprintf(path, sizeof(path), "%s/%s/type", root, entry->d_name);
-            if (!lsm_read_text_file(path, type, sizeof(type)) ||
+            char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
+            if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
+                !lsm_join_path(path, sizeof(path), base, "type") ||
+                !lsm_read_text_file(path, type, sizeof(type)) ||
                 strcmp(type, "Battery") != 0)
                 continue;
 
@@ -446,8 +447,6 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
             memset(battery, 0, sizeof(*battery));
             initialise_battery_measurements(battery);
             lsm_copy_string(battery->name, sizeof(battery->name), entry->d_name);
-            char base[LSM_PATH_LEN];
-            snprintf(base, sizeof(base), "%s/%s", root, entry->d_name);
             (void)lsm_join_path(path, sizeof(path), base, "/model_name");
             lsm_read_text_file(path, battery->model, sizeof(battery->model));
             (void)lsm_join_path(path, sizeof(path), base, "/manufacturer");
@@ -472,7 +471,7 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
                 monitor, battery->name);
             if (battery->is_peripheral &&
                 (strcasecmp(battery->manufacturer, "Logitech") == 0 ||
-                 strncmp(battery->name, "hidpp_battery_", 14U) == 0)) {
+                 lsm_string_starts_with(battery->name, "hidpp_battery_"))) {
                 if (battery_state)
                     (void)lsm_logitech_hidpp_find_device(
                         base, battery_state->hidraw_path,
@@ -500,7 +499,8 @@ void lsm_battery_update(LsmMonitor *monitor)
         if (battery_state && battery_state->bluez_record) continue;
 
         char base[LSM_PATH_LEN], path[LSM_PATH_LEN];
-        snprintf(base, sizeof(base), "%s/%s", root, battery->name);
+        if (!lsm_join_path(base, sizeof(base), root, battery->name))
+            continue;
         (void)lsm_join_path(path, sizeof(path), base, "/present");
         battery->present = access(path, R_OK) != 0 ||
                            lsm_read_u64_or_zero(path) != 0;
@@ -581,9 +581,7 @@ void lsm_battery_update(LsmMonitor *monitor)
         if (charging || discharging) {
             const char *time_name = charging
                 ? "time_to_full_now" : "time_to_empty_now";
-            char time_suffix[64];
-            snprintf(time_suffix, sizeof(time_suffix), "/%s", time_name);
-            (void)lsm_join_path(path, sizeof(path), base, time_suffix);
+            (void)lsm_join_path(path, sizeof(path), base, time_name);
             if (!lsm_read_u64_file(path, &seconds) &&
                 isfinite(battery->power_watts) &&
                 battery->power_watts > 0.01) {

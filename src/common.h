@@ -43,6 +43,7 @@
 #define lsm_u64_add_saturating infiltratr_u64_add_saturating
 #define lsm_u64_multiply_checked infiltratr_u64_multiply_checked
 #define lsm_u64_multiply_saturating infiltratr_u64_multiply_saturating
+#define lsm_size_add_checked infiltratr_size_add_checked
 #define lsm_size_multiply_checked infiltratr_size_multiply_checked
 #define lsm_percent_u64 infiltratr_percent_u64
 #define lsm_u64_counter_rate infiltratr_u64_counter_rate

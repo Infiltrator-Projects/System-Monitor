@@ -16,6 +16,7 @@
  */
 #include "monitor.h"
 
+#include "common.h"
 #include "monitor_platform.h"
 
 #include <limits.h>
@@ -43,8 +44,7 @@ void lsm_monitor_set_process_totals(LsmMonitor *monitor,
     uint64_t thread_count = 0U;
     for (size_t index = 0U; index < process_count; index++) {
         const uint64_t threads = processes ? processes[index].threads : 0U;
-        thread_count = UINT64_MAX - thread_count < threads
-            ? UINT64_MAX : thread_count + threads;
+        thread_count = lsm_u64_add_saturating(thread_count, threads);
     }
     monitor->cpu.process_count = process_count > UINT_MAX
         ? UINT_MAX : (unsigned)process_count;

@@ -146,7 +146,17 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
     }
 
     char directory[LSM_PATH_LEN];
-    snprintf(directory, sizeof(directory), "%s/%s", g_get_home_dir(), LSM_LOG_DIRECTORY);
+    if (!lsm_join_path(directory, sizeof(directory),
+                       g_get_home_dir(), LSM_LOG_DIRECTORY)) {
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to create the log directory", "%s",
+                          g_strerror(ENAMETOOLONG));
+        if (app->details.process_record_menu_item)
+            gtk_check_menu_item_set_active(
+                GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item),
+                FALSE);
+        return;
+    }
     if (g_mkdir_with_parents(directory, 0700) != 0) {
         lsm_ui_show_error(GTK_WINDOW(app->shell.window), "Unable to create the log directory", "%s", g_strerror(errno));
         if (app->details.process_record_menu_item)
@@ -167,9 +177,19 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
     char filename[256];
     snprintf(filename, sizeof(filename), "%.160s-%llu-%s.csv", name,
              (unsigned long long)app->process.selected_pid, timestamp);
-    char *full_path = g_build_filename(directory, filename, NULL);
-    g_strlcpy(app->process.record_path, full_path, sizeof(app->process.record_path));
-    g_free(full_path);
+    if (!lsm_join_path(app->process.record_path,
+                       sizeof(app->process.record_path),
+                       directory, filename)) {
+        g_free(name);
+        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                          "Unable to start recording", "%s",
+                          g_strerror(ENAMETOOLONG));
+        if (app->details.process_record_menu_item)
+            gtk_check_menu_item_set_active(
+                GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item),
+                FALSE);
+        return;
+    }
     g_free(name);
 
     int recorder_error = 0;

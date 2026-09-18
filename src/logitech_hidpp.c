@@ -118,17 +118,19 @@ bool lsm_logitech_hidpp_find_device(const char *power_supply_path,
     bool found = false;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (strncmp(entry->d_name, "hidraw", 6U) != 0) continue;
+        if (!lsm_string_starts_with(entry->d_name, "hidraw")) continue;
+        char hidraw_path[LSM_HIDPP_PATH_SIZE];
         char link_path[LSM_HIDPP_PATH_SIZE];
         char resolved_device[LSM_HIDPP_PATH_SIZE];
-        if (snprintf(link_path, sizeof(link_path), "%s/%s/device", sys_root,
-                     entry->d_name) >= (int)sizeof(link_path))
+        if (!lsm_join_path(hidraw_path, sizeof(hidraw_path),
+                           sys_root, entry->d_name) ||
+            !lsm_join_path(link_path, sizeof(link_path),
+                           hidraw_path, "device"))
             continue;
         if (!lsm_realpath_copy(link_path, resolved_device, sizeof(resolved_device))) continue;
         if (strcmp(resolved_supply, resolved_device) != 0) continue;
-        if (snprintf(device_path, device_path_size, "%s/%s",
-                     hidraw_dev_root(), entry->d_name) >=
-            (int)device_path_size)
+        if (!lsm_join_path(device_path, device_path_size,
+                           hidraw_dev_root(), entry->d_name))
             device_path[0] = '\0';
         found = device_path[0] != '\0';
         break;
