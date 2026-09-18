@@ -771,20 +771,19 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
-            "## Design priorities",
+            "## What matters",
+            "## Appearance",
             "## Capabilities",
             "## Architecture",
             "## Build and test",
             "src/infiltratr-common",
             "## Release assets",
-            "## Repository layout",
-            "## Repository and release policy",
-            "## Contributing and security",
-            "## Documentation",
+            "## Repository policy",
             "docs/ARCHITECTURE.md",
             "docs/PORTABILITY.md",
             "docs/HARDWARE.md",
             ".github/CONTRIBUTING.md",
+            ".github/SECURITY.md",
             "## Licence",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };

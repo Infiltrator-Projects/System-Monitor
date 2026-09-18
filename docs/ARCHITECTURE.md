@@ -2,9 +2,9 @@
 
 # Architecture
 
-Linux System Monitor is organised around a deliberately small set of boundaries: presentation, platform-neutral snapshots/contracts, platform backends, and reusable Common primitives. The goal is to keep the Linux implementation direct while avoiding Linux-specific assumptions in the application-facing model.
+Linux System Monitor separates presentation, platform-neutral state, platform backends and reusable Common primitives.
 
-## High-level structure
+## Structure
 
 ```text
 GTK 3 presentation
@@ -15,57 +15,41 @@ platform contracts
         ↓
 Linux backend and collectors
         ↓
-procfs / sysfs / ioctls / D-Bus / optional in-process driver APIs
+procfs / sysfs / ioctls / D-Bus / optional driver APIs
 
 Infiltratr Common
         ↓
-shared parsing / formatting / timing / durable I/O primitives
+shared parsing / formatting / timing / path / durable-I/O / allocation primitives
 ```
 
-The GTK layer consumes snapshots and model state. It should not know where a metric came from, which Linux path produced it, or how a driver-specific counter is retained between samples.
+GTK consumes completed snapshots and model state. It should not need to know which Linux path, ioctl or driver produced a metric.
 
-## Platform-neutral contracts
+## Contracts and ownership
 
-Public monitor and process structures are plain C data. They carry current values, identities and explicit availability state required by the presentation layer. Native implementation details such as file descriptors, cumulative-counter baselines, Linux path ownership and driver handles do not belong in those public snapshots.
+Public monitor and process structures are plain C data with explicit availability. Native implementation details such as file descriptors, driver handles, Linux paths and retained counter baselines stay below those contracts.
 
-Platform seams keep operating-system work below the application model. The Linux monitor backend owns Linux-specific retained state and coordinates collector lifecycle. A future native backend should implement the same application-facing contract rather than teaching GTK or the public data model about another operating system.
+The Linux backend owns Linux-specific retained state and collector lifetimes. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths. Device-oriented state should be retained by stable identity where possible so topology changes do not corrupt baselines or leak resources.
 
-## Linux backend ownership
+Optional telemetry degrades independently. A failed read must not silently preserve stale availability or invalidate unrelated metrics.
 
-The Linux monitor backend owns retained resources needed across samples, including native source contexts, Wi-Fi metadata state, CPU/disk/network accounting state and hardware telemetry state. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths.
+## Collection and presentation
 
-GPU and NPU telemetry caches are tied to the active monitor backend rather than process-global mutable state. Topology reconciliation retains state by stable device identity where possible, destroys unmatched resources and creates new resources only for newly discovered devices.
+Collection modules read and interpret operating-system or driver state. Presentation modules format snapshots for GTK widgets and graphs. Expensive discovery work should stay off high-frequency paths and off the GTK main thread where practical.
 
-Optional telemetry is independently degradable. Losing one driver attribute must not make unrelated metrics disappear, and a failed read must not silently reuse stale availability from an earlier sample.
-
-## Collection versus presentation
-
-Collection modules read and interpret operating-system or driver state. Presentation modules format current snapshots for GTK widgets and graphs. Expensive discovery work is kept off the high-frequency sample path where practical.
-
-The application does not use shell commands as normal telemetry providers. Direct collection keeps ownership, error handling and units inside the program and avoids making the GUI an orchestration layer around unrelated tools.
+Process collection follows the same rule: platform-neutral process records and controls remain distinct from Linux `/proc`, signals, scheduler operations, affinity masks and user IDs.
 
 ## Infiltratr Common
 
-`src/infiltratr-common` is an exact git submodule pin to Infiltratr Common. Common owns genuinely reusable primitives such as strict parsing, formatting, monotonic timing, checked arithmetic, durable atomic I/O and ordered readable-path selection.
+`src/infiltratr-common` is pinned to one exact Common release commit. Common owns reusable mechanisms; System Monitor owns product and hardware policy.
 
-System Monitor owns product-specific policy: Linux hardware discovery, driver interpretation, monitor snapshot semantics, UI behaviour and hardware capability decisions. Common must not be modified from this repository merely to make one System Monitor call site convenient.
+Use Common when its contract is at least as strong as the local requirement. Do not weaken a Linux-specific contract merely to replace it with a broader generic helper, and do not modify the Common repository from this project.
 
-## Process architecture
+## Privilege boundary
 
-Process collection follows the same separation. Platform-neutral process records and controls are kept distinct from Linux-native implementation details such as `/proc`, signals, scheduler calls, affinity masks and user identifiers. Inspection and control operations return explicit success/failure information rather than leaking native handles into presentation code.
+The installed product is one GUI executable. It has no project-owned privileged helper or daemon.
 
-## GUI and privilege boundary
+The Debian package grants only the capability required for the read-only Bluetooth HCI monitor path. Startup drops all capabilities before normal GTK and monitoring work continues. Other privileged information must degrade to unavailable rather than triggering implicit elevation.
 
-The installed product is one GUI executable. There is no project-owned privileged daemon or helper. Running the GUI with elevated privileges is an explicit user choice outside the normal package architecture.
+## Build contract
 
-Collectors must therefore degrade gracefully when information is unavailable to the current user. Missing permission is not a reason to guess a value or to introduce an always-running privileged component.
-
-## Build-system contract
-
-Make and CMake both build the same application and pinned Common dependency. CI exercises both build paths, the C test suite, sanitizer checks where supported, a 32-bit compile gate and release-package construction.
-
-Direct `make install` is intentionally disabled. Installation belongs to the Debian package or native installer so installed files remain auditable and removable through one package boundary.
-
-## Documentation ownership
-
-This file owns the architectural boundaries. `PORTABILITY.md` owns language/toolchain and platform-extension rules. `HARDWARE.md` owns telemetry-source and availability behaviour. Contribution and security policy live under `.github/` so engineering contracts are not duplicated across multiple documents.
+Make and CMake build the same application and exact Common pin. CI exercises both paths, tests, sanitizers, 32-bit compilation and package construction. Direct `make install` is disabled; installation is owned by the package or native installer.
