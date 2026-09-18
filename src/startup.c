@@ -232,7 +232,8 @@ static gboolean write_startup_override(const char *source_path,
     char directory[LSM_PATH_LEN];
     if (!lsm_join_path(directory, sizeof(directory),
                        g_get_user_config_dir(), "autostart")) {
-        g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_NAMETOOLONG,
+        g_set_error(error, G_FILE_ERROR,
+                    g_file_error_from_errno(ENAMETOOLONG),
                     "Startup configuration path is too long");
         g_free(data);
         return FALSE;
