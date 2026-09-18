@@ -34,6 +34,7 @@ int main(void)
     snprintf(saved->paths.preferences_path, sizeof(saved->paths.preferences_path),
              "%s/preferences.conf", directory);
     saved->runtime.update_interval_ms = 2000U;
+    saved->runtime.theme_mode = INFILTRATR_THEME_NIGHT;
     saved->runtime.newer_on_right = false;
     saved->runtime.network_use_bits = true;
     saved->runtime.always_on_top = true;
@@ -51,6 +52,7 @@ int main(void)
     assert((status.st_mode & 0777) == 0600);
 
     loaded->runtime.update_interval_ms = 1000U;
+    loaded->runtime.theme_mode = INFILTRATR_THEME_SYSTEM;
     loaded->runtime.newer_on_right = true;
     loaded->runtime.window_width = 1280;
     loaded->runtime.window_height = 800;
@@ -58,6 +60,7 @@ int main(void)
              "%s", saved->paths.preferences_path);
     lsm_preferences_load(loaded);
     assert(loaded->runtime.update_interval_ms == 2000U);
+    assert(loaded->runtime.theme_mode == INFILTRATR_THEME_NIGHT);
     assert(!loaded->runtime.newer_on_right);
     assert(loaded->runtime.network_use_bits);
     assert(loaded->runtime.always_on_top);
@@ -80,15 +83,17 @@ int main(void)
 
     file = fopen(saved->paths.preferences_path, "w");
     assert(file);
-    fputs("update_interval_ms=7\nwindow_width=-1\npage_scroll_1=nan\n"
-          "last_tab=999\n", file);
+    fputs("update_interval_ms=7\ntheme_mode=ultraviolet\n"
+          "window_width=-1\npage_scroll_1=nan\nlast_tab=999\n", file);
     assert(fclose(file) == 0);
     loaded->runtime.update_interval_ms = 1000U;
+    loaded->runtime.theme_mode = INFILTRATR_THEME_DAY;
     loaded->runtime.window_width = 1280;
     loaded->runtime.page_scroll[LSM_TAB_PROCESSES] = 12.0;
     loaded->runtime.last_tab = LSM_TAB_PERFORMANCE;
     lsm_preferences_load(loaded);
     assert(loaded->runtime.update_interval_ms == 1000U);
+    assert(loaded->runtime.theme_mode == INFILTRATR_THEME_DAY);
     assert(loaded->runtime.window_width == 1280);
     assert(loaded->runtime.page_scroll[LSM_TAB_PROCESSES] == 12.0);
     assert(loaded->runtime.last_tab == LSM_TAB_PERFORMANCE);
@@ -97,6 +102,6 @@ int main(void)
     rmdir(directory);
     free(loaded);
     free(saved);
-    puts("Preference round-trip, page scroll and invalid-value fallback passed.");
+    puts("Preference round-trip, theme, page scroll and invalid-value fallback passed.");
     return 0;
 }

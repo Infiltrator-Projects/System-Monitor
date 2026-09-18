@@ -43,27 +43,129 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
     }
 }
 
-void lsm_app_shell_apply_css(void)
+static const char lsm_base_css[] =
+    "* { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
+    "headerbar .title, .titlebar .title {"
+    " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\", Sans;"
+    " font-weight: 400;"
+    "}"
+    "button, treeview header button, notebook tab { font-weight: 700; }"
+    "#lsm-side-button:checked {"
+    " background-color: alpha(@theme_selected_bg_color, 0.28);"
+    " border-color: @theme_selected_bg_color;"
+    "}";
+
+void lsm_app_shell_apply_theme(LsmApp *app)
 {
-    /* Infiltrator Design v1: MBLINK is the reference implementation. The
-     * application keeps its native GTK colour semantics while sharing the MB
-     * Corpo typography roles with the rest of the project family. */
-    static const char css[] =
-        "* { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
-        "headerbar .title, .titlebar .title {"
-        " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\", Sans;"
-        " font-weight: 400;"
+    if (!app) return;
+    GdkScreen *screen = gdk_screen_get_default();
+    if (!screen) return;
+
+    if (!app->shell.theme_provider) {
+        app->shell.theme_provider = gtk_css_provider_new();
+        gtk_style_context_add_provider_for_screen(
+            screen, GTK_STYLE_PROVIDER(app->shell.theme_provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50U);
+    }
+
+    if (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM) {
+        gtk_css_provider_load_from_data(
+            app->shell.theme_provider, lsm_base_css, -1, NULL);
+        return;
+    }
+
+    const InfiltratrThemePalette *palette =
+        infiltratr_theme_resolve(app->runtime.theme_mode, false);
+    char css[8192];
+    const int written = snprintf(
+        css, sizeof(css),
+        "%s"
+        "@define-color lsm_background #%06X;"
+        "@define-color lsm_panel #%06X;"
+        "@define-color lsm_card #%06X;"
+        "@define-color lsm_surface #%06X;"
+        "@define-color lsm_input #%06X;"
+        "@define-color lsm_border #%06X;"
+        "@define-color lsm_text #%06X;"
+        "@define-color lsm_title #%06X;"
+        "@define-color lsm_subtle #%06X;"
+        "@define-color lsm_neutral #%06X;"
+        "@define-color lsm_selection #%06X;"
+        "@define-color lsm_selection_text #%06X;"
+        "@define-color lsm_card_hover #%06X;"
+        "@define-color lsm_surface_hover #%06X;"
+        "window, dialog, .background {"
+        " background-color: @lsm_background; color: @lsm_text;"
         "}"
-        "button, treeview header button, notebook tab { font-weight: 700; }"
+        "headerbar, .titlebar {"
+        " background-image: none; background-color: @lsm_panel;"
+        " color: @lsm_title; border-bottom: 1px solid @lsm_border;"
+        "}"
+        "menubar {"
+        " background-color: @lsm_surface; color: @lsm_text;"
+        " border-bottom: 1px solid @lsm_border;"
+        "}"
+        "menu {"
+        " background-color: @lsm_panel; color: @lsm_text;"
+        " border: 1px solid @lsm_border;"
+        "}"
+        "menuitem:hover { background-color: @lsm_surface_hover; }"
+        "button, combobox button, entry, spinbutton {"
+        " background-image: none; background-color: @lsm_card; color: @lsm_text;"
+        " border: 1px solid @lsm_neutral; box-shadow: none;"
+        "}"
+        "button:hover {"
+        " background-color: @lsm_card_hover; border-color: @lsm_neutral;"
+        "}"
+        "button:active, button:checked {"
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        " border-color: @lsm_neutral;"
+        "}"
+        "button:disabled {"
+        " background-color: @lsm_input; color: @lsm_subtle;"
+        " border-color: @lsm_border;"
+        "}"
+        "notebook > header {"
+        " background-color: @lsm_surface; color: @lsm_text;"
+        " border-color: @lsm_border;"
+        "}"
+        "notebook > header > tabs > tab:checked {"
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        "}"
+        "treeview, textview, textview text, viewport, scrolledwindow {"
+        " background-color: @lsm_input; color: @lsm_text;"
+        " border-color: @lsm_border;"
+        "}"
+        "entry selection, textview text selection, treeview.view:selected {"
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        "}"
+        "scrollbar slider { background-color: @lsm_neutral; }"
+        "tooltip {"
+        " background-color: @lsm_card; color: @lsm_title;"
+        " border: 1px solid @lsm_border;"
+        "}"
         "#lsm-side-button:checked {"
-        " background-color: alpha(@theme_selected_bg_color, 0.28);"
-        " border-color: @theme_selected_bg_color;"
-        "}";
-    GtkCssProvider *provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(provider, css, -1, NULL);
-    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
-        GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    g_object_unref(provider);
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        " border-color: @lsm_neutral;"
+        "}",
+        lsm_base_css,
+        (unsigned int)palette->background_rgb,
+        (unsigned int)palette->panel_rgb,
+        (unsigned int)palette->card_rgb,
+        (unsigned int)palette->surface_rgb,
+        (unsigned int)palette->input_rgb,
+        (unsigned int)palette->border_rgb,
+        (unsigned int)palette->text_rgb,
+        (unsigned int)palette->title_rgb,
+        (unsigned int)palette->subtle_rgb,
+        (unsigned int)palette->neutral_accent_rgb,
+        (unsigned int)palette->selection_background_rgb,
+        (unsigned int)palette->selection_foreground_rgb,
+        (unsigned int)palette->card_hover_rgb,
+        (unsigned int)palette->surface_hover_rgb);
+    if (written < 0 || (size_t)written >= sizeof(css)) return;
+    gtk_css_provider_load_from_data(
+        app->shell.theme_provider, css, written, NULL);
 }
 
 /* Window and tab lifecycle. Expensive pages refresh on demand as well as by
@@ -315,7 +417,17 @@ void lsm_app_shell_connect_notebook(LsmApp *app)
 
 void lsm_app_shell_cancel_pending(LsmApp *app)
 {
-    if (!app || !app->runtime.window_restore_reflow_source) return;
-    g_source_remove(app->runtime.window_restore_reflow_source);
-    app->runtime.window_restore_reflow_source = 0U;
+    if (!app) return;
+    if (app->runtime.window_restore_reflow_source) {
+        g_source_remove(app->runtime.window_restore_reflow_source);
+        app->runtime.window_restore_reflow_source = 0U;
+    }
+    if (app->shell.theme_provider) {
+        GdkScreen *screen = gdk_screen_get_default();
+        if (screen)
+            gtk_style_context_remove_provider_for_screen(
+                screen, GTK_STYLE_PROVIDER(app->shell.theme_provider));
+        g_object_unref(app->shell.theme_provider);
+        app->shell.theme_provider = NULL;
+    }
 }

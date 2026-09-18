@@ -55,6 +55,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     }
     app->application = application;
     app->runtime.update_interval_ms = LSM_DEFAULT_UPDATE_INTERVAL_MS;
+    app->runtime.theme_mode = INFILTRATR_THEME_SYSTEM;
     app->runtime.newer_on_right = TRUE;
     app->runtime.network_use_bits = FALSE;
     app->runtime.process_cpu_per_core = FALSE;
@@ -103,7 +104,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     g_free(preferences_path);
     lsm_preferences_load(app);
     lsm_process_filters_load(app);
-    lsm_app_shell_apply_css();
+    lsm_app_shell_apply_theme(app);
 
     app->shell.window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(app->shell.window), LSM_PROGRAM_NAME);

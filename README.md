@@ -6,7 +6,7 @@
 
 Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It presents the useful parts of Windows Task Manager while collecting hardware, process, service and user information directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.23 ([version file](support/VERSION))\
+**Current source version:** 1.0.24 ([version file](support/VERSION))\
 **Shared foundation:** exact Infiltratr Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -18,6 +18,10 @@ Linux System Monitor is deliberately a native application rather than an orchest
 Collection prefers project-owned C parsers and native kernel/driver interfaces over external commands. Unsupported metrics are presented as unavailable rather than guessed or fabricated. Potentially slow native Performance sampling, recurring process scans, mounted-filesystem capacity queries, explicit process-inspection inventories, Application History persistence and recurring process-recording writes are isolated from the GTK main thread so kernel, NSS, remote-I/O or storage delays cannot freeze the interface.
 
 Storage and memory use 1024-based scaling with traditional labels: 1 KB = 1024 bytes, 1 MB = 1024 KB, 1 GB = 1024 MB and 1 TB = 1024 GB. Network rates and negotiated link speeds use decimal 1000-based scaling, matching conventional network notation.
+
+## Appearance
+
+**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system leaves the host GTK/Mint palette authoritative while retaining the shared Infiltrator typography. Day and Night apply the semantic palettes from the pinned Infiltratr Common release through System Monitor's thin GTK adapter. The selected mode is stored per user and takes effect immediately without restarting the application.
 
 ## Capabilities
 

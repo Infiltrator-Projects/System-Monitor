@@ -132,6 +132,19 @@ static void on_direction_selected(GtkCheckMenuItem *item, gpointer user_data)
     lsm_preferences_save(app);
 }
 
+static void on_theme_selected(GtkCheckMenuItem *item, gpointer user_data)
+{
+    if (!gtk_check_menu_item_get_active(item)) return;
+    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
+    if (!app) return;
+    const int mode = GPOINTER_TO_INT(user_data);
+    if (mode < INFILTRATR_THEME_SYSTEM || mode > INFILTRATR_THEME_NIGHT)
+        return;
+    app->runtime.theme_mode = (InfiltratrThemeMode)mode;
+    lsm_app_shell_apply_theme(app);
+    lsm_preferences_save(app);
+}
+
 static void on_preferences(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
@@ -355,6 +368,28 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
         app->runtime.compact_summary);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
                           app->shell.compact_summary_menu_item);
+
+    GtkWidget *theme_root = gtk_menu_item_new_with_label("Theme");
+    GtkWidget *theme_menu = gtk_menu_new();
+    GSList *theme_group = NULL;
+    static const char *const theme_labels[] = {
+        "Follow system", "Day", "Night"
+    };
+    for (int mode = INFILTRATR_THEME_SYSTEM;
+         mode <= INFILTRATR_THEME_NIGHT; mode++) {
+        GtkWidget *radio = gtk_radio_menu_item_new_with_label(
+            theme_group, theme_labels[mode]);
+        theme_group = gtk_radio_menu_item_get_group(
+            GTK_RADIO_MENU_ITEM(radio));
+        g_object_set_data(G_OBJECT(radio), "lsm-app", app);
+        g_signal_connect(radio, "toggled",
+                         G_CALLBACK(on_theme_selected), GINT_TO_POINTER(mode));
+        gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), radio);
+        if (mode == (int)app->runtime.theme_mode)
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(radio), TRUE);
+    }
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_root), theme_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_root);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
                           gtk_separator_menu_item_new());
 

@@ -37,6 +37,25 @@ static gboolean parse_boolean(const char *value, gboolean fallback)
         ? (parsed ? TRUE : FALSE) : fallback;
 }
 
+static InfiltratrThemeMode validated_theme_mode(
+    const char *value, InfiltratrThemeMode fallback)
+{
+    if (value && strcmp(value, "system") == 0) return INFILTRATR_THEME_SYSTEM;
+    if (value && strcmp(value, "day") == 0) return INFILTRATR_THEME_DAY;
+    if (value && strcmp(value, "night") == 0) return INFILTRATR_THEME_NIGHT;
+    return fallback;
+}
+
+static const char *theme_mode_value(InfiltratrThemeMode mode)
+{
+    switch (mode) {
+        case INFILTRATR_THEME_DAY: return "day";
+        case INFILTRATR_THEME_NIGHT: return "night";
+        case INFILTRATR_THEME_SYSTEM:
+        default: return "system";
+    }
+}
+
 static guint validated_interval(const char *value, guint fallback)
 {
     int64_t parsed = 0;
@@ -92,6 +111,9 @@ void lsm_preferences_load(LsmApp *app)
         if (strcmp(key, "update_interval_ms") == 0)
             app->runtime.update_interval_ms = validated_interval(
                 value, app->runtime.update_interval_ms);
+        else if (strcmp(key, "theme_mode") == 0)
+            app->runtime.theme_mode = validated_theme_mode(
+                value, app->runtime.theme_mode);
         else if (strcmp(key, "newer_on_right") == 0)
             app->runtime.newer_on_right = parse_boolean(
                 value, app->runtime.newer_on_right);
@@ -152,6 +174,7 @@ static bool write_preferences(FILE *file, const void *user_data)
     int result = fprintf(file,
         "# Linux System Monitor graphical preferences\n"
         "update_interval_ms=%u\n"
+        "theme_mode=%s\n"
         "newer_on_right=%d\n"
         "network_use_bits=%d\n"
         "process_cpu_per_core=%d\n"
@@ -164,7 +187,9 @@ static bool write_preferences(FILE *file, const void *user_data)
         "window_maximized=%d\n"
         "tab_layout_version=%d\n"
         "last_tab=%d\n",
-        app->runtime.update_interval_ms, app->runtime.newer_on_right ? 1 : 0,
+        app->runtime.update_interval_ms,
+        theme_mode_value(app->runtime.theme_mode),
+        app->runtime.newer_on_right ? 1 : 0,
         app->runtime.network_use_bits ? 1 : 0,
         app->runtime.process_cpu_per_core ? 1 : 0,
         app->runtime.show_all_filesystems ? 1 : 0,

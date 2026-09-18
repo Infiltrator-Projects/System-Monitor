@@ -12,8 +12,15 @@
 
 #include "app.h"
 
-/** Install the application CSS provider on the default screen. */
-void lsm_app_shell_apply_css(void);
+/**
+ * Apply the selected appearance mode.
+ *
+ * Follow-system mode keeps the host GTK palette authoritative. Day and Night
+ * use the semantic palettes supplied by Infiltratr Common.
+ *
+ * @param [in,out] app Active application context.
+ */
+void lsm_app_shell_apply_theme(LsmApp *app);
 
 /**
  * Connect top-level window state, keyboard and close handlers.

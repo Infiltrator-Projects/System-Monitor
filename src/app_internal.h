@@ -21,6 +21,8 @@
 #include "monitor_types.h"
 #include "performance_selection.h"
 
+#include <infiltratr/design.h>
+
 #include <stdio.h>
 
 typedef struct LsmProcessScanner LsmProcessScanner;
@@ -314,6 +316,7 @@ typedef struct {
     GtkWidget *pause_menu_item;
     GtkWidget *always_on_top_menu_item;
     GtkWidget *compact_summary_menu_item;
+    GtkCssProvider *theme_provider;
     GtkWidget *summary_bar;
     GtkWidget *summary_cpu;
     GtkWidget *summary_memory;
@@ -331,6 +334,7 @@ typedef struct {
     guint users_timer;
     guint filesystem_timer;
     guint update_interval_ms;
+    InfiltratrThemeMode theme_mode;
     double last_process_refresh_monotonic;
     gboolean paused;
     gboolean newer_on_right;
