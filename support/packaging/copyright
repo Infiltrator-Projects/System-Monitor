@@ -18,7 +18,7 @@ License: GPL-3+
  On Debian systems, the complete text of the GNU General Public License version
  3 is available in /usr/share/common-licenses/GPL-3.
 
-Files: support/resources/icons/linux-system-monitor.png
+Files: support/resources/icons/system-monitor.png
 Copyright: 2020 Neeraj Kumar
 License: BSD-3-clause
  Redistribution and use in source and binary forms, with or without

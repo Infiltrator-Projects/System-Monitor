@@ -16,10 +16,13 @@
 #include "sampling_policy.h"
 
 #define LSM_PROGRAM_NAME "System Monitor"
-#define LSM_EXECUTABLE_NAME "linux-system-monitor"
-#define LSM_APPLICATION_ID "io.github.theinfiltratr.LinuxSystemMonitor"
-#define LSM_CONFIG_DIRECTORY "linux-system-monitor"
-#define LSM_LOG_DIRECTORY "Linux-System-Monitor-logs"
+#define LSM_EXECUTABLE_NAME "system-monitor"
+#define LSM_APPLICATION_ID "io.github.theinfiltratr.SystemMonitor"
+#define LSM_CONFIG_DIRECTORY "system-monitor"
+#define LSM_LOG_DIRECTORY "System-Monitor-logs"
+/* 1.0.30 and earlier used the pre-rebrand technical paths. */
+#define LSM_PREVIOUS_CONFIG_DIRECTORY "linux-system-monitor"
+#define LSM_PREVIOUS_LOG_DIRECTORY "Linux-System-Monitor-logs"
 #define LSM_LEGACY_CONFIG_DIRECTORY "sysmontask-c"
 #define LSM_LEGACY_LOG_DIRECTORY "sysmontask_log"
 

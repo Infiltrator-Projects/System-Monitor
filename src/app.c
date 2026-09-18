@@ -33,6 +33,8 @@
 #include "summary_bar.h"
 #include "users.h"
 
+#include <glib/gstdio.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -40,11 +42,23 @@ static bool app_paths_initialise(LsmApp *app)
 {
     if (!app) return false;
     const char *config_root = g_get_user_config_dir();
-    return config_root &&
-        lsm_join_path(app->paths.config_dir, sizeof(app->paths.config_dir),
-                      config_root, LSM_CONFIG_DIRECTORY) &&
-        lsm_join_path(app->paths.filter_path, sizeof(app->paths.filter_path),
-                      app->paths.config_dir, "filters.conf") &&
+    if (!config_root ||
+        !lsm_join_path(app->paths.config_dir, sizeof(app->paths.config_dir),
+                       config_root, LSM_CONFIG_DIRECTORY))
+        return false;
+
+    /* Preserve the user's settings across the 1.0.31 technical-name rebrand.
+     * rename(2) is atomic within ~/.config; failure is non-fatal because the
+     * application can safely continue with a fresh System Monitor directory. */
+    char previous_config[LSM_PATH_LEN];
+    if (!g_file_test(app->paths.config_dir, G_FILE_TEST_EXISTS) &&
+        lsm_join_path(previous_config, sizeof(previous_config), config_root,
+                      LSM_PREVIOUS_CONFIG_DIRECTORY) &&
+        g_file_test(previous_config, G_FILE_TEST_IS_DIR))
+        (void)g_rename(previous_config, app->paths.config_dir);
+
+    return lsm_join_path(app->paths.filter_path, sizeof(app->paths.filter_path),
+                         app->paths.config_dir, "filters.conf") &&
         lsm_join_path(app->paths.column_path, sizeof(app->paths.column_path),
                       app->paths.config_dir, "process-columns.conf") &&
         lsm_join_path(app->paths.preferences_path,

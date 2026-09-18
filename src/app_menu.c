@@ -48,7 +48,7 @@ void lsm_app_menu_save_snapshot(GtkMenuItem *item, gpointer user_data)
         GTK_FILE_CHOOSER_ACTION_SAVE, "Cancel", GTK_RESPONSE_CANCEL,
         "Save", GTK_RESPONSE_ACCEPT, NULL);
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser),
-                                      "linux-system-monitor-snapshot.txt");
+                                      "system-monitor-snapshot.txt");
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser),
                                                     TRUE);
     GtkFileFilter *filter = gtk_file_filter_new();
@@ -222,7 +222,7 @@ static void on_plot_log(GtkMenuItem *item, gpointer user_data)
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), log_dir);
     g_free(log_dir);
     GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "Linux System Monitor CSV logs");
+    gtk_file_filter_set_name(filter, "System Monitor CSV logs");
     gtk_file_filter_add_pattern(filter, "*.csv");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
 
@@ -295,7 +295,7 @@ static void on_about(GtkMenuItem *item, gpointer user_data)
         "copyright", info->copyright_text,
         "license-type", GTK_LICENSE_CUSTOM,
         "license",
-        "Linux System Monitor is free software licensed under the GNU General "
+        "System Monitor is free software licensed under the GNU General "
         "Public License version 3 or, at your option, any later version "
         "(GPL-3.0-or-later).\n\n"
         "See LICENSE in the source package for the complete licence text.",

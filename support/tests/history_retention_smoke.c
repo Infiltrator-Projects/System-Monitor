@@ -32,7 +32,7 @@ static gboolean write_oversized_history(const char *directory)
     snprintf(path, sizeof(path), "%s/app-history.tsv", directory);
     FILE *file = fopen(path, "w");
     if (!file) return FALSE;
-    if (fputs("# Linux-System-Monitor App History v1\n", file) == EOF) {
+    if (fputs("# System-Monitor App History v1\n", file) == EOF) {
         fclose(file);
         return FALSE;
     }

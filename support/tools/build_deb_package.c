@@ -429,13 +429,13 @@ static void format_debian_date(time_t epoch, char *destination, size_t size)
 static void install_release_changelog(const char *version, time_t epoch)
 {
     static const char relative[] =
-        "usr/share/doc/linux-system-monitor/changelog";
+        "usr/share/doc/system-monitor/changelog";
     char date[64];
     format_debian_date(epoch, date, sizeof(date));
     char text[1536];
     const int written = snprintf(
         text, sizeof(text),
-        "linux-system-monitor (%s) unstable; urgency=medium\n\n"
+        "system-monitor (%s) unstable; urgency=medium\n\n"
         "  * Release %s. See the GitHub release notes for details.\n\n"
         " -- Shannon Smith <The-First-Infiltrator@users.noreply.github.com>  %s\n",
         version, version, date);
@@ -448,7 +448,7 @@ static void install_release_changelog(const char *version, time_t epoch)
     char destination[PATH_MAX];
     stage_path(source, sizeof(source), relative);
     stage_path(destination, sizeof(destination),
-               "usr/share/doc/linux-system-monitor/changelog.gz");
+               "usr/share/doc/system-monitor/changelog.gz");
     gzip_changelog(source, destination);
     if (unlink(source) != 0)
         fail("remove temporary changelog: %s", strerror(errno));
@@ -465,7 +465,7 @@ int main(int argc, char **argv)
     const char *output = argv[3];
     if (!version[0] || !architecture[0] || !output[0])
         fail("version, architecture and output are required");
-    if (!executable_file("build/linux-system-monitor"))
+    if (!executable_file("build/system-monitor"))
         fail("build the GUI application first");
 
     char template_path[] = "build/deb-root-XXXXXX";
@@ -482,11 +482,11 @@ int main(int argc, char **argv)
 
     const time_t epoch = source_date_epoch();
 
-    copy_staged("build/linux-system-monitor",
-                "usr/bin/linux-system-monitor", 0755);
+    copy_staged("build/system-monitor",
+                "usr/bin/system-monitor", 0755);
     char staged_application[PATH_MAX];
     stage_path(staged_application, sizeof(staged_application),
-               "usr/bin/linux-system-monitor");
+               "usr/bin/system-monitor");
     const char *keep_debug = getenv("LSM_KEEP_DEBUG");
     if (!keep_debug || strcmp(keep_debug, "1") != 0)
         strip_binary_if_available(staged_application);
@@ -508,20 +508,20 @@ int main(int argc, char **argv)
              "baseline GLIBC_%u.%u", staged_application, required_glibc_major,
              required_glibc_minor, LSM_GLIBC_BASELINE_MAJOR,
              LSM_GLIBC_BASELINE_MINOR);
-    copy_staged("support/resources/icons/linux-system-monitor.png",
-                "usr/share/icons/hicolor/96x96/apps/linux-system-monitor.png",
+    copy_staged("support/resources/icons/system-monitor.png",
+                "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
-    copy_staged("LICENSE", "usr/share/doc/linux-system-monitor/LICENSE", 0644);
+    copy_staged("LICENSE", "usr/share/doc/system-monitor/LICENSE", 0644);
     copy_staged("support/legal/THIRD_PARTY_NOTICES",
-                "usr/share/doc/linux-system-monitor/THIRD_PARTY_NOTICES", 0644);
+                "usr/share/doc/system-monitor/THIRD_PARTY_NOTICES", 0644);
     copy_staged("support/packaging/copyright",
-                "usr/share/doc/linux-system-monitor/copyright", 0644);
-    copy_staged("README.md", "usr/share/doc/linux-system-monitor/README.md", 0644);
+                "usr/share/doc/system-monitor/copyright", 0644);
+    copy_staged("README.md", "usr/share/doc/system-monitor/README.md", 0644);
     copy_staged("support/resources/data/PCI_IDS_LICENSE",
-                "usr/share/doc/linux-system-monitor/PCI_IDS_LICENSE", 0644);
+                "usr/share/doc/system-monitor/PCI_IDS_LICENSE", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",
-                    "usr/share/doc/linux-system-monitor/BUILD-INFO", 0644);
+                    "usr/share/doc/system-monitor/BUILD-INFO", 0644);
 
     install_release_changelog(version, epoch);
 
@@ -531,12 +531,12 @@ int main(int argc, char **argv)
         "Type=Application\n"
         "Name=System Monitor\n"
         "Comment=Native Linux system and hardware monitor\n"
-        "Exec=linux-system-monitor\n"
-        "Icon=linux-system-monitor\n"
+        "Exec=system-monitor\n"
+        "Icon=system-monitor\n"
         "Terminal=false\n"
         "Categories=System;Monitor;GTK;\n"
         "StartupNotify=true\n";
-    write_staged("usr/share/applications/linux-system-monitor.desktop",
+    write_staged("usr/share/applications/system-monitor.desktop",
                  0644, desktop);
 
     const uint64_t bytes = installed_size_bytes(stage_root);
@@ -544,13 +544,16 @@ int main(int argc, char **argv)
     char control[LSM_DEB_TEXT];
     const int written = snprintf(
         control, sizeof(control),
-        "Package: linux-system-monitor\n"
+        "Package: system-monitor\n"
         "Version: %s\n"
         "Section: utils\n"
         "Priority: optional\n"
         "Architecture: %s\n"
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
         "Homepage: https://github.com/Infiltrator-Projects/System-Monitor\n"
+        "Provides: linux-system-monitor\n"
+        "Breaks: linux-system-monitor (<= 1.0.30)\n"
+        "Replaces: linux-system-monitor (<= 1.0.30)\n"
         "Depends: libc6 (>= %u.%u), libcap2-bin, "
         "libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
         "Description: native GTK system and hardware monitor for Linux\n"
@@ -569,7 +572,7 @@ int main(int argc, char **argv)
         "#!/bin/sh\n"
         "set -e\n"
         "if command -v setcap >/dev/null 2>&1; then\n"
-        "  setcap cap_net_raw=ep /usr/bin/linux-system-monitor || "
+        "  setcap cap_net_raw=ep /usr/bin/system-monitor || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "could not apply CAP_NET_RAW.' >&2\n"
         "else\n"

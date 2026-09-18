@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux-System-Monitor build
+# System-Monitor build
 # Author and maintainer: Shannon Smith
 
 CC ?= cc
@@ -22,7 +22,7 @@ INFILTRATR_COMMON_VERSION := 1.19.2
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
-TARGET := $(BUILD_DIR)/linux-system-monitor
+TARGET := $(BUILD_DIR)/system-monitor
 STYLE_CHECKER := $(BUILD_DIR)/source-style-checker
 PORTABILITY_CHECKER := $(BUILD_DIR)/check-portability
 NATIVE_SAFETY_CHECKER := $(BUILD_DIR)/native-installer-safety
@@ -32,8 +32,8 @@ NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
 GLIBC_ABI_SMOKE := $(BUILD_DIR)/glibc-abi-smoke
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
-DEB_OUTPUT ?= linux-system-monitor_$(VERSION)_$(DEB_ARCH).deb
-SOURCE_ZIP := Linux-System-Monitor-$(VERSION)-source.zip
+DEB_OUTPUT ?= system-monitor_$(VERSION)_$(DEB_ARCH).deb
+SOURCE_ZIP := System-Monitor-$(VERSION)-source.zip
 DIST_SOURCE_DATE_EPOCH ?= 315532800
 BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
 BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
@@ -233,7 +233,7 @@ $(BUILD_CONFIG): FORCE | $(BUILD_DIR)
 	@if ! cmp -s $@.tmp $@; then mv -f $@.tmp $@; else rm -f $@.tmp; fi
 
 $(BUILD_INFO): $(VERSION_FILE) $(INFILTRATR_COMMON_DIR)/VERSION | $(BUILD_DIR)
-	@printf 'Version: %s\nProfile: %s\nShared C library: Infiltratr Common %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: linux-system-monitor\n' \
+	@printf 'Version: %s\nProfile: %s\nShared C library: Infiltratr Common %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: system-monitor\n' \
 		'$(VERSION)' '$(BUILD_PROFILE)' '$(INFILTRATR_COMMON_VERSION)' > $@
 
 $(BUILD_DIR)/%.o: src/%.c src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps
@@ -946,14 +946,14 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO)
 	./$(DEB_PACKAGE_BUILDER) $(VERSION) $(DEB_ARCH) $(DEB_OUTPUT)
 	dpkg-deb --info $(DEB_OUTPUT) >/dev/null
 	dpkg-deb --contents $(DEB_OUTPUT) > $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/bin/linux-system-monitor$$' $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/doc/linux-system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/doc/linux-system-monitor/THIRD_PARTY_NOTICES$$' \
+	grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
+	grep -q 'usr/share/doc/system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
+	grep -q 'usr/share/doc/system-monitor/THIRD_PARTY_NOTICES$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/icons/hicolor/96x96/apps/linux-system-monitor.png$$' \
+	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	@test "$$(awk '$$1 ~ /^-/ && $$1 ~ /x/ {print $$6}' \
-		$(BUILD_DIR)/deb-contents.txt | grep -v '^\./usr/bin/linux-system-monitor$$' | wc -l)" -eq 0
+		$(BUILD_DIR)/deb-contents.txt | grep -v '^\./usr/bin/system-monitor$$' | wc -l)" -eq 0
 	@! grep -Eq '(libexec|polkit|rules\.d|Configure-Hardware|Run-Linux)' \
 		$(BUILD_DIR)/deb-contents.txt
 	@repro='$(BUILD_DIR)/deb-reproducibility-check.deb'; \
@@ -973,14 +973,14 @@ dist: common-check clean
 	@command -v zip >/dev/null 2>&1 || { \
 		echo "zip is required to create the optional source archive." >&2; exit 1; \
 	}
-	@tmp=$$(mktemp -d); root="$$tmp/Linux-System-Monitor-$(VERSION)-source"; \
+	@tmp=$$(mktemp -d); root="$$tmp/System-Monitor-$(VERSION)-source"; \
 		mkdir -p "$$root"; \
 		tar --exclude-vcs --exclude='./build' --exclude='./build-*' \
 			--exclude='*.deb' --exclude='*.run' --exclude='*.tar.gz' --exclude='*.zip' \
 			-cf - . | tar -xf - -C "$$root"; \
 		find "$$root" -exec touch -h -d '@$(DIST_SOURCE_DATE_EPOCH)' {} +; \
 		rm -f "$(CURDIR)/$(SOURCE_ZIP)"; \
-		(cd "$$tmp" && find "Linux-System-Monitor-$(VERSION)-source" -print | \
+		(cd "$$tmp" && find "System-Monitor-$(VERSION)-source" -print | \
 			LC_ALL=C sort | zip -X -q "$(CURDIR)/$(SOURCE_ZIP)" -@); \
 		rm -rf "$$tmp"
 	@echo "Created deterministic optional source archive: $(SOURCE_ZIP)"
@@ -988,4 +988,4 @@ dist: common-check clean
 release:
 	$(MAKE) deb
 	$(MAKE) native-installer
-	@echo "Release artifacts created: $(DEB_OUTPUT), linux-system-monitor-$(VERSION)-native-installer.run"
+	@echo "Release artifacts created: $(DEB_OUTPUT), system-monitor-$(VERSION)-native-installer.run"

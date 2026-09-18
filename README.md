@@ -6,14 +6,14 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.30 ([version file](support/VERSION))\
+**Current source version:** 1.0.31 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
 
 ## What matters
 
-The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
+The installed product is one GUI executable, `system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
 Slow collection work is kept away from the GTK main thread. Reusable parsing, formatting, timing, path, allocation and durable-I/O primitives come from the pinned Common library; Linux hardware and product-specific behaviour remain in System Monitor.
 
@@ -61,7 +61,7 @@ sudo apt install build-essential git pkg-config libgtk-3-dev libbluetooth-dev li
 git clone --recurse-submodules https://github.com/Infiltrator-Projects/System-Monitor.git
 cd System-Monitor
 make
-./build/linux-system-monitor
+./build/system-monitor
 ```
 
 Run `make check` for the project verification suite. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
@@ -72,8 +72,8 @@ Direct `make install` is disabled. Installation is owned by the Debian package o
 
 Each numbered release publishes:
 
-- `linux-system-monitor_<version>_amd64.deb`
-- `linux-system-monitor-<version>-native-installer.run`
+- `system-monitor_<version>_amd64.deb`
+- `system-monitor-<version>-native-installer.run`
 
 The `.deb` is the generic amd64 package. The `.run` performs a native local build/test/install.
 

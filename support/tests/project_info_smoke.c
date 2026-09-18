@@ -36,6 +36,9 @@ int main(void)
     const InfiltratrProjectInfo *info = lsm_project_info();
     assert(infiltratr_project_info_is_valid(info));
     assert(strcmp(info->program_name, "System Monitor") == 0);
+    assert(strcmp(info->executable_name, "system-monitor") == 0);
+    assert(strcmp(info->application_id,
+                  "io.github.theinfiltratr.SystemMonitor") == 0);
     assert(strcmp(info->version, LSM_VERSION) == 0);
     assert(strcmp(info->website,
                   "https://github.com/Infiltrator-Projects/System-Monitor") == 0);

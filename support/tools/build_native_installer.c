@@ -192,7 +192,7 @@ int main(int argc, char **argv)
 
     char default_output[LSM_INSTALLER_PATH_LEN];
     const int default_length = snprintf(default_output, sizeof(default_output),
-        "%s/linux-system-monitor-%s-native-installer.run", root, version);
+        "%s/system-monitor-%s-native-installer.run", root, version);
     if (default_length < 0 || (size_t)default_length >= sizeof(default_output)) {
         free(version);
         fputs("Default installer path is too long.\n", stderr);

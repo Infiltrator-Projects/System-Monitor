@@ -36,8 +36,8 @@ int main(void)
     assert(lsm_string_equal(NULL, NULL));
     assert(lsm_string_equal("monitor", "monitor"));
     assert(!lsm_string_equal("monitor", NULL));
-    assert(lsm_string_starts_with("linux-system-monitor", "linux"));
-    assert(lsm_string_ends_with("linux-system-monitor", "monitor"));
+    assert(lsm_string_starts_with("system-monitor", "linux"));
+    assert(lsm_string_ends_with("system-monitor", "monitor"));
     uint64_t parsed = 0U;
     assert(lsm_parse_u64("0xff", 0U, &parsed));
     assert(parsed == 255U);

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux-System-Monitor source build
+# System-Monitor source build
 # Author and maintainer: Shannon Smith
 cmake_minimum_required(VERSION 3.20)
 
@@ -64,7 +64,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${INFILTRATR_COMMON_DIR}/VERSION")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION" LSM_PROJECT_VERSION)
 string(STRIP "${LSM_PROJECT_VERSION}" LSM_PROJECT_VERSION)
-project(LinuxSystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C)
+project(SystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -180,44 +180,44 @@ set(INFILTRATR_COMMON_WARNINGS_AS_ERRORS ON CACHE BOOL
 add_subdirectory("${INFILTRATR_COMMON_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/infiltratr-common" EXCLUDE_FROM_ALL)
 
-add_executable(linux-system-monitor ${LSM_SOURCE_NAMES})
-target_include_directories(linux-system-monitor PRIVATE src)
-target_compile_definitions(linux-system-monitor PRIVATE
+add_executable(system-monitor ${LSM_SOURCE_NAMES})
+target_include_directories(system-monitor PRIVATE src)
+target_compile_definitions(system-monitor PRIVATE
     LSM_VERSION="${PROJECT_VERSION}" LSM_BUILD_PROFILE="cmake"
     _GNU_SOURCE _FILE_OFFSET_BITS=64)
 if(LSM_TIME64_SUPPORTED)
-    target_compile_definitions(linux-system-monitor PRIVATE _TIME_BITS=64)
+    target_compile_definitions(system-monitor PRIVATE _TIME_BITS=64)
 endif()
-target_compile_options(linux-system-monitor PRIVATE
+target_compile_options(system-monitor PRIVATE
     -include "${CMAKE_CURRENT_SOURCE_DIR}/src/glibc_compat.h"
     -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
     ${LSM_PORTABLE_OPT_FLAGS})
 if(LSM_SUPPORTS_FILE_PREFIX_MAP)
-    target_compile_options(linux-system-monitor PRIVATE
+    target_compile_options(system-monitor PRIVATE
         "-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
-    target_link_options(linux-system-monitor PRIVATE
+    target_link_options(system-monitor PRIVATE
         "-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
 endif()
 if(LSM_SUPPORTS_DEBUG_PREFIX_MAP)
-    target_compile_options(linux-system-monitor PRIVATE
+    target_compile_options(system-monitor PRIVATE
         "-fdebug-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
-    target_link_options(linux-system-monitor PRIVATE
+    target_link_options(system-monitor PRIVATE
         "-fdebug-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
 endif()
 if(LSM_SUPPORTS_STACK_PROTECTOR_STRONG)
-    target_compile_options(linux-system-monitor PRIVATE
+    target_compile_options(system-monitor PRIVATE
         -fstack-protector-strong)
 endif()
-target_link_options(linux-system-monitor PRIVATE
+target_link_options(system-monitor PRIVATE
     -Wl,--gc-sections -Wl,--as-needed)
 if(LSM_SUPPORTS_FULL_RELRO)
-    target_link_options(linux-system-monitor PRIVATE
+    target_link_options(system-monitor PRIVATE
         -Wl,-z,relro -Wl,-z,now)
 endif()
-target_link_libraries(linux-system-monitor PRIVATE
+target_link_libraries(system-monitor PRIVATE
     InfiltratrCommon::Common PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
 if(LSM_IPO_SUPPORTED)
-    set_property(TARGET linux-system-monitor
+    set_property(TARGET system-monitor
         PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 endif()
 

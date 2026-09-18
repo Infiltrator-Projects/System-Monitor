@@ -401,7 +401,7 @@ static void command_first_line(const char *command, const char *argument,
 static void usage(const char *version)
 {
     printf("System Monitor %s hardware-native installer\n\n", version);
-    printf("Usage: linux-system-monitor-%s-native-installer.run [options]\n\n",
+    printf("Usage: system-monitor-%s-native-installer.run [options]\n\n",
            version);
     puts("Options:");
     puts("  --profile native|aggressive|portable");
@@ -679,7 +679,7 @@ int main(int argc, char **argv)
     printf("  Package:      %s\n", package_architecture);
     printf("  Profile:      %s\n", profile);
     printf("  Jobs:         %d\n", jobs);
-    puts("  Installation: replaces the linux-system-monitor Debian package");
+    puts("  Installation: replaces the system-monitor Debian package");
     puts("  Privileges:   missing prerequisites and final package installation only");
     if (dry_run) return EXIT_SUCCESS;
 
@@ -691,7 +691,7 @@ int main(int argc, char **argv)
         run_required(source_root, clean_arguments);
     }
     run_make(make_path, source_root, jobs, compiler, pkg_config,
-             "build/linux-system-monitor", cflags);
+             "build/system-monitor", cflags);
 
     const int stage_template_length = snprintf(
         cleanup_stage, sizeof(cleanup_stage),
@@ -725,7 +725,7 @@ int main(int argc, char **argv)
         "Profile: %s\nC flags: %s\nShared C library: Infiltratr Common %s\n"
         "License: GPL-3.0-or-later\n"
         "Installation model: hardware-native Debian package\n"
-        "Package ownership: linux-system-monitor\n",
+        "Package ownership: system-monitor\n",
         version, timestamp, package_architecture, compiler_line, profile, cflags,
         common_version);
     if (written < 0 || (size_t)written >= sizeof(text))
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
 
     char package_path[LSM_BUILDER_PATH_LEN];
     written = snprintf(package_path, sizeof(package_path),
-                       "%s/linux-system-monitor_%s_%s.deb", cleanup_stage,
+                       "%s/system-monitor_%s_%s.deb", cleanup_stage,
                        version, package_architecture);
     if (written < 0 || (size_t)written >= sizeof(package_path))
         fail("native package path is too long");
@@ -754,13 +754,28 @@ int main(int argc, char **argv)
 
     puts("\nCompilation and package creation passed.");
     puts("Administrator permission is now required to replace the installed package.");
+
+    /* 1.0.31 completes the package rename. Remove the previous package identity
+     * only when it is actually installed; per-user configuration is migrated
+     * by the application on first start under the new name. */
+    const char *const legacy_status_arguments[] = {
+        dpkg, "--status", "linux-system-monitor", NULL
+    };
+    if (run_process(NULL, legacy_status_arguments, true) == 0) {
+        puts("Removing previous linux-system-monitor package identity...");
+        const char *const legacy_remove_arguments[] = {
+            sudo_path, "--", dpkg, "--remove", "linux-system-monitor", NULL
+        };
+        run_required(NULL, legacy_remove_arguments);
+    }
+
     const char *const install_arguments[] = {
         sudo_path, "--", dpkg, "--install", package_path, NULL
     };
     run_required(NULL, install_arguments);
 
     printf("\nSystem Monitor %s is installed system-wide.\n", version);
-    puts("The normal menu launcher and linux-system-monitor command now use this");
+    puts("The normal menu launcher and system-monitor command now use this");
     puts("hardware-native build. APT records it as the installed package.");
     return EXIT_SUCCESS;
 }

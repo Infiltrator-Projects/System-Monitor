@@ -107,7 +107,7 @@ static const HelpTopic topics[] = {
         "Run new task",
         "Choose File > Run new task, enter a program and optional arguments, then select "
         "Run. Quoted arguments are parsed directly and the program starts as your desktop "
-        "user. Linux System Monitor does not pass the text to a shell and does not offer "
+        "user. System Monitor does not pass the text to a shell and does not offer "
         "hidden elevation."
     },
     {
@@ -119,7 +119,7 @@ static const HelpTopic topics[] = {
     },
     {
         "Find which process is using a file",
-        "Choose Tools > Find process using file, select a file, and Linux System Monitor "
+        "Choose Tools > Find process using file, select a file, and System Monitor "
         "will scan visible process descriptors internally. The results show the process, PID "
         "and matching descriptor. Access restrictions may hide processes owned by other users."
     },
@@ -244,7 +244,7 @@ void lsm_help_show(LsmApp *app)
     help->app = app;
     help->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     app->shell.help_window = help->window;
-    gtk_window_set_title(GTK_WINDOW(help->window), "Linux System Monitor Help");
+    gtk_window_set_title(GTK_WINDOW(help->window), "System Monitor Help");
     gtk_window_set_default_size(GTK_WINDOW(help->window), 880, 680);
     gtk_window_set_transient_for(GTK_WINDOW(help->window), GTK_WINDOW(app->shell.window));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(help->window), TRUE);

@@ -172,7 +172,7 @@ static bool write_preferences(FILE *file, const void *user_data)
 {
     const LsmApp *app = user_data;
     int result = fprintf(file,
-        "# Linux System Monitor graphical preferences\n"
+        "# System Monitor graphical preferences\n"
         "update_interval_ms=%u\n"
         "theme_mode=%s\n"
         "newer_on_right=%d\n"

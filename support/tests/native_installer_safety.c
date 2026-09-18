@@ -248,7 +248,7 @@ static int mock_make(int argc, char **argv)
     }
 
     const bool produces_application = arguments_contain(argc, argv, "all") ||
-        arguments_contain(argc, argv, "build/linux-system-monitor");
+        arguments_contain(argc, argv, "build/system-monitor");
     const bool produces_package_builder =
         arguments_contain(argc, argv, "build/build-deb-package");
     if (!produces_application && !produces_package_builder) return EXIT_SUCCESS;
@@ -256,7 +256,7 @@ static int mock_make(int argc, char **argv)
     char target[LSM_SAFETY_PATH_LEN];
     if (!join_path(target, sizeof(target), build_path,
                    produces_package_builder ? "build-deb-package" :
-                                              "linux-system-monitor"))
+                                              "system-monitor"))
         return EXIT_FAILURE;
     char executable[LSM_SAFETY_PATH_LEN];
     if (!realpath(argv[0], executable)) return EXIT_FAILURE;
@@ -481,7 +481,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (!file_contains(log_path, "build/linux-system-monitor") ||
+    if (!file_contains(log_path, "build/system-monitor") ||
         !file_contains(log_path, "build/build-deb-package") ||
         !file_contains(log_path, "package") ||
         !file_contains(log_path, "sudo --") ||

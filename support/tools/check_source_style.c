@@ -710,7 +710,7 @@ static void check_licensing_contract(void)
     static const char *const required_legal_files[] = {
         "LICENSE", "src/infiltratr-common/LICENSE",
         "support/legal/THIRD_PARTY_NOTICES",
-        "support/resources/icons/linux-system-monitor.png.license",
+        "support/resources/icons/system-monitor.png.license",
         "support/resources/data/pci-names.tsv.license",
         "support/resources/data/PCI_IDS_LICENSE",
         "support/packaging/copyright"
@@ -733,7 +733,7 @@ static void check_licensing_contract(void)
                         "Copyright (c) 1997-2026 Martin Mares");
     require_file_marker("support/legal/THIRD_PARTY_NOTICES",
                         "Copyright (c) 2015-2026 Albert Pool");
-    require_file_marker("support/resources/icons/linux-system-monitor.png.license",
+    require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: BSD-3-Clause");
     require_file_marker("support/resources/data/pci-names.tsv.license",
                         "SPDX-License-Identifier: BSD-3-Clause");
@@ -882,10 +882,10 @@ static void check_shared_release_contract(void)
     char *release = read_file(".github/workflows/release.yml", &size);
     if (release) {
         require_text_marker(".github/workflows/release.yml", release,
-                            "linux-system-monitor_${version}_amd64.deb");
+                            "system-monitor_${version}_amd64.deb");
         require_text_marker(".github/workflows/release.yml", release,
-                            "linux-system-monitor-${version}-native-installer.run");
-        if (strstr(release, "Linux-System-Monitor-${version}-source.zip"))
+                            "system-monitor-${version}-native-installer.run");
+        if (strstr(release, "System-Monitor-${version}-source.zip"))
             report_error(
                 ".github/workflows/release.yml: releases must upload only "
                 "the .deb and .run artifacts");

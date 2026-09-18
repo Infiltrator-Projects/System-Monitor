@@ -381,7 +381,7 @@ static int history_write_request(LsmHistorySaveRequest *request,
     if (g_mkdir_with_parents(request->config_dir, 0700) != 0)
         return errno ? errno : EIO;
 
-    GString *output = g_string_new("# Linux-System-Monitor App History v1\n");
+    GString *output = g_string_new("# System-Monitor App History v1\n");
     for (size_t index = 0U; index < request->count; index++) {
         const LsmHistoryPersistEntry *entry = &request->entries[index];
         char *safe_key = sanitise_field(entry->key);
@@ -549,7 +549,7 @@ static void history_report_save_failure(LsmApp *app, int failure)
                           g_strerror(failure));
     } else {
         fprintf(stderr,
-                "Linux System Monitor: unable to save application history: %s\n",
+                "System Monitor: unable to save application history: %s\n",
                 g_strerror(failure));
     }
 }
@@ -937,7 +937,7 @@ void lsm_history_destroy(LsmApp *app)
         const int failure = history_save_checked_sync(app);
         if (failure != 0)
             fprintf(stderr,
-                    "Linux System Monitor: unable to save application history during shutdown: %s\n",
+                    "System Monitor: unable to save application history during shutdown: %s\n",
                     g_strerror(failure));
     }
 

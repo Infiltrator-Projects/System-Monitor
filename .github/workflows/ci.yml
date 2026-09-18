@@ -115,7 +115,7 @@ jobs:
           set -euo pipefail
           make -j2 deb native-installer
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="linux-system-monitor_${version}_amd64.deb"
+          deb="system-monitor_${version}_amd64.deb"
           test -f "$deb"
 
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
@@ -135,10 +135,10 @@ jobs:
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
-          changelog="$tmp/root/usr/share/doc/linux-system-monitor/changelog.gz"
+          changelog="$tmp/root/usr/share/doc/system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')
-          expected_line="linux-system-monitor (${version}) unstable; urgency=medium"
+          expected_line="system-monitor (${version}) unstable; urgency=medium"
           if [[ "$first_line" != "$expected_line" ]]; then
             printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
             exit 1

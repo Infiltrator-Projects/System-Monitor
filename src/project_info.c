@@ -34,7 +34,7 @@
         .executable_name = LSM_EXECUTABLE_NAME,                                 \
         .application_id = LSM_APPLICATION_ID,                                   \
         .version = LSM_VERSION,                                                 \
-        .source_id = "linux-system-monitor-" LSM_VERSION,                       \
+        .source_id = "system-monitor-" LSM_VERSION,                       \
         .build_profile = LSM_BUILD_PROFILE,                                     \
         .author = "Shannon Smith",                                             \
         .website = "https://github.com/Infiltrator-Projects/System-Monitor",  \
