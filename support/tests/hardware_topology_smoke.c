@@ -3,7 +3,7 @@
  * @file hardware_topology_smoke.c
  * @brief Verify stable-ID topology reconciliation preserves live baselines.
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "hardware_topology.h"

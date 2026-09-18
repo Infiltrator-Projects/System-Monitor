@@ -4,7 +4,7 @@
  * @brief Regression test for native Intel PMU discovery and metric mapping.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L

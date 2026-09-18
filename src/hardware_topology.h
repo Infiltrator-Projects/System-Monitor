@@ -4,7 +4,7 @@
  * @brief Stable-ID sorting and state reconciliation for optional hardware.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef LINUX_SYSTEM_MONITOR_HARDWARE_TOPOLOGY_H

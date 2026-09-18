@@ -16,7 +16,7 @@
  * the backend lifetime. The public context is serial and GTK-independent.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"

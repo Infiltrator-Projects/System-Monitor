@@ -3,7 +3,7 @@
  * @file sample_history_smoke.c
  * @brief Regression tests for graph history direction, gaps and wraparound.
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "sample_history.h"

@@ -7,7 +7,7 @@
  * frequency attributes, sysinfo memory accounting, temperature and SMBIOS.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "monitor_linux_internal.h"

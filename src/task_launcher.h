@@ -4,7 +4,7 @@
  * @brief Explicit graphical Run new task workflow.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef LINUX_SYSTEM_MONITOR_TASK_LAUNCHER_H

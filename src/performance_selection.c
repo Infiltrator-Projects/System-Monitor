@@ -4,7 +4,7 @@
  * @brief Re-entrancy guard for Performance side-pane selection.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "performance_selection.h"

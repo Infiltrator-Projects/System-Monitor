@@ -3,7 +3,7 @@
  * @file quality_policy_smoke.c
  * @brief Regression checks for cadence, deferred presentation and formatting.
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "metric_format.h"
