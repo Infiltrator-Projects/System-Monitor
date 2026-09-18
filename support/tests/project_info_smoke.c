@@ -35,7 +35,7 @@ int main(void)
 {
     const InfiltratrProjectInfo *info = lsm_project_info();
     assert(infiltratr_project_info_is_valid(info));
-    assert(strcmp(info->program_name, "Linux System Monitor") == 0);
+    assert(strcmp(info->program_name, "System Monitor") == 0);
     assert(strcmp(info->version, LSM_VERSION) == 0);
     assert(strcmp(info->website,
                   "https://github.com/Infiltrator-Projects/System-Monitor") == 0);
@@ -50,7 +50,7 @@ int main(void)
     char text[2048];
     const size_t length = fread(text, 1U, sizeof(text) - 1U, metadata);
     text[length] = '\0';
-    assert(strstr(text, "name=Linux System Monitor\n") != NULL);
+    assert(strstr(text, "name=System Monitor\n") != NULL);
     assert(strstr(text, "version=" LSM_VERSION "\n") != NULL);
     assert(strstr(text,
                   "common-library=infiltratr-common-1.19.2\n") != NULL);
