@@ -627,7 +627,8 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		./$(BUILD_DIR)/runtime-stability-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/process_grouping_smoke.c src/process_grouping.c -lm \
+		support/tests/process_grouping_smoke.c src/process_grouping.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/process-grouping-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
