@@ -33,10 +33,9 @@
 #include "summary_bar.h"
 #include "users.h"
 
-#include <glib/gstdio.h>
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 static bool app_paths_initialise(LsmApp *app)
 {
@@ -51,11 +50,14 @@ static bool app_paths_initialise(LsmApp *app)
      * rename(2) is atomic within ~/.config; failure is non-fatal because the
      * application can safely continue with a fresh System Monitor directory. */
     char previous_config[LSM_PATH_LEN];
-    if (!g_file_test(app->paths.config_dir, G_FILE_TEST_EXISTS) &&
+    struct stat current_status;
+    struct stat previous_status;
+    if (stat(app->paths.config_dir, &current_status) != 0 &&
         lsm_join_path(previous_config, sizeof(previous_config), config_root,
                       LSM_PREVIOUS_CONFIG_DIRECTORY) &&
-        g_file_test(previous_config, G_FILE_TEST_IS_DIR))
-        (void)g_rename(previous_config, app->paths.config_dir);
+        stat(previous_config, &previous_status) == 0 &&
+        S_ISDIR(previous_status.st_mode))
+        (void)rename(previous_config, app->paths.config_dir);
 
     return lsm_join_path(app->paths.filter_path, sizeof(app->paths.filter_path),
                          app->paths.config_dir, "filters.conf") &&
