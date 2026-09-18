@@ -8,7 +8,7 @@ for argument in "$@"; do
     case "$argument" in
         -h|--help)
             cat <<'USAGE'
-Linux System Monitor hardware-native installer
+System Monitor hardware-native installer
 Usage: ./support/installer/bootstrap.sh [options]
   --profile native|aggressive|portable
   --compiler PATH

@@ -529,7 +529,7 @@ int main(int argc, char **argv)
         "# SPDX-License-Identifier: GPL-3.0-or-later\n"
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=Linux System Monitor\n"
+        "Name=System Monitor\n"
         "Comment=Native Linux system and hardware monitor\n"
         "Exec=linux-system-monitor\n"
         "Icon=linux-system-monitor\n"

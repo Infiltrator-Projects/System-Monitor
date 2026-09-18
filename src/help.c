@@ -35,7 +35,7 @@ typedef struct {
 static const HelpTopic topics[] = {
     {
         "Getting started",
-        "Linux System Monitor is a complete graphical system-management application. "
+        "System Monitor is a complete graphical system-management application. "
         "Use the tabs across the top to move between Performance, Processes, App History, "
         "Startup Apps, Users, Details, Services and File Systems. "
         "Values update automatically; Options > Pause updates freezes presentation without "

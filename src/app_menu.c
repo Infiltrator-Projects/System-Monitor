@@ -460,7 +460,7 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
     GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
     GtkWidget *help_menu = gtk_menu_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
-                          menu_item("_Linux System Monitor Help", G_CALLBACK(on_help), app));
+                          menu_item("_System Monitor Help", G_CALLBACK(on_help), app));
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), menu_item("_About " LSM_PROGRAM_NAME, G_CALLBACK(on_about), app));
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(help_root), help_menu);

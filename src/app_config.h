@@ -15,7 +15,7 @@
 
 #include "sampling_policy.h"
 
-#define LSM_PROGRAM_NAME "Linux System Monitor"
+#define LSM_PROGRAM_NAME "System Monitor"
 #define LSM_EXECUTABLE_NAME "linux-system-monitor"
 #define LSM_APPLICATION_ID "io.github.theinfiltratr.LinuxSystemMonitor"
 #define LSM_CONFIG_DIRECTORY "linux-system-monitor"

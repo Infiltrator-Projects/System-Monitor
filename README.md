@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Linux System Monitor
+# System Monitor
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
-Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
+System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.29 ([version file](support/VERSION))\
-**Shared foundation:** exact Infiltratr Common 1.19.2 gitlink at `src/infiltratr-common`  
+**Current source version:** 1.0.30 ([version file](support/VERSION))\
+**Shared foundation:** exact Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
 
@@ -15,7 +15,7 @@ Linux System Monitor is a native C17/GTK 3 desktop system manager for Linux. It 
 
 The installed product is one GUI executable, `linux-system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
-Slow collection work is kept away from the GTK main thread. Reusable parsing, formatting, timing, path, allocation and durable-I/O primitives come from the pinned Infiltratr Common library; Linux hardware and product-specific behaviour remain in System Monitor.
+Slow collection work is kept away from the GTK main thread. Reusable parsing, formatting, timing, path, allocation and durable-I/O primitives come from the pinned Common library; Linux hardware and product-specific behaviour remain in System Monitor.
 
 Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB labels. Network rates and negotiated link speeds use decimal 1000-based scaling.
 
@@ -45,7 +45,7 @@ Linux backends and collectors
         ↓
 procfs / sysfs / ioctls / D-Bus / optional in-process driver libraries
 
-Infiltratr Common 1.19.2
+Common 1.19.2
         ↓
 shared parsing / formatting / timing / path / durable-I/O / allocation primitives
 ```

@@ -400,7 +400,7 @@ static void command_first_line(const char *command, const char *argument,
 
 static void usage(const char *version)
 {
-    printf("Linux System Monitor %s hardware-native installer\n\n", version);
+    printf("System Monitor %s hardware-native installer\n\n", version);
     printf("Usage: linux-system-monitor-%s-native-installer.run [options]\n\n",
            version);
     puts("Options:");
@@ -673,7 +673,7 @@ int main(int argc, char **argv)
         jobs = processors > 0L && processors <= INT_MAX ? (int)processors : 1;
     }
 
-    printf("Linux System Monitor %s hardware-native build\n", version);
+    printf("System Monitor %s hardware-native build\n", version);
     printf("  Compiler:     %s\n", compiler);
     printf("  Machine:      %s\n", machine_architecture);
     printf("  Package:      %s\n", package_architecture);
@@ -759,7 +759,7 @@ int main(int argc, char **argv)
     };
     run_required(NULL, install_arguments);
 
-    printf("\nLinux System Monitor %s is installed system-wide.\n", version);
+    printf("\nSystem Monitor %s is installed system-wide.\n", version);
     puts("The normal menu launcher and linux-system-monitor command now use this");
     puts("hardware-native build. APT records it as the installed package.");
     return EXIT_SUCCESS;

@@ -234,7 +234,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     else
         (void)snprintf(slots, sizeof(slots), "N/A");
     fprintf(file,
-        "Linux System Monitor diagnostic snapshot\n"
+        "System Monitor diagnostic snapshot\n"
         "Version: %s\nGenerated: %s\nHost: %s\nOperating system: %s\n"
         "Kernel: %s %s\nArchitecture: %s\n\n"
         "CPU\n  %s\n  Utilisation: %.1f%% (user %.1f%%, kernel %.1f%%)\n"

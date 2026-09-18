@@ -174,12 +174,12 @@ jobs:
           else
             notes=$(git log -1 --format=%b "$head_commit")
             if [[ -z "$notes" ]]; then
-              notes="Verified Linux System Monitor ${version} release."
+              notes="Verified System Monitor ${version} release."
             fi
             gh release create "$tag" "$deb" "$installer" \
               --verify-tag \
               --target "$head_commit" \
-              --title "Linux System Monitor $version" \
+              --title "System Monitor $version" \
               --notes "$notes" \
               --latest
           fi
