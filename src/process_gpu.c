@@ -46,19 +46,6 @@ typedef struct {
     bool memory_available;
 } LsmDrmClient;
 
-static bool numeric_name(const char *name)
-{
-    if (!name || !*name) return false;
-    for (const char *cursor = name; *cursor; cursor++)
-        if (!isdigit((unsigned char)*cursor)) return false;
-    return true;
-}
-
-static bool parse_bytes(const char *text, uint64_t *bytes)
-{
-    return infiltratr_parse_binary_quantity_u64(text, bytes);
-}
-
 static char *field_value(char *line)
 {
     char *separator = strchr(line, ':');
@@ -89,7 +76,7 @@ static void add_engine(LsmProcessGpuEngine *engines, size_t *count,
     if (*count >= LSM_PROCESS_GPU_MAX_ENGINES) return;
     LsmProcessGpuEngine *engine = &engines[(*count)++];
     memset(engine, 0, sizeof(*engine));
-    (void)snprintf(engine->name, sizeof(engine->name), "%s", name);
+    lsm_copy_string(engine->name, sizeof(engine->name), name);
     engine->time_ns = time_ns;
     engine->capacity = capacity > 0U ? capacity : 1U;
     engine->time_available = have_time;
@@ -109,7 +96,7 @@ static void set_memory_region(LsmDrmClient *client, const char *name,
     if (client->region_count >= LSM_PROCESS_GPU_MAX_REGIONS) return;
     LsmDrmMemoryRegion *region = &client->regions[client->region_count++];
     memset(region, 0, sizeof(*region));
-    (void)snprintf(region->name, sizeof(region->name), "%s", name);
+    lsm_copy_string(region->name, sizeof(region->name), name);
     region->bytes = bytes;
     region->resident_preferred = resident;
 }
@@ -128,21 +115,21 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
     while (fgets(line, sizeof(line), file)) {
         char *newline = strchr(line, '\n');
         if (newline) *newline = '\0';
-        if (strncmp(line, "drm-driver:", 11U) == 0) {
+        if (lsm_string_starts_with(line, "drm-driver:")) {
             char *value = field_value(line);
-            if (value) (void)snprintf(driver, sizeof(driver), "%s", value);
-        } else if (strncmp(line, "drm-pdev:", 9U) == 0) {
+            if (value) lsm_copy_string(driver, sizeof(driver), value);
+        } else if (lsm_string_starts_with(line, "drm-pdev:")) {
             char *value = field_value(line);
-            if (value) (void)snprintf(device, sizeof(device), "%s", value);
-        } else if (strncmp(line, "drm-minor:", 10U) == 0 && !device[0]) {
+            if (value) lsm_copy_string(device, sizeof(device), value);
+        } else if (lsm_string_starts_with(line, "drm-minor:") && !device[0]) {
             char *value = field_value(line);
             if (value) (void)snprintf(device, sizeof(device), "minor-%s", value);
-        } else if (strncmp(line, "drm-client-id:", 14U) == 0) {
+        } else if (lsm_string_starts_with(line, "drm-client-id:")) {
             char *value = field_value(line);
             const char *cursor = value;
             have_client_id = value &&
                 lsm_parse_u64_token(&cursor, 10U, &client_id);
-        } else if (strncmp(line, "drm-engine-capacity-", 20U) == 0) {
+        } else if (lsm_string_starts_with(line, "drm-engine-capacity-")) {
             char *separator = strchr(line, ':');
             uint64_t capacity = 0U;
             const char *cursor = separator ? separator + 1 : NULL;
@@ -155,7 +142,7 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
                        capacity > (uint64_t)UINT_MAX
                            ? UINT_MAX : (unsigned)capacity,
                        false);
-        } else if (strncmp(line, "drm-engine-", 11U) == 0) {
+        } else if (lsm_string_starts_with(line, "drm-engine-")) {
             char *separator = strchr(line, ':');
             uint64_t time_ns = 0U;
             const char *cursor = separator ? separator + 1 : NULL;
@@ -165,14 +152,16 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
             add_engine(client->engines, &client->engine_count,
                        line + 11U, time_ns, 1U, true);
             recognised = true;
-        } else if (strncmp(line, "drm-resident-", 13U) == 0 ||
-                   strncmp(line, "drm-memory-", 11U) == 0) {
-            const bool resident = strncmp(line, "drm-resident-", 13U) == 0;
+        } else if (lsm_string_starts_with(line, "drm-resident-") ||
+                   lsm_string_starts_with(line, "drm-memory-")) {
+            const bool resident = lsm_string_starts_with(line, "drm-resident-");
             const size_t prefix = resident ? 13U : 11U;
             char *separator = strchr(line, ':');
             char *value = field_value(line);
             uint64_t bytes = 0U;
-            if (!separator || !value || !parse_bytes(value, &bytes)) continue;
+            if (!separator || !value ||
+                !infiltratr_parse_binary_quantity_u64(value, &bytes))
+                continue;
             *separator = '\0';
             set_memory_region(client, line + prefix, bytes, resident);
             client->memory_available = true;
@@ -218,11 +207,13 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
     size_t seen_count = 0U;
     struct dirent *entry = NULL;
     while ((entry = readdir(directory))) {
-        if (!numeric_name(entry->d_name)) continue;
+        uint64_t descriptor = 0U;
+        if (!lsm_parse_u64_range(entry->d_name, 10U, 0U,
+                                 (uint64_t)INT_MAX, &descriptor))
+            continue;
         char path[640];
-        const int path_written = snprintf(path, sizeof(path), "%s/%s",
-                                          directory_path, entry->d_name);
-        if (path_written < 0 || (size_t)path_written >= sizeof(path)) continue;
+        if (!lsm_join_path(path, sizeof(path), directory_path, entry->d_name))
+            continue;
         LsmDrmClient client;
         memset(&client, 0, sizeof(client));
         if (!read_client_file(path, &client) ||
@@ -232,8 +223,8 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
          * key. Stop at the bounded working set instead of accepting clients
          * that subsequent descriptors could count again. */
         if (seen_count >= LSM_PROCESS_GPU_MAX_CLIENTS) break;
-        (void)snprintf(seen[seen_count], sizeof(seen[seen_count]),
-                       "%s", client.key);
+        lsm_copy_string(seen[seen_count], sizeof(seen[seen_count]),
+                        client.key);
         seen_count++;
         for (size_t index = 0U; index < client.engine_count; index++) {
             if (!client.engines[index].time_available) continue;

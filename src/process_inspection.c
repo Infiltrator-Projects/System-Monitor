@@ -97,20 +97,12 @@ bool lsm_process_inspection_identity_matches(
     return parse_start_ticks(text, &current) && current == expected_instance_id;
 }
 
-static bool numeric_name(const char *text)
-{
-    if (!text || !*text) return false;
-    for (const unsigned char *cursor = (const unsigned char *)text; *cursor; cursor++)
-        if (!isdigit(*cursor)) return false;
-    return true;
-}
-
 static const char *descriptor_kind(const char *target)
 {
     if (!target || !*target) return "Unknown";
-    if (strncmp(target, "socket:[", 8U) == 0) return "Socket";
-    if (strncmp(target, "pipe:[", 6U) == 0) return "Pipe";
-    if (strncmp(target, "anon_inode:", 11U) == 0) return "Anon inode";
+    if (lsm_string_starts_with(target, "socket:[")) return "Socket";
+    if (lsm_string_starts_with(target, "pipe:[")) return "Pipe";
+    if (lsm_string_starts_with(target, "anon_inode:")) return "Anon inode";
     if (target[0] == '/') return "File";
     return "Kernel object";
 }
@@ -142,11 +134,14 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
     size_t count = 0U, capacity = 0U;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (!numeric_name(entry->d_name)) continue;
+        uint64_t descriptor = 0U;
+        if (!lsm_parse_u64_range(entry->d_name, 10U, 0U,
+                                 (uint64_t)INT_MAX, &descriptor))
+            continue;
         char link_path[PATH_MAX];
-        const int written = snprintf(link_path, sizeof(link_path), "%s/%s",
-                                     directory_path, entry->d_name);
-        if (written < 0 || (size_t)written >= sizeof(link_path)) continue;
+        if (!lsm_join_path(link_path, sizeof(link_path),
+                           directory_path, entry->d_name))
+            continue;
         char target[LSM_INSPECTION_TARGET_LEN];
         const ssize_t length = readlink(link_path, target, sizeof(target) - 1U);
         if (length < 0) continue;
@@ -156,7 +151,7 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
             break;
         LsmOpenFileInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
-        item->descriptor = atoi(entry->d_name);
+        item->descriptor = (int)descriptor;
         lsm_copy_string(item->kind, sizeof(item->kind), descriptor_kind(target));
         lsm_copy_string(item->target, sizeof(item->target), target);
     }
@@ -260,9 +255,13 @@ size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **o
     size_t count = 0U, capacity = 0U;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
-        if (!numeric_name(entry->d_name)) continue;
         uint64_t tid = 0U;
-        if (!lsm_parse_u64(entry->d_name, 10U, &tid)) continue;
+        if (!lsm_parse_u64_range(entry->d_name, 10U, 1U, UINT64_MAX, &tid))
+            continue;
+        char thread_path[PATH_MAX];
+        if (!lsm_join_path(thread_path, sizeof(thread_path),
+                           task_path, entry->d_name))
+            continue;
         if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
                                count + 1U, 32U))
             break;
@@ -270,17 +269,13 @@ size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **o
         memset(item, 0, sizeof(*item));
         item->tid = (LsmProcessId)tid;
         char path[PATH_MAX], text[LSM_NAME_LEN];
-        int written = snprintf(path, sizeof(path), "%s/%s/comm", task_path,
-                               entry->d_name);
-        if (written >= 0 && (size_t)written < sizeof(path) &&
+        if (lsm_join_path(path, sizeof(path), thread_path, "comm") &&
             lsm_read_text_file(path, text, sizeof(text)))
             lsm_copy_string(item->name, sizeof(item->name), text);
         else
             snprintf(item->name, sizeof(item->name), "Thread %llu",
                      (unsigned long long)item->tid);
-        written = snprintf(path, sizeof(path), "%s/%s/status", task_path,
-                           entry->d_name);
-        if (written >= 0 && (size_t)written < sizeof(path))
+        if (lsm_join_path(path, sizeof(path), thread_path, "status"))
             read_thread_state(path, item->state, sizeof(item->state));
         if (!item->state[0]) lsm_copy_string(item->state, sizeof(item->state), "Unknown");
     }
@@ -339,8 +334,11 @@ size_t lsm_process_inspection_find_file_users(const char *path,
     size_t count = 0U, capacity = 0U;
     struct dirent *entry;
     while ((entry = readdir(proc))) {
-        if (!numeric_name(entry->d_name)) continue;
-        const pid_t pid = (pid_t)atoi(entry->d_name);
+        uint64_t parsed_pid = 0U;
+        if (!lsm_parse_u64_range(entry->d_name, 10U, 1U,
+                                 (uint64_t)INT_MAX, &parsed_pid))
+            continue;
+        const pid_t pid = (pid_t)parsed_pid;
         LsmOpenFileInfo *files = NULL;
         const size_t file_count = lsm_process_inspection_open_files(
             (LsmProcessId)pid, &files);

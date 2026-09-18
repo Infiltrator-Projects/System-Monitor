@@ -25,6 +25,8 @@
 #include "processes_ui.h"
 #include "ui_helpers.h"
 
+#include <infiltratr/config.h>
+
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
@@ -300,6 +302,21 @@ void lsm_details_save_layout(const LsmApp *app)
     g_string_free(text, TRUE);
 }
 
+static gboolean layout_boolean(const char *value, gboolean fallback)
+{
+    bool parsed = false;
+    if (!infiltratr_config_parse_bool(value, &parsed)) return fallback;
+    return parsed ? TRUE : FALSE;
+}
+
+static int layout_integer(const char *value, int minimum, int maximum,
+                          int fallback)
+{
+    int64_t parsed = 0;
+    return lsm_parse_i64_range(value, 10U, minimum, maximum, &parsed)
+        ? (int)parsed : fallback;
+}
+
 static void process_columns_load(LsmApp *app)
 {
     gboolean visible[PROC_N_COLUMNS];
@@ -318,28 +335,33 @@ static void process_columns_load(LsmApp *app)
     }
 
     gchar *content = NULL;
-    gsize length = 0;
-    if (g_file_get_contents(app->paths.column_path, &content, &length, NULL)) {
+    if (g_file_get_contents(app->paths.column_path, &content, NULL, NULL)) {
         gchar **lines = g_strsplit(content, "\n", -1);
         for (gchar **line = lines; *line; line++) {
-            char *equals = strchr(*line, '=');
-            if (!equals) continue;
-            *equals++ = '\0';
-            gboolean enabled = atoi(equals) != 0;
-            if (strcmp(*line, "layout_version") == 0)
-                layout_version = atoi(equals);
-            else if (strcmp(*line, "tree") == 0)
-                app->details.details_tree_mode = enabled;
-            else if (strcmp(*line, "heatmap") == 0) app->details.process_heatmap = enabled;
-            else if (strcmp(*line, "sort_column") == 0) {
-                const int parsed = atoi(equals);
-                if (parsed >= 0 && parsed < PROC_N_COLUMNS)
-                    sort_column = parsed;
-            } else if (strcmp(*line, "sort_order") == 0) {
-                sort_order = strcmp(equals, "descending") == 0
-                    ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING;
-            }
-            else {
+            char *key = NULL;
+            char *value = NULL;
+            if (infiltratr_config_parse_line(*line, &key, &value) !=
+                INFILTRATR_CONFIG_LINE_ENTRY)
+                continue;
+
+            if (strcmp(key, "layout_version") == 0)
+                layout_version = layout_integer(
+                    value, 0, INT_MAX, layout_version);
+            else if (strcmp(key, "tree") == 0)
+                app->details.details_tree_mode = layout_boolean(
+                    value, app->details.details_tree_mode);
+            else if (strcmp(key, "heatmap") == 0)
+                app->details.process_heatmap = layout_boolean(
+                    value, app->details.process_heatmap);
+            else if (strcmp(key, "sort_column") == 0)
+                sort_column = layout_integer(
+                    value, 0, PROC_N_COLUMNS - 1, sort_column);
+            else if (strcmp(key, "sort_order") == 0) {
+                if (strcmp(value, "descending") == 0)
+                    sort_order = GTK_SORT_DESCENDING;
+                else if (strcmp(value, "ascending") == 0)
+                    sort_order = GTK_SORT_ASCENDING;
+            } else {
                 for (int i = 0; i < PROC_N_COLUMNS; i++) {
                     char width_key[64];
                     char order_key[64];
@@ -347,19 +369,18 @@ static void process_columns_load(LsmApp *app)
                              column_specs[i].key);
                     snprintf(order_key, sizeof(order_key), "order.%s",
                              column_specs[i].key);
-                    if (strcmp(*line, column_specs[i].key) == 0) {
-                        visible[i] = enabled;
+                    if (strcmp(key, column_specs[i].key) == 0) {
+                        visible[i] = layout_boolean(value, visible[i]);
                         break;
                     }
-                    if (strcmp(*line, width_key) == 0) {
-                        const int parsed = atoi(equals);
-                        if (parsed >= 40 && parsed <= 2000) widths[i] = parsed;
+                    if (strcmp(key, width_key) == 0) {
+                        widths[i] = layout_integer(
+                            value, 40, 2000, widths[i]);
                         break;
                     }
-                    if (strcmp(*line, order_key) == 0) {
-                        const int parsed = atoi(equals);
-                        if (parsed >= 0 && parsed < PROC_N_COLUMNS)
-                            order[i] = parsed;
+                    if (strcmp(key, order_key) == 0) {
+                        order[i] = layout_integer(
+                            value, 0, PROC_N_COLUMNS - 1, order[i]);
                         break;
                     }
                 }

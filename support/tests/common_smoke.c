@@ -42,6 +42,13 @@ int main(void)
     assert(lsm_parse_u64("0xff", 0U, &parsed));
     assert(parsed == 255U);
     assert(!lsm_parse_u64("-1", 10U, &parsed));
+    assert(lsm_parse_u64_range("42", 10U, 1U, 100U, &parsed));
+    assert(parsed == 42U);
+    int64_t signed_parsed = 0;
+    assert(lsm_parse_i64("-7", 10U, &signed_parsed));
+    assert(signed_parsed == -7);
+    assert(lsm_parse_i64_range("-5", 10U, -10, 10, &signed_parsed));
+    assert(signed_parsed == -5);
     assert(lsm_clamp_double(-1.0, 0.0, 100.0) == 0.0);
     assert(lsm_clamp_double(101.0, 0.0, 100.0) == 100.0);
 
@@ -124,6 +131,9 @@ int main(void)
     assert(checked_u64 == (1ULL << 20U));
     assert(!lsm_u64_multiply_checked(UINT64_MAX, 2U, &checked_u64));
     size_t checked_size = 0U;
+    assert(lsm_size_add_checked(16U, 8U, &checked_size));
+    assert(checked_size == 24U);
+    assert(!lsm_size_add_checked(SIZE_MAX, 1U, &checked_size));
     assert(lsm_size_multiply_checked(16U, sizeof(uint64_t), &checked_size));
     assert(checked_size == 16U * sizeof(uint64_t));
     assert(!lsm_size_multiply_checked(SIZE_MAX, 2U, &checked_size));

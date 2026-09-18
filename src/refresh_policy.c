@@ -9,13 +9,6 @@
  */
 #include "refresh_policy.h"
 
-#include <infiltratr/timing.h>
-
-bool lsm_refresh_interval_due(double now, double last, double interval)
-{
-    return infiltratr_interval_due(now, last, interval);
-}
-
 bool lsm_refresh_page_should_present(unsigned current_page,
                                      unsigned target_page, bool dirty)
 {

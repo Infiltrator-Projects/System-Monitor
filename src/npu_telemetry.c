@@ -46,19 +46,6 @@ struct LsmNpuTelemetry {
     bool intel_ivpu;
 };
 
-static bool first_existing_path(const char *base,
-                                const char *const *suffixes,
-                                size_t suffix_count,
-                                char *destination,
-                                size_t destination_size)
-{
-    if (!destination || destination_size == 0U) return false;
-    destination[0] = '\0';
-    if (!base || !*base || !suffixes || suffix_count == 0U) return false;
-    return infiltratr_first_readable_path(base, suffixes, suffix_count,
-                                          destination, destination_size);
-}
-
 static bool existing_path(const char *base, const char *suffix,
                           char *destination, size_t destination_size)
 {
@@ -67,8 +54,8 @@ static bool existing_path(const char *base, const char *suffix,
         return false;
     }
     const char *const suffixes[] = {suffix};
-    return first_existing_path(base, suffixes, 1U,
-                               destination, destination_size);
+    return infiltratr_first_readable_path(
+        base, suffixes, 1U, destination, destination_size);
 }
 
 static const char *telemetry_base(const LsmNpuInfo *npu)
@@ -137,30 +124,30 @@ LsmNpuTelemetry *lsm_npu_telemetry_create(const LsmNpuInfo *npu)
     } else {
         /* Unknown drivers are accepted only when the attribute name states
          * its unit. Driver-specific profiles can extend this list safely. */
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_utilization_paths,
             LSM_ARRAY_LENGTH(generic_utilization_paths),
             telemetry->utilization, sizeof(telemetry->utilization));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_busy_time_paths,
             LSM_ARRAY_LENGTH(generic_busy_time_paths),
             telemetry->busy_time_us, sizeof(telemetry->busy_time_us));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_memory_used_paths,
             LSM_ARRAY_LENGTH(generic_memory_used_paths),
             telemetry->memory_used, sizeof(telemetry->memory_used));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_memory_total_paths,
             LSM_ARRAY_LENGTH(generic_memory_total_paths),
             telemetry->memory_total, sizeof(telemetry->memory_total));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_clock_paths, LSM_ARRAY_LENGTH(generic_clock_paths),
             telemetry->clock, sizeof(telemetry->clock));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_temperature_paths,
             LSM_ARRAY_LENGTH(generic_temperature_paths),
             telemetry->temperature, sizeof(telemetry->temperature));
-        (void)first_existing_path(
+        (void)infiltratr_first_readable_path(
             base, generic_power_paths, LSM_ARRAY_LENGTH(generic_power_paths),
             telemetry->power, sizeof(telemetry->power));
     }

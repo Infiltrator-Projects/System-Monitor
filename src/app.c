@@ -17,6 +17,7 @@
 #include "app_shell.h"
 
 #include "application_catalog.h"
+#include "common.h"
 #include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
@@ -34,6 +35,22 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+static bool app_paths_initialise(LsmApp *app)
+{
+    if (!app) return false;
+    const char *config_root = g_get_user_config_dir();
+    return config_root &&
+        lsm_join_path(app->paths.config_dir, sizeof(app->paths.config_dir),
+                      config_root, LSM_CONFIG_DIRECTORY) &&
+        lsm_join_path(app->paths.filter_path, sizeof(app->paths.filter_path),
+                      app->paths.config_dir, "filters.conf") &&
+        lsm_join_path(app->paths.column_path, sizeof(app->paths.column_path),
+                      app->paths.config_dir, "process-columns.conf") &&
+        lsm_join_path(app->paths.preferences_path,
+                      sizeof(app->paths.preferences_path),
+                      app->paths.config_dir, "preferences.conf");
+}
 
 LsmApp *lsm_app_create(void)
 {
@@ -67,8 +84,12 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.window_height = LSM_DEFAULT_WINDOW_HEIGHT;
     app->runtime.last_tab = LSM_TAB_PERFORMANCE;
     app->runtime.active_tab = LSM_TAB_PERFORMANCE;
-    g_strlcpy(app->runtime.selected_performance_page, "cpu",
-              sizeof(app->runtime.selected_performance_page));
+    lsm_copy_string(app->runtime.selected_performance_page,
+                    sizeof(app->runtime.selected_performance_page), "cpu");
+    if (!app_paths_initialise(app)) {
+        fputs("Unable to construct the configuration paths\n", stderr);
+        return;
+    }
     if (!lsm_monitor_init(&app->monitor)) {
         fputs("Unable to initialise the monitoring backend\n", stderr);
         return;
@@ -92,16 +113,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->monitor.cpu.physical_cores = 12;
 #endif
 
-    snprintf(app->paths.config_dir, sizeof(app->paths.config_dir), "%s/%s", g_get_user_config_dir(), LSM_CONFIG_DIRECTORY);
-    char *filter_path = g_build_filename(app->paths.config_dir, "filters.conf", NULL);
-    g_strlcpy(app->paths.filter_path, filter_path, sizeof(app->paths.filter_path));
-    g_free(filter_path);
-    char *column_path = g_build_filename(app->paths.config_dir, "process-columns.conf", NULL);
-    g_strlcpy(app->paths.column_path, column_path, sizeof(app->paths.column_path));
-    g_free(column_path);
-    char *preferences_path = g_build_filename(app->paths.config_dir, "preferences.conf", NULL);
-    g_strlcpy(app->paths.preferences_path, preferences_path, sizeof(app->paths.preferences_path));
-    g_free(preferences_path);
     lsm_preferences_load(app);
     lsm_process_filters_load(app);
     lsm_app_shell_apply_theme(app);

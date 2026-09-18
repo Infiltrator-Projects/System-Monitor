@@ -29,6 +29,9 @@
 #define lsm_string_starts_with infiltratr_string_starts_with
 #define lsm_string_ends_with infiltratr_string_ends_with
 #define lsm_parse_u64 infiltratr_parse_u64
+#define lsm_parse_i64 infiltratr_parse_i64
+#define lsm_parse_u64_range infiltratr_parse_u64_range
+#define lsm_parse_i64_range infiltratr_parse_i64_range
 #define lsm_parse_u64_token infiltratr_parse_u64_token
 #define lsm_array_reserve infiltratr_array_reserve
 #define lsm_clamp_double infiltratr_clamp_double

@@ -601,17 +601,27 @@ static void enumerate_npus(LsmMonitor *monitor)
     if (!directory) return;
     struct dirent *entry;
     while ((entry = readdir(directory)) && monitor->npu_count < LSM_MAX_NPUS) {
-        if (strncmp(entry->d_name, "accel", 5) != 0 ||
+        if (!lsm_string_starts_with(entry->d_name, "accel") ||
             !isdigit((unsigned char)entry->d_name[5])) continue;
         LsmNpuInfo *npu = &monitor->npus[monitor->npu_count++];
         memset(npu, 0, sizeof(*npu));
         lsm_copy_string(npu->display_identifier, sizeof(npu->display_identifier),
                         entry->d_name);
-        snprintf(npu->device_identifier, sizeof(npu->device_identifier),
-                 "/dev/accel/%s", entry->d_name);
+        if (!lsm_join_path(npu->device_identifier,
+                           sizeof(npu->device_identifier),
+                           "/dev/accel", entry->d_name)) {
+            monitor->npu_count--;
+            continue;
+        }
 
+        char class_path[LSM_PATH_LEN];
         char link[LSM_PATH_LEN], resolved[LSM_PATH_LEN];
-        snprintf(link, sizeof(link), "/sys/class/accel/%s/device", entry->d_name);
+        if (!lsm_join_path(class_path, sizeof(class_path),
+                           "/sys/class/accel", entry->d_name) ||
+            !lsm_join_path(link, sizeof(link), class_path, "device")) {
+            monitor->npu_count--;
+            continue;
+        }
         if (lsm_realpath_copy(link, resolved, sizeof(resolved)))
             lsm_copy_string(npu->platform_identity, sizeof(npu->platform_identity), resolved);
         else
@@ -622,8 +632,8 @@ static void enumerate_npus(LsmMonitor *monitor)
         ssize_t length = readlink(link, driver_link, sizeof(driver_link) - 1);
         if (length > 0) {
             driver_link[length] = '\0';
-            const char *base = strrchr(driver_link, '/');
-            lsm_copy_string(npu->driver, sizeof(npu->driver), base ? base + 1 : driver_link);
+            lsm_copy_string(npu->driver, sizeof(npu->driver),
+                            lsm_path_basename(driver_link));
         }
 
         char vendor_id[32] = "", device_id[32] = "", vendor[LSM_NAME_LEN] = "";

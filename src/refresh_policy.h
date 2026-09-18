@@ -15,6 +15,8 @@
 #ifndef LINUX_SYSTEM_MONITOR_REFRESH_POLICY_H
 #define LINUX_SYSTEM_MONITOR_REFRESH_POLICY_H
 
+#include <infiltratr/timing.h>
+
 #include <stdbool.h>
 
 /**
@@ -25,7 +27,7 @@
  * @param interval Required interval in seconds.
  * @return true when due or when any input cannot form a safe baseline.
  */
-bool lsm_refresh_interval_due(double now, double last, double interval);
+#define lsm_refresh_interval_due infiltratr_interval_due
 
 /**
  * Decide whether a dirty page model should be presented immediately.

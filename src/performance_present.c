@@ -31,7 +31,7 @@
 static bool useful_hardware_name(const char *name)
 {
     return name && name[0] && strcmp(name, "N/A") != 0 &&
-           strncmp(name, "PCI ", 4) != 0;
+           !lsm_string_starts_with(name, "PCI ");
 }
 
 static const char *preferred_hardware_name(const char *product,
@@ -361,7 +361,8 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
        intentionally not promoted into the product-name position. */
     const char *product = preferred_hardware_name(net->product, net->vendor);
     if (strcmp(page->hardware_product, product) != 0) {
-        g_strlcpy(page->hardware_product, product, sizeof(page->hardware_product));
+        lsm_copy_string(page->hardware_product,
+                        sizeof(page->hardware_product), product);
         lsm_ui_set_label_text(widgets->product, "%s", page->hardware_product);
         const char *kind = net->wireless ? "Wi-Fi" : "Ethernet";
         if (strcmp(page->hardware_product, "N/A") == 0)
@@ -374,7 +375,8 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
                                page->hardware_product);
     }
     if (strcmp(page->hardware_vendor, net->vendor) != 0 && net->vendor[0]) {
-        g_strlcpy(page->hardware_vendor, net->vendor, sizeof(page->hardware_vendor));
+        lsm_copy_string(page->hardware_vendor,
+                        sizeof(page->hardware_vendor), net->vendor);
         lsm_ui_set_label_text(widgets->vendor, "%s", page->hardware_vendor);
     }
     char receive[64], send[64], total_received[64], total_sent[64];
@@ -552,7 +554,8 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
         isfinite(gpu->temperature_c);
     const char *product = useful_hardware_name(gpu->name) ? gpu->name : "N/A";
     if (strcmp(page->hardware_product, product) != 0) {
-        g_strlcpy(page->hardware_product, product, sizeof(page->hardware_product));
+        lsm_copy_string(page->hardware_product,
+                        sizeof(page->hardware_product), product);
         if (strcmp(product, "N/A") == 0)
             lsm_ui_set_label_text(page->button_title, "GPU %zu", page->index);
         else
