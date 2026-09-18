@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.19.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.0")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "9b6e92ef135f7e4bc0af809975a619aa20a2eaa3")
+set(INFILTRATR_COMMON_TAG "v1.19.2")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.2")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "44409af17c89b6ece6b4bcb2c0c133213c695c23")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -129,15 +129,13 @@ list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
 # operating-system providers merely because they coexist in the source tree.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LSM_PLATFORM_NAME "linux")
-    set(LSM_ATOMIC_FILE_PROVIDER "posix")
 else()
     message(FATAL_ERROR
         "No native monitor/process backend is implemented for ${CMAKE_SYSTEM_NAME}")
 endif()
 list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX
-    "src/(atomic_file|monitor_backend|process_backend)_[^/]+\\.c$")
+    "src/(monitor_backend|process_backend)_[^/]+\\.c$")
 list(APPEND LSM_SOURCE_NAMES
-    "src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c"
     "src/monitor_backend_${LSM_PLATFORM_NAME}.c"
     "src/process_backend_${LSM_PLATFORM_NAME}.c")
 
@@ -267,7 +265,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     endforeach()
 
     add_executable(lsm-atomic-file-smoke support/tests/atomic_file_smoke.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c)
+        )
     add_executable(lsm-backend-smoke support/tests/backend_smoke.c
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
@@ -285,7 +283,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-dbus-models-smoke support/tests/dbus_models_smoke.c
         src/ui_helpers.c )
     add_executable(lsm-duration-format-smoke
-        support/tests/duration_format_smoke.c src/duration_format.c)
+        support/tests/duration_format_smoke.c )
     add_executable(lsm-efficiency-smoke support/tests/efficiency_smoke.c
         ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-glibc-abi-smoke support/tests/glibc_abi_smoke.c
@@ -306,16 +304,16 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/nvml.c )
     add_dependencies(lsm-nvml-smoke lsm-mock-nvml)
     add_executable(lsm-preferences-smoke support/tests/preferences_smoke.c
-        src/preferences.c src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c)
+        src/preferences.c )
     add_executable(lsm-process-management-smoke
         support/tests/process_management_smoke.c ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES} )
     add_executable(lsm-quality-policy-smoke support/tests/quality_policy_smoke.c
-        src/metric_format.c src/refresh_policy.c)
+         src/refresh_policy.c)
     add_executable(lsm-sample-history-smoke support/tests/sample_history_smoke.c
         src/sample_history.c)
     add_executable(lsm-startup-smoke support/tests/startup_smoke.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c src/ui_helpers.c)
+         src/ui_helpers.c)
     add_executable(lsm-ui-update-smoke support/tests/ui_update_smoke.c
         src/ui_helpers.c)
     add_executable(lsm-wifi-metadata-smoke support/tests/wifi_metadata_smoke.c
@@ -358,11 +356,11 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/mountinfo.c src/pci_names.c src/pci_names_data.c )
     add_executable(lsm-system-snapshot-smoke
         support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c 
-        src/metric_format.c)
+
+        )
     add_executable(lsm-process-export-smoke
         support/tests/process_export_smoke.c src/process_export.c src/process_model.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c  src/ui_helpers.c)
+          src/ui_helpers.c)
     add_executable(lsm-task-manager-layout-smoke
         support/tests/task_manager_layout_smoke.c)
     add_executable(lsm-process-inspection-smoke support/tests/process_inspection_smoke.c
@@ -372,8 +370,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/mountinfo.c )
     add_executable(lsm-history-retention-smoke
         support/tests/history_retention_smoke.c src/history.c
-        src/atomic_file_${LSM_ATOMIC_FILE_PROVIDER}.c 
-        src/duration_format.c src/ui_helpers.c)
+
+         src/ui_helpers.c)
     target_compile_definitions(lsm-history-retention-smoke PRIVATE
         LSM_HISTORY_TEST_API)
     add_executable(lsm-async-workers-smoke

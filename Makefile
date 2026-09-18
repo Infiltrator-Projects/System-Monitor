@@ -16,9 +16,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.19.0
-INFILTRATR_COMMON_COMMIT := 9b6e92ef135f7e4bc0af809975a619aa20a2eaa3
-INFILTRATR_COMMON_VERSION := 1.19.0
+INFILTRATR_COMMON_TAG := v1.19.2
+INFILTRATR_COMMON_COMMIT := 44409af17c89b6ece6b4bcb2c0c133213c695c23
+INFILTRATR_COMMON_VERSION := 1.19.2
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -39,9 +39,8 @@ BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
 BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
 LSM_PLATFORM ?= linux
 ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' support/sources.txt)
-ATOMIC_FILE_PROVIDER_NAME := $(if $(filter linux,$(LSM_PLATFORM)),atomic_file_posix.c,atomic_file_$(LSM_PLATFORM).c)
-PLATFORM_BACKEND_NAMES := $(ATOMIC_FILE_PROVIDER_NAME) monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c
-SOURCE_NAMES := $(filter-out atomic_file_%.c monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
+PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c
+SOURCE_NAMES := $(filter-out monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
 SOURCES := $(addprefix src/,$(SOURCE_NAMES))
 OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
@@ -287,13 +286,13 @@ COMMON_LINK_TARGETS := \
 
 atomic-file-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		support/tests/atomic_file_smoke.c src/atomic_file_posix.c \
+		support/tests/atomic_file_smoke.c  \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/atomic-file-smoke
 	./$(BUILD_DIR)/atomic-file-smoke
 
 duration-format-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		support/tests/duration_format_smoke.c src/duration_format.c \
+		support/tests/duration_format_smoke.c  \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/duration-format-smoke
 	./$(BUILD_DIR)/duration-format-smoke
 
@@ -372,9 +371,9 @@ analyzer-check: check-deps | $(BUILD_DIR)
 	@set -e; \
 	if [ -n "$(ANALYZER_FLAG)" ]; then \
 		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
-			-fsyntax-only src/atomic_file_posix.c  \
-			src/duration_format.c src/process_backend_linux.c src/refresh_policy.c \
-			src/process_gpu.c src/metric_format.c src/cpu_accounting.c \
+			-fsyntax-only   \
+			 src/process_backend_linux.c src/refresh_policy.c \
+			src/process_gpu.c  src/cpu_accounting.c \
 			src/memory_accounting.c \
 			src/disk_accounting.c src/mountinfo.c src/storage_metadata.c \
 			src/smbios_memory.c \
@@ -434,7 +433,7 @@ memory-accounting-smoke: | $(BUILD_DIR)
 
 quality-policy-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/quality_policy_smoke.c \
-		src/metric_format.c src/refresh_policy.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		 src/refresh_policy.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/quality-policy-smoke
 	./$(BUILD_DIR)/quality-policy-smoke
 
@@ -506,8 +505,8 @@ filesystem-inventory-smoke: | $(BUILD_DIR)
 
 history-retention-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 $(STRICT_WARNINGS) \
-		support/tests/history_retention_smoke.c src/history.c src/atomic_file_posix.c \
-		 src/duration_format.c src/ui_helpers.c \
+		support/tests/history_retention_smoke.c src/history.c  \
+		  src/ui_helpers.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
 	./$(BUILD_DIR)/history-retention-smoke
@@ -691,7 +690,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		./$(BUILD_DIR)/filesystem-inventory-sanitized
 	$(CC) $(CPPFLAGS) -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/quality_policy_smoke.c src/metric_format.c src/refresh_policy.c \
+		support/tests/quality_policy_smoke.c  src/refresh_policy.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/quality-policy-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -699,8 +698,8 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		./$(BUILD_DIR)/quality-policy-sanitized
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/history_retention_smoke.c src/history.c src/atomic_file_posix.c \
-		 src/duration_format.c src/ui_helpers.c \
+		support/tests/history_retention_smoke.c src/history.c  \
+		  src/ui_helpers.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
 		-o $(BUILD_DIR)/history-retention-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -781,7 +780,7 @@ native-command-audit:
 startup-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/startup_smoke.c \
-		src/atomic_file_posix.c src/ui_helpers.c $(INFILTRATR_COMMON_ARCHIVE) \
+		 src/ui_helpers.c $(INFILTRATR_COMMON_ARCHIVE) \
 		-Wl,--gc-sections -l:libgtk-3.so.0 -l:libgdk-3.so.0 \
 		-l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 \
 		-l:libpango-1.0.so.0 -l:libcairo.so.2 -lm -o $(BUILD_DIR)/startup-smoke
@@ -840,7 +839,7 @@ cpu-accounting-smoke: | $(BUILD_DIR)
 system-snapshot-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c \
-		src/atomic_file_posix.c  src/metric_format.c \
+		   \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/system-snapshot-smoke
 	./$(BUILD_DIR)/system-snapshot-smoke
@@ -848,7 +847,7 @@ system-snapshot-smoke: | $(BUILD_DIR)
 process-export-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/process_export_smoke.c \
-		src/process_export.c src/atomic_file_posix.c src/process_model.c  \
+		src/process_export.c  src/process_model.c  \
 		$(INFILTRATR_COMMON_ARCHIVE) -Wl,--gc-sections -lm \
 		-o $(BUILD_DIR)/process-export-smoke
 	./$(BUILD_DIR)/process-export-smoke
@@ -856,7 +855,7 @@ process-export-smoke: | $(BUILD_DIR)
 preferences-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/preferences_smoke.c \
-		src/preferences.c src/atomic_file_posix.c \
+		src/preferences.c  \
 		$(INFILTRATR_COMMON_ARCHIVE) \
 		-Wl,--gc-sections -l:libglib-2.0.so.0 -lm \
 		-o $(BUILD_DIR)/preferences-smoke
@@ -891,14 +890,15 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_grouping.c -o $(COVERAGE_DIR)/process_grouping.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_grouping_smoke.c $(COVERAGE_DIR)/process_grouping.o src/process_model.c -lm -o $(COVERAGE_DIR)/process-grouping-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/mountinfo.c -o $(COVERAGE_DIR)/mountinfo.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/duration_format.c -o $(COVERAGE_DIR)/duration_format.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/cpu_direct.c -o $(COVERAGE_DIR)/cpu_direct.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/refresh_policy.c -o $(COVERAGE_DIR)/refresh_policy.o
-	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/metric_format.c -o $(COVERAGE_DIR)/metric_format.o
+	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/wifi_metadata.c -o $(COVERAGE_DIR)/wifi_metadata.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/filesystem_inventory.c -o $(COVERAGE_DIR)/filesystem_inventory.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage -c src/process_inspection.c -o $(COVERAGE_DIR)/process_inspection.o
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/mountinfo_smoke.c $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/mountinfo-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/duration_format_smoke.c $(COVERAGE_DIR)/duration_format.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/duration-format-smoke
-	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c $(COVERAGE_DIR)/metric_format.o $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/cpu_direct_smoke.c $(COVERAGE_DIR)/cpu_direct.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/cpu-direct-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/wifi_metadata_smoke.c $(COVERAGE_DIR)/wifi_metadata.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/wifi-metadata-smoke
+	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/quality_policy_smoke.c $(COVERAGE_DIR)/refresh_policy.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/refresh-policy-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/filesystem_inventory_smoke.c $(COVERAGE_DIR)/filesystem_inventory.o $(COVERAGE_DIR)/mountinfo.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(CC) $(CPPFLAGS) -std=c17 --coverage support/tests/process_inspection_smoke.c $(COVERAGE_DIR)/process_inspection.o $(INFILTRATR_COMMON_ARCHIVE) -lm -o $(COVERAGE_DIR)/process-inspection-smoke
 	$(COVERAGE_DIR)/cpu-smoke
@@ -912,11 +912,12 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/performance-selection-smoke
 	$(COVERAGE_DIR)/process-grouping-smoke
 	$(COVERAGE_DIR)/mountinfo-smoke
-	$(COVERAGE_DIR)/duration-format-smoke
+	$(COVERAGE_DIR)/cpu-direct-smoke
+	$(COVERAGE_DIR)/wifi-metadata-smoke
 	$(COVERAGE_DIR)/refresh-policy-smoke
 	$(COVERAGE_DIR)/filesystem-inventory-smoke
 	$(COVERAGE_DIR)/process-inspection-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/duration_format.c ../../src/refresh_policy.c ../../src/metric_format.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
+	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/wifi_metadata.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
 	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 16) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
 	@echo "Coverage scope: 16 deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."

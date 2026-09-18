@@ -4,7 +4,6 @@ app.c
 app_runtime.c
 app_menu.c
 app_shell.c
-atomic_file_posix.c
 project_info.c
 preferences.c
 summary_bar.c
@@ -13,7 +12,6 @@ help.c
 filesystems.c
 filesystem_inventory.c
 ui_helpers.c
-metric_format.c
 refresh_policy.c
 wifi_metadata.c
 graph.c
@@ -25,7 +23,6 @@ performance_pages_core.c
 performance_pages_devices.c
 performance_present.c
 details_page.c
-duration_format.c
 process_actions.c
 process_recorder.c
 process_scanner.c
