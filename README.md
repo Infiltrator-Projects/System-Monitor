@@ -85,6 +85,6 @@ Contribution guidance lives in [CONTRIBUTING.md](.github/CONTRIBUTING.md). Secur
 
 ## Licence
 
-Copyright © 2026 Shannon Smith.
+Copyright © 2016 Shannon Smith.
 
 Shannon Smith-owned source and documentation are licensed under GPL-3.0-or-later. Retained third-party notices for the SysMonTask icon and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`.
