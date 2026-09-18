@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * @file check_source_style.c
+ * @file check_source_style.cpp
  * @brief Mechanical source, manifest and documentation consistency audit.
  *
- * This developer tool is deliberately written in C so the project does not
- * require Python merely to validate its own C source tree.
+ * This developer-only audit uses C++17 where RAII containers and filesystem
+ * traversal remove fixed path buffers and manual list ownership. The installed
+ * System Monitor application remains C17 and does not link the C++ runtime.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2026 Shannon Smith
@@ -12,27 +13,25 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
-#include <dirent.h>
-#include <errno.h>
-#include <stdbool.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-
-#define LSM_CHECK_MAX_ENTRIES 1024U
-#define LSM_CHECK_PATH_LEN 4096U
+#include <algorithm>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <new>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <vector>
 #define LSM_SPDX_C "// SPDX-License-Identifier: GPL-3.0-or-later\n"
 #define LSM_SPDX_HASH "# SPDX-License-Identifier: GPL-3.0-or-later\n"
 #define LSM_SPDX_MARKDOWN \
     "<!-- SPDX-License-Identifier: GPL-3.0-or-later -->\n"
 #define LSM_DOXYGEN_LICENSE "@license GPL-3.0-or-later"
 
-typedef struct {
-    char *items[LSM_CHECK_MAX_ENTRIES];
-    size_t count;
-} StringList;
+using StringList = std::vector<std::string>;
 
 static unsigned error_count;
 
@@ -54,114 +53,92 @@ static void report_error(const char *format, ...)
 
 static bool regular_file(const char *path)
 {
-    struct stat status;
-    return stat(path, &status) == 0 && S_ISREG(status.st_mode);
+    std::error_code error;
+    return std::filesystem::is_regular_file(path, error);
 }
 
 static bool directory_path(const char *path)
 {
-    struct stat status;
-    return stat(path, &status) == 0 && S_ISDIR(status.st_mode);
+    std::error_code error;
+    return std::filesystem::is_directory(path, error);
 }
 
-static bool ends_with(const char *text, const char *suffix)
+static bool ends_with(std::string_view text, std::string_view suffix)
 {
-    const size_t text_length = strlen(text);
-    const size_t suffix_length = strlen(suffix);
-    return text_length >= suffix_length &&
-           strcmp(text + text_length - suffix_length, suffix) == 0;
-}
-
-static char *trim_line(char *line)
-{
-    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
-    char *end = line + strlen(line);
-    while (end > line &&
-           (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
-        *--end = '\0';
-    return line;
+    return text.size() >= suffix.size() &&
+           text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 static bool list_contains(const StringList *list, const char *item)
 {
-    for (size_t index = 0U; index < list->count; index++)
-        if (strcmp(list->items[index], item) == 0) return true;
-    return false;
+    return std::find(list->begin(), list->end(), item) != list->end();
 }
 
 static bool list_add(StringList *list, const char *item)
 {
-    if (list->count >= LSM_CHECK_MAX_ENTRIES) return false;
-    list->items[list->count] = strdup(item);
-    if (!list->items[list->count]) return false;
-    list->count++;
-    return true;
-}
-
-static void list_destroy(StringList *list)
-{
-    for (size_t index = 0U; index < list->count; index++) free(list->items[index]);
-    memset(list, 0, sizeof(*list));
-}
-
-static bool join_path(char *destination, size_t destination_size,
-                      const char *left, const char *right)
-{
-    const int written = snprintf(destination, destination_size, "%s/%s", left, right);
-    return written >= 0 && (size_t)written < destination_size;
+    try {
+        list->emplace_back(item);
+        return true;
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
 }
 
 static void read_manifest(const char *manifest_name, const char *base,
                           StringList *entries)
 {
-    FILE *file = fopen(manifest_name, "r");
+    std::ifstream file(manifest_name);
     if (!file) {
-        report_error("%s: unable to open: %s", manifest_name, strerror(errno));
+        report_error("%s: unable to open", manifest_name);
         return;
     }
 
-    char line[LSM_CHECK_PATH_LEN];
-    while (fgets(line, sizeof(line), file)) {
-        char *entry = trim_line(line);
-        if (!*entry || *entry == '#') continue;
-        if (list_contains(entries, entry)) {
-            report_error("%s: duplicate entry %s", manifest_name, entry);
+    std::string line;
+    while (std::getline(file, line)) {
+        const size_t first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#') continue;
+        const size_t last = line.find_last_not_of(" \t\r\n");
+        const std::string entry = line.substr(first, last - first + 1U);
+        if (list_contains(entries, entry.c_str())) {
+            report_error("%s: duplicate entry %s", manifest_name, entry.c_str());
             continue;
         }
-        if (!list_add(entries, entry)) {
-            report_error("%s: too many entries or out of memory", manifest_name);
+        if (!list_add(entries, entry.c_str())) {
+            report_error("%s: out of memory", manifest_name);
             break;
         }
-        char path[LSM_CHECK_PATH_LEN];
-        if (!join_path(path, sizeof(path), base, entry) || !regular_file(path))
-            report_error("%s: missing file %s", manifest_name, entry);
+        std::error_code error;
+        const std::filesystem::path path =
+            std::filesystem::path(base) / entry;
+        if (!std::filesystem::is_regular_file(path, error))
+            report_error("%s: missing file %s", manifest_name, entry.c_str());
     }
-    fclose(file);
 }
 
 static void check_source_manifest(const StringList *listed)
 {
-    DIR *directory = opendir("src");
-    if (!directory) {
-        report_error("src: unable to open: %s", strerror(errno));
-        return;
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator("src", error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        if (!iterator->is_regular_file(error)) continue;
+        const std::string name = iterator->path().filename().string();
+        if (!ends_with(name, ".c")) continue;
+        if (!list_contains(listed, name.c_str()))
+            report_error("support/sources.txt: unlisted application source %s",
+                         name.c_str());
     }
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
-        if (!ends_with(entry->d_name, ".c")) continue;
-        if (!list_contains(listed, entry->d_name))
-            report_error("support/sources.txt: unlisted application source %s", entry->d_name);
-    }
-    closedir(directory);
+    if (error)
+        report_error("src: unable to enumerate: %s", error.message().c_str());
 
-    for (size_t index = 0U; index < listed->count; index++) {
-        char path[LSM_CHECK_PATH_LEN];
-        if (!join_path(path, sizeof(path), "src", listed->items[index]) ||
-            !regular_file(path))
+    for (const std::string &entry : *listed) {
+        const std::filesystem::path path = std::filesystem::path("src") / entry;
+        if (!std::filesystem::is_regular_file(path, error)) {
+            error.clear();
             continue;
-        if (!ends_with(listed->items[index], ".c"))
+        }
+        if (!ends_with(entry, ".c"))
             report_error("support/sources.txt: unexpected application source %s",
-                         listed->items[index]);
+                         entry.c_str());
     }
 }
 
@@ -184,34 +161,28 @@ static bool maintained_markdown_path(const char *path)
 
 static void check_markdown_tree(const char *directory_path_value)
 {
-    DIR *directory = opendir(directory_path_value);
-    if (!directory) {
-        report_error("%s: unable to open: %s", directory_path_value,
-                     strerror(errno));
-        return;
-    }
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
-        if (strcmp(entry->d_name, ".") == 0 ||
-            strcmp(entry->d_name, "..") == 0 ||
-            strcmp(entry->d_name, ".git") == 0 ||
-            strcmp(entry->d_name, "build") == 0 ||
-            strncmp(entry->d_name, "build-", 6U) == 0)
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        const std::string name = iterator->path().filename().string();
+        if (name == ".git" || name == "build" || name.rfind("build-", 0U) == 0U)
             continue;
 
-        char path[LSM_CHECK_PATH_LEN];
-        if (!join_path(path, sizeof(path), directory_path_value, entry->d_name))
-            continue;
-        if (strcmp(path, "./src/infiltratr-common") == 0) continue;
-        if (directory_path(path)) {
-            check_markdown_tree(path);
-        } else if (ends_with(entry->d_name, ".md") &&
-                   !maintained_markdown_path(path)) {
+        std::string path = iterator->path().generic_string();
+        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
+        if (path == "./src/infiltratr-common") continue;
+        if (iterator->is_directory(error)) {
+            check_markdown_tree(path.c_str());
+        } else if (ends_with(name, ".md") &&
+                   !maintained_markdown_path(path.c_str())) {
             report_error("%s: unapproved maintained Markdown file; update the "
-                         "documentation allowlist deliberately", path);
+                         "documentation allowlist deliberately", path.c_str());
         }
+        error.clear();
     }
-    closedir(directory);
+    if (error)
+        report_error("%s: unable to enumerate: %s", directory_path_value,
+                     error.message().c_str());
 }
 
 static void check_markdown_policy(void)
@@ -265,7 +236,7 @@ static char *read_file(const char *path, size_t *size_out)
         fclose(file);
         return NULL;
     }
-    char *contents = malloc((size_t)length + 1U);
+    char *contents = static_cast<char *>(malloc((size_t)length + 1U));
     if (!contents) {
         fclose(file);
         return NULL;
@@ -614,30 +585,24 @@ static void check_source_file(const char *path)
 
 static void scan_source_tree(const char *directory_path_value)
 {
-    DIR *directory = opendir(directory_path_value);
-    if (!directory) {
-        report_error("%s: unable to open: %s", directory_path_value, strerror(errno));
-        return;
-    }
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
-        if (entry->d_name[0] == '.' &&
-            (entry->d_name[1] == '\0' ||
-             (entry->d_name[1] == '.' && entry->d_name[2] == '\0')))
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        std::string path = iterator->path().generic_string();
+        if (path == "src/infiltratr-common" ||
+            path == "./src/infiltratr-common")
             continue;
-        char path[LSM_CHECK_PATH_LEN];
-        if (!join_path(path, sizeof(path), directory_path_value, entry->d_name)) {
-            report_error("%s/%s: path is too long", directory_path_value, entry->d_name);
-            continue;
+        if (iterator->is_directory(error)) {
+            scan_source_tree(path.c_str());
+        } else if (ends_with(path, ".c") || ends_with(path, ".cpp") ||
+                   ends_with(path, ".h")) {
+            check_source_file(path.c_str());
         }
-        if (strcmp(path, "src/infiltratr-common") == 0) continue;
-        if (directory_path(path)) {
-            scan_source_tree(path);
-        } else if (ends_with(path, ".c") || ends_with(path, ".h")) {
-            check_source_file(path);
-        }
+        error.clear();
     }
-    closedir(directory);
+    if (error)
+        report_error("%s: unable to enumerate: %s", directory_path_value,
+                     error.message().c_str());
 }
 
 static void require_text_marker(const char *path, const char *text,
@@ -795,31 +760,24 @@ static void check_engineering_documentation(void)
 
 static void check_shell_boundary_tree(const char *directory_path_value)
 {
-    DIR *directory = opendir(directory_path_value);
-    if (!directory) return;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
-        if (entry->d_name[0] == '.' &&
-            (entry->d_name[1] == '\0' ||
-             (entry->d_name[1] == '.' && entry->d_name[2] == '\0')))
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        const std::string name = iterator->path().filename().string();
+        if (name == ".git" || name == "build" || name == "build-cmake")
             continue;
-        if (strcmp(entry->d_name, ".git") == 0 ||
-            strcmp(entry->d_name, "build") == 0 ||
-            strcmp(entry->d_name, "build-cmake") == 0)
-            continue;
-        char path[LSM_CHECK_PATH_LEN];
-        if (!join_path(path, sizeof(path), directory_path_value, entry->d_name))
-            continue;
-        if (strcmp(path, "./src/infiltratr-common") == 0) continue;
-        if (directory_path(path)) {
-            check_shell_boundary_tree(path);
+        std::string path = iterator->path().generic_string();
+        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
+        if (path == "./src/infiltratr-common") continue;
+        if (iterator->is_directory(error)) {
+            check_shell_boundary_tree(path.c_str());
         } else if (ends_with(path, ".sh") &&
-                   strcmp(path, "./support/installer/bootstrap.sh") != 0) {
-            report_error("%s: unexpected shell source; reusable project logic must be C",
-                         path);
+                   path != "./support/installer/bootstrap.sh") {
+            report_error("%s: unexpected shell source; reusable project logic "
+                         "must remain native C/C++", path.c_str());
         }
+        error.clear();
     }
-    closedir(directory);
 }
 
 static void check_shell_boundary(void)
@@ -901,7 +859,7 @@ static void check_shared_release_contract(void)
 
 int main(void)
 {
-    StringList sources = {0};
+    StringList sources;
     read_manifest("support/sources.txt", "src", &sources);
     check_source_manifest(&sources);
     check_root_layout();
@@ -913,7 +871,6 @@ int main(void)
     scan_source_tree("src");
     scan_source_tree("support/tests");
     scan_source_tree("support/tools");
-    list_destroy(&sources);
 
     if (error_count != 0U) return 1;
     puts("Source-style audit passed.");

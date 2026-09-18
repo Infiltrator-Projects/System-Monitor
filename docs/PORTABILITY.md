@@ -2,11 +2,11 @@
 
 # Portability
 
-System Monitor targets ISO C17. Portability means keeping application contracts independent of Linux implementation details, not pretending the current Linux backend already runs unchanged everywhere.
+System Monitor's installed application targets ISO C17. Developer-only build and audit tools may use ISO C++17 when its standard-library ownership or filesystem facilities materially reduce implementation risk. Portability means keeping application contracts independent of Linux implementation details, not pretending the current Linux backend already runs unchanged everywhere.
 
 ## Language and interfaces
 
-Prefer C11/C99 constructs when they are equally clear. Do not add C23-only features, a C++ runtime requirement or compiler-specific product logic merely for convenience.
+Prefer C11/C99 constructs in the installed application when they are equally clear. Do not add C23-only features, a C++ runtime dependency or compiler-specific product logic merely for convenience. C++ is confined to developer tooling unless a product change demonstrates a concrete correctness, safety or maintainability benefit.
 
 Application-facing snapshots and contracts remain plain C. They must not expose Linux handles, GTK objects, implementation-owned paths or hidden global ownership.
 

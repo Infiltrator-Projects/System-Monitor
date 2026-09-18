@@ -3,6 +3,7 @@
 # Author and maintainer: Shannon Smith
 
 CC ?= cc
+CXX ?= c++
 AR ?= ar
 PKG_CONFIG ?= pkg-config
 DOXYGEN ?= doxygen
@@ -69,6 +70,8 @@ BASE_WARNINGS := -Wall -Wextra -Wpedantic
 STRICT_WARNINGS := $(BASE_WARNINGS) -Werror -Wshadow -Wformat=2 -Wundef \
 	-Wstrict-prototypes -Wmissing-prototypes -Wcast-qual -Wwrite-strings \
 	-Wswitch-enum -Wnull-dereference
+CXX_STRICT_WARNINGS := $(BASE_WARNINGS) -Werror -Wshadow -Wformat=2 -Wundef \
+	-Wcast-qual -Wswitch-enum -Wnull-dereference
 
 ifeq ($(ENABLE_LTO),1)
 LTO_FLAGS := $(shell tmp=$$(mktemp); \
@@ -135,7 +138,7 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all build-all clean run install install-built uninstall check build-check check-deps common-bootstrap common-check common-library strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
+.PHONY: all build-all clean run install install-built uninstall check build-check check-deps cxx-check common-bootstrap common-check common-library strict-check style-check FORCE atomic-file-smoke duration-format-smoke \
 	backend-check backend-smoke monitor-platform-smoke process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke async-workers-smoke efficiency-smoke \
 	mountinfo-smoke storage-metadata-smoke system-sources-smoke smbios-memory-smoke battery-smoke bluetooth-battery-smoke \
 	wifi-metadata-smoke hidpp-smoke nvml-smoke native-command-audit portability-check \
@@ -255,6 +258,17 @@ $(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
 run: $(TARGET)
 	./$(TARGET)
 
+cxx-check:
+	@printf 'int main(){return 0;}\n' | \
+		$(CXX) -std=c++17 -x c++ -fsyntax-only - >/dev/null 2>&1 || { \
+		echo "A C++17 compiler is required for the developer source auditor."; \
+		echo "Debian/Ubuntu/Mint: sudo apt install build-essential"; \
+		echo "Fedora: sudo dnf install gcc-c++"; \
+		echo "Arch/Manjaro: sudo pacman -S --needed base-devel"; \
+		echo "openSUSE: sudo zypper install gcc-c++"; \
+		exit 1; \
+	}
+
 check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
@@ -298,8 +312,8 @@ duration-format-smoke: | $(BUILD_DIR)
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
 
-$(STYLE_CHECKER): support/tools/check_source_style.c | $(BUILD_DIR)
-	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
+$(STYLE_CHECKER): support/tools/check_source_style.cpp | $(BUILD_DIR) cxx-check
+	$(CXX) -std=c++17 $(CXX_STRICT_WARNINGS) $< -o $@
 
 $(PORTABILITY_CHECKER): support/tools/check_portability.c | $(BUILD_DIR)
 	$(CC) -std=c17 $(STRICT_WARNINGS) $< -o $@
@@ -327,7 +341,7 @@ $(GLIBC_ABI_SMOKE): support/tests/glibc_abi_smoke.c support/tools/glibc_abi.c su
 glibc-abi-smoke: $(GLIBC_ABI_SMOKE)
 	./$(GLIBC_ABI_SMOKE)
 
-style-check: $(STYLE_CHECKER)
+style-check: cxx-check $(STYLE_CHECKER)
 	./$(STYLE_CHECKER)
 
 clang-doc-check: | $(BUILD_DIR)

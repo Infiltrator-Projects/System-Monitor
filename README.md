@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.31 ([version file](support/VERSION))\
+**Current source version:** 1.0.32 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -64,7 +64,7 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the project verification suite. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
+Run `make check` for the project verification suite. The installed application remains C17; the developer-only source auditor uses C++17 RAII/filesystem facilities and is not shipped in the package. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 

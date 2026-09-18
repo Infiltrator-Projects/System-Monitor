@@ -229,14 +229,23 @@ if(DOXYGEN_FOUND)
 endif()
 
 if(LSM_BUILD_DEVELOPER_TOOLS)
+    # The installed application remains C17. Developer-only tools may use C++17
+    # when RAII materially reduces manual resource and path handling.
+    enable_language(CXX)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+
     # Keep one warning policy for release tools and one native-source policy for
-    # smoke programs. This prevents Make/CMake from drifting as new parsers are
-    # added and makes release-mode tests use the same feature macros as the app.
+    # smoke programs. C-only warnings are gated by language so the same
+    # interface policy can be linked to the C++ source auditor.
     add_library(lsm-developer-tool-policy INTERFACE)
     target_compile_options(lsm-developer-tool-policy INTERFACE
         -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef
-        -Wstrict-prototypes -Wmissing-prototypes -Wcast-qual
-        -Wwrite-strings -Wswitch-enum -Wnull-dereference)
+        -Wcast-qual -Wswitch-enum -Wnull-dereference
+        $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>
+        $<$<COMPILE_LANGUAGE:C>:-Wmissing-prototypes>
+        $<$<COMPILE_LANGUAGE:C>:-Wwrite-strings>)
 
     add_library(lsm-developer-smoke-policy INTERFACE)
     target_link_libraries(lsm-developer-smoke-policy INTERFACE
@@ -253,7 +262,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_compile_options(lsm-developer-smoke-policy INTERFACE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/src/glibc_compat.h")
 
-    add_executable(lsm-source-style-checker support/tools/check_source_style.c)
+    add_executable(lsm-source-style-checker support/tools/check_source_style.cpp)
     add_executable(lsm-portability-checker support/tools/check_portability.c)
     add_executable(lsm-native-installer-builder support/tools/build_native_installer.c)
     add_executable(lsm-native-installer support/tools/native_installer.c)
