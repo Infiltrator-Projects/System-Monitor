@@ -98,7 +98,7 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
         cairo_new_path(cr);
         if (make_series_path(cr, history, maximum, width, height, true)) {
             cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,
-                                  compact ? 0.22 : 0.25);
+                                  compact ? 0.18 : 0.20);
             cairo_fill(cr);
         }
     }
@@ -131,7 +131,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     GdkRGBA border = {0.21, 0.23, 0.25, 1.0};
     GtkStyleContext *style = gtk_widget_get_style_context(widget);
     if (style) {
-        (void)gtk_style_context_lookup_color(style, "lsm_surface", &background);
+        const char *surface_name = graph->compact ? "lsm_surface" : "lsm_card";
+        (void)gtk_style_context_lookup_color(style, surface_name, &background);
         (void)gtk_style_context_lookup_color(style, "lsm_border", &border);
     }
 
@@ -142,8 +143,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     if (!graph->compact) {
         cairo_set_source_rgba(cr, graph->primary_colour.red,
                               graph->primary_colour.green,
-                              graph->primary_colour.blue, 0.18);
-        cairo_set_line_width(cr, 0.55);
+                              graph->primary_colour.blue, 0.13);
+        cairo_set_line_width(cr, 0.50);
         for (int i = 1; i < 10; i++) {
             const double x = width * i / 10.0;
             cairo_move_to(cr, x, 0.0);
@@ -158,8 +159,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
         if (graph->emphasise_midline) {
             cairo_set_source_rgba(cr, graph->primary_colour.red,
                                   graph->primary_colour.green,
-                                  graph->primary_colour.blue, 0.30);
-            cairo_set_line_width(cr, 0.75);
+                                  graph->primary_colour.blue, 0.24);
+            cairo_set_line_width(cr, 0.70);
             cairo_move_to(cr, 0.0, height / 2.0);
             cairo_line_to(cr, width, height / 2.0);
             cairo_stroke(cr);
