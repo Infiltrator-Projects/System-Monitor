@@ -16,6 +16,7 @@ No unreleased changes.
 - Apply Common detail-label, heading, kicker, summary and selected-summary roles to performance captions, values and device-row metadata so text hierarchy matches the rest of the Infiltrator family.
 - Remove the remaining hard-coded purple memory-composition frame and resolve its background/border through the active Common palette.
 - Preserve the correct Common foreground roles through normal, hover, checked and disabled button states so custom dark navigation rows never inherit the light-button foreground colour.
+- Extend the strict GTK compatibility surface for the style-class API used by the new hierarchy so warning-as-error Make verification covers the same calls as the real GTK build.
 
 ## 1.0.49 - 2026-09-20
 
