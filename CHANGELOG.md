@@ -14,6 +14,7 @@ No unreleased changes.
 - Render performance graphs on Common surface layers with subtle graphite frames and reduced grid emphasis instead of metric-coloured outer boxes.
 - Give the performance split panes explicit theme identities so the sidebar, content canvas and separator retain the intended layered graphite structure.
 - Keep menus, tabs, scrollbars, text surfaces and About-dialog controls within the same Common 1.19.10 MBLINK-derived Night hierarchy.
+- Build the generated GTK theme stylesheet in strict-C-safe fragments so the richer visual contract remains portable under the project's warning-as-error checks.
 
 ## 1.0.48 - 2026-09-20
 
