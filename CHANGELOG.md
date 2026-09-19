@@ -6,6 +6,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.46 - 2026-09-20
+
+- Restore the established MB graphite-grey Night shell instead of presenting the near-black Common canvas as the application background.
+- Keep Common 1.19.8 authoritative for semantic component colours and typography while mapping the top-level Night shell to the existing #2B2B30 System Monitor graphite used by graph/drawing fallback rendering.
+- Apply the same graphite shell when Follow system resolves a dark host theme, so explicit Night and system-dark presentation remain visually consistent.
+
 ## 1.0.45 - 2026-09-20
 
 - Complete a second forensic Common 1.19.8 usage pass without changing Common itself.
