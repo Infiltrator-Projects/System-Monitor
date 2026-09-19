@@ -81,7 +81,7 @@ static void property_string(GVariant *dictionary, const char *key,
     GVariant *value = g_variant_lookup_value(dictionary, key, NULL);
     if (!value) return;
     const char *text = g_variant_get_string(value, NULL);
-    if (text) lsm_copy_string(buffer, text, buffer_size);
+    if (text) lsm_copy_string(buffer, buffer_size, text);
     g_variant_unref(value);
 }
 
@@ -122,17 +122,16 @@ static void fill_account_identity(LsmLinuxSessionRecord *record)
     struct passwd *password = getpwuid(record->uid);
     if (password && password->pw_gecos && password->pw_gecos[0]) {
         char gecos[LSM_NAME_LEN];
-        lsm_copy_string(gecos, password->pw_gecos, sizeof(gecos));
+        lsm_copy_string(gecos, sizeof(gecos), password->pw_gecos);
         char *comma = strchr(gecos, ',');
         if (comma) *comma = '\0';
-        lsm_copy_string(record->session.display_name, gecos,
-                  sizeof(record->session.display_name));
+        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name), gecos);
     } else if (password && password->pw_name && password->pw_name[0]) {
-        lsm_copy_string(record->session.display_name, password->pw_name,
-                  sizeof(record->session.display_name));
+        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name),
+                        password->pw_name);
     } else {
-        lsm_copy_string(record->session.display_name, record->session.username,
-                  sizeof(record->session.display_name));
+        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name),
+                        record->session.username);
     }
 }
 
@@ -158,11 +157,10 @@ static LsmLinuxSessionRecord *parse_session_list(GVariant *reply,
         LsmLinuxSessionRecord *record = &sessions[count++];
         memset(record, 0, sizeof(*record));
         record->uid = (uid_t)uid;
-        lsm_copy_string(record->session.id, id, sizeof(record->session.id));
-        lsm_copy_string(record->session.username, username,
-                  sizeof(record->session.username));
-        lsm_copy_string(record->session.seat, seat, sizeof(record->session.seat));
-        lsm_copy_string(record->object_path, path, sizeof(record->object_path));
+        lsm_copy_string(record->session.id, sizeof(record->session.id), id);
+        lsm_copy_string(record->session.username, sizeof(record->session.username), username);
+        lsm_copy_string(record->session.seat, sizeof(record->session.seat), seat);
+        lsm_copy_string(record->object_path, sizeof(record->object_path), path);
         fill_account_identity(record);
     }
     g_variant_iter_free(iter);
@@ -212,9 +210,9 @@ static LsmLinuxSessionRecord *collect_sessions(GDBusConnection *bus,
         }
         if (property_error) g_error_free(property_error);
         if (!session->state[0])
-            lsm_copy_string(session->state, "online", sizeof(session->state));
+            lsm_copy_string(session->state, sizeof(session->state), "online");
         if (!session->type[0])
-            lsm_copy_string(session->type, "unspecified", sizeof(session->type));
+            lsm_copy_string(session->type, sizeof(session->type), "unspecified");
     }
     return sessions;
 }

@@ -404,12 +404,10 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index)
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_NETWORK, index, stack, friendly, net->name);
     LsmNetworkPageWidgets *widgets = &page->widgets.network;
-    lsm_copy_string(page->hardware_product,
-              network_product ? network_product : "N/A",
-              sizeof(page->hardware_product));
-    lsm_copy_string(page->hardware_vendor,
-              net->vendor[0] ? net->vendor : "N/A",
-              sizeof(page->hardware_vendor));
+    lsm_copy_string(page->hardware_product, sizeof(page->hardware_product),
+                    network_product ? network_product : "N/A");
+    lsm_copy_string(page->hardware_vendor, sizeof(page->hardware_vendor),
+                    net->vendor[0] ? net->vendor : "N/A");
 
     /* Original SysMonTask header: interface and Throughput on the left,
        adapter product and the current graph scale on the right. */

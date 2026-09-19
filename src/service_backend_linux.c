@@ -57,11 +57,11 @@ static LsmServiceEntry *service_get(LsmServiceEntry **entries, size_t *count,
 
     LsmServiceEntry *entry = &(*entries)[(*count)++];
     memset(entry, 0, sizeof(*entry));
-    lsm_copy_string(entry->name, name, sizeof(entry->name));
-    lsm_copy_string(entry->description, name, sizeof(entry->description));
-    lsm_copy_string(entry->active, "inactive", sizeof(entry->active));
-    lsm_copy_string(entry->substate, "dead", sizeof(entry->substate));
-    lsm_copy_string(entry->startup, "unknown", sizeof(entry->startup));
+    lsm_copy_string(entry->name, sizeof(entry->name), name);
+    lsm_copy_string(entry->description, sizeof(entry->description), name);
+    lsm_copy_string(entry->active, sizeof(entry->active), "inactive");
+    lsm_copy_string(entry->substate, sizeof(entry->substate), "dead");
+    lsm_copy_string(entry->startup, sizeof(entry->startup), "unknown");
     return entry;
 }
 
@@ -102,9 +102,9 @@ static void merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
         if (length < 8U || strcmp(name + length - 8U, ".service") != 0) continue;
         LsmServiceEntry *entry = service_get(entries, count, capacity, name);
         if (!entry) break;
-        lsm_copy_string(entry->description, description, sizeof(entry->description));
-        lsm_copy_string(entry->active, active, sizeof(entry->active));
-        lsm_copy_string(entry->substate, substate, sizeof(entry->substate));
+        lsm_copy_string(entry->description, sizeof(entry->description), description);
+        lsm_copy_string(entry->active, sizeof(entry->active), active);
+        lsm_copy_string(entry->substate, sizeof(entry->substate), substate);
     }
     g_variant_iter_free(iter);
 }
@@ -123,7 +123,7 @@ static void merge_unit_files(GVariant *files, LsmServiceEntry **entries,
         if (length < 8U || strcmp(unit + length - 8U, ".service") != 0) continue;
         LsmServiceEntry *entry = service_get(entries, count, capacity, unit);
         if (!entry) break;
-        lsm_copy_string(entry->startup, state, sizeof(entry->startup));
+        lsm_copy_string(entry->startup, sizeof(entry->startup), state);
     }
     g_variant_iter_free(iter);
 }

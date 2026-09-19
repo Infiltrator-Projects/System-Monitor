@@ -248,9 +248,8 @@ LsmDevicePage *performance_build_gpu_page(LsmApp *app, size_t index)
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_GPU, index, stack, button, gpu->display_identifier);
     LsmGpuPageWidgets *widgets = &page->widgets.gpu;
-    lsm_copy_string(page->hardware_product,
-              performance_useful_hardware_name(gpu->name) ? gpu->name : "N/A",
-              sizeof(page->hardware_product));
+    lsm_copy_string(page->hardware_product, sizeof(page->hardware_product),
+                    performance_useful_hardware_name(gpu->name) ? gpu->name : "N/A");
 
     /* Keep GPU presentation consistent with the other Performance pages:
        live metric and identity in the header, graphs in the expandable area,
@@ -493,7 +492,7 @@ LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index)
         snprintf(battery_title, sizeof(battery_title), "%s — %s",
                  button, battery->model);
     else
-        lsm_copy_string(battery_title, button, sizeof(battery_title));
+        lsm_copy_string(battery_title, sizeof(battery_title), button);
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_BATTERY, index, stack, battery_title, battery->name);
     LsmBatteryPageWidgets *widgets = &page->widgets.battery;

@@ -130,7 +130,7 @@ static void executable_from_command(const char *command, char *output,
             (assignment_token(token) || token[0] == '-'))
             continue;
         if (flatpak_wrapper && strcmp(identity, "run") == 0) continue;
-        lsm_copy_string(output, identity, size);
+        lsm_copy_string(output, size, identity);
         return;
     }
 }
@@ -138,7 +138,7 @@ static void executable_from_command(const char *command, char *output,
 static void desktop_id_from_filename(const char *filename, char *id,
                                      size_t size)
 {
-    lsm_copy_string(id, filename ? filename : "", size);
+    lsm_copy_string(id, size, filename ? filename : "");
     char *suffix = strstr(id, ".desktop");
     if (suffix && suffix[8] == '\0') *suffix = '\0';
 }
@@ -204,11 +204,9 @@ static void load_desktop_file(LsmApplicationCatalog *catalog,
     LsmApplicationEntry *entry = calloc(1U, sizeof(*entry));
     if (entry) {
         desktop_id_from_filename(filename, entry->id, sizeof(entry->id));
-        lsm_copy_string(entry->executable, executable, sizeof(entry->executable));
-        lsm_copy_string(entry->name, *name ? name : entry->id,
-                  sizeof(entry->name));
-        lsm_copy_string(entry->icon, *icon ? icon : "application-x-executable",
-                  sizeof(entry->icon));
+        lsm_copy_string(entry->executable, sizeof(entry->executable), executable);
+        lsm_copy_string(entry->name, sizeof(entry->name), *name ? name : entry->id);
+        lsm_copy_string(entry->icon, sizeof(entry->icon), *icon ? icon : "application-x-executable");
         g_ptr_array_add(catalog->entries, entry);
         register_identity(catalog, entry->executable, entry);
         register_desktop_id_aliases(catalog, entry->id, entry);

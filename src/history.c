@@ -337,10 +337,8 @@ static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
 {
     if (!app || !app->history.app_history) return NULL;
     LsmHistorySaveRequest *request = g_new0(LsmHistorySaveRequest, 1U);
-    lsm_copy_string(request->config_dir, app->paths.config_dir,
-              sizeof(request->config_dir));
-    lsm_copy_string(request->path, app->history.history_path,
-              sizeof(request->path));
+    lsm_copy_string(request->config_dir, sizeof(request->config_dir), app->paths.config_dir);
+    lsm_copy_string(request->path, sizeof(request->path), app->history.history_path);
     request->generation = app->history.history_mutation_generation;
     request->count = app->history.history_entry_count;
     if (request->count > 0U)
@@ -887,7 +885,7 @@ void lsm_history_build(LsmApp *app, GtkWidget *container)
     app->history.app_history_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, history_sample_free);
     app->history.history_save_coordinator = history_coordinator_create();
     char *path = g_build_filename(app->paths.config_dir, "app-history.tsv", NULL);
-    lsm_copy_string(app->history.history_path, path, sizeof(app->history.history_path));
+    lsm_copy_string(app->history.history_path, sizeof(app->history.history_path), path);
     g_free(path);
     history_load(app);
 
@@ -979,15 +977,14 @@ void lsm_history_destroy(LsmApp *app)
 gboolean lsm_history_test_init(LsmApp *app, const char *config_dir)
 {
     if (!app || !config_dir || !*config_dir) return FALSE;
-    lsm_copy_string(app->paths.config_dir, config_dir, sizeof(app->paths.config_dir));
+    lsm_copy_string(app->paths.config_dir, sizeof(app->paths.config_dir), config_dir);
     app->history.app_history = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, history_entry_free);
     app->history.app_history_samples = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, history_sample_free);
     char *path = g_build_filename(config_dir, "app-history.tsv", NULL);
     if (!path) return FALSE;
-    lsm_copy_string(app->history.history_path, path,
-              sizeof(app->history.history_path));
+    lsm_copy_string(app->history.history_path, sizeof(app->history.history_path), path);
     g_free(path);
     history_load(app);
     return TRUE;

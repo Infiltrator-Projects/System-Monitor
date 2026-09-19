@@ -94,13 +94,11 @@ static UserInfo *aggregate_users(LsmApp *app, const LsmUserSession *sessions,
         UserInfo *user;
         if (found < 0) {
             user = &users[count++];
-            lsm_copy_string(user->account_identity,
-                      sessions[i].account_identity,
-                      sizeof(user->account_identity));
-            lsm_copy_string(user->username, sessions[i].username,
-                      sizeof(user->username));
-            lsm_copy_string(user->display_name, sessions[i].display_name,
-                      sizeof(user->display_name));
+            lsm_copy_string(user->account_identity, sizeof(user->account_identity),
+                            sessions[i].account_identity);
+            lsm_copy_string(user->username, sizeof(user->username), sessions[i].username);
+            lsm_copy_string(user->display_name, sizeof(user->display_name),
+                            sessions[i].display_name);
         } else {
             user = &users[found];
         }
@@ -126,7 +124,7 @@ static UserInfo *aggregate_users(LsmApp *app, const LsmUserSession *sessions,
 static void format_login_time(uint64_t usec, char *buffer, size_t size)
 {
     if (!usec) {
-        lsm_copy_string(buffer, "N/A", size);
+        lsm_copy_string(buffer, size, "N/A");
         return;
     }
     time_t timestamp = (time_t)(usec / 1000000ULL);
@@ -146,9 +144,9 @@ static void session_location(const LsmUserSession *session, char *buffer, size_t
         snprintf(buffer, size, "%s%s%s", session->seat,
                  *session->seat ? " / " : "", session->tty);
     else if (*session->seat)
-        lsm_copy_string(buffer, session->seat, size);
+        lsm_copy_string(buffer, size, session->seat);
     else
-        lsm_copy_string(buffer, "Local", size);
+        lsm_copy_string(buffer, size, "Local");
 }
 
 static gboolean selected_user_row(LsmApp *app, char **session_id, char **username,

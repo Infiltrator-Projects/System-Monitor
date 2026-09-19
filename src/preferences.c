@@ -154,8 +154,8 @@ void lsm_preferences_load(LsmApp *app)
                 value, 0, LSM_TAB_LAYOUT_VERSION, 0);
         else if (strcmp(key, "performance_page") == 0 &&
                  valid_stack_name(value))
-            lsm_copy_string(app->runtime.selected_performance_page, value,
-                      sizeof(app->runtime.selected_performance_page));
+            lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
+                            value);
         else if (strncmp(key, "page_scroll_", 12U) == 0 &&
                  key[12] >= '0' && key[12] <= '7' && key[13] == '\0') {
             const size_t index = (size_t)(key[12] - '0');
