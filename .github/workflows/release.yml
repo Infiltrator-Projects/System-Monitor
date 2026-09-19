@@ -85,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="system-monitor_${version}_amd64.deb"
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
           test -f "$deb"
 
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
@@ -131,7 +131,7 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v${version}"
-          deb="system-monitor_${version}_amd64.deb"
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
           installer="system-monitor-${version}-native-installer.run"
           test -f "$deb"
           test -x "$installer"
