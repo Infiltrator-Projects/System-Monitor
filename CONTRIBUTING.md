@@ -2,11 +2,13 @@
 
 # Contributing to System Monitor
 
-System Monitor uses C and C++ as equal first-class project languages. The implementation chooses between them per component according to correctness, clarity, performance, maintainability and control. Other language/runtime ecosystems require a concrete capability that C/C++ cannot reasonably provide.
+System Monitor uses C and C++ as equal first-class project languages. C, procedural C++ and object-oriented C++ are implementation styles, not competing identities: choose the style that expresses the component most clearly and strongly. The decision is based on correctness, clarity, performance, maintainability and control. Other language/runtime ecosystems require a concrete capability that C/C++ cannot reasonably provide.
 
 ## Engineering rules
 
 - Go as low in the stack as practical and prefer authoritative native interfaces over parsing external monitoring utilities.
+- Do not introduce objects, inheritance or virtual dispatch merely because C++ permits them; use OO where encapsulated state or genuine polymorphism makes the design stronger, and prefer direct procedural/value-oriented code otherwise.
+- Use C++ facilities such as RAII, stronger types, templates or scoped ownership when they make the implementation safer or clearer without hiding important control flow or machine semantics.
 - Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
 - Keep GTK types out of reusable accounting, parsing and model layers.
 - Keep System-Monitor-specific hardware and UI policy local.

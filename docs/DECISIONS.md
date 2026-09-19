@@ -12,11 +12,11 @@ This file records durable architectural choices for System Monitor.
 
 ## ADR-002 — C and C++ are equal first-class choices
 
-**Decision.** Choose C or C++ per component; neither language is preferred over the other by policy.
+**Decision.** Choose C or C++ per component; neither language is preferred over the other by policy. Within C++, procedural/value-oriented and object-oriented styles are also selected by fit rather than ideology.
 
-**Rationale.** Technical quality, control and clarity matter more than language fashion.
+**Rationale.** C, C++ and OO C++ can express the same underlying systems work with different strengths. Plain C often maps most directly to native ABIs and explicit data flow; C++ can strengthen ownership, types and generic code; OO C++ is useful when encapsulated state or genuine runtime polymorphism matches the problem. Technical quality, control and clarity matter more than language or paradigm fashion.
 
-**Consequence.** The installed application may remain mostly C while developer or future components use C++ when it is the stronger solution.
+**Consequence.** Existing C remains C when it is the strongest implementation. C++ features or OO structure are introduced when they make a component demonstrably better, not merely because they are available. Conversely, C++ is not rejected where it provides the stronger solution.
 
 ## ADR-003 — Snapshots isolate collection from presentation
 

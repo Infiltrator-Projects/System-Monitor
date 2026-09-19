@@ -8,7 +8,9 @@ System Monitor uses C and C++ as equal, first-class project languages. The curre
 
 Choose C or C++ according to which gives the stronger implementation for the component: correctness, clarity, performance, maintainability and control are more important than language preference. Neither C nor C++ is subordinate to the other.
 
-Project-owned code should prefer C or C++ over introducing another language ecosystem. A different language or runtime requires a concrete technical advantage that C/C++ cannot reasonably provide; novelty or convenience alone is not sufficient. Within C and C++, newer features are adopted for demonstrated benefit rather than because they are newer.
+Treat C, procedural C++ and object-oriented C++ as different expressive tools for the same systems-programming domain. Some problems are clearest as plain data and functions; others benefit from C++ value types, RAII, stronger type relationships, templates or scoped ownership. Object orientation is appropriate when the problem genuinely contains encapsulated state or interchangeable runtime behaviour. It is not a reason to manufacture inheritance hierarchies around kernel, driver or hardware interfaces that are naturally procedural.
+
+Project-owned code should prefer C or C++ over introducing another language ecosystem. A different language or runtime requires a concrete technical advantage that C/C++ cannot reasonably provide; novelty or convenience alone is not sufficient. Within C and C++, newer features and OO techniques are adopted for demonstrated benefit rather than because the language makes them available.
 
 Application-facing snapshots and contracts currently remain plain C because that is the established interface contract, not because C is preferred over C++. They must not expose Linux handles, GTK objects, implementation-owned paths or hidden global ownership.
 

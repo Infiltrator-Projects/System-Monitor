@@ -15,9 +15,11 @@ System Monitor starts from the behaviour the product must own, studies standards
 
 The project does not promise that every metric exists on every machine, and it does not treat command-line utility output as a stable API when a stronger native interface is available.
 
-## Dependency policy
+## Language and dependency policy
 
-C and C++ are preferred for first-party native implementation where they fit the problem. Platform frameworks and external libraries are used when their documented contract is the stronger engineering choice. A dependency must not silently become the source of product policy, and exact first-party dependencies are pinned where reproducibility requires it.
+C and C++ are preferred for first-party native implementation where they fit the problem. The project does not treat C, procedural C++ or object-oriented C++ as a hierarchy of better and worse languages or styles. They are different expressive tools: direct C may best match a native ABI or simple state transform; C++ may better express ownership, invariants or generic algorithms; OO C++ may be appropriate when encapsulated state or real polymorphism exists. The design should use whichever form makes the actual problem clearest without adding abstraction for its own sake.
+
+Platform frameworks and external libraries are used when their documented contract is the stronger engineering choice. A dependency must not silently become the source of product policy, and exact first-party dependencies are pinned where reproducibility requires it.
 
 ## Failure philosophy
 
