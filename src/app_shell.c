@@ -43,6 +43,39 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
     }
 }
 
+static gboolean lsm_system_prefers_dark(void)
+{
+    GtkSettings *settings = gtk_settings_get_default();
+    if (!settings) return FALSE;
+
+    gboolean prefer_dark = FALSE;
+    gchar *theme_name = NULL;
+    g_object_get(settings,
+                 "gtk-application-prefer-dark-theme", &prefer_dark,
+                 "gtk-theme-name", &theme_name,
+                 NULL);
+
+    gboolean dark = prefer_dark;
+    if (theme_name) {
+        gchar *lower = g_ascii_strdown(theme_name, -1);
+        dark = dark || (lower && strstr(lower, "dark") != NULL);
+        g_free(lower);
+        g_free(theme_name);
+    }
+    return dark;
+}
+
+static void on_system_theme_changed(GtkSettings *settings,
+                                    GParamSpec *pspec,
+                                    gpointer user_data)
+{
+    (void)settings;
+    (void)pspec;
+    LsmApp *app = user_data;
+    if (app && app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM)
+        lsm_app_shell_apply_theme(app);
+}
+
 static const char lsm_base_css[] =
     "* { font-family: \"MB Corpo S Title WEB\"; font-weight: 400; }"
     "headerbar .title, .titlebar .title {"
@@ -66,17 +99,20 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         gtk_style_context_add_provider_for_screen(
             screen, GTK_STYLE_PROVIDER(app->shell.theme_provider),
             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50U);
-    }
 
-    if (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM) {
-        gtk_css_provider_load_from_data(
-            app->shell.theme_provider, lsm_base_css, -1, NULL);
-        if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
-        return;
+        GtkSettings *settings = gtk_settings_get_default();
+        if (settings) {
+            g_signal_connect(settings, "notify::gtk-theme-name",
+                             G_CALLBACK(on_system_theme_changed), app);
+            g_signal_connect(settings,
+                             "notify::gtk-application-prefer-dark-theme",
+                             G_CALLBACK(on_system_theme_changed), app);
+        }
     }
 
     const InfiltratrThemePalette *palette =
-        infiltratr_theme_resolve(app->runtime.theme_mode, false);
+        infiltratr_theme_resolve(app->runtime.theme_mode,
+                                 lsm_system_prefers_dark());
     char css[8192];
     const int written = snprintf(
         css, sizeof(css),
