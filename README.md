@@ -6,8 +6,8 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.42 ([version file](support/VERSION))\
-**Shared foundation:** exact Common 1.19.4 gitlink at `src/infiltratr-common`  
+**Current source version:** 1.0.43 ([version file](support/VERSION))\
+**Shared foundation:** exact Common 1.19.6 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
 
@@ -31,7 +31,7 @@ Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB lab
 
 System Monitor packages the MB Corpo typefaces used by its interface. Normal UI text uses **MB Corpo S Title WEB** and title text uses **MB Corpo A Title Cond WEB**, with the S family as the only application-level fallback.
 
-**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system keeps the host GTK/Mint palette authoritative. Day and Night use the semantic palettes supplied by the pinned Common release, and the choice is stored per user.
+**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the exact Common Day or Night palette; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette and Night is the MB graphite/black palette with the canonical blue accent. The choice is stored per user.
 
 ## Capabilities
 
@@ -55,7 +55,7 @@ Linux backends and collectors
         ↓
 procfs / sysfs / ioctls / D-Bus / optional in-process driver libraries
 
-Common 1.19.4
+Common 1.19.6
         ↓
 shared parsing / formatting / timing / path / durable-I/O / allocation primitives
 ```
