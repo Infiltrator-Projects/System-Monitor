@@ -401,8 +401,13 @@ static double read_active_dpm_clock(const char *path)
     double clock = NAN;
     while (fgets(line, sizeof(line), file)) {
         if (!strchr(line, '*')) continue;
+        const char *cursor = line;
+        uint64_t level = 0U;
         double value = 0.0;
-        if (sscanf(line, "%*u: %lf", &value) == 1) {
+        if (!lsm_parse_u64_token(&cursor, 10U, &level) || *cursor != ':')
+            continue;
+        cursor++;
+        if (lsm_parse_double_token(&cursor, true, &value)) {
             clock = value;
             break;
         }
@@ -421,8 +426,9 @@ static bool read_gpu_engine_busy(const LsmGpuTelemetryCache *cache,
         if (!cache->engine_busy[index] ||
             !lsm_read_u64_file(cache->engine_busy[index], &value))
             return false;
-        if (UINT64_MAX - sum < value) return false;
-        sum += value;
+        uint64_t next = 0U;
+        if (!lsm_u64_add_checked(sum, value, &next)) return false;
+        sum = next;
     }
     *total = sum;
     return true;

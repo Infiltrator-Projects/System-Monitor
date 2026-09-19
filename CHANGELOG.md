@@ -10,7 +10,7 @@ No unreleased changes.
 
 - Pin both Make and CMake builds, the source gitlink, project-identity regression test and maintained documentation to exact Common 1.19.8.
 - Consume Common 1.19.8's internal duplicate-code cleanup without changing System Monitor's public behaviour or Linux/hardware ownership boundaries.
-- Replace remaining private generic quantity, numeric-token, prefix, trimming and lexical-basename mechanics with Common where Common's contract is equal or stronger; retain Linux record grammar and product policy locally.
+- Replace remaining private generic quantity, numeric-token, checked-arithmetic, prefix, trimming and lexical-basename mechanics with Common where Common's contract is equal or stronger; retain Linux record grammar and product policy locally.
 - Restore one authoritative Common version across all build paths after the 1.19.6/1.19.7 metadata drift that caused the Make verification gate to fail.
 - Repair the strict-check GTK compatibility declarations required by the System-theme observer introduced in the 1.0.43 appearance work.
 

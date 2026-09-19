@@ -82,7 +82,7 @@ static LsmBluetoothCaptureState capture_state = {
 static bool controller_index(const char *controller, uint16_t *index)
 {
     uint64_t value = 0U;
-    if (!controller || !index || strncmp(controller, "hci", 3U) != 0 ||
+    if (!controller || !index || !lsm_string_starts_with(controller, "hci") ||
         controller[3] == '\0' ||
         !lsm_parse_u64_range(controller + 3U, 10U, 0U, UINT16_MAX, &value))
         return false;

@@ -353,15 +353,15 @@ static void native_device_identity(const char *hardware_path,
                             "Microsoft Hyper-V Storage Adapter");
     }
     if (strcmp(vendor, "N/A") == 0 &&
-        (strncmp(driver, "hv_", 3) == 0 ||
-         strncmp(driver, "hyperv_", 7) == 0))
+        (lsm_string_starts_with(driver, "hv_") ||
+         lsm_string_starts_with(driver, "hyperv_")))
         lsm_copy_string(vendor, vendor_size, "Microsoft Corporation");
 
     if (strcmp(product, "N/A") == 0 && pci_device &&
         vendor_id[0] && device_id[0]) {
-        const char *vendor_text = strncmp(vendor_id, "0x", 2) == 0
+        const char *vendor_text = lsm_string_starts_with(vendor_id, "0x")
             ? vendor_id + 2 : vendor_id;
-        const char *device_text = strncmp(device_id, "0x", 2) == 0
+        const char *device_text = lsm_string_starts_with(device_id, "0x")
             ? device_id + 2 : device_id;
         (void)snprintf(product, product_size, "PCI %.4s:%.4s",
                        vendor_text, device_text);
@@ -1116,7 +1116,7 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
         const char *card = entry->d_name;
-        if (strncmp(card, "card", 4) != 0 || !isdigit((unsigned char)card[4]) ||
+        if (!lsm_string_starts_with(card, "card") || !isdigit((unsigned char)card[4]) ||
             strchr(card, '-'))
             continue;
 
@@ -1236,7 +1236,7 @@ static double thermal_cpu_temperature(const LsmSystemSources *sources)
     double best = NAN;
     struct dirent *entry = NULL;
     while ((entry = readdir(directory))) {
-        if (strncmp(entry->d_name, "thermal_zone", 12) != 0) continue;
+        if (!lsm_string_starts_with(entry->d_name, "thermal_zone")) continue;
         char path[LSM_PATH_LEN];
         char type[128] = "";
         if (!child_path(path, sizeof(path), root, entry->d_name, "/type") ||

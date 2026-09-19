@@ -181,8 +181,8 @@ static void bluetooth_device_type(const char *icon, char *destination,
     if (!icon || !icon[0]) return;
 
     const char *source = icon;
-    if (strncmp(source, "audio-", 6U) == 0) source += 6U;
-    else if (strncmp(source, "input-", 6U) == 0) source += 6U;
+    if (lsm_string_starts_with(source, "audio-")) source += 6U;
+    else if (lsm_string_starts_with(source, "input-")) source += 6U;
 
     size_t used = 0U;
     bool first = true;

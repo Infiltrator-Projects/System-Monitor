@@ -33,6 +33,8 @@
 #define lsm_parse_u64_range infiltratr_parse_u64_range
 #define lsm_parse_i64_range infiltratr_parse_i64_range
 #define lsm_parse_u64_token infiltratr_parse_u64_token
+#define lsm_parse_i64_token infiltratr_parse_i64_token
+#define lsm_parse_double_token infiltratr_parse_double_token
 #define lsm_array_reserve infiltratr_array_reserve
 #define lsm_clamp_double infiltratr_clamp_double
 #define lsm_realpath_copy infiltratr_realpath_copy
@@ -44,6 +46,7 @@
 #define lsm_read_u64_or_zero infiltratr_read_u64_or_zero
 #define lsm_read_double_file infiltratr_read_double_file
 #define lsm_read_double_or_nan infiltratr_read_double_or_nan
+#define lsm_u64_add_checked infiltratr_u64_add_checked
 #define lsm_u64_add_saturating infiltratr_u64_add_saturating
 #define lsm_u64_multiply_checked infiltratr_u64_multiply_checked
 #define lsm_u64_multiply_saturating infiltratr_u64_multiply_saturating

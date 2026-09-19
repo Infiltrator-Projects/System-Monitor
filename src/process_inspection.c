@@ -218,7 +218,7 @@ static void read_thread_state(const char *path, char *state, size_t state_size)
     if (!file) return;
     char line[256];
     while (fgets(line, sizeof(line), file)) {
-        if (strncmp(line, "State:", 6U) != 0) continue;
+        if (!lsm_string_starts_with(line, "State:")) continue;
         char *value = line + 6U;
         while (*value == ' ' || *value == '\t') value++;
         lsm_trim_line_end(value);

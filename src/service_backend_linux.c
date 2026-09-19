@@ -189,8 +189,8 @@ bool lsm_service_backend_collect(LsmServiceEntry **out_entries,
 bool lsm_service_backend_state_is_enabled(const char *state)
 {
     return state &&
-           (strncmp(state, "enabled", 7U) == 0 ||
-            strncmp(state, "linked", 6U) == 0 ||
+           (lsm_string_starts_with(state, "enabled") ||
+            lsm_string_starts_with(state, "linked") ||
             strcmp(state, "alias") == 0);
 }
 

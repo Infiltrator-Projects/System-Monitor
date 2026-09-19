@@ -100,7 +100,7 @@ const char *performance_page_colour(LsmPageType type)
 bool performance_useful_hardware_name(const char *name)
 {
     return name && name[0] && strcmp(name, "N/A") != 0 &&
-           strncmp(name, "PCI ", 4) != 0;
+           !lsm_string_starts_with(name, "PCI ");
 }
 
 void performance_numbered_device_name(char *buffer, size_t size,
@@ -566,13 +566,13 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
 {
     if (!name || !*name || strcmp(name, "cpu") == 0 ||
         strcmp(name, "memory") == 0) return true;
-    if (strncmp(name, "disk-", 5) == 0) {
+    if (lsm_string_starts_with(name, "disk-")) {
         for (size_t index = 0; index < app->monitor.disk_count; index++)
             if (strcmp(app->monitor.disks[index].name, name + 5) == 0) return true;
-    } else if (strncmp(name, "network-", 8) == 0) {
+    } else if (lsm_string_starts_with(name, "network-")) {
         for (size_t index = 0; index < app->monitor.net_count; index++)
             if (strcmp(app->monitor.nets[index].name, name + 8) == 0) return true;
-    } else if (strncmp(name, "bluetooth-", 10) == 0) {
+    } else if (lsm_string_starts_with(name, "bluetooth-")) {
         for (size_t index = 0; index < app->monitor.bluetooth_device_count;
              index++) {
             char candidate[96];
@@ -583,7 +583,7 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
                 device->address, device->alias);
             if (strcmp(candidate, name) == 0) return true;
         }
-    } else if (strncmp(name, "gpu-", 4) == 0) {
+    } else if (lsm_string_starts_with(name, "gpu-")) {
         for (size_t index = 0; index < app->monitor.gpu_count; index++) {
             char candidate[96];
             const LsmGpuInfo *gpu = &app->monitor.gpus[index];
@@ -591,10 +591,10 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
                               gpu->platform_identity, gpu->display_identifier);
             if (strcmp(candidate, name) == 0) return true;
         }
-    } else if (strncmp(name, "battery-", 8) == 0) {
+    } else if (lsm_string_starts_with(name, "battery-")) {
         for (size_t index = 0; index < app->monitor.battery_count; index++)
             if (strcmp(app->monitor.batteries[index].name, name + 8) == 0) return true;
-    } else if (strncmp(name, "npu-", 4) == 0) {
+    } else if (lsm_string_starts_with(name, "npu-")) {
         for (size_t index = 0; index < app->monitor.npu_count; index++) {
             char candidate[96];
             const LsmNpuInfo *npu = &app->monitor.npus[index];
