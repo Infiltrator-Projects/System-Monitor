@@ -153,11 +153,12 @@ else()
         "No native monitor/process/service backend is implemented for ${CMAKE_SYSTEM_NAME}")
 endif()
 list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX
-    "src/(monitor_backend|process_backend|service_backend)_[^/]+\\.c$")
+    "src/(monitor_backend|process_backend|service_backend|user_backend)_[^/]+\\.c$")
 list(APPEND LSM_SOURCE_NAMES
     "src/monitor_backend_${LSM_PLATFORM_NAME}.c"
     "src/process_backend_${LSM_PLATFORM_NAME}.c"
-    "src/service_backend_${LSM_PLATFORM_NAME}.c")
+    "src/service_backend_${LSM_PLATFORM_NAME}.c"
+    "src/user_backend_${LSM_PLATFORM_NAME}.c")
 
 set(LSM_MONITOR_CORE_SOURCES
     src/monitor.c)

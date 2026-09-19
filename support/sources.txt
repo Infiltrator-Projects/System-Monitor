@@ -40,6 +40,7 @@ startup.c
 services.c
 service_backend_linux.c
 users.c
+user_backend_linux.c
 monitor.c
 monitor_backend_linux.c
 monitor_cpu_memory.c

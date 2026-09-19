@@ -499,6 +499,27 @@ static void check_service_page_boundary(const char *path, const char *text)
     }
 }
 
+static void check_user_page_boundary(const char *path, const char *text)
+{
+    if (strcmp(path, "src/users.c") != 0) return;
+    static const char *const native_markers[] = {
+        "org.freedesktop.login1",
+        "g_dbus_connection_call",
+        "g_bus_get_sync",
+        "GVariant",
+        "getpwuid(",
+        "uid_t"
+    };
+    for (size_t index = 0U;
+         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
+        const char *found = strstr(text, native_markers[index]);
+        if (found)
+            report_error(
+                "%s:%zu: native user/session detail crosses the backend boundary",
+                path, line_number_at(text, found));
+    }
+}
+
 static void check_process_platform_boundary(const char *path, const char *text)
 {
     static const char *const contract_files[] = {
@@ -583,6 +604,7 @@ static void check_source_file(const char *path)
     check_unit_label_policy(path, text);
     check_platform_path_boundary(path, text);
     check_service_page_boundary(path, text);
+    check_user_page_boundary(path, text);
     check_process_platform_boundary(path, text);
 
     size_t line_number = 1U;

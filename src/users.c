@@ -2,12 +2,12 @@
 #define _POSIX_C_SOURCE 200809L
 /**
  * @file users.c
- * @brief Logged-in users and sessions through systemd-logind D-Bus.
+ * @brief GTK presentation and process aggregation for logged-in sessions.
  *
- * Session identity comes directly from org.freedesktop.login1.  Resource totals
- * are calculated from the same retained /proc snapshot used by the Processes
- * tab, avoiding another complete process scan.  Parent rows represent users;
- * child rows represent graphical, terminal or remote sessions.
+ * Native session discovery and sign-out are delegated through user_backend.h.
+ * Resource totals are calculated from the retained process snapshot, avoiding
+ * another process scan. Parent rows represent users; child rows represent
+ * graphical, terminal or remote sessions.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016 Shannon Smith
@@ -15,12 +15,11 @@
  */
 #include "users.h"
 #include "app_internal.h"
-#include "app_config.h"
 #include "common.h"
 #include "ui_helpers.h"
+#include "user_backend.h"
 
 #include <math.h>
-#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,31 +37,13 @@ enum {
     USER_COL_MEMORY,
     USER_COL_LOGIN,
     USER_COL_SESSION_ID,
-    USER_COL_UID,
     USER_COL_IS_SESSION,
     USER_COL_USERNAME,
     USER_N_COLUMNS
 };
 
 typedef struct {
-    char id[64];
-    uid_t uid;
-    char username[64];
-    char seat[64];
-    char object_path[LSM_PATH_LEN];
-    char state[32];
-    char type[64];
-    char session_class[64];
-    char tty[64];
-    char display[64];
-    char remote_host[LSM_NAME_LEN];
-    gboolean remote;
-    guint32 leader;
-    guint64 timestamp;
-} SessionInfo;
-
-typedef struct {
-    uid_t uid;
+    char account_identity[128];
     char username[64];
     char display_name[LSM_NAME_LEN];
     unsigned session_count;
@@ -72,7 +53,7 @@ typedef struct {
 } UserInfo;
 
 typedef struct {
-    SessionInfo *sessions;
+    LsmUserSession *sessions;
     size_t session_count;
     char *error_message;
     char *preserve_session;
@@ -87,185 +68,19 @@ typedef struct {
     gboolean cancelled;
 } UserActionResult;
 
-/* login1 queries run in GTask workers; GTK receives only bounded snapshots. */
-static GVariant *login_manager_call_on_bus(GDBusConnection *bus,
-                                           const char *method,
-                                           GVariant *parameters,
-                                           int timeout_ms,
-                                           GCancellable *cancellable,
-                                           GError **error)
+static ssize_t user_find(UserInfo *users, size_t count,
+                         const char *account_identity)
 {
-    if (!bus) return NULL;
-    return g_dbus_connection_call_sync(bus,
-        "org.freedesktop.login1",
-        "/org/freedesktop/login1",
-        "org.freedesktop.login1.Manager",
-        method,
-        parameters,
-        NULL,
-        G_DBUS_CALL_FLAGS_NONE,
-        timeout_ms,
-        cancellable,
-        error);
-}
-
-static GVariant *session_properties_on_bus(GDBusConnection *bus,
-                                           const char *object_path,
-                                           GCancellable *cancellable,
-                                           GError **error)
-{
-    if (!bus) return NULL;
-    GVariant *reply = g_dbus_connection_call_sync(bus,
-        "org.freedesktop.login1",
-        object_path,
-        "org.freedesktop.DBus.Properties",
-        "GetAll",
-        g_variant_new("(s)", "org.freedesktop.login1.Session"),
-        NULL,
-        G_DBUS_CALL_FLAGS_NONE,
-        LSM_DBUS_QUERY_TIMEOUT_MS,
-        cancellable,
-        error);
-    if (!reply) return NULL;
-    GVariant *dictionary = g_variant_get_child_value(reply, 0);
-    g_variant_unref(reply);
-    return dictionary;
-}
-
-static void property_string(GVariant *dictionary, const char *key,
-                            char *buffer, size_t buffer_size)
-{
-    GVariant *value = g_variant_lookup_value(dictionary, key, NULL);
-    if (!value) return;
-    const char *text = g_variant_get_string(value, NULL);
-    if (text) g_strlcpy(buffer, text, buffer_size);
-    g_variant_unref(value);
-}
-
-static gboolean property_boolean(GVariant *dictionary, const char *key)
-{
-    GVariant *value = g_variant_lookup_value(dictionary, key, NULL);
-    if (!value) return FALSE;
-    gboolean result = g_variant_get_boolean(value);
-    g_variant_unref(value);
-    return result;
-}
-
-static guint32 property_uint32(GVariant *dictionary, const char *key)
-{
-    GVariant *value = g_variant_lookup_value(dictionary, key, NULL);
-    if (!value) return 0;
-    guint32 result = g_variant_get_uint32(value);
-    g_variant_unref(value);
-    return result;
-}
-
-static guint64 property_uint64(GVariant *dictionary, const char *key)
-{
-    GVariant *value = g_variant_lookup_value(dictionary, key, NULL);
-    if (!value) return 0;
-    guint64 result = g_variant_get_uint64(value);
-    g_variant_unref(value);
-    return result;
-}
-
-static SessionInfo *parse_session_list(GVariant *reply, size_t *out_count)
-{
-    SessionInfo *sessions = NULL;
-    size_t count = 0, capacity = 0;
-    GVariantIter *iter = NULL;
-    g_variant_get(reply, "(a(susso))", &iter);
-    const char *id, *username, *seat, *path;
-    guint32 uid;
-    while (g_variant_iter_loop(iter, "(&su&s&s&o)", &id, &uid, &username, &seat, &path)) {
-        if (!lsm_array_reserve((void **)&sessions, &capacity,
-                               sizeof(*sessions), count + 1U, 8U))
-            break;
-        SessionInfo *session = &sessions[count++];
-        memset(session, 0, sizeof(*session));
-        g_strlcpy(session->id, id, sizeof(session->id));
-        session->uid = (uid_t)uid;
-        g_strlcpy(session->username, username, sizeof(session->username));
-        g_strlcpy(session->seat, seat, sizeof(session->seat));
-        g_strlcpy(session->object_path, path, sizeof(session->object_path));
-    }
-    g_variant_iter_free(iter);
-    *out_count = count;
-    return sessions;
-}
-
-static SessionInfo *collect_sessions(GDBusConnection *bus,
-                                     GCancellable *cancellable,
-                                     size_t *out_count, GError **error)
-{
-    *out_count = 0;
-    GVariant *reply = login_manager_call_on_bus(
-        bus, "ListSessions", NULL, LSM_DBUS_QUERY_TIMEOUT_MS,
-        cancellable, error);
-    if (!reply) return NULL;
-
-    SessionInfo *sessions = parse_session_list(reply, out_count);
-    g_variant_unref(reply);
-    for (size_t index = 0; index < *out_count; index++) {
-        if (g_cancellable_is_cancelled(cancellable)) break;
-        SessionInfo *session = &sessions[index];
-        GError *property_error = NULL;
-        GVariant *properties = session_properties_on_bus(
-            bus, session->object_path, cancellable, &property_error);
-        if (properties) {
-            property_string(properties, "State", session->state,
-                            sizeof(session->state));
-            property_string(properties, "Type", session->type,
-                            sizeof(session->type));
-            property_string(properties, "Class", session->session_class,
-                            sizeof(session->session_class));
-            property_string(properties, "TTY", session->tty,
-                            sizeof(session->tty));
-            property_string(properties, "Display", session->display,
-                            sizeof(session->display));
-            property_string(properties, "RemoteHost", session->remote_host,
-                            sizeof(session->remote_host));
-            session->remote = property_boolean(properties, "Remote");
-            session->leader = property_uint32(properties, "Leader");
-            session->timestamp = property_uint64(properties, "Timestamp");
-            g_variant_unref(properties);
-        }
-        if (property_error) g_error_free(property_error);
-        if (!*session->state)
-            g_strlcpy(session->state, "online", sizeof(session->state));
-        if (!*session->type)
-            g_strlcpy(session->type, "unspecified", sizeof(session->type));
-    }
-    return sessions;
-}
-
-static ssize_t user_find(UserInfo *users, size_t count, uid_t uid)
-{
-    for (size_t i = 0; i < count; i++) if (users[i].uid == uid) return (ssize_t)i;
+    if (!account_identity || !account_identity[0]) return -1;
+    for (size_t index = 0U; index < count; index++)
+        if (strcmp(users[index].account_identity, account_identity) == 0)
+            return (ssize_t)index;
     return -1;
-}
-
-static void fill_display_name(UserInfo *user)
-{
-    struct passwd *password = getpwuid(user->uid);
-    if (!password) {
-        g_strlcpy(user->display_name, user->username, sizeof(user->display_name));
-        return;
-    }
-    if (password->pw_gecos && *password->pw_gecos) {
-        char gecos[LSM_NAME_LEN];
-        g_strlcpy(gecos, password->pw_gecos, sizeof(gecos));
-        char *comma = strchr(gecos, ',');
-        if (comma) *comma = '\0';
-        g_strlcpy(user->display_name, gecos, sizeof(user->display_name));
-    } else {
-        g_strlcpy(user->display_name, password->pw_name, sizeof(user->display_name));
-    }
 }
 
 /* Multiple sessions are grouped under one user while retaining child rows for
  * session-specific sign-out and location details. */
-static UserInfo *aggregate_users(LsmApp *app, const SessionInfo *sessions,
+static UserInfo *aggregate_users(LsmApp *app, const LsmUserSession *sessions,
                                  size_t session_count, size_t *out_count)
 {
     if (out_count) *out_count = 0;
@@ -274,30 +89,28 @@ static UserInfo *aggregate_users(LsmApp *app, const SessionInfo *sessions,
     if (!users) return NULL;
     size_t count = 0;
     for (size_t i = 0; i < session_count; i++) {
-        ssize_t found = user_find(users, count, sessions[i].uid);
+        ssize_t found = user_find(
+            users, count, sessions[i].account_identity);
         UserInfo *user;
         if (found < 0) {
             user = &users[count++];
-            user->uid = sessions[i].uid;
-            g_strlcpy(user->username, sessions[i].username, sizeof(user->username));
-            fill_display_name(user);
-        } else user = &users[found];
+            g_strlcpy(user->account_identity,
+                      sessions[i].account_identity,
+                      sizeof(user->account_identity));
+            g_strlcpy(user->username, sessions[i].username,
+                      sizeof(user->username));
+            g_strlcpy(user->display_name, sessions[i].display_name,
+                      sizeof(user->display_name));
+        } else {
+            user = &users[found];
+        }
         user->session_count++;
     }
 
     for (size_t i = 0; i < app->process.process_snapshot_count; i++) {
         const LsmProcessInfo *process = &app->process.process_snapshot[i];
-        ssize_t found = -1;
-        for (size_t user_index = 0; user_index < count; user_index++) {
-            char account_identity[128];
-            (void)snprintf(account_identity, sizeof(account_identity),
-                           "uid:%llu",
-                           (unsigned long long)users[user_index].uid);
-            if (strcmp(account_identity, process->account_identity) == 0) {
-                found = (ssize_t)user_index;
-                break;
-            }
-        }
+        const ssize_t found =
+            user_find(users, count, process->account_identity);
         if (found < 0) continue;
         UserInfo *user = &users[found];
         user->process_count++;
@@ -310,7 +123,7 @@ static UserInfo *aggregate_users(LsmApp *app, const SessionInfo *sessions,
     return users;
 }
 
-static void format_login_time(guint64 usec, char *buffer, size_t size)
+static void format_login_time(uint64_t usec, char *buffer, size_t size)
 {
     if (!usec) {
         g_strlcpy(buffer, "N/A", size);
@@ -322,7 +135,7 @@ static void format_login_time(guint64 usec, char *buffer, size_t size)
     strftime(buffer, size, "%d/%m/%Y %H:%M", &local);
 }
 
-static void session_location(const SessionInfo *session, char *buffer, size_t size)
+static void session_location(const LsmUserSession *session, char *buffer, size_t size)
 {
     if (session->remote && *session->remote_host)
         snprintf(buffer, size, "Remote: %s", session->remote_host);
@@ -339,7 +152,7 @@ static void session_location(const SessionInfo *session, char *buffer, size_t si
 }
 
 static gboolean selected_user_row(LsmApp *app, char **session_id, char **username,
-                                  guint *uid, gboolean *is_session)
+                                  gboolean *is_session)
 {
     GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->users.users_tree));
     GtkTreeModel *model = NULL;
@@ -348,7 +161,6 @@ static gboolean selected_user_row(LsmApp *app, char **session_id, char **usernam
     gtk_tree_model_get(model, &iter,
                        USER_COL_SESSION_ID, session_id,
                        USER_COL_USERNAME, username,
-                       USER_COL_UID, uid,
                        USER_COL_IS_SESSION, is_session,
                        -1);
     return TRUE;
@@ -417,10 +229,9 @@ static void user_show_processes(GtkButton *button, gpointer user_data)
     (void)button;
     LsmApp *app = user_data;
     char *session = NULL, *username = NULL;
-    guint uid = 0;
     gboolean is_session = FALSE;
-    if (selected_user_row(app, &session, &username, &uid, &is_session)) {
-        (void)uid; (void)is_session;
+    if (selected_user_row(app, &session, &username, &is_session)) {
+        (void)is_session;
         gtk_entry_set_text(GTK_ENTRY(app->processes.processes_search),
                            username ? username : "");
         gtk_notebook_set_current_page(GTK_NOTEBOOK(app->shell.notebook),
@@ -448,17 +259,8 @@ static void user_action_worker(GTask *task, gpointer source_object,
     (void)source_object;
     UserActionResult *result = task_data;
     GError *error = NULL;
-    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
-    if (bus) {
-        GVariant *parameters = g_variant_ref_sink(
-            g_variant_new("(s)", result->session));
-        GVariant *reply = login_manager_call_on_bus(
-            bus, "TerminateSession", parameters,
-            LSM_DBUS_ACTION_TIMEOUT_MS, cancellable, &error);
-        g_variant_unref(parameters);
-        if (reply) g_variant_unref(reply);
-        g_object_unref(bus);
-    }
+    (void)lsm_user_backend_terminate_session(
+        result->session, cancellable, &error);
     if (error) {
         result->error_message = g_strdup(error->message);
         g_error_free(error);
@@ -511,15 +313,12 @@ static void user_signout(GtkButton *button, gpointer user_data)
     (void)button;
     LsmApp *app = user_data;
     char *session = NULL, *username = NULL;
-    guint uid = 0;
     gboolean is_session = FALSE;
-    if (!selected_user_row(app, &session, &username, &uid, &is_session) ||
+    if (!selected_user_row(app, &session, &username, &is_session) ||
         !is_session || !session || !*session) {
         g_free(session); g_free(username);
         return;
     }
-    (void)uid;
-
     GtkWidget *confirm = gtk_message_dialog_new(GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
         "Sign out session %s?", session);
@@ -556,7 +355,7 @@ static void user_refresh_result_free(gpointer data)
 {
     UserRefreshResult *result = data;
     if (!result) return;
-    free(result->sessions);
+    lsm_user_backend_free(result->sessions);
     g_free(result->error_message);
     g_free(result->preserve_session);
     g_free(result->preserve_username);
@@ -571,12 +370,8 @@ static void user_refresh_worker(GTask *task, gpointer source_object,
     (void)source_object;
     UserRefreshResult *result = task_data;
     GError *error = NULL;
-    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
-    if (bus) {
-        result->sessions = collect_sessions(bus, cancellable,
-                                            &result->session_count, &error);
-        g_object_unref(bus);
-    }
+    (void)lsm_user_backend_collect(
+        &result->sessions, &result->session_count, cancellable, &error);
     if (error) {
         result->error_message = g_strdup(error->message);
         g_error_free(error);
@@ -636,19 +431,21 @@ static void apply_user_refresh(LsmApp *app, UserRefreshResult *result)
                            USER_COL_MEMORY, memory_text,
                            USER_COL_LOGIN, "",
                            USER_COL_SESSION_ID, "",
-                           USER_COL_UID, (guint)user->uid,
                            USER_COL_IS_SESSION, FALSE,
                            USER_COL_USERNAME, user->username,
                            -1);
 
         for (size_t session_index = 0;
              session_index < result->session_count; session_index++) {
-            SessionInfo *session = &result->sessions[session_index];
-            if (session->uid != user->uid) continue;
+            LsmUserSession *session = &result->sessions[session_index];
+            if (strcmp(session->account_identity,
+                       user->account_identity) != 0)
+                continue;
             char location[256], leader[32], login[64], type[128];
             session_location(session, location, sizeof(location));
-            snprintf(leader, sizeof(leader), "%u", session->leader);
-            format_login_time(session->timestamp, login, sizeof(login));
+            snprintf(leader, sizeof(leader), "%llu",
+                     (unsigned long long)session->leader);
+            format_login_time(session->timestamp_usec, login, sizeof(login));
             snprintf(type, sizeof(type), "%.60s%s%.60s", session->type,
                      *session->session_class ? " / " : "", session->session_class);
             GtkTreeIter child;
@@ -665,7 +462,6 @@ static void apply_user_refresh(LsmApp *app, UserRefreshResult *result)
                                USER_COL_MEMORY, "",
                                USER_COL_LOGIN, login,
                                USER_COL_SESSION_ID, session->id,
-                               USER_COL_UID, (guint)user->uid,
                                USER_COL_IS_SESSION, TRUE,
                                USER_COL_USERNAME, user->username,
                                -1);
@@ -709,11 +505,9 @@ void lsm_users_refresh(LsmApp *app)
     if (!app || app->runtime.shutting_down || !app->users.users_store ||
         app->users.users_refresh_pending) return;
     UserRefreshResult *result = g_new0(UserRefreshResult, 1);
-    guint preserve_uid = 0;
     selected_user_row(app, &result->preserve_session,
-                      &result->preserve_username, &preserve_uid,
+                      &result->preserve_username,
                       &result->preserve_is_session);
-    (void)preserve_uid;
 
     app->users.users_refresh_pending = TRUE;
     app->users.users_refresh_cancellable = g_cancellable_new();
@@ -758,7 +552,7 @@ void lsm_users_build(LsmApp *app, GtkWidget *container)
     app->users.users_store = gtk_tree_store_new(USER_N_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_STRING);
+        G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING);
     app->users.users_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->users.users_store));
     gtk_tree_view_set_enable_tree_lines(GTK_TREE_VIEW(app->users.users_tree), TRUE);
     gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(app->users.users_tree), TRUE);

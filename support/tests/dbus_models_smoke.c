@@ -8,7 +8,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 #include "../src/service_backend_linux.c"
-#include "../src/users.c"
+#include "../src/user_backend_linux.c"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -84,13 +84,13 @@ int main(void)
 
     GVariant *sessions_reply = sample_sessions();
     size_t session_count = 0;
-    SessionInfo *sessions = parse_session_list(sessions_reply, &session_count);
+    LsmLinuxSessionRecord *sessions = parse_session_list(sessions_reply, &session_count);
     g_variant_unref(sessions_reply);
     assert(session_count == 1);
-    assert(strcmp(sessions[0].id, "2") == 0);
+    assert(strcmp(sessions[0].session.id, "2") == 0);
     assert(sessions[0].uid == 1000);
-    assert(strcmp(sessions[0].username, "shannon") == 0);
-    assert(strcmp(sessions[0].seat, "seat0") == 0);
+    assert(strcmp(sessions[0].session.username, "shannon") == 0);
+    assert(strcmp(sessions[0].session.seat, "seat0") == 0);
     free(sessions);
 
     GVariant *properties = sample_properties();
