@@ -4,6 +4,13 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+No unreleased changes.
+
+## 1.0.40 - 2026-09-19
+
+- Replace the application artwork with the shared non-automotive Infiltrator icon language: dark graphite field, #72dcff cyan linework and a simplified system-monitor glyph.
+- Keep the same project-owned icon source wired through the desktop launcher and Debian/Mint package aliases so the menu, application and Software Manager remain consistent.
+
 - Documentation baseline aligned with the Infiltrator project family.
 
 ## Recording policy
