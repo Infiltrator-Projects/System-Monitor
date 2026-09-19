@@ -44,9 +44,9 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
 }
 
 static const char lsm_base_css[] =
-    "* { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
+    "* { font-family: \"MB Corpo S Title WEB\"; font-weight: 400; }"
     "headerbar .title, .titlebar .title {"
-    " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\", Sans;"
+    " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\";"
     " font-weight: 400;"
     "}"
     "button, treeview header button, notebook tab { font-weight: 700; }"

@@ -6,6 +6,10 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.41 - 2026-09-19
+
+- Bundle the MB Corpo UI fonts with both Debian and native-installer releases, refresh the font cache during package lifecycle changes, and remove the explicit system Sans fallback.
+
 ## 1.0.40 - 2026-09-19
 
 - Replace the application artwork with the shared non-automotive Infiltrator icon language: dark graphite field, #72dcff cyan linework and a simplified system-monitor glyph.

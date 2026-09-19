@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake doxygen gcc-multilib g++-multilib git libc6-dev-i386 \
+            build-essential cmake doxygen fontconfig gcc-multilib g++-multilib git libc6-dev-i386 \
             libbluetooth-dev libcap2-bin libgtk-3-dev pkg-config
 
       - name: Verify exact current main and Release commit
@@ -106,6 +106,16 @@ jobs:
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
+          fonts_dir="$tmp/root/usr/share/fonts/truetype/infiltrator"
+          test -d "$fonts_dir"
+          mapfile -t font_files < <(find "$fonts_dir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print)
+          if ((${#font_files[@]} < 2)); then
+            printf 'Debian package does not contain the bundled MB Corpo font files.\n' >&2
+            exit 1
+          fi
+          font_families=$(fc-scan --format '%{family}\n' "${font_files[@]}")
+          grep -Fq 'MB Corpo S Title WEB' <<<"$font_families"
+          grep -Fq 'MB Corpo A Title Cond WEB' <<<"$font_families"
           changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')

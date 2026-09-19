@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.39 ([version file](support/VERSION))\
+**Current source version:** 1.0.41 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.3 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -28,6 +28,8 @@ Slow collection work is kept away from the GTK main thread. Reusable mechanisms 
 Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB labels. Network rates and negotiated link speeds use decimal 1000-based scaling.
 
 ## Appearance
+
+System Monitor packages the MB Corpo typefaces used by its interface. Normal UI text uses **MB Corpo S Title WEB** and title text uses **MB Corpo A Title Cond WEB**, with the S family as the only application-level fallback.
 
 **View → Theme** provides **Follow system**, **Day** and **Night**. Follow system keeps the host GTK/Mint palette authoritative. Day and Night use the semantic palettes supplied by the pinned Common release, and the choice is stored per user.
 
@@ -95,4 +97,4 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 Copyright © 2016–2026 Shannon Smith.
 
-Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`.
+Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry, bundled PCI-name data and the bundled MB Corpo typeface resources are preserved in `support/legal/THIRD_PARTY_NOTICES`.
