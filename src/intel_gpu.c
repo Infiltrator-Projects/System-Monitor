@@ -183,9 +183,8 @@ static bool discover_pmu_root(const LsmGpuInfo *gpu,
             !lsm_string_starts_with(entry->d_name, "xe"))
             continue;
         if (!pmu_root_matches_identity(entry->d_name, gpu)) continue;
-        const int written = snprintf(destination, destination_size, "%s/%s",
-                                     root, entry->d_name);
-        found = written >= 0 && (size_t)written < destination_size;
+        found = lsm_join_path(destination, destination_size,
+                              root, entry->d_name);
         if (found) break;
     }
     closedir(directory);

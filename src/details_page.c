@@ -154,7 +154,7 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_TEXT: {
             gchar *value = NULL;
             gtk_tree_model_get(model, iter, column, &value, -1);
-            snprintf(text, sizeof(text), "%s", value ? value : "");
+            lsm_copy_string(text, sizeof(text), value ? value : "");
             g_free(value);
             break;
         }

@@ -498,14 +498,13 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
                 const bool engine_busy_available =
                     read_gpu_engine_busy(telemetry, &engine_busy);
                 if (engine_busy_available && gpu_state) {
+                    double percent = 0.0;
                     if (gpu_state->engine_busy_initialized &&
-                        engine_busy >= gpu_state->previous_engine_busy_ns &&
-                        elapsed > 0.0) {
-                        const double percent = 100.0 *
-                            (double)(engine_busy - gpu_state->previous_engine_busy_ns) /
-                            (elapsed * 1000000000.0);
+                        lsm_u64_counter_rate(
+                            engine_busy, gpu_state->previous_engine_busy_ns,
+                            0.0000001L, elapsed, &percent)) {
                         gpu->utilization_percent =
-                            fmin(100.0, fmax(0.0, percent));
+                            lsm_clamp_double(percent, 0.0, 100.0);
                     } else {
                         gpu->utilization_percent = 0.0;
                     }

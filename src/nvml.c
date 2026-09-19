@@ -184,8 +184,9 @@ static LsmGpuInfo *append_nvml_gpu(LsmMonitor *monitor, const char *card)
     if (monitor->gpu_count >= LSM_MAX_GPUS) return NULL;
     LsmGpuInfo *gpu = &monitor->gpus[monitor->gpu_count++];
     memset(gpu, 0, sizeof(*gpu));
-    snprintf(gpu->display_identifier, sizeof(gpu->display_identifier), "%s", card);
-    snprintf(gpu->driver, sizeof(gpu->driver), "NVIDIA");
+    lsm_copy_string(gpu->display_identifier,
+                    sizeof(gpu->display_identifier), card);
+    lsm_copy_string(gpu->driver, sizeof(gpu->driver), "NVIDIA");
     monitor->topology_generation++;
     return gpu;
 }

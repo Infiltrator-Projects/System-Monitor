@@ -41,9 +41,8 @@ void lsm_process_group_metrics_add(LsmProcessGroupMetrics *metrics,
             (!metrics->gpu_available ||
              process->gpu_percent > metrics->gpu_engine_peak)) {
             metrics->gpu_engine_peak = process->gpu_percent;
-            (void)snprintf(metrics->gpu_engine,
-                           sizeof(metrics->gpu_engine), "%s",
-                           process->gpu_engine);
+            lsm_copy_string(metrics->gpu_engine, sizeof(metrics->gpu_engine),
+                            process->gpu_engine);
         }
         metrics->gpu_percent = positive_finite_sum(
             metrics->gpu_percent, process->gpu_percent);

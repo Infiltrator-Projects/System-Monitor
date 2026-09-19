@@ -189,12 +189,19 @@ static bool refresh_busy_time(LsmNpuTelemetry *telemetry,
         return false;
     }
 
-    const uint64_t delta = current - telemetry->previous_busy_time_us;
     const double interval = telemetry->busy_elapsed_seconds;
+    double percent = 0.0;
+    const bool have_rate = lsm_u64_counter_rate(
+        current, telemetry->previous_busy_time_us, 0.0001L,
+        interval, &percent);
     telemetry->previous_busy_time_us = current;
     telemetry->busy_elapsed_seconds = 0.0;
-    telemetry->last_busy_percent = lsm_clamp_double(
-        100.0 * (double)delta / (interval * 1000000.0), 0.0, 100.0);
+    if (!have_rate) {
+        telemetry->last_busy_valid = false;
+        return false;
+    }
+    telemetry->last_busy_percent =
+        lsm_clamp_double(percent, 0.0, 100.0);
     telemetry->last_busy_valid = true;
     npu->utilization_percent = telemetry->last_busy_percent;
     npu->utilization_available = true;

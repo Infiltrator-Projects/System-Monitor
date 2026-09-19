@@ -22,6 +22,8 @@
 #include "task_launcher.h"
 #include "ui_helpers.h"
 
+#include <infiltratr/design.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -372,13 +374,13 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
     GtkWidget *theme_root = gtk_menu_item_new_with_label("Theme");
     GtkWidget *theme_menu = gtk_menu_new();
     GSList *theme_group = NULL;
-    static const char *const theme_labels[] = {
-        "Follow system", "Day", "Night"
-    };
     for (int mode = INFILTRATR_THEME_SYSTEM;
          mode <= INFILTRATR_THEME_NIGHT; mode++) {
+        const char *label = mode == INFILTRATR_THEME_SYSTEM
+            ? "Follow system"
+            : infiltratr_theme_mode_name((InfiltratrThemeMode)mode);
         GtkWidget *radio = gtk_radio_menu_item_new_with_label(
-            theme_group, theme_labels[mode]);
+            theme_group, label);
         theme_group = gtk_radio_menu_item_get_group(
             GTK_RADIO_MENU_ITEM(radio));
         g_object_set_data(G_OBJECT(radio), "lsm-app", app);

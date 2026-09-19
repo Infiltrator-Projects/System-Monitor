@@ -682,8 +682,9 @@ static void history_identity(const LsmProcessInfo *process,
         memcpy(executable, process->command, length);
         executable[length] = '\0';
     }
-    if (!executable[0]) snprintf(executable, sizeof(executable), "%s", process->name);
-    snprintf(identity, identity_size, "%s", executable);
+    if (!executable[0])
+        lsm_copy_string(executable, sizeof(executable), process->name);
+    lsm_copy_string(identity, identity_size, executable);
     snprintf(key, key_size, "%s|%s",
              process->account_identity, executable);
 }

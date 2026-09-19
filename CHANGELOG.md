@@ -6,6 +6,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.45 - 2026-09-20
+
+- Complete a second forensic Common 1.19.8 usage pass without changing Common itself.
+- Source MB Corpo family names and role weights from Common's typography contract, and use Common's canonical theme names where they match System Monitor's UI wording.
+- Replace remaining equivalent private counter-rate arithmetic, allocation-growth overflow checks, bounded string-copy formatting and simple lexical path joining with Common contracts while preserving Linux, hardware and presentation policy locally.
+
 ## 1.0.44 - 2026-09-19
 
 - Complete the forensic Common 1.19.8 integration by routing strict numeric-token conversion, checked addition, prefix checks, quantity parsing, trimming and lexical-basename handling through Common where its contract is equal or stronger.

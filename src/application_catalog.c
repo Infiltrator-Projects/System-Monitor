@@ -232,9 +232,8 @@ static void scan_application_directory(LsmApplicationCatalog *catalog,
             strcmp(item->d_name + length - 8U, ".desktop") != 0)
             continue;
         char path[LSM_PATH_LEN];
-        const int written = snprintf(
-            path, sizeof(path), "%s/%s", directory, item->d_name);
-        if (written < 0 || (size_t)written >= sizeof(path)) continue;
+        if (!lsm_join_path(path, sizeof(path), directory, item->d_name))
+            continue;
         load_desktop_file(catalog, path, item->d_name);
     }
     closedir(stream);
@@ -254,14 +253,13 @@ LsmApplicationCatalog *lsm_application_catalog_create(void)
 
     char user_directory[LSM_PATH_LEN];
     const char *data_home = getenv("XDG_DATA_HOME");
-    if (data_home && *data_home) {
-        snprintf(user_directory, sizeof(user_directory),
-                 "%s/applications", data_home);
-    } else {
-        snprintf(user_directory, sizeof(user_directory),
-                 "%s/.local/share/applications", g_get_home_dir());
-    }
-    scan_application_directory(catalog, user_directory);
+    const char *home_base = data_home && *data_home
+        ? data_home : g_get_home_dir();
+    const char *home_suffix = data_home && *data_home
+        ? "applications" : ".local/share/applications";
+    if (lsm_join_path(user_directory, sizeof(user_directory),
+                      home_base, home_suffix))
+        scan_application_directory(catalog, user_directory);
 
     const char *data_dirs = getenv("XDG_DATA_DIRS");
     if (!data_dirs || !*data_dirs)
@@ -273,9 +271,7 @@ LsmApplicationCatalog *lsm_application_catalog_create(void)
              directory;
              directory = strtok_r(NULL, ":", &save)) {
             char path[LSM_PATH_LEN];
-            const int written = snprintf(
-                path, sizeof(path), "%s/applications", directory);
-            if (written >= 0 && (size_t)written < sizeof(path))
+            if (lsm_join_path(path, sizeof(path), directory, "applications"))
                 scan_application_directory(catalog, path);
         }
         free(copy);

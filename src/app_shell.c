@@ -23,6 +23,8 @@
 #include "startup.h"
 #include "users.h"
 
+#include <infiltratr/design.h>
+
 #include <string.h>
 
 void lsm_app_shell_apply_compact_summary(LsmApp *app)
@@ -78,18 +80,6 @@ static void on_system_theme_changed(GtkSettings *settings,
         lsm_app_shell_apply_theme(app);
 }
 
-static const char lsm_base_css[] =
-    "* { font-family: \"MB Corpo S Title WEB\"; font-weight: 400; }"
-    "headerbar .title, .titlebar .title {"
-    " font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\";"
-    " font-weight: 400;"
-    "}"
-    "button, treeview header button, notebook tab { font-weight: 700; }"
-    "#lsm-side-button:checked {"
-    " background-color: alpha(@theme_selected_bg_color, 0.28);"
-    " border-color: @theme_selected_bg_color;"
-    "}";
-
 void lsm_app_shell_apply_theme(LsmApp *app)
 {
     if (!app) return;
@@ -115,10 +105,23 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode,
                                  lsm_system_prefers_dark());
+    const InfiltratrTypography *typography = infiltratr_typography();
+    if (!palette || !typography || !typography->ui_family ||
+        !typography->brand_family)
+        return;
+
     char css[8192];
     const int written = snprintf(
         css, sizeof(css),
-        "%s"
+        "* { font-family: \"%s\"; font-weight: %u; }"
+        "headerbar .title, .titlebar .title {"
+        " font-family: \"%s\", \"%s\"; font-weight: %u;"
+        "}"
+        "button, treeview header button, notebook tab { font-weight: %u; }"
+        "#lsm-side-button:checked {"
+        " background-color: alpha(@theme_selected_bg_color, 0.28);"
+        " border-color: @theme_selected_bg_color;"
+        "}"
         "@define-color lsm_background #%06X;"
         "@define-color lsm_panel #%06X;"
         "@define-color lsm_card #%06X;"
@@ -187,7 +190,12 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " background-color: @lsm_selection; color: @lsm_selection_text;"
         " border-color: @lsm_neutral;"
         "}",
-        lsm_base_css,
+        typography->ui_family,
+        (unsigned int)typography->ui_regular_weight,
+        typography->brand_family,
+        typography->ui_family,
+        (unsigned int)typography->brand_weight,
+        (unsigned int)typography->ui_bold_weight,
         (unsigned int)palette->background_rgb,
         (unsigned int)palette->panel_rgb,
         (unsigned int)palette->card_rgb,

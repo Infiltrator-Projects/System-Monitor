@@ -437,16 +437,13 @@ void lsm_bluetooth_traffic_apply_device(
     device->rx_bytes_per_sec = 0.0;
     device->tx_bytes_per_sec = 0.0;
 
-    if (state->initialized && isfinite(elapsed_seconds) &&
-        elapsed_seconds > 0.0) {
-        if (counters->rx_bytes >= state->previous_rx)
-            device->rx_bytes_per_sec =
-                (double)(counters->rx_bytes - state->previous_rx) /
-                elapsed_seconds;
-        if (counters->tx_bytes >= state->previous_tx)
-            device->tx_bytes_per_sec =
-                (double)(counters->tx_bytes - state->previous_tx) /
-                elapsed_seconds;
+    if (state->initialized) {
+        (void)lsm_u64_counter_rate(
+            counters->rx_bytes, state->previous_rx, 1.0L,
+            elapsed_seconds, &device->rx_bytes_per_sec);
+        (void)lsm_u64_counter_rate(
+            counters->tx_bytes, state->previous_tx, 1.0L,
+            elapsed_seconds, &device->tx_bytes_per_sec);
     }
     state->previous_rx = counters->rx_bytes;
     state->previous_tx = counters->tx_bytes;
