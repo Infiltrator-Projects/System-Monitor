@@ -11,9 +11,11 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provid
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
 
-## What matters
+## Engineering ethos
 
 System Monitor is built from first principles: establish what the operating system or hardware interface actually guarantees, then implement the required behaviour directly where practical. It deliberately avoids depending on the output or behaviour of external monitoring utilities when an authoritative native interface is available, because those dependencies can change independently of this project. External libraries are used when their documented contract is the stronger solution; important product behaviour remains owned by System Monitor.
+
+The project does not equate newer with better. Proven kernel interfaces and collection methods remain when they are the strongest source of truth; a replacement or dependency must improve correctness, coverage, resilience, performance or maintainability rather than merely moving responsibility elsewhere.
 
 The installed product is one GUI executable, `system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
