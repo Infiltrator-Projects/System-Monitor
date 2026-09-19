@@ -105,6 +105,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     const gboolean system_dark = lsm_system_prefers_dark();
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
+    const InfiltratrTypography *typography = infiltratr_typography();
+    if (!palette || !typography || !typography->ui_family ||
+        !typography->brand_family)
+        return;
+
     /*
      * System Monitor's established MB night shell is graphite grey, not the
      * near-black Common canvas.  Keep Common authoritative for the semantic
@@ -118,10 +123,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
     const unsigned int shell_background_rgb =
         night_resolved ? 0x2B2B30U : (unsigned int)palette->background_rgb;
-    const InfiltratrTypography *typography = infiltratr_typography();
-    if (!palette || !typography || !typography->ui_family ||
-        !typography->brand_family)
-        return;
 
     char css[8192];
     const int written = snprintf(
