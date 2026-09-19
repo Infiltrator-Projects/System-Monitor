@@ -89,7 +89,7 @@ The `.deb` is the generic amd64 package. Its Debian/APT identity is `infiltrator
 
 Development is kept on `main`. A release commit is publishable only after the full Verify workflow succeeds for the exact current commit. Published tags and release assets are immutable; changing source after a published version requires advancing `support/VERSION`.
 
-Contribution guidance lives in [CONTRIBUTING.md](.github/CONTRIBUTING.md). Security reports follow [SECURITY.md](.github/SECURITY.md).
+Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security reports follow [SECURITY.md](SECURITY.md).
 
 ## Licence
 

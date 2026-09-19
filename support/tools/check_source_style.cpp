@@ -146,12 +146,18 @@ static bool maintained_markdown_path(const char *path)
 {
     static const char *const maintained[] = {
         "./README.md",
+        "./CHANGELOG.md",
+        "./CONTRIBUTING.md",
+        "./SECURITY.md",
+        "./docs/README.md",
         "./docs/ARCHITECTURE.md",
+        "./docs/DESIGN.md",
+        "./docs/DECISIONS.md",
+        "./docs/ROADMAP.md",
+        "./docs/VALIDATION.md",
         "./docs/PORTABILITY.md",
         "./docs/HARDWARE.md",
-        "./.github/CODE_OF_CONDUCT.md",
-        "./.github/CONTRIBUTING.md",
-        "./.github/SECURITY.md"
+        "./.github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
          index < sizeof(maintained) / sizeof(maintained[0]); index++)
@@ -188,13 +194,11 @@ static void check_markdown_tree(const char *directory_path_value)
 static void check_markdown_policy(void)
 {
     static const char *const required[] = {
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/PORTABILITY.md",
-        "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md",
-        ".github/CONTRIBUTING.md",
-        ".github/SECURITY.md"
+        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
+        "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
+        "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
+        "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md"
     };
     check_markdown_tree(".");
     for (size_t index = 0U;
@@ -207,7 +211,7 @@ static void check_markdown_policy(void)
 static void check_root_layout(void)
 {
     static const char *const retired_root_entries[] = {
-        ".clang-format", ".editorconfig", "CHANGELOG.md", "Doxyfile",
+        ".clang-format", ".editorconfig", "Doxyfile",
         "NATIVE_INSTALLER_EDITION", "THIRD_PARTY_NOTICES", "VERSION",
         "data", "icons", "install.sh", "packaging", "shared",
         "sources.txt", "tests", "tools"
@@ -655,13 +659,9 @@ static void check_licensing_contract(void)
         require_file_prefix(hash_header_files[index], LSM_SPDX_HASH);
 
     static const char *const markdown_header_files[] = {
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/PORTABILITY.md",
-        "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md",
-        ".github/CONTRIBUTING.md",
-        ".github/SECURITY.md"
+        "README.md", "CONTRIBUTING.md", "SECURITY.md",
+        "docs/ARCHITECTURE.md", "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
          index < sizeof(markdown_header_files) /
@@ -719,9 +719,11 @@ static void check_licensing_contract(void)
 static void check_engineering_documentation(void)
 {
     static const char *const required_files[] = {
-        "README.md", "docs/ARCHITECTURE.md", "docs/PORTABILITY.md",
-        "docs/HARDWARE.md", ".github/CODE_OF_CONDUCT.md",
-        ".github/CONTRIBUTING.md", ".github/SECURITY.md",
+        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
+        "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
+        "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
+        "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md",
         "support/Doxyfile", "LICENSE", "support/legal/THIRD_PARTY_NOTICES",
         "support/packaging/copyright"
     };
@@ -738,7 +740,7 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
-            "## What matters",
+            "## Engineering ethos",
             "## Appearance",
             "## Capabilities",
             "## Architecture",
@@ -749,8 +751,8 @@ static void check_engineering_documentation(void)
             "docs/ARCHITECTURE.md",
             "docs/PORTABILITY.md",
             "docs/HARDWARE.md",
-            ".github/CONTRIBUTING.md",
-            ".github/SECURITY.md",
+            "CONTRIBUTING.md",
+            "SECURITY.md",
             "## Licence",
             "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
         };

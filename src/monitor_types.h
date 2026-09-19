@@ -96,10 +96,10 @@ typedef struct {
 typedef struct {
     uint64_t total_bytes;              /**< Installed physical memory. */
     uint64_t available_bytes;          /**< Kernel estimate available without swapping. */
-    uint64_t used_bytes;               /**< Total minus available, matching psutil. */
+    uint64_t used_bytes;               /**< Total physical memory minus the kernel's available estimate. */
     uint64_t free_bytes;               /**< Completely unused physical memory. */
     uint64_t buffers_bytes;            /**< Filesystem block-device buffers. */
-    uint64_t cached_bytes;             /**< Cached plus reclaimable slab, matching psutil. */
+    uint64_t cached_bytes;             /**< Linux cache plus reclaimable slab accounting. */
     uint64_t swap_total_bytes;         /**< Configured swap capacity. */
     uint64_t swap_used_bytes;          /**< Swap capacity currently occupied. */
     uint64_t committed_bytes;          /**< Virtual memory committed by the kernel. */
