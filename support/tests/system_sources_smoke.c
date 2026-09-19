@@ -205,6 +205,12 @@ static bool setup_fixture(char *root, size_t root_size)
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/name", "coretemp\n");
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_input", "42000\n");
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_label", "Package id 0\n");
+    /* A generic ACPI zone can describe a board/chassis sensor. It must not
+     * outrank an explicitly identified CPU package source merely because its
+     * label contains CPU or its temperature is higher. */
+    FIXTURE_FILE("/sys/class/hwmon/hwmon1/name", "acpitz\n");
+    FIXTURE_FILE("/sys/class/hwmon/hwmon1/temp1_input", "99000\n");
+    FIXTURE_FILE("/sys/class/hwmon/hwmon1/temp1_label", "CPU\n");
 #undef FIXTURE_FILE
 #undef FIXTURE_LINK
     return true;

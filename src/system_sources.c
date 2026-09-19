@@ -1097,15 +1097,25 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
     return count;
 }
 
-/* Temperature selection scores labels and driver names to avoid reporting an
- * unrelated motherboard sensor as the CPU package temperature. */
+/* Only sensor providers whose interface name explicitly identifies a CPU or
+ * package source are eligible. Generic ACPI zones and substring guesses can
+ * describe chassis or motherboard sensors and therefore remain unavailable. */
 static bool cpu_sensor_name(const char *name)
 {
-    if (!name) return false;
-    return strcasestr(name, "coretemp") || strcasestr(name, "k10temp") ||
-           strcasestr(name, "zenpower") || strcasestr(name, "cpu") ||
-           strcasestr(name, "soc_thermal") || strcasestr(name, "x86_pkg_temp") ||
-           strcasestr(name, "acpitz");
+    if (!name || !name[0]) return false;
+    static const char *const sources[] = {
+        "coretemp",
+        "k10temp",
+        "zenpower",
+        "cpu_thermal",
+        "cpu-thermal",
+        "soc_thermal",
+        "soc-thermal",
+        "x86_pkg_temp"
+    };
+    for (size_t index = 0U; index < LSM_ARRAY_LENGTH(sources); index++)
+        if (strcasecmp(name, sources[index]) == 0) return true;
+    return false;
 }
 
 static int temperature_label_score(const char *label)
