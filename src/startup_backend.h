@@ -15,7 +15,7 @@
 
 #include "monitor_types.h"
 
-#include <glib.h>
+#include <gio/gio.h>
 #include <stdbool.h>
 #include <stddef.h>
 
