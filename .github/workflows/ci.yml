@@ -115,7 +115,7 @@ jobs:
           set -euo pipefail
           make -j2 deb native-installer
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="system-monitor_${version}_amd64.deb"
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
           test -f "$deb"
 
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
