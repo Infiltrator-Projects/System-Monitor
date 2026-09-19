@@ -8,7 +8,7 @@ No unreleased changes.
 
 ## 1.0.48 - 2026-09-20
 
-- Pin the project and gitlink to Common 1.19.10.
+- Pin the project and gitlink to Common 1.19.10 at `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`.
 - Replace the temporary single-grey Night override with Common's complete Linux MBLINK reference palette.
 - Use the MBLINK canvas, titlebar, connection-bar, card/surface, border, heading/summary and accent-hover roles directly so Night retains the layered graphite appearance instead of collapsing into one black or grey field.
 - Style System Monitor summary frames and general frames with those same semantic layers while keeping product-specific performance colours local.
