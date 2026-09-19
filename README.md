@@ -17,6 +17,8 @@ System Monitor is built from first principles: establish what the operating syst
 
 The project does not equate newer with better. Proven kernel interfaces and collection methods remain when they are the strongest source of truth; a replacement or dependency must improve correctness, coverage, resilience, performance or maintainability rather than merely moving responsibility elsewhere.
 
+C and C++ are equal, first-class implementation languages for the project. The choice between them is made according to the needs of the component, with no general preference for one over the other. The language preference is C/C++ over other language ecosystems; another language is introduced only when it offers a concrete technical advantage that C or C++ cannot reasonably provide.
+
 The installed product is one GUI executable, `system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
 Slow collection work is kept away from the GTK main thread. Reusable parsing, formatting, timing, path, allocation and durable-I/O primitives come from the pinned Common library; Linux hardware and product-specific behaviour remain in System Monitor.
@@ -68,7 +70,7 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the project verification suite. The installed application remains C17; the developer-only source auditor uses C++17 RAII/filesystem facilities and is not shipped in the package. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
+Run `make check` for the project verification suite. The current installed application is C17; the developer-only source auditor is C++17 and is not shipped in the package. CI also exercises CMake/CTest, sanitizers, 32-bit compilation, generated Doxygen documentation with warnings treated as errors, and release-package construction.
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer.
 

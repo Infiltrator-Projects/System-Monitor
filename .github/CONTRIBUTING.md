@@ -2,12 +2,13 @@
 
 # Contributing to System Monitor
 
-System Monitor's installed application is native C17/GTK 3. Developer-only tooling may use C++17 where its standard library materially improves safety or maintainability. The project keeps explicit boundaries between GTK presentation, platform-neutral models, Linux backends and Common.
+System Monitor uses C and C++ as equal, first-class project languages. The current installed application is predominantly C17/GTK 3, while developer tooling also uses C++17. The choice between C and C++ is made per component according to correctness, clarity, performance, maintainability and control; neither language has priority over the other. The project keeps explicit boundaries between GTK presentation, platform-neutral models, Linux backends and Common.
 
 ## Engineering rules
 
-- Target ISO C17 for the installed application; prefer older standard constructs when they are equally clear.
-- Use ISO C++17 only in developer tooling where it provides a concrete correctness, safety or maintainability benefit; do not add a C++ runtime dependency to the installed application merely for convenience.
+- Treat C and C++ as equal first-class implementation choices; do not impose a C-over-C++ or C++-over-C rule.
+- Prefer C or C++ for project-owned code over other language ecosystems. Introduce another language or runtime only when it provides a concrete capability or engineering benefit that C/C++ cannot reasonably provide.
+- Within C or C++, do not adopt a newer language feature merely because it is newer; use the feature and supported standard that best fit the component and toolchain.
 - Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
 - Keep GTK types out of reusable accounting, parsing and model layers.
 - Apply first-principles ownership to telemetry: prefer authoritative native interfaces and project-owned behaviour over parsing or orchestrating external utilities whose output can change independently.

@@ -2,13 +2,15 @@
 
 # Portability
 
-System Monitor's installed application targets ISO C17. Developer-only build and audit tools may use ISO C++17 when its standard-library ownership or filesystem facilities materially reduce implementation risk. Portability means keeping application contracts independent of Linux implementation details, not pretending the current Linux backend already runs unchanged everywhere.
+System Monitor uses C and C++ as equal, first-class project languages. The current installed application targets ISO C17 and current C++ developer tools target ISO C++17, but that division is an implementation state rather than a language hierarchy. Portability means keeping application contracts independent of Linux implementation details, not pretending the current Linux backend already runs unchanged everywhere.
 
 ## Language and interfaces
 
-Prefer C11/C99 constructs in the installed application when they are equally clear. Do not add C23-only features, a C++ runtime dependency or compiler-specific product logic merely for convenience. C++ is confined to developer tooling unless a product change demonstrates a concrete correctness, safety or maintainability benefit.
+Choose C or C++ according to which gives the stronger implementation for the component: correctness, clarity, performance, maintainability and control are more important than language preference. Neither C nor C++ is subordinate to the other.
 
-Application-facing snapshots and contracts remain plain C. They must not expose Linux handles, GTK objects, implementation-owned paths or hidden global ownership.
+Project-owned code should prefer C or C++ over introducing another language ecosystem. A different language or runtime requires a concrete technical advantage that C/C++ cannot reasonably provide; novelty or convenience alone is not sufficient. Within C and C++, newer features are adopted for demonstrated benefit rather than because they are newer.
+
+Application-facing snapshots and contracts currently remain plain C because that is the established interface contract, not because C is preferred over C++. They must not expose Linux handles, GTK objects, implementation-owned paths or hidden global ownership.
 
 ## Platform boundary
 
