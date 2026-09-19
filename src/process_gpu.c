@@ -51,9 +51,7 @@ static char *field_value(char *line)
     char *separator = strchr(line, ':');
     if (!separator) return NULL;
     char *value = separator + 1;
-    while (*value && isspace((unsigned char)*value)) value++;
-    char *end = value + strlen(value);
-    while (end > value && isspace((unsigned char)end[-1])) *--end = '\0';
+    lsm_trim(value);
     return value;
 }
 
@@ -309,7 +307,7 @@ bool lsm_process_gpu_calculate_engine(
     if (engine && engine_size > 0U && peak_engine) {
         const char *display_name = strrchr(peak_engine, ':');
         display_name = display_name ? display_name + 1U : peak_engine;
-        (void)snprintf(engine, engine_size, "%s", display_name);
+        lsm_copy_string(engine, engine_size, display_name);
     }
     return true;
 }

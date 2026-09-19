@@ -276,10 +276,9 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor)
         LsmBluetoothInfo *destination = &monitor->bluetooth[index];
         memset(destination, 0, sizeof(*destination));
 
-        const char *name = strrchr(source->object_path, '/');
-        name = name && name[1] ? name + 1 : source->object_path;
+        const char *name = lsm_path_basename(source->object_path);
         lsm_copy_string(destination->name, sizeof(destination->name),
-                        name && name[0] ? name : "Bluetooth");
+                        name[0] ? name : "Bluetooth");
         lsm_copy_string(destination->address, sizeof(destination->address),
                         source->address);
         lsm_copy_string(destination->adapter_name,

@@ -23,6 +23,8 @@
 #include "startup.h"
 #include "users.h"
 
+#include <string.h>
+
 void lsm_app_shell_apply_compact_summary(LsmApp *app)
 {
     if (!app || !app->shell.window) return;

@@ -101,8 +101,10 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%u/cache/index%d/level",
                      cpu_index, index);
             if (!lsm_read_text_file(path, level_text, sizeof(level_text))) continue;
-            const int level = atoi(level_text);
-            if (level < 1 || level > 3) continue;
+            int64_t level_value = 0;
+            if (!lsm_parse_i64_range(level_text, 10U, 1, 3, &level_value))
+                continue;
+            const int level = (int)level_value;
 
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%u/cache/index%d/type",
                      cpu_index, index);
@@ -174,9 +176,16 @@ static void read_cpu_static(LsmMonitor *monitor)
                 snprintf(monitor->cpu.model, sizeof(monitor->cpu.model), "%s", value);
                 model_found = true;
             } else if (strcmp(line, "physical id") == 0) {
-                physical_id = atoi(value);
+                int64_t parsed = 0;
+                if (lsm_parse_i64_range(value, 10U, INT_MIN, INT_MAX,
+                                        &parsed))
+                    physical_id = (int)parsed;
             } else if (strcmp(line, "core id") == 0) {
-                core_id = atoi(value);
+                int64_t parsed = 0;
+                if (!lsm_parse_i64_range(value, 10U, INT_MIN, INT_MAX,
+                                         &parsed))
+                    continue;
+                core_id = (int)parsed;
                 if (physical_id >= 0 && physical_id < 256 && core_id >= 0 && core_id < 256 &&
                     !physical_pairs[physical_id][core_id]) {
                     physical_pairs[physical_id][core_id] = true;
@@ -227,13 +236,11 @@ static unsigned read_numa_node_count(void)
     unsigned count = 0U;
     struct dirent *entry = NULL;
     while ((entry = readdir(directory))) {
-        if (strncmp(entry->d_name, "node", 4U) != 0 ||
-            !isdigit((unsigned char)entry->d_name[4]))
-            continue;
-        bool numeric = true;
-        for (const char *cursor = entry->d_name + 4U; *cursor; cursor++)
-            if (!isdigit((unsigned char)*cursor)) numeric = false;
-        if (numeric && count < UINT_MAX) count++;
+        if (!lsm_string_starts_with(entry->d_name, "node")) continue;
+        uint64_t node = 0U;
+        if (lsm_parse_u64(entry->d_name + 4U, 10U, &node) &&
+            count < UINT_MAX)
+            count++;
     }
     closedir(directory);
     return count > 0U ? count : 1U;
@@ -284,8 +291,11 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
 
     struct dirent *entry = NULL;
     while ((entry = readdir(directory))) {
-        if (strncmp(entry->d_name, "policy", 6U) != 0 ||
-            !isdigit((unsigned char)entry->d_name[6])) continue;
+        if (!lsm_string_starts_with(entry->d_name, "policy"))
+            continue;
+        uint64_t policy_index = 0U;
+        if (!lsm_parse_u64(entry->d_name + 6U, 10U, &policy_index))
+            continue;
 
         char current[LSM_PATH_LEN];
         char maximum[LSM_PATH_LEN];
@@ -373,12 +383,12 @@ static double read_temperature_c(LsmMonitor *monitor)
  * fields retain the slower detail cadence. */
 static uint64_t read_system_file_handles(void)
 {
-    FILE *file = fopen("/proc/sys/fs/file-nr", "r");
-    if (!file) return 0U;
-    unsigned long long allocated = 0U;
-    const bool valid = fscanf(file, "%llu", &allocated) == 1;
-    fclose(file);
-    return valid ? (uint64_t)allocated : 0U;
+    char text[128];
+    if (!lsm_read_text_file("/proc/sys/fs/file-nr", text, sizeof(text)))
+        return 0U;
+    const char *cursor = text;
+    uint64_t allocated = 0U;
+    return lsm_parse_u64_token(&cursor, 10U, &allocated) ? allocated : 0U;
 }
 
 static void update_memory(LsmMonitor *monitor, bool refresh_details)

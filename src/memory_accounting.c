@@ -13,6 +13,8 @@
 
 #include "common.h"
 
+#include <infiltratr/quantity.h>
+
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,27 +27,11 @@ static bool parse_quantity(char *line, char **key, uint64_t *bytes)
     *separator = '\0';
     lsm_trim(line);
 
-    const char *cursor = separator + 1;
     uint64_t parsed = 0U;
-    if (!lsm_parse_u64_token(&cursor, 10U, &parsed)) return false;
-    while (*cursor && isspace((unsigned char)*cursor)) cursor++;
-
-    uint64_t multiplier = 1U;
-    if (*cursor) {
-        if (cursor[0] != 'k' || cursor[1] != 'B' ||
-            (cursor[2] && !isspace((unsigned char)cursor[2])))
-            return false;
-        multiplier = 1024U;
-        cursor += 2;
-        while (*cursor && isspace((unsigned char)*cursor)) cursor++;
-        if (*cursor) return false;
-    }
-
-    uint64_t converted = 0U;
-    if (!infiltratr_u64_multiply_checked(parsed, multiplier, &converted))
+    if (!infiltratr_parse_binary_quantity_u64(separator + 1, &parsed))
         return false;
     *key = line;
-    *bytes = converted;
+    *bytes = parsed;
     return true;
 }
 

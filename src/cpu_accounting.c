@@ -20,21 +20,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool parse_u64_field(const char **cursor, uint64_t *value)
-{
-    return lsm_parse_u64_token(cursor, 10U, value);
-}
-
 static bool parse_cpu_row(const char *line, LsmCpuCounters *counter)
 {
-    if (!line || !counter || strncmp(line, "cpu", 3U) != 0) return false;
+    if (!line || !counter || !lsm_string_starts_with(line, "cpu"))
+        return false;
     const char *cursor = line + 3U;
     while (isdigit((unsigned char)*cursor)) cursor++;
     if (*cursor && !isspace((unsigned char)*cursor)) return false;
 
     uint64_t fields[8] = {0U};
     size_t count = 0U;
-    while (count < 8U && parse_u64_field(&cursor, &fields[count])) count++;
+    while (count < 8U && lsm_parse_u64_token(&cursor, 10U, &fields[count])) count++;
     if (count < 4U) return false;
 
     memset(counter, 0, sizeof(*counter));
@@ -52,10 +48,10 @@ static bool parse_named_counter(const char *line, const char *name,
                                 uint64_t *value)
 {
     const size_t length = strlen(name);
-    if (strncmp(line, name, length) != 0 ||
+    if (!lsm_string_starts_with(line, name) ||
         !isspace((unsigned char)line[length])) return false;
     const char *cursor = line + length;
-    return parse_u64_field(&cursor, value);
+    return lsm_parse_u64_token(&cursor, 10U, value);
 }
 
 bool lsm_cpu_accounting_parse(const char *text,
@@ -70,7 +66,7 @@ bool lsm_cpu_accounting_parse(const char *text,
     char *save = NULL;
     for (char *line = strtok_r(copy, "\n", &save); line;
          line = strtok_r(NULL, "\n", &save)) {
-        if (strncmp(line, "cpu", 3U) == 0 &&
+        if (lsm_string_starts_with(line, "cpu") &&
             (isspace((unsigned char)line[3]) ||
              isdigit((unsigned char)line[3]))) {
             LsmCpuCounters counter;
@@ -91,9 +87,9 @@ bool lsm_cpu_accounting_parse(const char *text,
                 if (sample->cpu_count < index + 2U)
                     sample->cpu_count = index + 2U;
             }
-        } else if (strncmp(line, "intr", 4U) == 0) {
+        } else if (lsm_string_starts_with(line, "intr")) {
             (void)parse_named_counter(line, "intr", &sample->interrupts);
-        } else if (strncmp(line, "ctxt", 4U) == 0) {
+        } else if (lsm_string_starts_with(line, "ctxt")) {
             (void)parse_named_counter(line, "ctxt", &sample->context_switches);
         }
     }

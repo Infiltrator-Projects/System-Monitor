@@ -102,6 +102,7 @@ typedef enum {
 } GSpawnFlags;
 
 typedef struct _GObject GObject;
+typedef struct _GParamSpec GParamSpec;
 typedef struct _GApplication GApplication;
 typedef struct _GError { GQuark domain; gint code; gchar *message; } GError;
 typedef struct _GPtrArray { gpointer *pdata; guint len; } GPtrArray;
@@ -131,6 +132,7 @@ typedef struct _GList {
 
 typedef struct _GtkWidget GtkWidget;
 typedef struct _GtkApplication GtkApplication;
+typedef struct _GtkSettings GtkSettings;
 typedef struct _GtkWindow GtkWindow;
 typedef struct _GtkBox GtkBox;
 typedef struct _GtkButton GtkButton;
@@ -299,6 +301,7 @@ const gchar *g_get_user_config_dir(void);
 gchar *g_markup_printf_escaped(const gchar *format, ...);
 int g_mkdir_with_parents(const gchar *pathname, int mode);
 gpointer g_object_get_data(gpointer object, const gchar *key);
+void g_object_get(gpointer object, const gchar *first_property_name, ...);
 void g_object_set(gpointer object, const gchar *first_property_name, ...);
 void g_object_set_data(gpointer object, const gchar *key, gpointer data);
 gpointer g_object_ref(gpointer object);
@@ -357,6 +360,7 @@ gboolean g_spawn_async(const gchar *working_directory, gchar **argv,
 guint g_timeout_add(guint interval, GSourceFunc function, gpointer data);
 guint g_timeout_add_seconds(guint interval, GSourceFunc function, gpointer data);
 gchar *g_utf8_casefold(const gchar *str, gssize len);
+gchar *g_ascii_strdown(const gchar *str, gssize len);
 
 
 static inline gboolean lsm_g_ascii_isalnum(gchar c) {
@@ -454,6 +458,7 @@ PangoAttribute *pango_attr_weight_new(int weight);
 void cairo_new_path(cairo_t *cr); void cairo_move_to(cairo_t *cr,double x,double y); void cairo_line_to(cairo_t *cr,double x,double y); void cairo_close_path(cairo_t *cr); void cairo_fill(cairo_t *cr); void cairo_stroke(cairo_t *cr); void cairo_rectangle(cairo_t *cr,double x,double y,double width,double height); void cairo_set_dash(cairo_t *cr,const double *dashes,int num_dashes,double offset); void cairo_set_line_width(cairo_t *cr,double width); void cairo_set_source_rgba(cairo_t *cr,double red,double green,double blue,double alpha);
 
 /* GTK */
+GtkSettings *gtk_settings_get_default(void);
 GtkApplication *gtk_application_new(const gchar *application_id, int flags);
 GtkWidget *gtk_application_window_new(GtkApplication *application);
 GtkWidget *gtk_box_new(GtkOrientation orientation, gint spacing);

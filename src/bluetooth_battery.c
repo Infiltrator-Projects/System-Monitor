@@ -268,11 +268,9 @@ size_t lsm_bluetooth_device_parse_objects(
                 record->adapter_path[length] = '\0';
             }
         }
-        const char *controller = strrchr(record->adapter_path, '/');
-        controller = controller && controller[1]
-            ? controller + 1 : record->adapter_path;
+        const char *controller = lsm_path_basename(record->adapter_path);
         lsm_copy_string(record->controller, sizeof(record->controller),
-                        controller && controller[0] ? controller : "Bluetooth");
+                        controller[0] ? controller : "Bluetooth");
 
         (void)lookup_string(device, "Address", record->address,
                             sizeof(record->address));

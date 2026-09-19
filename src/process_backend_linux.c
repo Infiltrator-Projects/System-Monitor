@@ -253,7 +253,7 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     char *right = strrchr(text, ')');
     if (!left || !right || right <= left) return false;
     *right = '\0';
-    snprintf(process->name, sizeof(process->name), "%s", left + 1);
+    lsm_copy_string(process->name, sizeof(process->name), left + 1);
 
     char *save = NULL;
     char *token = strtok_r(right + 2, " ", &save);
@@ -537,42 +537,52 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
 static uint64_t read_total_cpu_ticks(void)
 {
     char text[512];
-    if (!lsm_read_text_file("/proc/stat", text, sizeof(text))) return 0U;
-    unsigned long long user = 0U;
-    unsigned long long nice = 0U;
-    unsigned long long system = 0U;
-    unsigned long long idle = 0U;
-    unsigned long long iowait = 0U;
-    unsigned long long irq = 0U;
-    unsigned long long softirq = 0U;
-    unsigned long long steal = 0U;
-    const int matched = sscanf(
-        text, "%*s %llu %llu %llu %llu %llu %llu %llu %llu",
-        &user, &nice, &system, &idle, &iowait, &irq, &softirq, &steal);
-    if (matched < 4) return 0U;
-    const uint64_t fields[] = {
-        user, nice, system, idle, iowait, irq, softirq, steal
-    };
+    if (!lsm_read_text_file("/proc/stat", text, sizeof(text)) ||
+        !lsm_string_starts_with(text, "cpu"))
+        return 0U;
+
+    const char *cursor = text + 3U;
+    uint64_t fields[8] = {0U};
+    size_t count = 0U;
+    while (count < LSM_ARRAY_LENGTH(fields) &&
+           lsm_parse_u64_token(&cursor, 10U, &fields[count]))
+        count++;
+    if (count < 4U) return 0U;
+
     uint64_t total = 0U;
-    for (size_t index = 0U; index < LSM_ARRAY_LENGTH(fields); index++)
+    for (size_t index = 0U; index < count; index++)
         total = lsm_u64_add_saturating(total, fields[index]);
     return total;
 }
 
 static int64_t read_boot_time(void)
 {
-    FILE *file = fopen("/proc/stat", "r");
-    if (!file) return 0;
-    char line[512];
+    char *text = NULL;
+    size_t length = 0U;
+    if (lsm_read_text_file_alloc("/proc/stat", &text, &length) !=
+        INFILTRATR_IO_OK)
+        return 0;
+    if (memchr(text, '\0', length) != NULL) {
+        free(text);
+        return 0;
+    }
+
     int64_t boot = 0;
-    while (fgets(line, sizeof(line), file)) {
-        long long value = 0;
-        if (sscanf(line, "btime %lld", &value) == 1) {
+    char *save = NULL;
+    for (char *line = strtok_r(text, "\n", &save); line;
+         line = strtok_r(NULL, "\n", &save)) {
+        if (!lsm_string_starts_with(line, "btime")) continue;
+        const char *cursor = line + 5U;
+        int64_t value = 0;
+        if (!infiltratr_parse_i64_token(&cursor, 10U, &value))
+            continue;
+        while (*cursor && isspace((unsigned char)*cursor)) cursor++;
+        if (*cursor == '\0') {
             boot = value;
             break;
         }
     }
-    fclose(file);
+    free(text);
     return boot;
 }
 
