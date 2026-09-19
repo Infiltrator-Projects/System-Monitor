@@ -81,7 +81,7 @@ Each numbered release publishes:
 - `infiltrator-system-monitor_<version>_amd64.deb`
 - `system-monitor-<version>-native-installer.run`
 
-The `.deb` is the generic amd64 package. Its Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. Version 1.0.36 migrates existing `system-monitor` package installations through the repository transition package, leaving that old package name as compatibility-only. The `.run` performs a native local build/test/install.
+The `.deb` is the generic amd64 package. Its Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. Version 1.0.36 migrates existing `system-monitor` package installations through the repository transition package, leaving that old package name as compatibility-only; the protected `infiltrator-system-monitor` identity is authoritative for future APT releases. The `.run` performs a native local build/test/install.
 
 ## Repository policy
 
