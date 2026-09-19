@@ -411,10 +411,12 @@ GtkWidget *performance_make_network_caption(const char *text)
 static void build_performance_contents(LsmApp *app, const char *visible_page)
 {
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_widget_set_name(paned, "lsm-performance-paned");
     app->performance.performance_root = paned;
     gtk_container_add(GTK_CONTAINER(app->performance.performance_container), paned);
 
     GtkWidget *side_scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_name(side_scroller, "lsm-performance-sidebar");
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_widget_set_size_request(side_scroller, LSM_SIDEBAR_WIDTH, -1);
@@ -434,6 +436,7 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
                                   GTK_STACK_TRANSITION_TYPE_CROSSFADE);
     gtk_stack_set_transition_duration(GTK_STACK(app->performance.performance_stack), 120);
     GtkWidget *performance_scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_name(performance_scroller, "lsm-performance-content");
     app->runtime.page_scrollers[LSM_TAB_PERFORMANCE] = performance_scroller;
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(performance_scroller),
                                    GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
