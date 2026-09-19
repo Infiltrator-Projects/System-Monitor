@@ -15,6 +15,7 @@ No unreleased changes.
 - Render primary performance graphs on the Common card surface while keeping compact sidebar graphs on the quieter surface layer, with softer grid/fill emphasis and neutral graphite frames.
 - Apply Common detail-label, heading, kicker, summary and selected-summary roles to performance captions, values and device-row metadata so text hierarchy matches the rest of the Infiltrator family.
 - Remove the remaining hard-coded purple memory-composition frame and resolve its background/border through the active Common palette.
+- Preserve the correct Common foreground roles through normal, hover, checked and disabled button states so custom dark navigation rows never inherit the light-button foreground colour.
 
 ## 1.0.49 - 2026-09-20
 
