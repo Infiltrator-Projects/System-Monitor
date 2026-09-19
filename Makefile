@@ -990,11 +990,11 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO)
 	grep -q 'usr/share/doc/infiltrator-system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/doc/infiltrator-system-monitor/THIRD_PARTY_NOTICES$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$' \
+	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/icons/hicolor/96x96/apps/infiltrator-system-monitor.png$' \
+	grep -q 'usr/share/icons/hicolor/96x96/apps/infiltrator-system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/app-install/icons/infiltrator-system-monitor.png$' \
+	grep -q 'usr/share/app-install/icons/infiltrator-system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	@test "$$(awk '$$1 ~ /^-/ && $$1 ~ /x/ {print $$6}' \
 		$(BUILD_DIR)/deb-contents.txt | grep -v '^\./usr/bin/system-monitor$$' | wc -l)" -eq 0
