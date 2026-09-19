@@ -18,7 +18,7 @@ Linux-specific paths, ioctls, signals, scheduler/affinity operations, D-Bus call
 
 GTK 3 is currently the Linux presentation toolkit; reusable accounting, parsing and model layers must not depend on GTK.
 
-Portability is judged at the contract boundary. Linux implementation files may use Linux-native facilities when they provide the strongest semantics; the requirement is that those facilities do not leak into a platform-neutral API.
+Portability is judged at the contract boundary, not by forcing implementations toward a lowest common denominator. Linux implementation files should use Linux-native facilities when they provide the strongest semantics, even when that requires more platform-specific code; the requirement is that those facilities do not leak into a platform-neutral API. A weaker implementation must not be chosen merely because it is easier to share across platforms.
 
 ## Representation assumptions
 
@@ -40,7 +40,7 @@ Counter arithmetic must handle overflow, rollback and invalid timing without pro
 
 Storage and memory presentation uses 1024-based KB/MB/GB/TB labels. Network rates and negotiated link speeds use decimal 1000-based scaling.
 
-Platform-neutral code must not hard-code `/proc`, `/sys` or `/dev`. Path construction, allocation growth and similar generic mechanics should use pinned Common APIs when their contracts fit.
+Platform-neutral code must not hard-code `/proc`, `/sys` or `/dev`. Path construction, allocation growth and similar generic mechanics belong in pinned Common APIs when they are fundamentally reusable. If a local generic mechanism is stronger than Common, improve Common to retain those advantages rather than accepting weaker reuse or preserving permanent duplication.
 
 Background workers expose platform-neutral results. Threading primitives, cancellation state, descriptors and synchronization objects remain owned by the implementing subsystem and are released deterministically. Detached lifetime is permitted only when ownership is explicitly transferred or reference-counted.
 
@@ -50,7 +50,8 @@ A portable change should preserve these properties:
 
 - platform-neutral code does not gain Linux-native types or paths;
 - external binary data is decoded with explicit width, alignment and byte-order assumptions;
-- no new language/runtime dependency is introduced without a concrete benefit;
+- no new language/runtime dependency is introduced without a concrete benefit that C/C++ cannot reasonably provide;
+- portability does not force a weaker or lowest-common-denominator implementation;
 - ownership, units, timing and failure behaviour remain explicit;
 - unsupported capabilities degrade to unavailable rather than guessed data;
 - another native backend could implement the same public contract without reproducing Linux internals.

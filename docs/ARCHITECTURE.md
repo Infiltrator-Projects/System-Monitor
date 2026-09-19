@@ -8,7 +8,7 @@ System Monitor separates presentation, platform-neutral state, native platform b
 
 System Monitor begins with the authoritative operating-system or hardware contract rather than treating another monitoring application as the source of truth. Where practical, the project implements collection and interpretation directly against native interfaces instead of parsing the output or inheriting the behaviour of external utilities that can change independently.
 
-First principles does not mean reimplementing every dependency. A kernel ABI, toolkit, driver API or shared Common primitive is appropriate when it provides a documented, sufficiently strong contract. Dependencies are chosen deliberately; they do not replace ownership of System Monitor's application, hardware and policy behaviour.
+First principles does not mean reimplementing every dependency. A kernel ABI, toolkit, driver API or shared Common primitive is appropriate when it provides the strongest practical contract for the job. The project should go as low in the stack as practical and avoid unnecessary third-party layers even when doing so requires more implementation work. Dependencies are chosen deliberately; ease, convention or development time do not justify surrendering control of important behaviour.
 
 ## Structure
 
@@ -56,9 +56,11 @@ Malformed external data is rejected or skipped at the narrowest practical bounda
 
 ## Common
 
-`src/infiltratr-common` is pinned to one exact Common release commit. Common owns reusable mechanisms; System Monitor owns application, Linux and hardware policy.
+`src/infiltratr-common` is pinned to one exact Common release commit. Common is the authoritative home for reusable project mechanisms; System Monitor owns application, Linux and hardware policy that is genuinely specific to this product.
 
-Use Common when its contract is at least as strong as the local requirement. Do not weaken a Linux-specific parser, timing rule or hardware contract merely to replace it with a broader generic helper, and do not modify the Common repository from this project.
+Common's target is reference-quality, leading-edge and complete reusable code, not merely a lowest-common-denominator helper set. If System Monitor contains a stronger implementation of a capability that is fundamentally generic, the correct direction is to improve Common so that its generic contract preserves the local implementation's correctness, performance, resilience and useful capabilities. Once Common is at least as strong, System Monitor should use Common and remove the duplicate implementation.
+
+Do not weaken specialised code merely to increase reuse. Equally, do not leave generic custom code permanently duplicated when its advantages can be incorporated into Common. Changes to Common are made in the Common repository and consumed here through a new exact pin; this repository does not edit the submodule in place.
 
 ## Security and trust model
 

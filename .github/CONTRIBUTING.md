@@ -8,11 +8,13 @@ System Monitor uses C and C++ as equal, first-class project languages. The curre
 
 - Treat C and C++ as equal first-class implementation choices; do not impose a C-over-C++ or C++-over-C rule.
 - Prefer C or C++ for project-owned code over other language ecosystems. Introduce another language or runtime only when it provides a concrete capability or engineering benefit that C/C++ cannot reasonably provide.
-- Within C or C++, do not adopt a newer language feature merely because it is newer; use the feature and supported standard that best fit the component and toolchain.
+- Within C or C++, do not adopt a newer language feature merely because it is newer; use it when it gives the stronger implementation, and replace an older approach when the newer one is demonstrably better.
 - Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
 - Keep GTK types out of reusable accounting, parsing and model layers.
-- Apply first-principles ownership to telemetry: prefer authoritative native interfaces and project-owned behaviour over parsing or orchestrating external utilities whose output can change independently.
-- Reuse the pinned Common APIs when their contract matches the requirement; do not modify the Common submodule from this repository.
+- Apply first-principles ownership to telemetry: go as low in the stack as practical, prefer authoritative native interfaces and project-owned behaviour, and avoid unnecessary third-party runtime layers even when the direct implementation is harder.
+- Do not knowingly choose a weaker implementation because it is easier, quicker, more fashionable, more conventional or more portable; technical quality decides.
+- Treat Common as the authoritative home for generic reusable mechanisms. If local generic code is stronger, improve Common to preserve those advantages, then use Common and remove the duplicate once its contract is at least as strong.
+- Keep Common reference-quality, leading-edge and complete rather than reducing it to lowest-common-denominator helpers; modify Common in its own repository and consume the resulting exact pin here.
 - Keep System-Monitor-specific hardware and UI policy local.
 - Make ownership, cleanup, units, availability and failure behaviour explicit.
 - Do not invent telemetry when an interface cannot establish a value safely.

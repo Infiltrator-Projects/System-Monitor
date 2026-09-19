@@ -15,13 +15,13 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provid
 
 System Monitor is built from first principles: establish what the operating system or hardware interface actually guarantees, then implement the required behaviour directly where practical. It deliberately avoids depending on the output or behaviour of external monitoring utilities when an authoritative native interface is available, because those dependencies can change independently of this project. External libraries are used when their documented contract is the stronger solution; important product behaviour remains owned by System Monitor.
 
-The project does not equate newer with better. Proven kernel interfaces and collection methods remain when they are the strongest source of truth; a replacement or dependency must improve correctness, coverage, resilience, performance or maintainability rather than merely moving responsibility elsewhere.
+The project does not equate newer with better. Proven interfaces and techniques remain when they are the strongest solution, and newer ones replace them when they are demonstrably better. Age, popularity, fashion, convenience and implementation effort do not decide the architecture: the strongest practical implementation does. System Monitor should not knowingly accept a weaker solution merely because it is easier, quicker, more conventional or more portable.
 
 C and C++ are equal, first-class implementation languages for the project. The choice between them is made according to the needs of the component, with no general preference for one over the other. The language preference is C/C++ over other language ecosystems; another language is introduced only when it offers a concrete technical advantage that C or C++ cannot reasonably provide.
 
 The installed product is one GUI executable, `system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
-Slow collection work is kept away from the GTK main thread. Reusable parsing, formatting, timing, path, allocation and durable-I/O primitives come from the pinned Common library; Linux hardware and product-specific behaviour remain in System Monitor.
+Slow collection work is kept away from the GTK main thread. Reusable mechanisms belong in the pinned Common library, whose goal is reference-quality, leading-edge, complete implementations that can be reused across projects without sacrificing the strengths of specialised code. When System Monitor develops a stronger generic implementation, those advantages should be incorporated into Common and the duplicate local implementation removed once Common is at least as strong. Linux hardware and genuinely product-specific behaviour remain in System Monitor.
 
 Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB labels. Network rates and negotiated link speeds use decimal 1000-based scaling.
 
