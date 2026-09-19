@@ -117,6 +117,7 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           deb="infiltrator-system-monitor_${version}_amd64.deb"
           test -f "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
 
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
           actual_members=$(ar t "$deb")
