@@ -19,13 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void set_invalid_argument(GError **error, const char *message)
-{
-    if (error)
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-                            message);
-}
-
 static GVariant *manager_call_on_bus(GDBusConnection *bus, const char *method,
                                      GVariant *parameters, int timeout_ms,
                                      GCancellable *cancellable, GError **error)
@@ -169,10 +162,7 @@ bool lsm_service_backend_collect(LsmServiceEntry **out_entries,
                                  GCancellable *cancellable,
                                  GError **error)
 {
-    if (!out_entries || !out_count) {
-        set_invalid_argument(error, "Service inventory output is invalid");
-        return false;
-    }
+    if (!out_entries || !out_count) return false;
     *out_entries = NULL;
     *out_count = 0U;
 
@@ -185,7 +175,7 @@ bool lsm_service_backend_collect(LsmServiceEntry **out_entries,
         collect_services(bus, cancellable, out_count, &collect_error);
     g_object_unref(bus);
     if (collect_error) {
-        if (error) g_propagate_error(error, collect_error);
+        if (error) *error = collect_error;
         else g_error_free(collect_error);
         free(entries);
         *out_count = 0U;
@@ -209,10 +199,7 @@ bool lsm_service_backend_action(const char *name,
                                 GCancellable *cancellable,
                                 GError **error)
 {
-    if (!name || !name[0]) {
-        set_invalid_argument(error, "Service name is unavailable");
-        return false;
-    }
+    if (!name || !name[0]) return false;
 
     const char *method = NULL;
     GVariant *parameters = NULL;
@@ -243,7 +230,6 @@ bool lsm_service_backend_action(const char *name,
         reload_after = true;
         break;
     default:
-        set_invalid_argument(error, "Unsupported service action");
         return false;
     }
 
