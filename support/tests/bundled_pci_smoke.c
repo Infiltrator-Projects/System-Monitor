@@ -3,7 +3,7 @@
  * @file bundled_pci_smoke.c
  * @brief Bundled PCI name resolver regression test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "pci_names.h"

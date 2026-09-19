@@ -3,7 +3,7 @@
  * @file storage_metadata_smoke.c
  * @brief Cached block metadata parsing and classification regression test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L

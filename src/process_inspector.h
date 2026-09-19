@@ -4,7 +4,7 @@
  * @brief Graphical detailed-process inspection and file-owner search.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef LINUX_SYSTEM_MONITOR_PROCESS_INSPECTOR_H

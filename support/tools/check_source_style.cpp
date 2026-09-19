@@ -8,7 +8,7 @@
  * System Monitor application remains C17 and does not link the C++ runtime.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -764,7 +764,7 @@ static void check_licensing_contract(void)
     require_file_marker("support/legal/THIRD_PARTY_NOTICES",
                         "Copyright (c) 2015-2026 Albert Pool");
     require_file_marker("support/resources/icons/system-monitor.png.license",
-                        "SPDX-FileCopyrightText: 2016-2026 Shannon Smith");
+                        "SPDX-FileCopyrightText: 2000-2026 Shannon Smith");
     require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: GPL-3.0-or-later");
     if (!regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))

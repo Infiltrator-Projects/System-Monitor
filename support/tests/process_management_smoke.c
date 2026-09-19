@@ -3,7 +3,7 @@
  * @file process_management_smoke.c
  * @brief Process detail, accounting and affinity smoke test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"

@@ -4,7 +4,7 @@
  * @brief Single source of truth for System Monitor release identity.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "project_info.h"
@@ -41,7 +41,7 @@
         .license_id = "GPL-3.0-or-later",                                      \
         .comments = LSM_PROJECT_COMMENTS "\n\nBuild: " BUILD_LABEL,                 \
         .icon_name = LSM_EXECUTABLE_NAME,                                       \
-        .copyright_text = "Copyright © 2016–2026 Shannon Smith"                     \
+        .copyright_text = "Copyright © 2000-2026 Shannon Smith"                     \
     }
 
 const InfiltratrProjectInfo *lsm_project_info(void)

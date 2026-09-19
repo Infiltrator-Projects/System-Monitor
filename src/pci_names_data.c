@@ -11,7 +11,7 @@
  * THIRD_PARTY_NOTICES.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @copyright PCI data copyright (c) 1997-2026 Martin Mares
  * @copyright PCI data copyright (c) 2015-2026 Albert Pool
  * @license GPL-3.0-or-later
