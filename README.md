@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.45 ([version file](support/VERSION))\
+**Current source version:** 1.0.46 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.8 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -31,7 +31,7 @@ Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB lab
 
 System Monitor packages the MB Corpo typefaces used by its interface. The family names and role weights are taken directly from the pinned Common 1.19.8 typography contract: normal UI text uses **MB Corpo S Title WEB** and title text uses **MB Corpo A Title Cond WEB**, with the S family as the only application-level fallback.
 
-**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the exact Common Day or Night palette; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette and Night is the MB graphite/black palette with the canonical blue accent. The choice is stored per user.
+**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the same Day or Night presentation used by the explicit choices; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette. Night retains Common 1.19.8 semantic component colours and typography but uses System Monitor's established MB graphite-grey `#2B2B30` shell instead of the near-black Common canvas, with the canonical blue accent. The choice is stored per user.
 
 ## Capabilities
 
