@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.48 ([version file](support/VERSION))\
+**Current source version:** 1.0.49 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.10 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -31,7 +31,7 @@ Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB lab
 
 System Monitor packages the MB Corpo typefaces used by its interface. The family names and role weights are taken directly from the pinned Common 1.19.10 typography contract: normal UI text uses **MB Corpo S Title WEB** and title text uses **MB Corpo A Title Cond WEB**, with the S family as the only application-level fallback.
 
-**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the same Day or Night presentation used by the explicit choices; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette. Night now consumes the complete Common 1.19.10 Linux MBLINK reference face: the `#050608` canvas, distinct graphite titlebar/connection/card/surface layers, their matching borders and text greys, and the canonical `#00ADEF` accent. System Monitor no longer substitutes a private single-grey shell. The choice is stored per user.
+**View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the same Day or Night presentation used by the explicit choices; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette. Night consumes the complete Common 1.19.10 Linux MBLINK reference face: the `#050608` canvas, distinct graphite titlebar/connection/card/surface layers, their matching borders and text greys, and the canonical `#00ADEF` accent. System Monitor also follows MBLINK's presentation hierarchy: ordinary controls and graph frames use restrained graphite borders, blue is reserved for selection and interaction emphasis, performance navigation is unboxed until selected, and graphs sit on Common surface layers instead of being outlined by their metric colour. The choice is stored per user.
 
 ## Capabilities
 
