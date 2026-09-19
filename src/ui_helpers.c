@@ -99,9 +99,9 @@ GdkRGBA lsm_ui_background_colour(GtkWidget *widget)
     const double luminance = 0.2126 * background.red +
                              0.7152 * background.green +
                              0.0722 * background.blue;
-    /* Follow-system mode retains the historical guard against GTK themes that
-     * expose an unusably black DrawingArea colour. A forced Common theme must
-     * preserve its semantic background exactly, including Common Night. */
+    /* Host themes still need a guard against unusably black DrawingArea
+     * colours. Forced application themes publish their resolved shell colour as
+     * lsm_background, including the MB graphite-grey Night shell. */
     if (!common_background && luminance < 0.08) {
         background.red = 0.17;
         background.green = 0.17;
