@@ -56,6 +56,8 @@ int main(void)
     loaded->runtime.newer_on_right = true;
     loaded->runtime.window_width = 1280;
     loaded->runtime.window_height = 800;
+    snprintf(loaded->paths.config_dir, sizeof(loaded->paths.config_dir),
+             "%s", saved->paths.config_dir);
     snprintf(loaded->paths.preferences_path, sizeof(loaded->paths.preferences_path),
              "%s", saved->paths.preferences_path);
     lsm_preferences_load(loaded);

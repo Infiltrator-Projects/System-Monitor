@@ -24,6 +24,15 @@
 #include <stdio.h>
 #include <string.h>
 
+/**
+ * Format a finite floating-point value for machine-readable storage.
+ *
+ * @param buffer Destination buffer.
+ * @param size Destination-buffer capacity in bytes.
+ * @param value Finite value to format.
+ * @param precision Number of digits after the decimal point.
+ * @return true when the complete representation was written.
+ */
 static inline bool lsm_numeric_format_fixed(char *buffer, size_t size,
                                             double value, unsigned precision)
 {
@@ -53,6 +62,14 @@ static inline bool lsm_numeric_format_fixed(char *buffer, size_t size,
     return written >= 0 && (size_t)written < size;
 }
 
+/**
+ * Parse a persisted floating-point value, accepting the historical comma form.
+ *
+ * @param text Persisted numeric text.
+ * @param value Receives the parsed finite value.
+ * @param legacy_decimal_comma Optional flag set when comma recovery was used.
+ * @return true when the entire value was parsed successfully.
+ */
 static inline bool lsm_numeric_parse_persisted_double(
     const char *text, double *value, bool *legacy_decimal_comma)
 {
@@ -72,6 +89,16 @@ static inline bool lsm_numeric_parse_persisted_double(
     return true;
 }
 
+/**
+ * Parse a persisted floating-point value and enforce an inclusive range.
+ *
+ * @param text Persisted numeric text.
+ * @param minimum Smallest accepted value.
+ * @param maximum Largest accepted value.
+ * @param value Receives the parsed value.
+ * @param legacy_decimal_comma Optional flag set when comma recovery was used.
+ * @return true when parsing succeeded and the value is within range.
+ */
 static inline bool lsm_numeric_parse_persisted_double_range(
     const char *text, double minimum, double maximum, double *value,
     bool *legacy_decimal_comma)
