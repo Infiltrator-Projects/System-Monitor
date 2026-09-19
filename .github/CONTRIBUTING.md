@@ -10,7 +10,7 @@ System Monitor's installed application is native C17/GTK 3. Developer-only tooli
 - Use ISO C++17 only in developer tooling where it provides a concrete correctness, safety or maintainability benefit; do not add a C++ runtime dependency to the installed application merely for convenience.
 - Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
 - Keep GTK types out of reusable accounting, parsing and model layers.
-- Prefer direct native interfaces over command orchestration for telemetry.
+- Apply first-principles ownership to telemetry: prefer authoritative native interfaces and project-owned behaviour over parsing or orchestrating external utilities whose output can change independently.
 - Reuse the pinned Common APIs when their contract matches the requirement; do not modify the Common submodule from this repository.
 - Keep System-Monitor-specific hardware and UI policy local.
 - Make ownership, cleanup, units, availability and failure behaviour explicit.

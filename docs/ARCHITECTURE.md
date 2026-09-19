@@ -4,6 +4,12 @@
 
 System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. The separation is a correctness boundary: GTK should consume completed state, while collectors retain the operating-system knowledge and mutable baselines required to produce it.
 
+## First-principles design
+
+System Monitor begins with the authoritative operating-system or hardware contract rather than treating another monitoring application as the source of truth. Where practical, the project implements collection and interpretation directly against native interfaces instead of parsing the output or inheriting the behaviour of external utilities that can change independently.
+
+First principles does not mean reimplementing every dependency. A kernel ABI, toolkit, driver API or shared Common primitive is appropriate when it provides a documented, sufficiently strong contract. Dependencies are chosen deliberately; they do not replace ownership of System Monitor's application, hardware and policy behaviour.
+
 ## Structure
 
 ```text
