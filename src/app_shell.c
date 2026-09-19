@@ -110,9 +110,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         !typography->brand_family)
         return;
 
-    char css[8192];
-    const int written = snprintf(
-        css, sizeof(css),
+    GString *css = g_string_sized_new(8192U);
+    if (!css) return;
+
+    g_string_append_printf(
+        css,
         "* { font-family: \"%s\"; font-weight: %u; }"
         "headerbar .title, .titlebar .title {"
         " font-family: \"%s\", \"%s\"; font-weight: %u;"
@@ -187,7 +189,40 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "entry, spinbutton {"
         " background-image: none; background-color: @lsm_input; color: @lsm_text;"
         " border: 1px solid @lsm_connection_border; box-shadow: none;"
-        "}"
+        "}",
+        typography->ui_family,
+        (unsigned int)typography->ui_regular_weight,
+        typography->brand_family,
+        typography->ui_family,
+        (unsigned int)typography->brand_weight,
+        (unsigned int)typography->ui_bold_weight,
+        (unsigned int)palette->background_rgb,
+        (unsigned int)palette->panel_rgb,
+        (unsigned int)palette->card_rgb,
+        (unsigned int)palette->surface_rgb,
+        (unsigned int)palette->input_rgb,
+        (unsigned int)palette->border_rgb,
+        (unsigned int)palette->text_rgb,
+        (unsigned int)palette->title_rgb,
+        (unsigned int)palette->subtle_rgb,
+        (unsigned int)palette->neutral_accent_rgb,
+        (unsigned int)palette->selection_background_rgb,
+        (unsigned int)palette->selection_foreground_rgb,
+        (unsigned int)palette->card_hover_rgb,
+        (unsigned int)palette->surface_hover_rgb,
+        (unsigned int)palette->operation_rgb,
+        (unsigned int)palette->operation_hover_rgb,
+        (unsigned int)palette->titlebar_rgb,
+        (unsigned int)palette->connection_rgb,
+        (unsigned int)palette->connection_border_rgb,
+        (unsigned int)palette->heading_rgb,
+        (unsigned int)palette->summary_rgb,
+        (unsigned int)palette->status_border_rgb,
+        (unsigned int)palette->accent_foreground_rgb,
+        (unsigned int)palette->accent_hover_rgb);
+
+    g_string_append(
+        css,
         "notebook > header {"
         " background-color: @lsm_surface; color: @lsm_summary;"
         " border-color: @lsm_border;"
@@ -241,40 +276,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-side-button:checked {"
         " background-color: alpha(@lsm_neutral, 0.075); color: @lsm_neutral;"
         " border-color: alpha(@lsm_neutral, 0.48);"
-        "}",
-        typography->ui_family,
-        (unsigned int)typography->ui_regular_weight,
-        typography->brand_family,
-        typography->ui_family,
-        (unsigned int)typography->brand_weight,
-        (unsigned int)typography->ui_bold_weight,
-        (unsigned int)palette->background_rgb,
-        (unsigned int)palette->panel_rgb,
-        (unsigned int)palette->card_rgb,
-        (unsigned int)palette->surface_rgb,
-        (unsigned int)palette->input_rgb,
-        (unsigned int)palette->border_rgb,
-        (unsigned int)palette->text_rgb,
-        (unsigned int)palette->title_rgb,
-        (unsigned int)palette->subtle_rgb,
-        (unsigned int)palette->neutral_accent_rgb,
-        (unsigned int)palette->selection_background_rgb,
-        (unsigned int)palette->selection_foreground_rgb,
-        (unsigned int)palette->card_hover_rgb,
-        (unsigned int)palette->surface_hover_rgb,
-        (unsigned int)palette->operation_rgb,
-        (unsigned int)palette->operation_hover_rgb,
-        (unsigned int)palette->titlebar_rgb,
-        (unsigned int)palette->connection_rgb,
-        (unsigned int)palette->connection_border_rgb,
-        (unsigned int)palette->heading_rgb,
-        (unsigned int)palette->summary_rgb,
-        (unsigned int)palette->status_border_rgb,
-        (unsigned int)palette->accent_foreground_rgb,
-        (unsigned int)palette->accent_hover_rgb);
-    if (written < 0 || (size_t)written >= sizeof(css)) return;
+        "}");
+
     gtk_css_provider_load_from_data(
-        app->shell.theme_provider, css, written, NULL);
+        app->shell.theme_provider, css->str, (gssize)css->len, NULL);
+    g_string_free(css, TRUE);
     if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
 }
 
