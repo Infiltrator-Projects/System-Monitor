@@ -763,7 +763,7 @@ static void check_licensing_contract(void)
     require_file_marker("support/legal/THIRD_PARTY_NOTICES",
                         "Copyright (c) 2015-2026 Albert Pool");
     require_file_marker("support/resources/icons/system-monitor.png.license",
-                        "SPDX-FileCopyrightText: 2016 Shannon Smith");
+                        "SPDX-FileCopyrightText: 2016-2026 Shannon Smith");
     require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: GPL-3.0-or-later");
     require_file_marker("support/resources/data/pci-names.tsv.license",
