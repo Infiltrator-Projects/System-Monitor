@@ -1,25 +1,45 @@
-# Contributing
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-## Engineering standard
+# Contributing to System Monitor
 
-Changes to System Monitor should preserve its first-principles ownership model. Start by identifying which layer owns the behaviour and what evidence will demonstrate the change.
+System Monitor uses C and C++ as equal first-class project languages. The implementation chooses between them per component according to correctness, clarity, performance, maintainability and control. Other language/runtime ecosystems require a concrete capability that C/C++ cannot reasonably provide.
 
-## Before coding
+## Engineering rules
 
-1. Read README.md, docs/ARCHITECTURE.md and docs/DESIGN.md.
-2. Search for an existing implementation before creating a parallel path.
-3. Keep generic shared behaviour in the appropriate first-party shared project rather than copying it.
-4. Add or update regression coverage for the changed contract.
-5. Update roadmap, validation or specialist documentation when support boundaries move.
+- Go as low in the stack as practical and prefer authoritative native interfaces over parsing external monitoring utilities.
+- Keep Linux paths, handles, ioctls, scheduler calls and driver knowledge below platform contracts.
+- Keep GTK types out of reusable accounting, parsing and model layers.
+- Keep System-Monitor-specific hardware and UI policy local.
+- Treat Common as the authoritative home for generic reusable mechanisms; improve Common before replacing a stronger local implementation.
+- Never invent telemetry when an interface cannot establish a value safely.
+- Make units, ownership, cleanup, availability and failure semantics explicit.
+- Add deterministic regression coverage for parser, accounting, lifecycle, topology and hardware-behaviour changes.
 
-## Language and dependency policy
+## Build and test
 
-Prefer C/C++ for first-party native code where suitable. Use platform-native language only at a platform boundary that genuinely requires it. External dependencies must have a clear contract and must not replace project-owned semantics merely for convenience.
+```bash
+git clone --recurse-submodules https://github.com/Infiltrator-Projects/System-Monitor.git
+cd System-Monitor
+make check
+cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cmake --parallel
+ctest --test-dir build-cmake --output-on-failure
+```
 
-## Verification
+Use `make docs` for Doxygen validation and `make -j2 release` for a release-equivalent packaging pass. Do not use direct `make install`.
 
-Run the repository's normal build and test path before publishing a change and ensure the relevant CI workflows remain green. Warnings, sanitizer failures, packaging failures and deliberately skipped mandatory evidence are not successful validation.
+## Documentation and comments
 
-## Repository policy
+The canonical map is `docs/README.md`. Maintain architecture, design, decisions, roadmap and validation in their named documents instead of creating overlapping Markdown.
 
-main is the working branch. Published tags and releases are immutable source identities. Changes should be small enough that their ownership, tests and documentation can be reviewed together.
+Comments document invariants, concurrency ordering, ownership transfer, units, ABI quirks, security boundaries, complexity choices and non-obvious reasons. They should not narrate straightforward statements.
+
+## Repository discipline
+
+Normal development stays on `main`. Keep commits focused, preserve strict warnings and keep documentation/test updates in the same change as the contract they describe.
+
+Participation standards remain in [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md).
+
+## Licence
+
+Contributions are accepted under GPL-3.0-or-later unless explicitly agreed otherwise.
