@@ -6,6 +6,15 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.49 - 2026-09-20
+
+- Refine GTK Night presentation to follow MBLINK's visual hierarchy rather than only sharing its raw colour values.
+- Keep ordinary buttons and controls on graphite operation surfaces with restrained borders; reserve cyan for selection, interaction emphasis and product metrics.
+- Remove always-cyan performance navigation borders so unselected device rows remain visually quiet and selected rows use MBLINK's translucent cyan treatment.
+- Render performance graphs on Common surface layers with subtle graphite frames and reduced grid emphasis instead of metric-coloured outer boxes.
+- Give the performance split panes explicit theme identities so the sidebar, content canvas and separator retain the intended layered graphite structure.
+- Keep menus, tabs, scrollbars, text surfaces and About-dialog controls within the same Common 1.19.10 MBLINK-derived Night hierarchy.
+
 ## 1.0.48 - 2026-09-20
 
 - Pin the project and gitlink to Common 1.19.10 at `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`.
