@@ -401,7 +401,7 @@ static void command_first_line(const char *command, const char *argument,
 static void usage(const char *version)
 {
     printf("System Monitor %s hardware-native installer\n\n", version);
-    printf("Usage: system-monitor-%s-native-installer.run [options]\n\n",
+    printf("Usage: infiltrator-system-monitor-%s-native-installer.run [options]\n\n",
            version);
     puts("Options:");
     puts("  --profile native|aggressive|portable");

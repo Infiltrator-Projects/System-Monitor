@@ -1028,4 +1028,4 @@ dist: common-check clean
 release:
 	$(MAKE) deb
 	$(MAKE) native-installer
-	@echo "Release artifacts created: $(DEB_OUTPUT), system-monitor-$(VERSION)-native-installer.run"
+	@echo "Release artifacts created: $(DEB_OUTPUT), infiltrator-system-monitor-$(VERSION)-native-installer.run"

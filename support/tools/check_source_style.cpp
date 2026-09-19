@@ -910,7 +910,7 @@ static void check_shared_release_contract(void)
         require_text_marker(".github/workflows/release.yml", release,
                             "infiltrator-system-monitor_${version}_amd64.deb");
         require_text_marker(".github/workflows/release.yml", release,
-                            "system-monitor-${version}-native-installer.run");
+                            "infiltrator-system-monitor-${version}-native-installer.run");
         if (strstr(release, "System-Monitor-${version}-source.zip"))
             report_error(
                 ".github/workflows/release.yml: releases must upload only "

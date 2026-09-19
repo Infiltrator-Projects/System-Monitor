@@ -133,7 +133,7 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v${version}"
           deb="infiltrator-system-monitor_${version}_amd64.deb"
-          installer="system-monitor-${version}-native-installer.run"
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
           test -f "$deb"
           test -x "$installer"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
