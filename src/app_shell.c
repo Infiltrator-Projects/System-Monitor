@@ -102,9 +102,22 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         }
     }
 
+    const gboolean system_dark = lsm_system_prefers_dark();
     const InfiltratrThemePalette *palette =
-        infiltratr_theme_resolve(app->runtime.theme_mode,
-                                 lsm_system_prefers_dark());
+        infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
+    /*
+     * System Monitor's established MB night shell is graphite grey, not the
+     * near-black Common canvas.  Keep Common authoritative for the semantic
+     * component palette, but map the top-level shell/background role to the
+     * long-standing #2B2B30 presentation colour whenever Night is resolved.
+     * This is the same neutral grey historically used by DrawingArea fallback
+     * rendering, so graphs and GTK chrome agree instead of switching to black.
+     */
+    const gboolean night_resolved =
+        app->runtime.theme_mode == INFILTRATR_THEME_NIGHT ||
+        (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
+    const unsigned int shell_background_rgb =
+        night_resolved ? 0x2B2B30U : (unsigned int)palette->background_rgb;
     const InfiltratrTypography *typography = infiltratr_typography();
     if (!palette || !typography || !typography->ui_family ||
         !typography->brand_family)
@@ -196,7 +209,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         typography->ui_family,
         (unsigned int)typography->brand_weight,
         (unsigned int)typography->ui_bold_weight,
-        (unsigned int)palette->background_rgb,
+        shell_background_rgb,
         (unsigned int)palette->panel_rgb,
         (unsigned int)palette->card_rgb,
         (unsigned int)palette->surface_rgb,
