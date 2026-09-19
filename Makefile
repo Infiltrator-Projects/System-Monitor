@@ -961,8 +961,8 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO)
 	dpkg-deb --info $(DEB_OUTPUT) >/dev/null
 	dpkg-deb --contents $(DEB_OUTPUT) > $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/doc/system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/doc/system-monitor/THIRD_PARTY_NOTICES$$' \
+	grep -q 'usr/share/doc/infiltrator-system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
+	grep -q 'usr/share/doc/infiltrator-system-monitor/THIRD_PARTY_NOTICES$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
