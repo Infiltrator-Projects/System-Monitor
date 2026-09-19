@@ -128,7 +128,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "@define-color lsm_border #%06X;"
         "@define-color lsm_text #%06X;"
         "@define-color lsm_title #%06X;"
+        "@define-color lsm_muted #%06X;"
         "@define-color lsm_subtle #%06X;"
+        "@define-color lsm_button_background #%06X;"
+        "@define-color lsm_button_foreground #%06X;"
         "@define-color lsm_neutral #%06X;"
         "@define-color lsm_selection #%06X;"
         "@define-color lsm_selection_text #%06X;"
@@ -141,6 +144,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "@define-color lsm_connection_border #%06X;"
         "@define-color lsm_heading #%06X;"
         "@define-color lsm_summary #%06X;"
+        "@define-color lsm_kicker #%06X;"
+        "@define-color lsm_detail_label #%06X;"
+        "@define-color lsm_selected_summary #%06X;"
         "@define-color lsm_status_border #%06X;"
         "@define-color lsm_accent_foreground #%06X;"
         "@define-color lsm_accent_hover #%06X;"
@@ -156,11 +162,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " color: @lsm_text; border: 1px solid @lsm_connection_border;"
         "}"
         "frame {"
-        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
+        " background-image: none; background-color: @lsm_card;"
         " color: @lsm_text; border-color: @lsm_border;"
         "}"
         "menubar {"
-        " background-color: @lsm_surface; color: @lsm_text;"
+        " background-color: @lsm_panel; color: @lsm_text;"
         " border-bottom: 1px solid @lsm_border;"
         "}"
         "menubar > menuitem { color: @lsm_summary; }"
@@ -171,16 +177,20 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         "menuitem:hover { background-color: @lsm_surface_hover; }"
         "button, combobox button {"
-        " background-image: none; background-color: @lsm_operation; color: @lsm_text;"
-        " border: 1px solid @lsm_border; box-shadow: none;"
+        " background-image: none; background-color: @lsm_button_background;"
+        " color: @lsm_button_foreground; border: 1px solid @lsm_border;"
+        " box-shadow: none;"
+        "}"
+        "button label, button image, combobox button label, combobox button image {"
+        " color: @lsm_button_foreground;"
         "}"
         "button:hover, combobox button:hover {"
-        " background-color: @lsm_operation_hover;"
-        " border-color: alpha(@lsm_neutral, 0.36);"
+        " background-color: @lsm_neutral; border-color: @lsm_neutral;"
         "}"
+        "button:hover label, button:hover image { color: @lsm_button_foreground; }"
         "button:active, button:checked {"
         " background-color: @lsm_selection; color: @lsm_selection_text;"
-        " border-color: alpha(@lsm_neutral, 0.48);"
+        " border-color: @lsm_neutral;"
         "}"
         "button:disabled {"
         " background-color: @lsm_input; color: @lsm_subtle;"
@@ -204,7 +214,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->border_rgb,
         (unsigned int)palette->text_rgb,
         (unsigned int)palette->title_rgb,
+        (unsigned int)palette->muted_rgb,
         (unsigned int)palette->subtle_rgb,
+        (unsigned int)palette->button_background_rgb,
+        (unsigned int)palette->button_foreground_rgb,
         (unsigned int)palette->neutral_accent_rgb,
         (unsigned int)palette->selection_background_rgb,
         (unsigned int)palette->selection_foreground_rgb,
@@ -217,6 +230,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->connection_border_rgb,
         (unsigned int)palette->heading_rgb,
         (unsigned int)palette->summary_rgb,
+        (unsigned int)palette->kicker_rgb,
+        (unsigned int)palette->detail_label_rgb,
+        (unsigned int)palette->selected_summary_rgb,
         (unsigned int)palette->status_border_rgb,
         (unsigned int)palette->accent_foreground_rgb,
         (unsigned int)palette->accent_hover_rgb);
@@ -224,20 +240,23 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     g_string_append(
         css,
         "notebook > header {"
-        " background-color: @lsm_surface; color: @lsm_summary;"
+        " background-color: @lsm_panel; color: @lsm_summary;"
         " border-color: @lsm_border;"
         "}"
         "notebook > header > tabs > tab {"
         " background-color: transparent; color: @lsm_summary;"
-        " border: 1px solid transparent;"
+        " border: 0; border-bottom: 2px solid transparent;"
+        " padding: 5px 10px;"
         "}"
+        "notebook > header > tabs > tab label { color: @lsm_summary; }"
         "notebook > header > tabs > tab:hover {"
-        " background-color: @lsm_card_hover; color: @lsm_title;"
+        " background-color: @lsm_card_hover;"
         "}"
+        "notebook > header > tabs > tab:hover label { color: @lsm_title; }"
         "notebook > header > tabs > tab:checked {"
-        " background-color: alpha(@lsm_neutral, 0.075); color: @lsm_neutral;"
-        " border-color: alpha(@lsm_neutral, 0.32);"
+        " background-color: transparent; border-bottom-color: @lsm_neutral;"
         "}"
+        "notebook > header > tabs > tab:checked label { color: @lsm_heading; }"
         "treeview, textview, textview text {"
         " background-color: @lsm_input; color: @lsm_text;"
         " border-color: @lsm_border;"
@@ -245,15 +264,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "viewport, scrolledwindow {"
         " background-color: @lsm_background; color: @lsm_text;"
         " border-color: @lsm_border;"
-        "}"
-        "#lsm-performance-sidebar, #lsm-performance-sidebar viewport {"
-        " background-color: @lsm_background; border-color: @lsm_border;"
-        "}"
-        "#lsm-performance-content, #lsm-performance-content viewport {"
-        " background-color: @lsm_background; border-color: @lsm_border;"
-        "}"
-        "#lsm-performance-paned > separator {"
-        " background-color: @lsm_border; min-width: 1px;"
         "}"
         "entry selection, textview text selection, treeview.view:selected {"
         " background-color: @lsm_selection; color: @lsm_selection_text;"
@@ -264,19 +274,39 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "tooltip {"
         " background-color: @lsm_card; color: @lsm_title;"
         " border: 1px solid @lsm_border;"
+        "}");
+
+    g_string_append(
+        css,
+        "#lsm-performance-sidebar, #lsm-performance-sidebar viewport {"
+        " background-color: @lsm_panel; border-color: @lsm_border;"
+        "}"
+        "#lsm-performance-content, #lsm-performance-content viewport {"
+        " background-color: @lsm_background; border-color: @lsm_border;"
+        "}"
+        "#lsm-performance-paned > separator {"
+        " background-color: @lsm_border; min-width: 1px;"
         "}"
         "#lsm-side-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_text; border: 1px solid transparent; box-shadow: none;"
+        " border-radius: 6px; margin: 3px 7px; padding: 4px 6px;"
         "}"
         "#lsm-side-button:hover {"
-        " background-color: @lsm_card_hover;"
-        " border-color: alpha(@lsm_neutral, 0.22);"
+        " background-color: @lsm_card_hover; border-color: transparent;"
         "}"
         "#lsm-side-button:checked {"
-        " background-color: alpha(@lsm_neutral, 0.075); color: @lsm_neutral;"
-        " border-color: alpha(@lsm_neutral, 0.48);"
-        "}");
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        " border-color: @lsm_border; border-left: 3px solid @lsm_neutral;"
+        "}"
+        ".lsm-side-title { color: @lsm_text; }"
+        ".lsm-side-identifier { color: @lsm_kicker; }"
+        ".lsm-side-value { color: @lsm_summary; }"
+        "#lsm-side-button:checked .lsm-side-title { color: @lsm_heading; }"
+        "#lsm-side-button:checked .lsm-side-identifier,"
+        "#lsm-side-button:checked .lsm-side-value { color: @lsm_selected_summary; }"
+        ".lsm-metric-caption { color: @lsm_detail_label; }"
+        ".lsm-metric-value { color: @lsm_heading; }");
 
     gtk_css_provider_load_from_data(
         app->shell.theme_provider, css->str, (gssize)css->len, NULL);
