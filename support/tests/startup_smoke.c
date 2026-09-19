@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 int main(void)
 {
