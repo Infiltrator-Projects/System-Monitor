@@ -158,18 +158,10 @@ static int signal_from_control(LsmProcessControl action)
     return 0;
 }
 
-static bool numeric_name(const char *name)
-{
-    if (!name || !*name) return false;
-    for (const char *p = name; *p; p++)
-        if (!isdigit((unsigned char)*p)) return false;
-    return true;
-}
-
 static bool parse_proc_pid(const char *name, pid_t *pid)
 {
     uint64_t value = 0U;
-    if (!pid || !numeric_name(name) ||
+    if (!pid ||
         !infiltratr_parse_u64_range(name, 10U, 1U, (uint64_t)INT_MAX,
                                     &value))
         return false;

@@ -205,8 +205,8 @@ static void process_identity(const LsmApp *app, size_t process_index,
     if (entry) {
         *category = PROCESS_CATEGORY_APPLICATION;
         snprintf(key, key_size, "app:%s", entry->id);
-        g_strlcpy(name, entry->name, name_size);
-        g_strlcpy(icon, entry->icon, icon_size);
+        lsm_copy_string(name, entry->name, name_size);
+        lsm_copy_string(icon, entry->icon, icon_size);
         return;
     }
 
@@ -216,8 +216,8 @@ static void process_identity(const LsmApp *app, size_t process_index,
              *category == PROCESS_CATEGORY_BACKGROUND
                  ? "background" : "system",
              process->name);
-    g_strlcpy(name, process->name, name_size);
-    g_strlcpy(icon, category_icon(*category), icon_size);
+    lsm_copy_string(name, process->name, name_size);
+    lsm_copy_string(icon, category_icon(*category), icon_size);
 }
 
 static void group_destroy(gpointer data)
@@ -291,9 +291,9 @@ static GPtrArray *collect_groups(LsmApp *app)
             group = calloc(1U, sizeof(*group));
             if (!group) continue;
             group->category = category;
-            g_strlcpy(group->key, key, sizeof(group->key));
-            g_strlcpy(group->name, name, sizeof(group->name));
-            g_strlcpy(group->icon, icon, sizeof(group->icon));
+            lsm_copy_string(group->key, key, sizeof(group->key));
+            lsm_copy_string(group->name, name, sizeof(group->name));
+            lsm_copy_string(group->icon, icon, sizeof(group->icon));
             if (!group_append(group, index, process)) {
                 group_destroy(group);
                 continue;
@@ -582,7 +582,7 @@ static void set_group_row(LsmApp *app, const ProcessGroup *group,
     if (group->count > 1U)
         snprintf(name, sizeof(name), "%s (%zu)", group->name, group->count);
     else
-        g_strlcpy(name, group->name, sizeof(name));
+        lsm_copy_string(name, group->name, sizeof(name));
     const char *status = group->metrics.all_stopped ? "Suspended" :
                          group->metrics.all_efficient
                          ? "Efficiency mode" : "";
@@ -644,7 +644,7 @@ static void append_group(LsmApp *app, const ProcessGroup *group,
     if (group->count > 1U)
         snprintf(name, sizeof(name), "%s (%zu)", group->name, group->count);
     else
-        g_strlcpy(name, group->name, sizeof(name));
+        lsm_copy_string(name, group->name, sizeof(name));
     const LsmProcessInfo *representative =
         &app->process.process_snapshot[group->indices[0]];
     if (desired_group && *desired_group &&
@@ -768,7 +768,7 @@ static void rebuild_grouped_model(LsmApp *app, GPtrArray *groups)
     const LsmProcessInstanceId desired_instance_id =
         app->process.selected_instance_id;
     char desired_group[LSM_NAME_LEN];
-    g_strlcpy(desired_group, app->process.selected_group_name,
+    lsm_copy_string(desired_group, app->process.selected_group_name,
               sizeof(desired_group));
     GHashTable *expanded = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, NULL);
@@ -936,7 +936,7 @@ static void select_group_processes(LsmApp *app, GtkTreeModel *model,
                 ordered[item].instance_id;
         }
         app->process.selected_group_count = index;
-        g_strlcpy(app->process.selected_group_name, name,
+        lsm_copy_string(app->process.selected_group_name, name,
                   sizeof(app->process.selected_group_name));
     } else {
         free(app->process.selected_group_pids);

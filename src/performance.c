@@ -122,7 +122,7 @@ void performance_select_side_button(LsmApp *app, LsmDevicePage *selected)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(page->button),
                                      page == selected);
     }
-    g_strlcpy(app->runtime.selected_performance_page, selected->stack_name,
+    lsm_copy_string(app->runtime.selected_performance_page, selected->stack_name,
               sizeof(app->runtime.selected_performance_page));
     lsm_performance_selection_end(&app->performance.performance_selection);
 }
@@ -229,7 +229,7 @@ LsmDevicePage *performance_new_page(LsmApp *app, LsmPageType type, size_t index,
     LsmDevicePage *page = g_new0(LsmDevicePage, 1);
     page->type = type;
     page->index = index;
-    g_strlcpy(page->stack_name, stack_name, sizeof(page->stack_name));
+    lsm_copy_string(page->stack_name, stack_name, sizeof(page->stack_name));
     page->page = performance_new_vertical_box(7);
     gtk_container_set_border_width(GTK_CONTAINER(page->page), 10);
     GtkWidget *button = make_side_button(page, app->performance.performance_stack,
@@ -664,7 +664,7 @@ static GPtrArray *capture_page_histories(const LsmApp *app)
         const LsmDevicePage *page =
             g_ptr_array_index(app->performance.device_pages, index);
         LsmPageHistorySnapshot *snapshot = g_new0(LsmPageHistorySnapshot, 1);
-        g_strlcpy(snapshot->stack_name, page->stack_name,
+        lsm_copy_string(snapshot->stack_name, page->stack_name,
                   sizeof(snapshot->stack_name));
         capture_graph_history(page->graph, &snapshot->graph);
         capture_graph_history(page->secondary_graph,

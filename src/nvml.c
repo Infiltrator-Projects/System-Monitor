@@ -172,9 +172,8 @@ static bool normalise_pci_bus_id(const char *text, char *buffer, size_t size)
 static bool gpu_pci_bus_id(const LsmGpuInfo *gpu, char *buffer, size_t size)
 {
     if (!gpu || !gpu->platform_identity[0]) return false;
-    const char *component = strrchr(gpu->platform_identity, '/');
-    component = component ? component + 1 : gpu->platform_identity;
-    return normalise_pci_bus_id(component, buffer, size);
+    return normalise_pci_bus_id(
+        lsm_path_basename(gpu->platform_identity), buffer, size);
 }
 
 static LsmGpuInfo *append_nvml_gpu(LsmMonitor *monitor, const char *card)

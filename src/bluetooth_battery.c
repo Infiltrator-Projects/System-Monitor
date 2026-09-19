@@ -12,6 +12,7 @@
  * @license GPL-3.0-or-later
  */
 #include "bluetooth_battery.h"
+#include "common.h"
 
 #include <gio/gio.h>
 #include <pthread.h>
@@ -74,7 +75,7 @@ static bool lookup_string(GVariant *properties, const char *key,
     if (!properties || !key || !destination || destination_size == 0U ||
         !g_variant_lookup(properties, key, "&s", &value) || !value)
         return false;
-    g_strlcpy(destination, value, destination_size);
+    lsm_copy_string(destination, value, destination_size);
     return destination[0] != '\0';
 }
 
@@ -96,7 +97,7 @@ static bool lookup_object_path(GVariant *properties, const char *key,
     if (!properties || !key || !destination || destination_size == 0U ||
         !g_variant_lookup(properties, key, "&o", &value) || !value)
         return false;
-    g_strlcpy(destination, value, destination_size);
+    lsm_copy_string(destination, value, destination_size);
     return destination[0] != '\0';
 }
 
@@ -145,7 +146,7 @@ size_t lsm_bluetooth_adapter_parse_objects(
         if (adapter) {
             LsmBluetoothAdapterRecord *record = &records[count++];
             memset(record, 0, sizeof(*record));
-            g_strlcpy(record->object_path, object_path,
+            lsm_copy_string(record->object_path, object_path,
                       sizeof(record->object_path));
             (void)lookup_string(adapter, "Address", record->address,
                                 sizeof(record->address));
@@ -160,7 +161,7 @@ size_t lsm_bluetooth_adapter_parse_objects(
             (void)lookup_boolean(adapter, "Discovering",
                                  &record->discovering);
             if (!record->name[0])
-                g_strlcpy(record->name, object_path, sizeof(record->name));
+                lsm_copy_string(record->name, object_path, sizeof(record->name));
             g_variant_unref(adapter);
         }
         g_variant_unref(interfaces);
@@ -255,7 +256,7 @@ size_t lsm_bluetooth_device_parse_objects(
 
         LsmBluetoothDeviceRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
-        g_strlcpy(record->object_path, object_path,
+        lsm_copy_string(record->object_path, object_path,
                   sizeof(record->object_path));
         (void)lookup_object_path(device, "Adapter", record->adapter_path,
                                  sizeof(record->adapter_path));
@@ -272,7 +273,7 @@ size_t lsm_bluetooth_device_parse_objects(
         const char *controller = strrchr(record->adapter_path, '/');
         controller = controller && controller[1]
             ? controller + 1 : record->adapter_path;
-        g_strlcpy(record->controller,
+        lsm_copy_string(record->controller,
                   controller && controller[0] ? controller : "Bluetooth",
                   sizeof(record->controller));
 
@@ -294,11 +295,11 @@ size_t lsm_bluetooth_device_parse_objects(
         (void)lookup_boolean(device, "ServicesResolved",
                              &record->services_resolved);
         if (!record->alias[0])
-            g_strlcpy(record->alias,
+            lsm_copy_string(record->alias,
                       record->name[0] ? record->name : record->address,
                       sizeof(record->alias));
         if (!record->name[0])
-            g_strlcpy(record->name,
+            lsm_copy_string(record->name,
                       record->alias[0] ? record->alias : "Bluetooth device",
                       sizeof(record->name));
 
@@ -354,12 +355,12 @@ size_t lsm_bluetooth_battery_parse_objects(
 
         LsmBluetoothBatteryRecord *record = &records[count];
         memset(record, 0, sizeof(*record));
-        g_strlcpy(record->object_path, object_path, sizeof(record->object_path));
+        lsm_copy_string(record->object_path, object_path, sizeof(record->object_path));
         if (!lookup_string(device, "Address", record->address,
                            sizeof(record->address))) {
             const char *marker = strstr(object_path, "/dev_");
             if (marker) {
-                g_strlcpy(record->address, marker + 5,
+                lsm_copy_string(record->address, marker + 5,
                           sizeof(record->address));
                 for (char *cursor = record->address; *cursor; cursor++)
                     if (*cursor == '_') *cursor = ':';
@@ -370,7 +371,7 @@ size_t lsm_bluetooth_battery_parse_objects(
             (void)lookup_string(device, "Name", record->name,
                                 sizeof(record->name));
         if (!record->name[0])
-            g_strlcpy(record->name, "Bluetooth device", sizeof(record->name));
+            lsm_copy_string(record->name, "Bluetooth device", sizeof(record->name));
         (void)lookup_string(battery, "Source", record->source,
                             sizeof(record->source));
         (void)lookup_string(device, "AddressType", record->address_type,

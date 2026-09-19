@@ -23,7 +23,7 @@ Linux backend and collectors
         ↓
 procfs / sysfs / ioctls / D-Bus / optional driver APIs
 
-Common 1.19.3
+Common 1.19.4
         ↓
 shared parsing / formatting / timing / path / durable-I/O / allocation primitives
 ```

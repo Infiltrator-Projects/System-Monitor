@@ -155,10 +155,9 @@ static bool pmu_root_matches_identity(const char *entry,
         return true;
     if (!gpu->platform_identity[0]) return false;
 
-    const char *component = strrchr(gpu->platform_identity, '/');
-    component = component ? component + 1 : gpu->platform_identity;
     char normalised[64];
-    lsm_copy_string(normalised, sizeof(normalised), component);
+    lsm_copy_string(normalised, sizeof(normalised),
+                    lsm_path_basename(gpu->platform_identity));
     for (char *cursor = normalised; *cursor; cursor++)
         if (*cursor == ':') *cursor = '_';
     return strstr(entry, normalised) != NULL;

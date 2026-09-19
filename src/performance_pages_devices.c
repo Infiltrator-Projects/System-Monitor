@@ -8,6 +8,7 @@
  * @license GPL-3.0-or-later
  */
 #include "performance_internal.h"
+#include "common.h"
 #include "app_internal.h"
 #include "gpu_metrics.h"
 #include "ui_helpers.h"
@@ -247,7 +248,7 @@ LsmDevicePage *performance_build_gpu_page(LsmApp *app, size_t index)
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_GPU, index, stack, button, gpu->display_identifier);
     LsmGpuPageWidgets *widgets = &page->widgets.gpu;
-    g_strlcpy(page->hardware_product,
+    lsm_copy_string(page->hardware_product,
               performance_useful_hardware_name(gpu->name) ? gpu->name : "N/A",
               sizeof(page->hardware_product));
 
@@ -492,7 +493,7 @@ LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index)
         snprintf(battery_title, sizeof(battery_title), "%s — %s",
                  button, battery->model);
     else
-        g_strlcpy(battery_title, button, sizeof(battery_title));
+        lsm_copy_string(battery_title, button, sizeof(battery_title));
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_BATTERY, index, stack, battery_title, battery->name);
     LsmBatteryPageWidgets *widgets = &page->widgets.battery;

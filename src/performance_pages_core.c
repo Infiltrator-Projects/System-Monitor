@@ -8,6 +8,7 @@
  * @license GPL-3.0-or-later
  */
 #include "performance_internal.h"
+#include "common.h"
 #include "app_internal.h"
 #include "metric_format.h"
 #include "sample_history.h"
@@ -403,10 +404,10 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index)
     LsmDevicePage *page = performance_new_page(
         app, LSM_PAGE_NETWORK, index, stack, friendly, net->name);
     LsmNetworkPageWidgets *widgets = &page->widgets.network;
-    g_strlcpy(page->hardware_product,
+    lsm_copy_string(page->hardware_product,
               network_product ? network_product : "N/A",
               sizeof(page->hardware_product));
-    g_strlcpy(page->hardware_vendor,
+    lsm_copy_string(page->hardware_vendor,
               net->vendor[0] ? net->vendor : "N/A",
               sizeof(page->hardware_vendor));
 

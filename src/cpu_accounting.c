@@ -105,30 +105,12 @@ bool lsm_cpu_accounting_read(const char *path,
                              LsmCpuAccountingSample *sample)
 {
     if (!path || !*path || !sample) return false;
-    FILE *file = fopen(path, "r");
-    if (!file) return false;
     char *text = NULL;
-    size_t capacity = 0U;
     size_t length = 0U;
-    char buffer[4096];
-    while (fgets(buffer, sizeof(buffer), file)) {
-        const size_t chunk = strlen(buffer);
-        size_t required = 0U;
-        if (!lsm_size_add_checked(length, chunk, &required) ||
-            !lsm_size_add_checked(required, 1U, &required) ||
-            !lsm_array_reserve((void **)&text, &capacity, sizeof(*text),
-                               required, 8192U)) {
-            free(text);
-            fclose(file);
-            return false;
-        }
-        memcpy(text + length, buffer, chunk);
-        length += chunk;
-        text[length] = '\0';
-    }
-    fclose(file);
-    if (!text) return false;
-    const bool okay = lsm_cpu_accounting_parse(text, sample);
+    if (lsm_read_text_file_alloc(path, &text, &length) != INFILTRATR_IO_OK)
+        return false;
+    const bool valid_text = memchr(text, '\0', length) == NULL;
+    const bool okay = valid_text && lsm_cpu_accounting_parse(text, sample);
     free(text);
     return okay;
 }

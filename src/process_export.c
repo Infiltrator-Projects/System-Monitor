@@ -20,14 +20,16 @@
 #include "numeric_io.h"
 #include "ui_helpers.h"
 
+#include <infiltratr/escape.h>
+
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void set_error(char *error, size_t size, const char *message)
 {
-    if (!error || size == 0U) return;
-    (void)snprintf(error, size, "%s", message ? message : "Unknown error");
+    lsm_copy_string(error, size, message ? message : "Unknown error");
 }
 
 static bool process_selected(const LsmApp *app,
@@ -87,19 +89,24 @@ static void append_spreadsheet_text(GString *destination, const char *text)
     }
 }
 
-static void csv_field(FILE *file, const char *text)
+static bool csv_field(FILE *file, const char *text)
 {
-    fputc('"', file);
-    if (csv_needs_formula_escape(text)) fputc('\'', file);
-    if (text) {
-        for (const unsigned char *cursor = (const unsigned char *)text;
-             *cursor; cursor++) {
-            if (*cursor == '"') fputc('"', file);
-            if (*cursor >= 32U && *cursor != 127U) fputc(*cursor, file);
-            else if (*cursor == '\t') fputc(' ', file);
-        }
-    }
-    fputc('"', file);
+    if (!file) return false;
+    if (!text) text = "";
+
+    size_t required = 0U;
+    if (!infiltratr_escape_csv_field(text, true, NULL, 0U, &required))
+        return false;
+
+    char stack[256];
+    char *encoded = required <= sizeof(stack) ? stack : malloc(required);
+    if (!encoded) return false;
+
+    const bool encoded_ok = infiltratr_escape_csv_field(
+        text, true, encoded, required, NULL);
+    const bool written_ok = encoded_ok && fputs(encoded, file) >= 0;
+    if (encoded != stack) free(encoded);
+    return written_ok;
 }
 
 static bool csv_row(FILE *file, const LsmProcessInfo *process)
@@ -118,13 +125,13 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
          !numeric_io_format_fixed(gpu_percent, sizeof(gpu_percent),
                                    process->gpu_percent, 3U)))
         return false;
-    csv_field(file, process->name);
+    if (!csv_field(file, process->name)) return false;
     fprintf(file, ",%llu,%llu,",
             (unsigned long long)process->pid,
             (unsigned long long)process->ppid);
-    csv_field(file, process->user);
+    if (!csv_field(file, process->user)) return false;
     fputc(',', file);
-    csv_field(file, process->state);
+    if (!csv_field(file, process->state)) return false;
     fprintf(file, ",%s,%llu,%llu,%u,%s,%s,",
             cpu_percent,
             (unsigned long long)process->cpu_time_nanoseconds,
@@ -132,18 +139,20 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
             read_rate, write_rate);
     if (process->gpu_available) fputs(gpu_percent, file);
     fputc(',', file);
-    csv_field(file, process->gpu_engine[0] ? process->gpu_engine : "N/A");
+    if (!csv_field(file, process->gpu_engine[0] ? process->gpu_engine : "N/A"))
+        return false;
     fprintf(file, ",%llu,%llu,%llu,%u,%llu,%llu,",
             (unsigned long long)process->gpu_memory_bytes,
             (unsigned long long)process->read_bytes,
             (unsigned long long)process->write_bytes, process->handle_count,
             (unsigned long long)process->context_switches,
             (unsigned long long)process->page_faults);
-    csv_field(file, lsm_process_priority_name(process->priority));
+    if (!csv_field(file, lsm_process_priority_name(process->priority)))
+        return false;
     fputc(',', file);
-    csv_field(file, process->executable);
+    if (!csv_field(file, process->executable)) return false;
     fputc(',', file);
-    csv_field(file, process->command);
+    if (!csv_field(file, process->command)) return false;
     fputc('\n', file);
     return ferror(file) == 0;
 }

@@ -308,9 +308,8 @@ static void read_gpu_identity_details(LsmGpuInfo *gpu)
     }
 
     gpu->pci_location[0] = '\0';
-    const char *base = strrchr(gpu->platform_identity, '/');
-    base = base ? base + 1U : gpu->platform_identity;
-    if (base && strchr(base, ':') && strchr(base, '.'))
+    const char *base = lsm_path_basename(gpu->platform_identity);
+    if (base[0] && strchr(base, ':') && strchr(base, '.'))
         lsm_copy_string(gpu->pci_location, sizeof(gpu->pci_location), base);
 }
 

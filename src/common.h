@@ -39,6 +39,7 @@
 #define lsm_path_basename infiltratr_path_basename
 #define lsm_join_path infiltratr_path_join
 #define lsm_read_text_file infiltratr_read_text_file
+#define lsm_read_text_file_alloc infiltratr_read_text_file_alloc
 #define lsm_read_u64_file infiltratr_read_u64_file
 #define lsm_read_u64_or_zero infiltratr_read_u64_or_zero
 #define lsm_read_double_file infiltratr_read_double_file

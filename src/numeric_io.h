@@ -16,6 +16,7 @@
 #define LINUX_SYSTEM_MONITOR_NUMERIC_IO_H
 
 #include <infiltratr/core.h>
+#include <infiltratr/format.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -36,30 +37,7 @@
 static inline bool numeric_io_format_fixed(char *buffer, size_t size,
                                             double value, unsigned precision)
 {
-    if (!buffer || size == 0U || !isfinite(value) || precision > 9U) return false;
-    uint64_t scale = 1U;
-    for (unsigned index = 0U; index < precision; index++) scale *= 10U;
-    const bool negative = signbit(value) && value != 0.0;
-    const long double magnitude = fabsl((long double)value);
-    const long double whole_ld = floorl(magnitude);
-    if (whole_ld > (long double)UINT64_MAX) return false;
-    uint64_t whole = (uint64_t)whole_ld;
-    uint64_t fraction = precision > 0U
-        ? (uint64_t)llroundl((magnitude - whole_ld) * (long double)scale)
-        : 0U;
-    if (precision > 0U && fraction >= scale) {
-        if (whole == UINT64_MAX) return false;
-        whole++;
-        fraction = 0U;
-    }
-    const int written = precision > 0U
-        ? snprintf(buffer, size, "%s%llu.%0*llu",
-                   negative ? "-" : "",
-                   (unsigned long long)whole, (int)precision,
-                   (unsigned long long)fraction)
-        : snprintf(buffer, size, "%s%llu",
-                   negative ? "-" : "", (unsigned long long)whole);
-    return written >= 0 && (size_t)written < size;
+    return infiltratr_format_fixed_ascii(value, precision, buffer, size);
 }
 
 /**

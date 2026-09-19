@@ -6,6 +6,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.42 - 2026-09-19
+
+- Advance to Common 1.19.4 and remove remaining private generic parsing, endian, saturation, allocated text-read and CSV-field mechanics where Common now owns an equal or stronger contract.
+- Use Common's locale-independent fixed-point formatter for preferences, history, recorder and export persistence while retaining System Monitor's legacy decimal-comma recovery policy.
+- Consolidate bounded string copies and lexical path basenames onto Common without moving Linux, hardware or GTK policy out of System Monitor.
+
 ## 1.0.41 - 2026-09-19
 
 - Bundle the MB Corpo UI fonts with both Debian and native-installer releases, refresh the font cache during package lifecycle changes, and remove the explicit system Sans fallback.

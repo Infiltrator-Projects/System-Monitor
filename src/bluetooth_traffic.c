@@ -13,6 +13,9 @@
  */
 #include "bluetooth_traffic.h"
 
+#include "common.h"
+
+#include <infiltratr/endian.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
 
@@ -76,25 +79,12 @@ static LsmBluetoothCaptureState capture_state = {
     .monitor_fd = -1
 };
 
-static uint16_t read_le16(const unsigned char *bytes)
-{
-    return (uint16_t)bytes[0] | (uint16_t)((uint16_t)bytes[1] << 8U);
-}
-
-static uint64_t add_saturating(uint64_t left, uint64_t right)
-{
-    return UINT64_MAX - left < right ? UINT64_MAX : left + right;
-}
-
 static bool controller_index(const char *controller, uint16_t *index)
 {
+    uint64_t value = 0U;
     if (!controller || !index || strncmp(controller, "hci", 3U) != 0 ||
-        controller[3] == '\0')
-        return false;
-    errno = 0;
-    char *end = NULL;
-    const unsigned long value = strtoul(controller + 3U, &end, 10);
-    if (errno != 0 || !end || *end != '\0' || value > UINT16_MAX)
+        controller[3] == '\0' ||
+        !lsm_parse_u64_range(controller + 3U, 10U, 0U, UINT16_MAX, &value))
         return false;
     *index = (uint16_t)value;
     return true;
@@ -132,9 +122,9 @@ bool lsm_bluetooth_traffic_parse_monitor(
 {
     if (!buffer || !packet || length < LSM_HCI_MON_HEADER_SIZE) return false;
     const unsigned char *bytes = buffer;
-    const uint16_t opcode = read_le16(bytes);
-    const uint16_t index = read_le16(bytes + 2U);
-    const uint16_t payload_length = read_le16(bytes + 4U);
+    const uint16_t opcode = infiltratr_load_le16(bytes);
+    const uint16_t index = infiltratr_load_le16(bytes + 2U);
+    const uint16_t payload_length = infiltratr_load_le16(bytes + 4U);
     if ((size_t)payload_length > length - LSM_HCI_MON_HEADER_SIZE)
         return false;
 
@@ -147,7 +137,7 @@ bool lsm_bluetooth_traffic_parse_monitor(
         case LSM_HCI_MON_ACL_RX:
             if (payload_length < 4U) return false;
             header_size = 4U;
-            data_length = read_le16(payload + 2U);
+            data_length = infiltratr_load_le16(payload + 2U);
             receive = opcode == LSM_HCI_MON_ACL_RX;
             break;
         case LSM_HCI_MON_SCO_TX:
@@ -162,7 +152,7 @@ bool lsm_bluetooth_traffic_parse_monitor(
             if (payload_length < 4U) return false;
             header_size = 4U;
             data_length =
-                (uint64_t)(read_le16(payload + 2U) & LSM_HCI_ISO_LENGTH_MASK);
+                (uint64_t)(infiltratr_load_le16(payload + 2U) & LSM_HCI_ISO_LENGTH_MASK);
             receive = opcode == LSM_HCI_MON_ISO_RX;
             break;
         default:
@@ -173,7 +163,7 @@ bool lsm_bluetooth_traffic_parse_monitor(
 
     packet->controller_index = index;
     packet->handle =
-        (uint16_t)(read_le16(payload) & LSM_HCI_HANDLE_MASK);
+        (uint16_t)(infiltratr_load_le16(payload) & LSM_HCI_HANDLE_MASK);
     packet->payload_bytes = data_length;
     packet->receive = receive;
     return true;
@@ -218,10 +208,10 @@ static void account_packet(const LsmBluetoothMonitorPacket *packet)
         packet->controller_index, packet->handle);
     if (slot) {
         if (packet->receive)
-            slot->rx_bytes = add_saturating(
+            slot->rx_bytes = lsm_u64_add_saturating(
                 slot->rx_bytes, packet->payload_bytes);
         else
-            slot->tx_bytes = add_saturating(
+            slot->tx_bytes = lsm_u64_add_saturating(
                 slot->tx_bytes, packet->payload_bytes);
     }
     (void)pthread_mutex_unlock(&capture_state.mutex);
@@ -423,9 +413,9 @@ bool lsm_bluetooth_traffic_read_device(
                 !slot->address[0] ||
                 strcasecmp(slot->address, address) != 0)
                 continue;
-            counters->rx_bytes = add_saturating(
+            counters->rx_bytes = lsm_u64_add_saturating(
                 counters->rx_bytes, slot->rx_bytes);
-            counters->tx_bytes = add_saturating(
+            counters->tx_bytes = lsm_u64_add_saturating(
                 counters->tx_bytes, slot->tx_bytes);
             if (slot->active && counters->link_count < UINT_MAX)
                 counters->link_count++;

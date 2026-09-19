@@ -9,6 +9,8 @@
  */
 #include "application_catalog.h"
 
+#include "common.h"
+
 #include <gtk/gtk.h>
 
 #include <ctype.h>
@@ -52,8 +54,7 @@ static void normalise_identity(const char *input, char *output, size_t size)
     if (!output || size == 0U) return;
     output[0] = '\0';
     if (!input || !*input) return;
-    const char *basename = strrchr(input, '/');
-    basename = basename ? basename + 1 : input;
+    const char *basename = lsm_path_basename(input);
     size_t written = 0U;
     while (*basename && written + 1U < size) {
         const unsigned char value = (unsigned char)*basename++;
@@ -129,7 +130,7 @@ static void executable_from_command(const char *command, char *output,
             (assignment_token(token) || token[0] == '-'))
             continue;
         if (flatpak_wrapper && strcmp(identity, "run") == 0) continue;
-        g_strlcpy(output, identity, size);
+        lsm_copy_string(output, identity, size);
         return;
     }
 }
@@ -137,7 +138,7 @@ static void executable_from_command(const char *command, char *output,
 static void desktop_id_from_filename(const char *filename, char *id,
                                      size_t size)
 {
-    g_strlcpy(id, filename ? filename : "", size);
+    lsm_copy_string(id, filename ? filename : "", size);
     char *suffix = strstr(id, ".desktop");
     if (suffix && suffix[8] == '\0') *suffix = '\0';
 }
@@ -203,10 +204,10 @@ static void load_desktop_file(LsmApplicationCatalog *catalog,
     LsmApplicationEntry *entry = calloc(1U, sizeof(*entry));
     if (entry) {
         desktop_id_from_filename(filename, entry->id, sizeof(entry->id));
-        g_strlcpy(entry->executable, executable, sizeof(entry->executable));
-        g_strlcpy(entry->name, *name ? name : entry->id,
+        lsm_copy_string(entry->executable, executable, sizeof(entry->executable));
+        lsm_copy_string(entry->name, *name ? name : entry->id,
                   sizeof(entry->name));
-        g_strlcpy(entry->icon, *icon ? icon : "application-x-executable",
+        lsm_copy_string(entry->icon, *icon ? icon : "application-x-executable",
                   sizeof(entry->icon));
         g_ptr_array_add(catalog->entries, entry);
         register_identity(catalog, entry->executable, entry);

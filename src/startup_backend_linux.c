@@ -74,12 +74,12 @@ static gboolean load_startup_entry(const char *path, const char *id,
         desktop_boolean(file, "X-GNOME-Autostart-enabled", TRUE);
 
     memset(entry, 0, sizeof(*entry));
-    g_strlcpy(entry->id, id, sizeof(entry->id));
-    g_strlcpy(entry->source_identity, path, sizeof(entry->source_identity));
-    g_strlcpy(entry->origin_identity, path, sizeof(entry->origin_identity));
-    g_strlcpy(entry->name, name[0] ? name : id, sizeof(entry->name));
-    g_strlcpy(entry->command, command, sizeof(entry->command));
-    g_strlcpy(entry->description, description, sizeof(entry->description));
+    lsm_copy_string(entry->id, id, sizeof(entry->id));
+    lsm_copy_string(entry->source_identity, path, sizeof(entry->source_identity));
+    lsm_copy_string(entry->origin_identity, path, sizeof(entry->origin_identity));
+    lsm_copy_string(entry->name, name[0] ? name : id, sizeof(entry->name));
+    lsm_copy_string(entry->command, command, sizeof(entry->command));
+    lsm_copy_string(entry->description, description, sizeof(entry->description));
     entry->user_entry = user_entry != FALSE;
     entry->enabled = !hidden && gnome_enabled;
 
