@@ -6,6 +6,16 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.50 - 2026-09-20
+
+- Match the visible System Monitor hierarchy more closely to the established InfiltratorFS/Common Night presentation instead of merely sharing its palette values.
+- Move the performance sidebar onto the Common panel layer and change selected device rows to the InfiltratorFS selection treatment: graphite selection fill, normal border and a narrow cyan leading edge.
+- Replace boxed cyan notebook selection with the same restrained cyan underline treatment used by the InfiltratorFS stack switcher.
+- Restore Common's dedicated button background and foreground roles for ordinary GTK controls, leaving the darker operation surface for components that semantically require it.
+- Render primary performance graphs on the Common card surface while keeping compact sidebar graphs on the quieter surface layer, with softer grid/fill emphasis and neutral graphite frames.
+- Apply Common detail-label, heading, kicker, summary and selected-summary roles to performance captions, values and device-row metadata so text hierarchy matches the rest of the Infiltrator family.
+- Remove the remaining hard-coded purple memory-composition frame and resolve its background/border through the active Common palette.
+
 ## 1.0.49 - 2026-09-20
 
 - Refine GTK Night presentation to follow MBLINK's visual hierarchy rather than only sharing its raw colour values.
