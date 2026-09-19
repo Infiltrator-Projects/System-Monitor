@@ -108,14 +108,14 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
     char read_rate[64];
     char write_rate[64];
     char gpu_percent[64];
-    if (!lsm_numeric_format_fixed(cpu_percent, sizeof(cpu_percent),
+    if (!numeric_io_format_fixed(cpu_percent, sizeof(cpu_percent),
                                   process->cpu_percent, 3U) ||
-        !lsm_numeric_format_fixed(read_rate, sizeof(read_rate),
+        !numeric_io_format_fixed(read_rate, sizeof(read_rate),
                                   process->read_bytes_per_sec, 3U) ||
-        !lsm_numeric_format_fixed(write_rate, sizeof(write_rate),
+        !numeric_io_format_fixed(write_rate, sizeof(write_rate),
                                   process->write_bytes_per_sec, 3U) ||
         (process->gpu_available &&
-         !lsm_numeric_format_fixed(gpu_percent, sizeof(gpu_percent),
+         !numeric_io_format_fixed(gpu_percent, sizeof(gpu_percent),
                                    process->gpu_percent, 3U)))
         return false;
     csv_field(file, process->name);

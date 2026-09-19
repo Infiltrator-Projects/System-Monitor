@@ -79,7 +79,7 @@ static double validated_double(const char *value, double minimum,
                                double maximum, double fallback)
 {
     double parsed = 0.0;
-    return lsm_numeric_parse_persisted_double_range(
+    return numeric_io_parse_persisted_double_range(
         value, minimum, maximum, &parsed, NULL) ? parsed : fallback;
 }
 
@@ -203,7 +203,7 @@ static bool write_preferences(FILE *file, const void *user_data)
     bool okay = result >= 0;
     for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++) {
         char scroll[64];
-        if (!lsm_numeric_format_fixed(scroll, sizeof(scroll),
+        if (!numeric_io_format_fixed(scroll, sizeof(scroll),
                                       app->runtime.page_scroll[index], 3U) ||
             fprintf(file, "page_scroll_%zu=%s\n", index, scroll) < 0)
             okay = false;

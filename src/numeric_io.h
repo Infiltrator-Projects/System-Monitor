@@ -33,7 +33,7 @@
  * @param precision Number of digits after the decimal point.
  * @return true when the complete representation was written.
  */
-static inline bool lsm_numeric_format_fixed(char *buffer, size_t size,
+static inline bool numeric_io_format_fixed(char *buffer, size_t size,
                                             double value, unsigned precision)
 {
     if (!buffer || size == 0U || !isfinite(value) || precision > 9U) return false;
@@ -70,7 +70,7 @@ static inline bool lsm_numeric_format_fixed(char *buffer, size_t size,
  * @param legacy_decimal_comma Optional flag set when comma recovery was used.
  * @return true when the entire value was parsed successfully.
  */
-static inline bool lsm_numeric_parse_persisted_double(
+static inline bool numeric_io_parse_persisted_double(
     const char *text, double *value, bool *legacy_decimal_comma)
 {
     if (legacy_decimal_comma) *legacy_decimal_comma = false;
@@ -99,13 +99,13 @@ static inline bool lsm_numeric_parse_persisted_double(
  * @param legacy_decimal_comma Optional flag set when comma recovery was used.
  * @return true when parsing succeeded and the value is within range.
  */
-static inline bool lsm_numeric_parse_persisted_double_range(
+static inline bool numeric_io_parse_persisted_double_range(
     const char *text, double minimum, double maximum, double *value,
     bool *legacy_decimal_comma)
 {
     double parsed = 0.0;
     bool legacy = false;
-    if (!lsm_numeric_parse_persisted_double(text, &parsed, &legacy) ||
+    if (!numeric_io_parse_persisted_double(text, &parsed, &legacy) ||
         parsed < minimum || parsed > maximum)
         return false;
     *value = parsed;

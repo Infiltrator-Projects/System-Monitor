@@ -391,9 +391,9 @@ static int history_write_request(LsmHistorySaveRequest *request,
         char *safe_identity = sanitise_field(entry->identity);
         char cpu_seconds[64];
         char active_seconds[64];
-        if (!lsm_numeric_format_fixed(cpu_seconds, sizeof(cpu_seconds),
+        if (!numeric_io_format_fixed(cpu_seconds, sizeof(cpu_seconds),
                                       entry->cpu_seconds, 6U) ||
-            !lsm_numeric_format_fixed(active_seconds, sizeof(active_seconds),
+            !numeric_io_format_fixed(active_seconds, sizeof(active_seconds),
                                       entry->active_seconds, 6U)) {
             g_free(safe_key);
             g_free(safe_name);
@@ -456,9 +456,9 @@ static gboolean history_load_record(LsmApp *app, char *line)
     int64_t last_seen = 0;
     bool cpu_legacy_decimal = false;
     bool active_legacy_decimal = false;
-    if (!lsm_numeric_parse_persisted_double(
+    if (!numeric_io_parse_persisted_double(
             fields[4], &cpu_seconds, &cpu_legacy_decimal) ||
-        !lsm_numeric_parse_persisted_double(
+        !numeric_io_parse_persisted_double(
             fields[5], &active_seconds, &active_legacy_decimal) ||
         !infiltratr_parse_u64(fields[6], 10U, &read_bytes) ||
         !infiltratr_parse_u64(fields[7], 10U, &write_bytes) ||

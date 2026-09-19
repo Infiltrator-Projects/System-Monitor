@@ -82,9 +82,9 @@ static bool write_record(LsmProcessRecorder *recorder, const RecordNode *node)
 
     char cpu_percent[64];
     char memory_percent[64];
-    if (!lsm_numeric_format_fixed(cpu_percent, sizeof(cpu_percent),
+    if (!numeric_io_format_fixed(cpu_percent, sizeof(cpu_percent),
                                   node->cpu_percent, 3U) ||
-        !lsm_numeric_format_fixed(memory_percent, sizeof(memory_percent),
+        !numeric_io_format_fixed(memory_percent, sizeof(memory_percent),
                                   node->memory_percent, 3U)) {
         errno = ERANGE;
         return false;
