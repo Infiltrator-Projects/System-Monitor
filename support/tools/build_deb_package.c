@@ -508,8 +508,18 @@ int main(int argc, char **argv)
              "baseline GLIBC_%u.%u", staged_application, required_glibc_major,
              required_glibc_minor, LSM_GLIBC_BASELINE_MAJOR,
              LSM_GLIBC_BASELINE_MINOR);
+    /* Keep the desktop icon canonical name, and also ship package-name aliases
+     * inside this package. Linux Mint Software Manager resolves APT packages
+     * by package name, so these aliases let the application own its artwork
+     * without a separate app-install helper package. */
     copy_staged("support/resources/icons/system-monitor.png",
                 "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
+                0644);
+    copy_staged("support/resources/icons/system-monitor.png",
+                "usr/share/icons/hicolor/96x96/apps/infiltrator-system-monitor.png",
+                0644);
+    copy_staged("support/resources/icons/system-monitor.png",
+                "usr/share/app-install/icons/infiltrator-system-monitor.png",
                 0644);
     copy_staged("LICENSE", "usr/share/doc/infiltrator-system-monitor/LICENSE", 0644);
     copy_staged("support/legal/THIRD_PARTY_NOTICES",
@@ -578,6 +588,12 @@ int main(int argc, char **argv)
         "else\n"
         "  echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "setcap is missing.' >&2\n"
+        "fi\n"
+        "if command -v gtk-update-icon-cache >/dev/null 2>&1; then\n"
+        "  gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true\n"
+        "fi\n"
+        "if command -v update-desktop-database >/dev/null 2>&1; then\n"
+        "  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true\n"
         "fi\n"
         "exit 0\n";
     write_staged("DEBIAN/postinst", 0755, postinst);
