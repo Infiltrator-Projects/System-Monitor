@@ -14,17 +14,17 @@
 typedef struct LsmApp LsmApp;
 
 /**
- * Construct the Startup Applications tab from XDG autostart semantics.
+ * Construct the Startup Applications presentation.
  *
  * @param [in,out] app Application that owns the model and action widgets.
  * @param [in] container Empty GTK container receiving the startup view.
  */
 void lsm_startup_build(LsmApp *app, GtkWidget *container);
 /**
- * Reconcile system and per-user XDG autostart entries into the current model.
+ * Refresh the current model from the active startup backend.
  *
- * User overrides are interpreted according to XDG precedence rather than as
- * independent duplicates.
+ * Platform-specific discovery and override semantics remain behind the backend
+ * contract rather than in GTK presentation code.
  *
  * @param [in,out] app Application whose startup model is refreshed.
  */

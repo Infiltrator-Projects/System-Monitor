@@ -37,6 +37,7 @@ process_inspector.c
 process_inspection.c
 history.c
 startup.c
+startup_backend_linux.c
 services.c
 service_backend_linux.c
 users.c

@@ -520,6 +520,27 @@ static void check_user_page_boundary(const char *path, const char *text)
     }
 }
 
+static void check_startup_page_boundary(const char *path, const char *text)
+{
+    if (strcmp(path, "src/startup.c") != 0) return;
+    static const char *const native_markers[] = {
+        "GKeyFile",
+        "g_get_user_config_dir",
+        "XDG_CONFIG_DIRS",
+        "/etc/xdg",
+        "g_mkdir_with_parents",
+        "LSM_ATOMIC_FILE_"
+    };
+    for (size_t index = 0U;
+         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
+        const char *found = strstr(text, native_markers[index]);
+        if (found)
+            report_error(
+                "%s:%zu: native startup detail crosses the backend boundary",
+                path, line_number_at(text, found));
+    }
+}
+
 static void check_process_platform_boundary(const char *path, const char *text)
 {
     static const char *const contract_files[] = {
@@ -605,6 +626,7 @@ static void check_source_file(const char *path)
     check_platform_path_boundary(path, text);
     check_service_page_boundary(path, text);
     check_user_page_boundary(path, text);
+    check_startup_page_boundary(path, text);
     check_process_platform_boundary(path, text);
 
     size_t line_number = 1U;

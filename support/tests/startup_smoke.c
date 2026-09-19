@@ -6,7 +6,7 @@
  * @copyright Copyright (c) 2016 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#include "../src/startup.c"
+#include "../src/startup_backend_linux.c"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -34,7 +34,7 @@ int main(void)
         "X-GNOME-Autostart-enabled=true\n";
     assert(g_file_set_contents(source, desktop, -1, NULL));
 
-    StartupEntry entry;
+    LsmStartupEntry entry;
     assert(load_startup_entry(source, "backup.desktop", FALSE, &entry));
     assert(entry.enabled);
     assert(strcmp(entry.name, "Backup Agent") == 0);
