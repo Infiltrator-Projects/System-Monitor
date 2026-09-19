@@ -33,7 +33,7 @@ NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
 GLIBC_ABI_SMOKE := $(BUILD_DIR)/glibc-abi-smoke
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
-DEB_OUTPUT ?= system-monitor_$(VERSION)_$(DEB_ARCH).deb
+DEB_OUTPUT ?= infiltrator-system-monitor_$(VERSION)_$(DEB_ARCH).deb
 SOURCE_ZIP := System-Monitor-$(VERSION)-source.zip
 DIST_SOURCE_DATE_EPOCH ?= 315532800
 BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
@@ -236,7 +236,7 @@ $(BUILD_CONFIG): FORCE | $(BUILD_DIR)
 	@if ! cmp -s $@.tmp $@; then mv -f $@.tmp $@; else rm -f $@.tmp; fi
 
 $(BUILD_INFO): $(VERSION_FILE) $(INFILTRATR_COMMON_DIR)/VERSION | $(BUILD_DIR)
-	@printf 'Version: %s\nProfile: %s\nShared C library: Infiltratr Common %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: system-monitor\n' \
+	@printf 'Version: %s\nProfile: %s\nShared C library: Infiltratr Common %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: infiltrator-system-monitor\n' \
 		'$(VERSION)' '$(BUILD_PROFILE)' '$(INFILTRATR_COMMON_VERSION)' > $@
 
 $(BUILD_DIR)/%.o: src/%.c src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps
