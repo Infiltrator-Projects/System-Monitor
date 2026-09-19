@@ -6,7 +6,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.35 ([version file](support/VERSION))\
+**Current source version:** 1.0.36 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.2 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; additional native backends are planned  
 **Licence:** GPL-3.0-or-later
@@ -74,10 +74,10 @@ Direct `make install` is disabled. Installation is owned by the Debian package o
 
 Each numbered release publishes:
 
-- `system-monitor_<version>_amd64.deb`
+- `infiltrator-system-monitor_<version>_amd64.deb`
 - `system-monitor-<version>-native-installer.run`
 
-The `.deb` is the generic amd64 package. The `.run` performs a native local build/test/install.
+The `.deb` is the generic amd64 package. Its Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. Version 1.0.36 also migrates existing `system-monitor` package installations through the repository transition package. The `.run` performs a native local build/test/install.
 
 ## Repository policy
 
