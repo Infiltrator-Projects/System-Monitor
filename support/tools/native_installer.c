@@ -679,7 +679,7 @@ int main(int argc, char **argv)
     printf("  Package:      %s\n", package_architecture);
     printf("  Profile:      %s\n", profile);
     printf("  Jobs:         %d\n", jobs);
-    puts("  Installation: replaces the system-monitor Debian package");
+    puts("  Installation: installs the infiltrator-system-monitor Debian package");
     puts("  Privileges:   missing prerequisites and final package installation only");
     if (dry_run) return EXIT_SUCCESS;
 
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
 
     char package_path[LSM_BUILDER_PATH_LEN];
     written = snprintf(package_path, sizeof(package_path),
-                       "%s/system-monitor_%s_%s.deb", cleanup_stage,
+                       "%s/infiltrator-system-monitor_%s_%s.deb", cleanup_stage,
                        version, package_architecture);
     if (written < 0 || (size_t)written >= sizeof(package_path))
         fail("native package path is too long");
