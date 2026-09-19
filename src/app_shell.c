@@ -110,7 +110,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         !typography->brand_family)
         return;
 
-    GString *css = g_string_sized_new(8192U);
+    GString *css = g_string_new(NULL);
     if (!css) return;
 
     g_string_append_printf(
