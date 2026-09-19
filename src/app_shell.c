@@ -110,20 +110,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         !typography->brand_family)
         return;
 
-    /*
-     * System Monitor's established MB night shell is graphite grey, not the
-     * near-black Common canvas.  Keep Common authoritative for the semantic
-     * component palette, but map the top-level shell/background role to the
-     * long-standing #2B2B30 presentation colour whenever Night is resolved.
-     * This is the same neutral grey historically used by DrawingArea fallback
-     * rendering, so graphs and GTK chrome agree instead of switching to black.
-     */
-    const gboolean night_resolved =
-        app->runtime.theme_mode == INFILTRATR_THEME_NIGHT ||
-        (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
-    const unsigned int shell_background_rgb =
-        night_resolved ? 0x2B2B30U : (unsigned int)palette->background_rgb;
-
     char css[8192];
     const int written = snprintf(
         css, sizeof(css),
@@ -150,12 +136,28 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "@define-color lsm_selection_text #%06X;"
         "@define-color lsm_card_hover #%06X;"
         "@define-color lsm_surface_hover #%06X;"
+        "@define-color lsm_titlebar #%06X;"
+        "@define-color lsm_connection #%06X;"
+        "@define-color lsm_connection_border #%06X;"
+        "@define-color lsm_heading #%06X;"
+        "@define-color lsm_summary #%06X;"
+        "@define-color lsm_status_border #%06X;"
+        "@define-color lsm_accent_foreground #%06X;"
+        "@define-color lsm_accent_hover #%06X;"
         "window, dialog, .background {"
         " background-color: @lsm_background; color: @lsm_text;"
         "}"
         "headerbar, .titlebar {"
-        " background-image: none; background-color: @lsm_panel;"
+        " background-image: none; background-color: @lsm_titlebar;"
         " color: @lsm_title; border-bottom: 1px solid @lsm_border;"
+        "}"
+        "#lsm-summary-bar {"
+        " background-image: none; background-color: @lsm_connection;"
+        " color: @lsm_text; border: 1px solid @lsm_connection_border;"
+        "}"
+        "frame {"
+        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
+        " color: @lsm_text; border-color: @lsm_border;"
         "}"
         "menubar {"
         " background-color: @lsm_surface; color: @lsm_text;"
@@ -177,6 +179,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " background-color: @lsm_selection; color: @lsm_selection_text;"
         " border-color: @lsm_neutral;"
         "}"
+        "button:hover { border-color: @lsm_accent_hover; }"
         "button:disabled {"
         " background-color: @lsm_input; color: @lsm_subtle;"
         " border-color: @lsm_border;"
@@ -201,8 +204,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " border: 1px solid @lsm_border;"
         "}"
         "#lsm-side-button:checked {"
-        " background-color: @lsm_selection; color: @lsm_selection_text;"
-        " border-color: @lsm_neutral;"
+        " background-color: alpha(@lsm_neutral, 0.075); color: @lsm_neutral;"
+        " border-color: alpha(@lsm_neutral, 0.48);"
         "}",
         typography->ui_family,
         (unsigned int)typography->ui_regular_weight,
@@ -210,7 +213,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         typography->ui_family,
         (unsigned int)typography->brand_weight,
         (unsigned int)typography->ui_bold_weight,
-        shell_background_rgb,
+        (unsigned int)palette->background_rgb,
         (unsigned int)palette->panel_rgb,
         (unsigned int)palette->card_rgb,
         (unsigned int)palette->surface_rgb,
@@ -223,7 +226,15 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->selection_background_rgb,
         (unsigned int)palette->selection_foreground_rgb,
         (unsigned int)palette->card_hover_rgb,
-        (unsigned int)palette->surface_hover_rgb);
+        (unsigned int)palette->surface_hover_rgb,
+        (unsigned int)palette->titlebar_rgb,
+        (unsigned int)palette->connection_rgb,
+        (unsigned int)palette->connection_border_rgb,
+        (unsigned int)palette->heading_rgb,
+        (unsigned int)palette->summary_rgb,
+        (unsigned int)palette->status_border_rgb,
+        (unsigned int)palette->accent_foreground_rgb,
+        (unsigned int)palette->accent_hover_rgb);
     if (written < 0 || (size_t)written >= sizeof(css)) return;
     gtk_css_provider_load_from_data(
         app->shell.theme_provider, css, written, NULL);
