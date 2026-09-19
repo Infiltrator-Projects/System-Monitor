@@ -368,11 +368,11 @@ clang-doc-check: | $(BUILD_DIR)
 		rm -f $$tmp; \
 		if [ -n "$(strip $(C_SOURCES))" ]; then \
 			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
-				-Wpedantic -Werror $doc_flags -fsyntax-only $(C_SOURCES); \
+				-Wpedantic -Werror $$doc_flags -fsyntax-only $(C_SOURCES); \
 		fi; \
 		if [ -n "$(strip $(CXX_SOURCES))" ]; then \
 			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
-				-Wpedantic -Werror $doc_flags -fsyntax-only $(CXX_SOURCES); \
+				-Wpedantic -Werror $$doc_flags -fsyntax-only $(CXX_SOURCES); \
 		fi; \
 		echo "Clang documentation syntax pass completed."; \
 	else \
