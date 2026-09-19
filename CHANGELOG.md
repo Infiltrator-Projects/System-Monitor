@@ -6,6 +6,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 No unreleased changes.
 
+## 1.0.44 - 2026-09-19
+
+- Complete the forensic Common 1.19.8 integration by routing strict numeric-token conversion, checked addition, prefix checks, quantity parsing, trimming and lexical-basename handling through Common where its contract is equal or stronger.
+- Keep Linux procfs/sysfs grammars, pthread absolute-deadline semantics, hardware policy and GTK presentation local where Common deliberately does not own them.
+- Preserve all existing functionality while reducing private generic mechanics and making the Common ownership boundary explicit.
+
 ## 1.0.43 - 2026-09-19
 
 - Pin both Make and CMake builds, the source gitlink, project-identity regression test and maintained documentation to exact Common 1.19.8.
