@@ -135,10 +135,10 @@ jobs:
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
-          changelog="$tmp/root/usr/share/doc/system-monitor/changelog.gz"
+          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')
-          expected_line="system-monitor (${version}) unstable; urgency=medium"
+          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
           if [[ "$first_line" != "$expected_line" ]]; then
             printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
             exit 1
