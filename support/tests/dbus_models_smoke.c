@@ -7,7 +7,7 @@
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
-#include "../src/services.c"
+#include "../src/service_backend_linux.c"
 #include "../src/users.c"
 
 #ifdef NDEBUG
@@ -64,7 +64,7 @@ static GVariant *sample_properties(void)
 
 int main(void)
 {
-    ServiceEntry *services = NULL;
+    LsmServiceEntry *services = NULL;
     size_t count = 0, capacity = 0;
     GVariant *units = sample_units();
     merge_loaded_units(units, &services, &count, &capacity);

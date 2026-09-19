@@ -73,90 +73,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(LSM_BUILD_DEVELOPER_TOOLS "Build source-audit and release tools" ON)
 
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt" LSM_SOURCE_NAMES)
-list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX "^[ \t]*(#|$)")
-set(LSM_PRODUCT_HAS_CXX FALSE)
-foreach(source_name IN LISTS LSM_SOURCE_NAMES)
-    if(source_name MATCHES "\\.cpp$")
-        set(LSM_PRODUCT_HAS_CXX TRUE)
-        break()
-    endif()
-endforeach()
-if(LSM_BUILD_DEVELOPER_TOOLS OR LSM_PRODUCT_HAS_CXX)
-    enable_language(CXX)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
-
-include(CheckIPOSupported)
-set(LSM_IPO_LANGUAGES C)
-if(LSM_PRODUCT_HAS_CXX)
-    list(APPEND LSM_IPO_LANGUAGES CXX)
-endif()
-check_ipo_supported(RESULT LSM_IPO_SUPPORTED OUTPUT LSM_IPO_ERROR
-    LANGUAGES ${LSM_IPO_LANGUAGES})
-include(CheckCSourceCompiles)
-include(CheckCCompilerFlag)
-include(CTest)
-set(LSM_SAVED_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS}")
-set(CMAKE_REQUIRED_DEFINITIONS -D_FILE_OFFSET_BITS=64 -D_TIME_BITS=64)
-check_c_source_compiles(
-    "#include <time.h>
-int main(void) { time_t value = 0; return value != 0; }"
-    LSM_TIME64_SUPPORTED)
-set(CMAKE_REQUIRED_DEFINITIONS "${LSM_SAVED_REQUIRED_DEFINITIONS}")
-
-find_package(PkgConfig REQUIRED)
-find_package(Threads REQUIRED)
-find_package(Doxygen QUIET)
-pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.22)
-
-# Performance flags are opportunistic rather than contractual. Every supported
-# distribution may use a different compiler vintage, so CMake proves each flag
-# before applying it to the GUI executable.
-set(LSM_PORTABLE_OPT_FLAGS)
-foreach(flag IN ITEMS -fno-semantic-interposition -fno-plt)
-    string(MAKE_C_IDENTIFIER "LSM_SUPPORTS_${flag}" flag_variable)
-    check_c_compiler_flag("${flag}" "${flag_variable}")
-    if(${flag_variable})
-        list(APPEND LSM_PORTABLE_OPT_FLAGS "${flag}")
-    endif()
-endforeach()
-
-check_c_compiler_flag(
-    "-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=."
-    LSM_SUPPORTS_FILE_PREFIX_MAP)
-check_c_compiler_flag(
-    "-fdebug-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=."
-    LSM_SUPPORTS_DEBUG_PREFIX_MAP)
-
-# Hardening remains portable by proving both the compiler and linker options
-# during configuration instead of assuming a GNU binutils implementation.
-check_c_compiler_flag(-fstack-protector-strong
-    LSM_SUPPORTS_STACK_PROTECTOR_STRONG)
-set(LSM_SAVED_REQUIRED_LINK_OPTIONS "${CMAKE_REQUIRED_LINK_OPTIONS}")
-set(CMAKE_REQUIRED_LINK_OPTIONS -Wl,-z,relro -Wl,-z,now)
-check_c_source_compiles("int main(void) { return 0; }"
-    LSM_SUPPORTS_FULL_RELRO)
-set(CMAKE_REQUIRED_LINK_OPTIONS "${LSM_SAVED_REQUIRED_LINK_OPTIONS}")
-
-list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
-
-# The source manifest lists every owned translation unit for quality auditing,
-# but an executable links exactly one implementation of each native backend
-# contract. This prevents a future port from accidentally compiling multiple
-# operating-system providers merely because they coexist in the source tree.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(LSM_PLATFORM_NAME "linux")
-else()
-    message(FATAL_ERROR
-        "No native monitor/process backend is implemented for ${CMAKE_SYSTEM_NAME}")
-endif()
 list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX
-    "src/(monitor_backend|process_backend)_[^/]+\\.c$")
+    "src/(monitor_backend|process_backend|service_backend)_[^/]+\\.c$")
 list(APPEND LSM_SOURCE_NAMES
     "src/monitor_backend_${LSM_PLATFORM_NAME}.c"
-    "src/process_backend_${LSM_PLATFORM_NAME}.c")
+    "src/process_backend_${LSM_PLATFORM_NAME}.c"
+    "src/service_backend_${LSM_PLATFORM_NAME}.c")
 
 set(LSM_MONITOR_CORE_SOURCES
     src/monitor.c)

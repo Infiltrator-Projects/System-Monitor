@@ -38,6 +38,7 @@ process_inspection.c
 history.c
 startup.c
 services.c
+service_backend_linux.c
 users.c
 monitor.c
 monitor_backend_linux.c

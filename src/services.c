@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file services.c
- * @brief systemd service inventory and control through the system D-Bus.
+ * @brief GTK presentation and asynchronous orchestration for Services.
  *
- * The tab talks directly to org.freedesktop.systemd1 through GDBus.  It does
- * not parse command output or depend on systemctl.  Read-only inventory calls
- * require no privilege.  Start, stop, restart, enable and disable requests are
- * authorised by systemd/polkit only when the user actually invokes them.
+ * Native service-manager discovery and control are delegated through
+ * service_backend.h. This module owns only selection, filtering, presentation
+ * and worker/main-context handoff.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016 Shannon Smith
@@ -15,7 +14,7 @@
 #include "services.h"
 #include "app_internal.h"
 #include "app_config.h"
-#include "common.h"
+#include "service_backend.h"
 #include "ui_helpers.h"
 
 #include <stdio.h>
@@ -33,15 +32,7 @@ enum {
 };
 
 typedef struct {
-    char name[LSM_NAME_LEN];
-    char description[256];
-    char active[32];
-    char substate[64];
-    char startup[64];
-} ServiceEntry;
-
-typedef struct {
-    ServiceEntry *entries;
+    LsmServiceEntry *entries;
     size_t count;
     char *error_message;
     char *preserve_name;
@@ -49,138 +40,12 @@ typedef struct {
 } ServiceRefreshResult;
 
 typedef struct {
-    char *method;
-    GVariant *parameters;
+    char *name;
+    LsmServiceAction action;
     char *failure_title;
     char *error_message;
-    gboolean reload_after;
     gboolean cancelled;
 } ServiceActionResult;
-
-/* systemd D-Bus access is kept off the GTK thread. Synchronous calls below
- * execute only inside GTask workers with bounded timeouts. */
-static GVariant *manager_call_on_bus(GDBusConnection *bus, const char *method,
-                                     GVariant *parameters, int timeout_ms,
-                                     GCancellable *cancellable, GError **error)
-{
-    if (!bus) return NULL;
-    return g_dbus_connection_call_sync(bus,
-        "org.freedesktop.systemd1",
-        "/org/freedesktop/systemd1",
-        "org.freedesktop.systemd1.Manager",
-        method,
-        parameters,
-        NULL,
-        G_DBUS_CALL_FLAGS_NONE,
-        timeout_ms,
-        cancellable,
-        error);
-}
-
-static ssize_t service_find(ServiceEntry *entries, size_t count, const char *name)
-{
-    for (size_t i = 0; i < count; i++)
-        if (strcmp(entries[i].name, name) == 0) return (ssize_t)i;
-    return -1;
-}
-
-static ServiceEntry *service_get(ServiceEntry **entries, size_t *count,
-                                 size_t *capacity, const char *name)
-{
-    ssize_t existing = service_find(*entries, *count, name);
-    if (existing >= 0) return &(*entries)[existing];
-    if (!lsm_array_reserve((void **)entries, capacity, sizeof(**entries),
-                           *count + 1U, 128U))
-        return NULL;
-    ServiceEntry *entry = &(*entries)[(*count)++];
-    memset(entry, 0, sizeof(*entry));
-    g_strlcpy(entry->name, name, sizeof(entry->name));
-    g_strlcpy(entry->description, name, sizeof(entry->description));
-    g_strlcpy(entry->active, "inactive", sizeof(entry->active));
-    g_strlcpy(entry->substate, "dead", sizeof(entry->substate));
-    g_strlcpy(entry->startup, "unknown", sizeof(entry->startup));
-    return entry;
-}
-
-static int service_compare(const void *left, const void *right)
-{
-    const ServiceEntry *a = left;
-    const ServiceEntry *b = right;
-    return strcmp(a->name, b->name);
-}
-
-static void merge_loaded_units(GVariant *units, ServiceEntry **entries,
-                               size_t *count, size_t *capacity)
-{
-    GVariantIter *iter = NULL;
-    g_variant_get(units, "(a(ssssssouso))", &iter);
-    const char *name, *description, *load, *active, *substate, *following;
-    const char *object_path, *job_type, *job_path;
-    guint32 job_id;
-    while (g_variant_iter_loop(iter, "(&s&s&s&s&s&s&ou&s&o)",
-                               &name, &description, &load, &active, &substate,
-                               &following, &object_path, &job_id, &job_type, &job_path)) {
-        (void)load; (void)following; (void)object_path; (void)job_id;
-        (void)job_type; (void)job_path;
-        size_t length = strlen(name);
-        if (length < 8 || strcmp(name + length - 8, ".service") != 0) continue;
-        ServiceEntry *entry = service_get(entries, count, capacity, name);
-        if (!entry) break;
-        g_strlcpy(entry->description, description, sizeof(entry->description));
-        g_strlcpy(entry->active, active, sizeof(entry->active));
-        g_strlcpy(entry->substate, substate, sizeof(entry->substate));
-    }
-    g_variant_iter_free(iter);
-}
-
-static void merge_unit_files(GVariant *files, ServiceEntry **entries,
-                             size_t *count, size_t *capacity)
-{
-    GVariantIter *iter = NULL;
-    g_variant_get(files, "(a(ss))", &iter);
-    const char *path, *state;
-    while (g_variant_iter_loop(iter, "(&s&s)", &path, &state)) {
-        const char *unit = lsm_path_basename(path);
-        size_t length = strlen(unit);
-        if (length < 8 || strcmp(unit + length - 8, ".service") != 0) continue;
-        ServiceEntry *entry = service_get(entries, count, capacity, unit);
-        if (!entry) break;
-        g_strlcpy(entry->startup, state, sizeof(entry->startup));
-    }
-    g_variant_iter_free(iter);
-}
-
-static ServiceEntry *collect_services(GDBusConnection *bus,
-                                      GCancellable *cancellable,
-                                      size_t *out_count, GError **error)
-{
-    ServiceEntry *entries = NULL;
-    size_t count = 0, capacity = 0;
-
-    GVariant *units = manager_call_on_bus(bus, "ListUnits", NULL,
-                                          LSM_DBUS_QUERY_TIMEOUT_MS,
-                                          cancellable, error);
-    if (!units) return NULL;
-    merge_loaded_units(units, &entries, &count, &capacity);
-    g_variant_unref(units);
-
-    /* ListUnitFiles adds disabled and otherwise-unloaded services.  Older
-     * systemd releases may not implement it; loaded services are still useful
-     * in that case, so this secondary call is deliberately non-fatal. */
-    GError *files_error = NULL;
-    GVariant *files = manager_call_on_bus(bus, "ListUnitFiles", NULL,
-                                          LSM_DBUS_QUERY_TIMEOUT_MS,
-                                          cancellable, &files_error);
-    if (files) {
-        merge_unit_files(files, &entries, &count, &capacity);
-        g_variant_unref(files);
-    }
-    if (files_error) g_error_free(files_error);
-
-    if (count > 1) qsort(entries, count, sizeof(*entries), service_compare);
-    *out_count = count;
-    return entries;
-}
 
 static gboolean selected_service(LsmApp *app, char **name, char **active, char **startup)
 {
@@ -194,13 +59,6 @@ static gboolean selected_service(LsmApp *app, char **name, char **active, char *
                        SERVICE_COL_STARTUP, startup,
                        -1);
     return TRUE;
-}
-
-static gboolean state_is_enabled(const char *state)
-{
-    return state && (strncmp(state, "enabled", 7) == 0 ||
-                     strncmp(state, "linked", 6) == 0 ||
-                     strcmp(state, "alias") == 0);
 }
 
 static void service_selection_changed(GtkTreeSelection *selection, gpointer user_data)
@@ -225,7 +83,7 @@ static void service_selection_changed(GtkTreeSelection *selection, gpointer user
     gtk_widget_set_sensitive(app->services.service_stop_button, running);
     gtk_widget_set_sensitive(app->services.service_restart_button, running);
     gtk_button_set_label(GTK_BUTTON(app->services.service_enable_button),
-                         state_is_enabled(startup) ? "Disable" : "Enable");
+                         lsm_service_backend_state_is_enabled(startup) ? "Disable" : "Enable");
     g_free(active);
     g_free(startup);
 }
@@ -234,8 +92,7 @@ static void service_action_result_free(gpointer data)
 {
     ServiceActionResult *result = data;
     if (!result) return;
-    g_free(result->method);
-    if (result->parameters) g_variant_unref(result->parameters);
+    g_free(result->name);
     g_free(result->failure_title);
     g_free(result->error_message);
     g_free(result);
@@ -250,20 +107,8 @@ static void service_action_worker(GTask *task, gpointer source_object,
     (void)source_object;
     ServiceActionResult *result = task_data;
     GError *error = NULL;
-    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
-    if (bus) {
-        GVariant *reply = manager_call_on_bus(
-            bus, result->method, result->parameters,
-            LSM_DBUS_ACTION_TIMEOUT_MS, cancellable, &error);
-        if (reply) g_variant_unref(reply);
-        if (!error && result->reload_after) {
-            reply = manager_call_on_bus(bus, "Reload", NULL,
-                                        LSM_DBUS_ACTION_TIMEOUT_MS,
-                                        cancellable, &error);
-            if (reply) g_variant_unref(reply);
-        }
-        g_object_unref(bus);
-    }
+    (void)lsm_service_backend_action(
+        result->name, result->action, cancellable, &error);
     if (error) {
         result->error_message = g_strdup(error->message);
         g_error_free(error);
@@ -296,17 +141,15 @@ static void service_action_complete(GObject *source_object,
     service_action_result_free(result);
 }
 
-static void perform_service_action(LsmApp *app, const char *method,
-                                   GVariant *parameters,
-                                   const char *failure_title,
-                                   gboolean reload_after)
+static void perform_service_action(LsmApp *app, const char *name,
+                                   LsmServiceAction action,
+                                   const char *failure_title)
 {
-    if (!app || app->runtime.shutting_down) return;
+    if (!app || !name || !name[0] || app->runtime.shutting_down) return;
     ServiceActionResult *result = g_new0(ServiceActionResult, 1);
-    result->method = g_strdup(method);
-    result->parameters = parameters ? g_variant_ref_sink(parameters) : NULL;
+    result->name = g_strdup(name);
+    result->action = action;
     result->failure_title = g_strdup(failure_title);
-    result->reload_after = reload_after;
     if (!app->services.services_action_cancellable)
         app->services.services_action_cancellable = g_cancellable_new();
     app->services.services_action_pending++;
@@ -323,10 +166,11 @@ static void service_start(GtkButton *button, gpointer user_data)
     LsmApp *app = user_data;
     char *name = NULL, *active = NULL, *startup = NULL;
     if (selected_service(app, &name, &active, &startup))
-        perform_service_action(app, "StartUnit",
-                               g_variant_new("(ss)", name, "replace"),
-                               "Unable to start service", FALSE);
-    g_free(name); g_free(active); g_free(startup);
+        perform_service_action(app, name, LSM_SERVICE_ACTION_START,
+                               "Unable to start service");
+    g_free(name);
+    g_free(active);
+    g_free(startup);
 }
 
 static void service_stop(GtkButton *button, gpointer user_data)
@@ -335,10 +179,11 @@ static void service_stop(GtkButton *button, gpointer user_data)
     LsmApp *app = user_data;
     char *name = NULL, *active = NULL, *startup = NULL;
     if (selected_service(app, &name, &active, &startup))
-        perform_service_action(app, "StopUnit",
-                               g_variant_new("(ss)", name, "replace"),
-                               "Unable to stop service", FALSE);
-    g_free(name); g_free(active); g_free(startup);
+        perform_service_action(app, name, LSM_SERVICE_ACTION_STOP,
+                               "Unable to stop service");
+    g_free(name);
+    g_free(active);
+    g_free(startup);
 }
 
 static void service_restart(GtkButton *button, gpointer user_data)
@@ -347,10 +192,11 @@ static void service_restart(GtkButton *button, gpointer user_data)
     LsmApp *app = user_data;
     char *name = NULL, *active = NULL, *startup = NULL;
     if (selected_service(app, &name, &active, &startup))
-        perform_service_action(app, "RestartUnit",
-                               g_variant_new("(ss)", name, "replace"),
-                               "Unable to restart service", FALSE);
-    g_free(name); g_free(active); g_free(startup);
+        perform_service_action(app, name, LSM_SERVICE_ACTION_RESTART,
+                               "Unable to restart service");
+    g_free(name);
+    g_free(active);
+    g_free(startup);
 }
 
 static void service_enable_disable(GtkButton *button, gpointer user_data)
@@ -360,18 +206,15 @@ static void service_enable_disable(GtkButton *button, gpointer user_data)
     char *name = NULL, *active = NULL, *startup = NULL;
     if (!selected_service(app, &name, &active, &startup)) return;
 
-    const char *units[] = {name, NULL};
-    const gboolean enable = !state_is_enabled(startup);
-    GVariant *parameters = enable
-        ? g_variant_new("(^asbb)", units, FALSE, TRUE)
-        : g_variant_new("(^asb)", units, FALSE);
-    perform_service_action(app,
-                           enable ? "EnableUnitFiles" : "DisableUnitFiles",
-                           parameters,
-                           enable ? "Unable to enable service"
-                                  : "Unable to disable service",
-                           TRUE);
-    g_free(name); g_free(active); g_free(startup);
+    const gboolean enable =
+        !lsm_service_backend_state_is_enabled(startup);
+    perform_service_action(
+        app, name,
+        enable ? LSM_SERVICE_ACTION_ENABLE : LSM_SERVICE_ACTION_DISABLE,
+        enable ? "Unable to enable service" : "Unable to disable service");
+    g_free(name);
+    g_free(active);
+    g_free(startup);
 }
 
 static void service_refresh_clicked(GtkButton *button, gpointer user_data)
@@ -438,7 +281,7 @@ static void service_refresh_result_free(gpointer data)
 {
     ServiceRefreshResult *result = data;
     if (!result) return;
-    free(result->entries);
+    lsm_service_backend_free(result->entries);
     g_free(result->error_message);
     g_free(result->preserve_name);
     g_free(result);
@@ -452,11 +295,8 @@ static void service_refresh_worker(GTask *task, gpointer source_object,
     (void)source_object;
     ServiceRefreshResult *result = task_data;
     GError *error = NULL;
-    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
-    if (bus) {
-        result->entries = collect_services(bus, cancellable, &result->count, &error);
-        g_object_unref(bus);
-    }
+    (void)lsm_service_backend_collect(
+        &result->entries, &result->count, cancellable, &error);
     if (error) {
         result->error_message = g_strdup(error->message);
         g_error_free(error);
@@ -489,7 +329,7 @@ static void apply_service_refresh(LsmApp *app, ServiceRefreshResult *result)
     size_t visible = 0;
     const char *search = gtk_entry_get_text(GTK_ENTRY(app->services.services_search));
     for (size_t index = 0; index < result->count; index++) {
-        ServiceEntry *entry = &result->entries[index];
+        LsmServiceEntry *entry = &result->entries[index];
         if (*search && !lsm_ui_text_matches(entry->name, search) &&
             !lsm_ui_text_matches(entry->description, search) &&
             !lsm_ui_text_matches(entry->active, search) &&
