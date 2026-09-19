@@ -3,9 +3,9 @@
  * @file check_portability.c
  * @brief Compile every application translation unit for the i386 ILP32 model.
  *
- * The portability gate is implemented in C so validating this C project does
- * not depend on a shell-language test harness.  It invokes the configured C
- * compiler directly, then validates each output object from its ELF header
+ * The portability gate is implemented in C so validation does not depend on a
+ * shell-language test harness. It invokes the configured C or C++ compiler for
+ * each translation unit, then validates each output object from its ELF header
  * rather than delegating that check to the external file(1) utility.
  *
  * @author Shannon Smith
@@ -49,6 +49,15 @@ static bool join_path(char *destination, size_t destination_size,
 {
     const int written = snprintf(destination, destination_size, "%s/%s", left, right);
     return written >= 0 && (size_t)written < destination_size;
+}
+
+static bool ends_with(const char *text, const char *suffix)
+{
+    if (!text || !suffix) return false;
+    const size_t text_length = strlen(text);
+    const size_t suffix_length = strlen(suffix);
+    return text_length >= suffix_length &&
+           strcmp(text + text_length - suffix_length, suffix) == 0;
 }
 
 static char *trim(char *text)
@@ -204,7 +213,7 @@ static void add_argument(const char *arguments[], size_t *count, const char *arg
 
 static int compile_source(const char *compiler, const char *root,
                           const char *version_define, const char *source,
-                          const char *object, bool quiet)
+                          const char *object, bool cxx, bool quiet)
 {
     char include_source[LSM_PORTABILITY_PATH_LEN];
     char include_compat[LSM_PORTABILITY_PATH_LEN];
@@ -235,7 +244,7 @@ static int compile_source(const char *compiler, const char *root,
     size_t count = 0U;
     add_argument(arguments, &count, compiler);
     add_argument(arguments, &count, "-m32");
-    add_argument(arguments, &count, "-std=c17");
+    add_argument(arguments, &count, cxx ? "-std=c++17" : "-std=c17");
     add_argument(arguments, &count, "-O2");
     add_argument(arguments, &count, include_source_argument);
     add_argument(arguments, &count, include_compat_argument);
@@ -252,10 +261,12 @@ static int compile_source(const char *compiler, const char *root,
     add_argument(arguments, &count, "-Wshadow");
     add_argument(arguments, &count, "-Wformat=2");
     add_argument(arguments, &count, "-Wundef");
-    add_argument(arguments, &count, "-Wstrict-prototypes");
-    add_argument(arguments, &count, "-Wmissing-prototypes");
+    if (!cxx) {
+        add_argument(arguments, &count, "-Wstrict-prototypes");
+        add_argument(arguments, &count, "-Wmissing-prototypes");
+        add_argument(arguments, &count, "-Wwrite-strings");
+    }
     add_argument(arguments, &count, "-Wcast-qual");
-    add_argument(arguments, &count, "-Wwrite-strings");
     add_argument(arguments, &count, "-Wswitch-enum");
     add_argument(arguments, &count, "-Wnull-dereference");
     add_argument(arguments, &count, "-pthread");
@@ -279,6 +290,8 @@ int main(int argc, char **argv)
 
     const char *compiler = getenv("CC");
     if (!compiler || !*compiler) compiler = "cc";
+    const char *cxx_compiler = getenv("CXX");
+    if (!cxx_compiler || !*cxx_compiler) cxx_compiler = "c++";
     const bool require_i386 = getenv("REQUIRE_I386") &&
                               strcmp(getenv("REQUIRE_I386"), "1") == 0;
 
@@ -324,7 +337,8 @@ int main(int argc, char **argv)
     }
 
     const int probe_result = compile_source(compiler, root, version_define,
-                                            probe_source, probe_object, true);
+                                            probe_source, probe_object,
+                                            false, true);
     if (probe_result != 0 || !object_is_i386(probe_object)) {
         puts("i386 toolchain unavailable; install gcc-multilib and 32-bit libc headers.");
         remove_temporary_files(temporary, 0U);
@@ -359,8 +373,10 @@ int main(int argc, char **argv)
             return EXIT_FAILURE;
         }
 
-        const int result = compile_source(compiler, root, version_define,
-                                          source_path, object_path, false);
+        const bool cxx = ends_with(sources.items[index], ".cpp");
+        const char *source_compiler = cxx ? cxx_compiler : compiler;
+        const int result = compile_source(source_compiler, root, version_define,
+                                          source_path, object_path, cxx, false);
         if (result != 0 || !object_is_i386(object_path)) {
             fprintf(stderr, "i386 compilation failed for %s\n", sources.items[index]);
             remove_temporary_files(temporary, index + 1U);

@@ -44,7 +44,12 @@ PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LS
 SOURCE_NAMES := $(filter-out monitor_backend_%.c process_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
 SOURCES := $(addprefix src/,$(SOURCE_NAMES))
-OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
+C_SOURCES := $(filter %.c,$(SOURCES))
+CXX_SOURCES := $(filter %.cpp,$(SOURCES))
+C_OBJECTS := $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
+CXX_OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(CXX_SOURCES))
+OBJECTS := $(C_OBJECTS) $(CXX_OBJECTS)
+APP_LINKER := $(if $(strip $(CXX_SOURCES)),$(CXX),$(CC))
 
 HARDWARE_MONITOR_SOURCES := \
 	src/monitor_hardware.c src/hardware_topology.c src/intel_gpu.c \
@@ -131,6 +136,10 @@ CPPFLAGS += -Isrc -I$(INFILTRATR_COMMON_DIR)/include \
 	-include src/glibc_compat.h
 CFLAGS ?= -O2 -g
 override CFLAGS += -std=c17 $(BASE_WARNINGS) -ffunction-sections -fdata-sections \
+	$(PORTABLE_OPT_FLAGS) $(PORTABLE_HARDENING_CFLAGS) $(LTO_FLAGS) \
+	$(REPRODUCIBLE_PATH_FLAGS) $(GTK_CFLAGS) -pthread
+CXXFLAGS ?= -O2 -g
+override CXXFLAGS += -std=c++17 $(BASE_WARNINGS) -ffunction-sections -fdata-sections \
 	$(PORTABLE_OPT_FLAGS) $(PORTABLE_HARDENING_CFLAGS) $(LTO_FLAGS) \
 	$(REPRODUCIBLE_PATH_FLAGS) $(GTK_CFLAGS) -pthread
 LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
@@ -228,8 +237,10 @@ FORCE:
 $(BUILD_CONFIG): FORCE | $(BUILD_DIR)
 	@{ \
 		printf 'CC=%s\n' '$(CC)'; \
+		printf 'CXX=%s\n' '$(CXX)'; \
 		printf 'CPPFLAGS=%s\n' '$(CPPFLAGS)'; \
 		printf 'CFLAGS=%s\n' '$(CFLAGS)'; \
+		printf 'CXXFLAGS=%s\n' '$(CXXFLAGS)'; \
 		printf 'LDFLAGS=%s\n' '$(LDFLAGS)'; \
 		printf 'LDLIBS=%s\n' '$(LDLIBS)'; \
 	} > $@.tmp
@@ -242,6 +253,9 @@ $(BUILD_INFO): $(VERSION_FILE) $(INFILTRATR_COMMON_DIR)/VERSION | $(BUILD_DIR)
 $(BUILD_DIR)/%.o: src/%.c src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/%.o: src/%.cpp src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps cxx-check
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
 common-library: common-check
 	$(MAKE) -C "$(INFILTRATR_COMMON_DIR)" \
 		BUILD_DIR="$(INFILTRATR_COMMON_BUILD_DIR)" \
@@ -251,7 +265,7 @@ $(INFILTRATR_COMMON_ARCHIVE): common-library
 	@test -f "$@"
 
 $(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
-	$(CC) $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(LDFLAGS) $(LDLIBS) -o $@
+	$(APP_LINKER) $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(LDFLAGS) $(LDLIBS) -o $@
 
 -include $(OBJECTS:.o=.d)
 
@@ -261,7 +275,7 @@ run: $(TARGET)
 cxx-check:
 	@printf 'int main(){return 0;}\n' | \
 		$(CXX) -std=c++17 -x c++ -fsyntax-only - >/dev/null 2>&1 || { \
-		echo "A C++17 compiler is required for the developer source auditor."; \
+		echo "A C++17 compiler is required for C++ project sources and the developer source auditor."; \
 		echo "Debian/Ubuntu/Mint: sudo apt install build-essential"; \
 		echo "Fedora: sudo dnf install gcc-c++"; \
 		echo "Arch/Manjaro: sudo pacman -S --needed base-devel"; \
@@ -352,8 +366,14 @@ clang-doc-check: | $(BUILD_DIR)
 			-Werror -Wdocumentation-pedantic - >/dev/null 2>&1 && \
 			doc_flags="$$doc_flags -Wdocumentation-pedantic"; \
 		rm -f $$tmp; \
-		$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
-			-Wpedantic -Werror $$doc_flags -fsyntax-only $(SOURCES); \
+		if [ -n "$(strip $(C_SOURCES))" ]; then \
+			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
+				-Wpedantic -Werror $doc_flags -fsyntax-only $(C_SOURCES); \
+		fi; \
+		if [ -n "$(strip $(CXX_SOURCES))" ]; then \
+			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
+				-Wpedantic -Werror $doc_flags -fsyntax-only $(CXX_SOURCES); \
+		fi; \
 		echo "Clang documentation syntax pass completed."; \
 	else \
 		echo "Clang is unavailable; documentation syntax gate skipped."; \
@@ -381,8 +401,14 @@ docs: docs-check
 # Compile every translation unit under the project's strongest portable GCC
 # warning policy. The compact GTK compatibility header is syntax-check only.
 strict-check: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -Isupport/tests/compat \
-		-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(SOURCES)
+	@if [ -n "$(strip $(C_SOURCES))" ]; then \
+		$(CC) $(CPPFLAGS) -Isupport/tests/compat \
+			-std=c17 $(STRICT_WARNINGS) -fsyntax-only $(C_SOURCES); \
+	fi
+	@if [ -n "$(strip $(CXX_SOURCES))" ]; then \
+		$(CXX) $(CPPFLAGS) -Isupport/tests/compat \
+			-std=c++17 $(CXX_STRICT_WARNINGS) -fsyntax-only $(CXX_SOURCES); \
+	fi
 
 # GCC's static analyser operates on source only. Keep linker artifacts out of
 # this gate so parallel verification has no archive-ordering race, and make the
@@ -597,7 +623,7 @@ wifi-metadata-smoke: | $(BUILD_DIR)
 	./$(BUILD_DIR)/wifi-metadata-smoke
 
 portability-check: $(PORTABILITY_CHECKER)
-	REQUIRE_I386=$(REQUIRE_I386) CC=$(CC) ./$(PORTABILITY_CHECKER) --root .
+	REQUIRE_I386=$(REQUIRE_I386) CC=$(CC) CXX=$(CXX) ./$(PORTABILITY_CHECKER) --root .
 
 hidpp-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
@@ -771,23 +797,23 @@ native-installer: common-check $(NATIVE_INSTALLER_BUILDER)
 	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER)
 
 native-command-audit:
-	@matches=$$(grep -REn --include='*.c' \
+	@matches=$$(grep -REn --include='*.c' --include='*.cpp' \
 		--exclude='task_launcher.c' \
 		'(^|[^[:alnum:]_])(popen|system|wordexp|g_spawn_[[:alnum:]_]*)[[:space:]]*[(]' src || true); \
 	if [ -n "$$matches" ]; then \
 		echo "Disallowed shell/command execution API found:"; echo "$$matches"; exit 1; \
 	fi
-	@matches=$$(grep -REn --include='*.c' \
+	@matches=$$(grep -REn --include='*.c' --include='*.cpp' \
 		'"/(usr/)?(bin|sbin)/(lspci|lshw|lsblk|systemctl|loginctl|nmcli|dmidecode|nvidia-smi|intel_gpu_top)"' src || true); \
 	if [ -n "$$matches" ]; then \
 		echo "Disallowed command-line telemetry path found:"; echo "$$matches"; exit 1; \
 	fi
-	@matches=$$(grep -REn --include='*.c' \
+	@matches=$$(grep -REn --include='*.c' --include='*.cpp' \
 		'lib(udev|mount|sensors)\.so|udev_[[:alnum:]_]*[[:space:]]*[(]|sensors_[[:alnum:]_]*[[:space:]]*[(]' src || true); \
 	if [ -n "$$matches" ]; then \
 		echo "Removed external hardware-library dependency found:"; echo "$$matches"; exit 1; \
 	fi
-	@matches=$$(grep -REn --include='*.c' \
+	@matches=$$(grep -REn --include='*.c' --include='*.cpp' \
 		'(^|[^[:alnum:]_])(execv|execve|execl|execlp|execvp|posix_spawn|g_subprocess_[[:alnum:]_]*)[[:space:]]*[(]' src || true); \
 	if [ -n "$$matches" ]; then \
 		echo "GUI application source must not launch executables:"; echo "$$matches"; exit 1; \

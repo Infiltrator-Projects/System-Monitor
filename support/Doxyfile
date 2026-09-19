@@ -2,7 +2,7 @@
 # System Monitor generated-reference configuration.
 PROJECT_NAME           = "System Monitor"
 PROJECT_NUMBER         =
-PROJECT_BRIEF          = "Single-process native C/GTK Linux system manager"
+PROJECT_BRIEF          = "Single-process native C/C++ GTK Linux system manager"
 OUTPUT_DIRECTORY       = build/docs
 CREATE_SUBDIRS         = NO
 OUTPUT_LANGUAGE        = English
@@ -12,7 +12,7 @@ USE_MDFILE_AS_MAINPAGE = README.md
 
 INPUT                  = README.md docs src
 RECURSIVE              = YES
-FILE_PATTERNS           = *.h *.c *.md
+FILE_PATTERNS           = *.h *.c *.cpp *.md
 EXCLUDE                 = src/pci_names_data.c
 EXCLUDE_PATTERNS        = */build/* */tests/compat/*
 

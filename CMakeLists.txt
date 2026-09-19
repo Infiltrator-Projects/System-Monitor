@@ -64,16 +64,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${INFILTRATR_COMMON_DIR}/VERSION")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION" LSM_PROJECT_VERSION)
 string(STRIP "${LSM_PROJECT_VERSION}" LSM_PROJECT_VERSION)
-project(SystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C)
+project(SystemMonitor VERSION "${LSM_PROJECT_VERSION}" LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(LSM_BUILD_DEVELOPER_TOOLS "Build source-audit and release tools" ON)
 
 include(CheckIPOSupported)
-check_ipo_supported(RESULT LSM_IPO_SUPPORTED OUTPUT LSM_IPO_ERROR LANGUAGES C)
+check_ipo_supported(RESULT LSM_IPO_SUPPORTED OUTPUT LSM_IPO_ERROR LANGUAGES C CXX)
 include(CheckCSourceCompiles)
 include(CheckCCompilerFlag)
 include(CTest)
@@ -229,12 +232,8 @@ if(DOXYGEN_FOUND)
 endif()
 
 if(LSM_BUILD_DEVELOPER_TOOLS)
-    # The installed application remains C17. Developer-only tools may use C++17
-    # when RAII materially reduces manual resource and path handling.
-    enable_language(CXX)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
+    # Developer-only tools use the same first-class C++17 toolchain available
+    # to application components when C++ is the stronger implementation choice.
 
     # Keep one warning policy for release tools and one native-source policy for
     # smoke programs. C-only warnings are gated by language so the same

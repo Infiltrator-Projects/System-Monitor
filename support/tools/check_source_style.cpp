@@ -122,7 +122,7 @@ static void check_source_manifest(const StringList *listed)
          !error && iterator != end; iterator.increment(error)) {
         if (!iterator->is_regular_file(error)) continue;
         const std::string name = iterator->path().filename().string();
-        if (!ends_with(name, ".c")) continue;
+        if (!ends_with(name, ".c") && !ends_with(name, ".cpp")) continue;
         if (!list_contains(listed, name.c_str()))
             report_error("support/sources.txt: unlisted application source %s",
                          name.c_str());
@@ -136,7 +136,7 @@ static void check_source_manifest(const StringList *listed)
             error.clear();
             continue;
         }
-        if (!ends_with(entry, ".c"))
+        if (!ends_with(entry, ".c") && !ends_with(entry, ".cpp"))
             report_error("support/sources.txt: unexpected application source %s",
                          entry.c_str());
     }
