@@ -41,7 +41,7 @@
         .license_id = "GPL-3.0-or-later",                                      \
         .comments = LSM_PROJECT_COMMENTS "\n\nBuild: " BUILD_LABEL,                 \
         .icon_name = LSM_EXECUTABLE_NAME,                                       \
-        .copyright_text = "Copyright © 2016 Shannon Smith"                     \
+        .copyright_text = "Copyright © 2016–2026 Shannon Smith"                     \
     }
 
 const InfiltratrProjectInfo *lsm_project_info(void)

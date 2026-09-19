@@ -93,6 +93,6 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 ## Licence
 
-Copyright © 2016 Shannon Smith.
+Copyright © 2016–2026 Shannon Smith.
 
 Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`.
