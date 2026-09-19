@@ -187,12 +187,16 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
     GtkWidget *labels = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
     gtk_widget_set_valign(labels, GTK_ALIGN_CENTER);
     GtkWidget *title_label = gtk_label_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(title_label),
+                                "lsm-side-title");
     char *markup = g_markup_printf_escaped("<b>%s</b>", title);
     gtk_label_set_markup(GTK_LABEL(title_label), markup);
     g_free(markup);
     gtk_widget_set_halign(title_label, GTK_ALIGN_START);
     gtk_label_set_ellipsize(GTK_LABEL(title_label), PANGO_ELLIPSIZE_END);
     GtkWidget *identifier_label = gtk_label_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(identifier_label),
+                                "lsm-side-identifier");
     markup = g_markup_printf_escaped("<small>%s</small>",
                                      identifier ? identifier : "");
     gtk_label_set_markup(GTK_LABEL(identifier_label), markup);
@@ -204,6 +208,8 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
     gtk_widget_set_visible(identifier_label,
                            identifier && identifier[0]);
     GtkWidget *value_label = gtk_label_new(value);
+    gtk_style_context_add_class(gtk_widget_get_style_context(value_label),
+                                "lsm-side-value");
     gtk_widget_set_halign(value_label, GTK_ALIGN_START);
     gtk_label_set_line_wrap(GTK_LABEL(value_label), FALSE);
     gtk_label_set_ellipsize(GTK_LABEL(value_label), PANGO_ELLIPSIZE_END);
@@ -247,6 +253,10 @@ GtkWidget *performance_make_metric_block(const char *name, GtkWidget **value_out
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *label = gtk_label_new(name);
     GtkWidget *value = gtk_label_new("N/A");
+    gtk_style_context_add_class(gtk_widget_get_style_context(label),
+                                "lsm-metric-caption");
+    gtk_style_context_add_class(gtk_widget_get_style_context(value),
+                                "lsm-metric-value");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_halign(value, GTK_ALIGN_START);
     make_large_value(value);
@@ -275,10 +285,14 @@ gboolean performance_draw_memory_composition(GtkWidget *widget, cairo_t *cr,
     const double middle_end = fmin(width, used_x + reclaimable_x);
 
     GdkRGBA colour;
-    GdkRGBA border;
+    GdkRGBA border = {0.21, 0.23, 0.25, 1.0};
     gdk_rgba_parse(&colour, performance_page_colour(LSM_PAGE_MEMORY));
-    gdk_rgba_parse(&border, "#74348f");
-    const GdkRGBA background = lsm_ui_background_colour(widget);
+    GdkRGBA background = lsm_ui_background_colour(widget);
+    GtkStyleContext *style = gtk_widget_get_style_context(widget);
+    if (style) {
+        (void)gtk_style_context_lookup_color(style, "lsm_card", &background);
+        (void)gtk_style_context_lookup_color(style, "lsm_border", &border);
+    }
 
     cairo_set_source_rgba(cr, background.red, background.green, background.blue, 1.0);
     cairo_rectangle(cr, 0.0, 0.0, width, height);
@@ -305,9 +319,9 @@ gboolean performance_draw_memory_composition(GtkWidget *widget, cairo_t *cr,
     cairo_line_to(cr, middle_end, height);
     cairo_stroke(cr);
 
-    cairo_set_source_rgba(cr, border.red, border.green, border.blue, 1.0);
-    cairo_set_line_width(cr, 3.0);
-    cairo_rectangle(cr, 1.5, 1.5, fmax(0.0, width - 3.0), fmax(0.0, height - 3.0));
+    cairo_set_source_rgba(cr, border.red, border.green, border.blue, border.alpha);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, 1.0, 1.0, fmax(0.0, width - 2.0), fmax(0.0, height - 2.0));
     cairo_stroke(cr);
     return FALSE;
 }
