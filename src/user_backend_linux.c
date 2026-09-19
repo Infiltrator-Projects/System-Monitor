@@ -184,7 +184,7 @@ static LsmLinuxSessionRecord *collect_sessions(GDBusConnection *bus,
     LsmLinuxSessionRecord *sessions = parse_session_list(reply, out_count);
     g_variant_unref(reply);
     for (size_t index = 0U; index < *out_count; index++) {
-        if (g_cancellable_is_cancelled(cancellable)) break;
+        if (cancellable && g_cancellable_is_cancelled(cancellable)) break;
         LsmLinuxSessionRecord *record = &sessions[index];
         LsmUserSession *session = &record->session;
         GError *property_error = NULL;
