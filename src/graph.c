@@ -126,7 +126,14 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     gtk_widget_get_allocation(widget, &allocation);
     const double width = allocation.width;
     const double height = allocation.height;
-    const GdkRGBA background = lsm_ui_background_colour(widget);
+    const GdkRGBA fallback_background = lsm_ui_background_colour(widget);
+    GdkRGBA background = fallback_background;
+    GdkRGBA border = {0.21, 0.23, 0.25, 1.0};
+    GtkStyleContext *style = gtk_widget_get_style_context(widget);
+    if (style) {
+        (void)gtk_style_context_lookup_color(style, "lsm_surface", &background);
+        (void)gtk_style_context_lookup_color(style, "lsm_border", &border);
+    }
 
     cairo_set_source_rgba(cr, background.red, background.green, background.blue, 1.0);
     cairo_rectangle(cr, 0.0, 0.0, width, height);
@@ -135,8 +142,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     if (!graph->compact) {
         cairo_set_source_rgba(cr, graph->primary_colour.red,
                               graph->primary_colour.green,
-                              graph->primary_colour.blue, 0.30);
-        cairo_set_line_width(cr, 0.65);
+                              graph->primary_colour.blue, 0.18);
+        cairo_set_line_width(cr, 0.55);
         for (int i = 1; i < 10; i++) {
             const double x = width * i / 10.0;
             cairo_move_to(cr, x, 0.0);
@@ -151,8 +158,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
         if (graph->emphasise_midline) {
             cairo_set_source_rgba(cr, graph->primary_colour.red,
                                   graph->primary_colour.green,
-                                  graph->primary_colour.blue, 0.48);
-            cairo_set_line_width(cr, 0.9);
+                                  graph->primary_colour.blue, 0.30);
+            cairo_set_line_width(cr, 0.75);
             cairo_move_to(cr, 0.0, height / 2.0);
             cairo_line_to(cr, width, height / 2.0);
             cairo_stroke(cr);
@@ -167,10 +174,8 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
                     width, height, TRUE, TRUE, graph->compact);
     }
 
-    cairo_set_source_rgba(cr, graph->primary_colour.red,
-                          graph->primary_colour.green,
-                          graph->primary_colour.blue, 1.0);
-    cairo_set_line_width(cr, graph->compact ? 2.0 : 2.2);
+    cairo_set_source_rgba(cr, border.red, border.green, border.blue, border.alpha);
+    cairo_set_line_width(cr, 1.0);
     cairo_rectangle(cr, 1.0, 1.0, fmax(0.0, width - 2.0), fmax(0.0, height - 2.0));
     cairo_stroke(cr);
     return FALSE;
