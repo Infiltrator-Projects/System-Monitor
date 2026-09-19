@@ -114,6 +114,13 @@ static void *sampler_thread_main(void *user_data)
     LsmLinuxSamplerState *sampler = user_data;
     if (!sampler || !sampler->backend) return NULL;
 
+    /* Storage topology can enter statvfs() on slow or blocked mounts and
+     * hardware discovery can touch device interfaces. Perform both only after
+     * the worker owns execution so GTK activation can construct the window. */
+    if (!lsm_storage_initialise(&sampler->sample))
+        sampler->backend->topology_refresh_requested = true;
+    lsm_hardware_initialise(&sampler->sample);
+
     for (;;) {
         bool force_topology = false;
         (void)pthread_mutex_lock(&sampler->mutex);
@@ -241,12 +248,7 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
         lsm_monitor_platform_destroy(monitor);
         return false;
     }
-    if (!lsm_storage_initialise(&sampler->sample)) {
-        lsm_monitor_platform_destroy(monitor);
-        return false;
-    }
-    lsm_hardware_initialise(&sampler->sample);
-
+    /* Slow storage/hardware discovery starts in sampler_thread_main(). */
     const double now = lsm_monotonic_seconds();
     if (!isfinite(now) || now <= 0.0) {
         lsm_monitor_platform_destroy(monitor);

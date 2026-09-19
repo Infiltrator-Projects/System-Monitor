@@ -17,6 +17,7 @@
 #include "app_internal.h"
 #include "atomic_file.h"
 #include "common.h"
+#include "numeric_io.h"
 #include "ui_helpers.h"
 
 #include <errno.h>
@@ -101,8 +102,22 @@ static void csv_field(FILE *file, const char *text)
     fputc('"', file);
 }
 
-static void csv_row(FILE *file, const LsmProcessInfo *process)
+static bool csv_row(FILE *file, const LsmProcessInfo *process)
 {
+    char cpu_percent[64];
+    char read_rate[64];
+    char write_rate[64];
+    char gpu_percent[64];
+    if (!lsm_numeric_format_fixed(cpu_percent, sizeof(cpu_percent),
+                                  process->cpu_percent, 3U) ||
+        !lsm_numeric_format_fixed(read_rate, sizeof(read_rate),
+                                  process->read_bytes_per_sec, 3U) ||
+        !lsm_numeric_format_fixed(write_rate, sizeof(write_rate),
+                                  process->write_bytes_per_sec, 3U) ||
+        (process->gpu_available &&
+         !lsm_numeric_format_fixed(gpu_percent, sizeof(gpu_percent),
+                                   process->gpu_percent, 3U)))
+        return false;
     csv_field(file, process->name);
     fprintf(file, ",%llu,%llu,",
             (unsigned long long)process->pid,
@@ -110,12 +125,12 @@ static void csv_row(FILE *file, const LsmProcessInfo *process)
     csv_field(file, process->user);
     fputc(',', file);
     csv_field(file, process->state);
-    fprintf(file, ",%.3f,%llu,%llu,%u,%.3f,%.3f,",
-            process->cpu_percent,
+    fprintf(file, ",%s,%llu,%llu,%u,%s,%s,",
+            cpu_percent,
             (unsigned long long)process->cpu_time_nanoseconds,
             (unsigned long long)process->rss_bytes, process->threads,
-            process->read_bytes_per_sec, process->write_bytes_per_sec);
-    if (process->gpu_available) fprintf(file, "%.3f", process->gpu_percent);
+            read_rate, write_rate);
+    if (process->gpu_available) fputs(gpu_percent, file);
     fputc(',', file);
     csv_field(file, process->gpu_engine[0] ? process->gpu_engine : "N/A");
     fprintf(file, ",%llu,%llu,%llu,%u,%llu,%llu,",
@@ -130,6 +145,7 @@ static void csv_row(FILE *file, const LsmProcessInfo *process)
     fputc(',', file);
     csv_field(file, process->command);
     fputc('\n', file);
+    return ferror(file) == 0;
 }
 
 static bool write_process_export(FILE *file, const void *user_data)
@@ -142,7 +158,8 @@ static bool write_process_export(FILE *file, const void *user_data)
           file);
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
         const LsmProcessInfo *process = &app->process.process_snapshot[index];
-        if (process_selected(app, process)) csv_row(file, process);
+        if (process_selected(app, process) && !csv_row(file, process))
+            return false;
     }
     return ferror(file) == 0;
 }

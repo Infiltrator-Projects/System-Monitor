@@ -160,6 +160,7 @@ int main(void)
 
     LsmProcessBackend *backend = lsm_process_backend_create();
     if (!backend) return 1;
+    sleep(1U);
     LsmProcessInfo *processes = NULL;
     size_t count = lsm_process_scan(backend, &processes,
         LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT);
@@ -177,6 +178,7 @@ int main(void)
         return 1;
     }
     if (found->ppid <= 0 || found->threads == 0 || found->instance_id == 0 ||
+        found->elapsed_seconds == 0U ||
         found->elapsed_seconds > 86400ULL || !found->command[0]) {
         fputs("current process details were incomplete\n", stderr);
         return 1;

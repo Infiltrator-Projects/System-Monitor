@@ -104,6 +104,7 @@ static bool setup_fixture(char *root, size_t root_size)
     } while (0)
 
     FIXTURE_FILE("/sys/block/sda/size", "4096\n");
+    FIXTURE_FILE("/sys/block/sda/diskseq", "101\n");
     FIXTURE_FILE("/sys/block/sda/device/vendor", "ATA\n");
     FIXTURE_FILE("/sys/block/sda/device/model", "Test Disk\n");
     FIXTURE_FILE("/sys/block/sda/device/protocol", "SATA\n");
@@ -132,6 +133,7 @@ static bool setup_fixture(char *root, size_t root_size)
 
     /* MMC/SD cards publish the CID product name as device/name, not model. */
     FIXTURE_FILE("/sys/block/mmcblk0/size", "8192\n");
+    FIXTURE_FILE("/sys/block/mmcblk0/diskseq", "202\n");
     FIXTURE_FILE("/sys/block/mmcblk0/device/name", "SD128 CARD\n");
     FIXTURE_FILE("/sys/block/mmcblk0/queue/rotational", "0\n");
 
@@ -246,6 +248,19 @@ int main(void)
     const size_t gpu_count = lsm_sources_list_gpus(sources, gpus, 4);
     const double temperature = lsm_sources_read_cpu_temperature(sources);
 
+    if (!lsm_join_path(path, sizeof(path), root, "/sys/block/sda/diskseq") ||
+        !write_text(path, "303\n"))
+        return 7;
+    LsmBlockDeviceRecord replacement_disks[4] = {0};
+    const size_t replacement_count =
+        lsm_sources_list_block_devices(sources, replacement_disks, 4);
+    bool replacement_identity_changed = false;
+    for (size_t index = 0U; index < replacement_count; index++)
+        if (strcmp(replacement_disks[index].name, "sda") == 0 &&
+            strcmp(replacement_disks[index].instance_identity,
+                   "diskseq:303") == 0)
+            replacement_identity_changed = true;
+
     bool mounted_ext4 = false;
     bool mounted_fat32 = false;
     bool unmounted_ntfs = false;
@@ -310,16 +325,19 @@ int main(void)
         if (strcmp(disks[index].name, "sda") == 0 &&
             strcmp(disks[index].model, "ATA Test Disk") == 0 &&
             strcmp(disks[index].media_type, "SSD") == 0 &&
-            strcmp(disks[index].connection_type, "SATA") == 0)
+            strcmp(disks[index].connection_type, "SATA") == 0 &&
+            strcmp(disks[index].instance_identity, "diskseq:101") == 0)
             sata_disk = true;
         if (strcmp(disks[index].name, "mmcblk0") == 0 &&
             strcmp(disks[index].model, "SD128 CARD") == 0 &&
-            strcmp(disks[index].connection_type, "MMC") == 0)
+            strcmp(disks[index].connection_type, "MMC") == 0 &&
+            strcmp(disks[index].instance_identity, "diskseq:202") == 0)
             mmc_disk = true;
     }
 
     const bool ok =
         disk_count == 2 && sata_disk && mmc_disk &&
+        replacement_identity_changed &&
         mount_count == 2 && strcmp(mounts[0].parent_disk, "sda") == 0 &&
         strcmp(mounts[0].filesystem, "ext4") == 0 &&
         partition_count == 7 && mounted_ext4 && mounted_fat32 && unmounted_ntfs &&

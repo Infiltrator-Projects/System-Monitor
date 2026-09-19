@@ -21,6 +21,7 @@
 #include "atomic_file.h"
 #include "details_page.h"
 #include "filesystems.h"
+#include "numeric_io.h"
 #include "performance.h"
 #include "processes_ui.h"
 
@@ -78,8 +79,8 @@ static double validated_double(const char *value, double minimum,
                                double maximum, double fallback)
 {
     double parsed = 0.0;
-    return infiltratr_parse_double_range(value, minimum, maximum, &parsed)
-        ? parsed : fallback;
+    return lsm_numeric_parse_persisted_double_range(
+        value, minimum, maximum, &parsed, NULL) ? parsed : fallback;
 }
 
 static gboolean valid_stack_name(const char *value)
@@ -200,10 +201,13 @@ static bool write_preferences(FILE *file, const void *user_data)
         app->runtime.window_maximized ? 1 : 0, LSM_TAB_LAYOUT_VERSION,
         app->runtime.last_tab);
     bool okay = result >= 0;
-    for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++)
-        if (fprintf(file, "page_scroll_%zu=%.3f\n", index,
-                    app->runtime.page_scroll[index]) < 0)
+    for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++) {
+        char scroll[64];
+        if (!lsm_numeric_format_fixed(scroll, sizeof(scroll),
+                                      app->runtime.page_scroll[index], 3U) ||
+            fprintf(file, "page_scroll_%zu=%s\n", index, scroll) < 0)
             okay = false;
+    }
     if (okay && fprintf(file, "performance_page=%s\n",
             app->runtime.selected_performance_page[0]
                 ? app->runtime.selected_performance_page : "cpu") < 0)

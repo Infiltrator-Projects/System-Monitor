@@ -132,6 +132,7 @@ typedef struct {
 /** Current counters, identity and mounted filesystems for one physical block device. */
 typedef struct {
     char name[64];
+    char instance_identity[LSM_IDENTITY_LEN];
     char model[LSM_NAME_LEN];
     char media_type[16];
     char connection_type[32];

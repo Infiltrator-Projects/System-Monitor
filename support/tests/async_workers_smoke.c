@@ -148,6 +148,22 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    FILE *recorded = fopen(path, "r");
+    if (!recorded) {
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+    char recorded_contents[4096];
+    const size_t recorded_length =
+        fread(recorded_contents, 1U, sizeof(recorded_contents) - 1U, recorded);
+    recorded_contents[recorded_length] = '\0';
+    (void)fclose(recorded);
+    if (!strstr(recorded_contents, ",4242,12.500,3.250,")) {
+        fputs("Recorder did not emit locale-independent decimal fields.\n", stderr);
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+
     if (unlink(path) != 0) {
         fputs("Unable to remove process recorder fixture.\n", stderr);
         return EXIT_FAILURE;

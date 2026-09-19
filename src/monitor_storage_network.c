@@ -46,6 +46,12 @@ static LsmLinuxDiskState *find_disk_state(LsmMonitor *monitor,
     return NULL;
 }
 
+static bool disk_instance_matches(const char *left, const char *right)
+{
+    return left && right && left[0] && right[0] &&
+           strcmp(left, right) == 0;
+}
+
 static void reconcile_disk_states(LsmMonitor *monitor,
                                   const LsmDiskInfo *disks, size_t count)
 {
@@ -54,18 +60,29 @@ static void reconcile_disk_states(LsmMonitor *monitor,
     LsmLinuxDiskState next[LSM_MAX_DISKS] = {0};
     for (size_t index = 0U; index < count && index < LSM_MAX_DISKS; index++) {
         LsmLinuxDiskState *old = find_disk_state(monitor, disks[index].name);
-        if (old) next[index] = *old;
+        if (old && disk_instance_matches(
+                old->instance_identity, disks[index].instance_identity))
+            next[index] = *old;
         lsm_copy_string(next[index].name, sizeof(next[index].name),
                         disks[index].name);
+        lsm_copy_string(next[index].instance_identity,
+                        sizeof(next[index].instance_identity),
+                        disks[index].instance_identity);
     }
     memcpy(state->disks, next, sizeof(next));
     state->disk_count = count < LSM_MAX_DISKS ? count : LSM_MAX_DISKS;
 }
 
-static const LsmDiskInfo *find_old_disk(const LsmMonitor *monitor, const char *name)
+static const LsmDiskInfo *find_old_disk(const LsmMonitor *monitor,
+                                        const LsmDiskInfo *disk)
 {
-    for (size_t i = 0; i < monitor->disk_count; i++) {
-        if (strcmp(monitor->disks[i].name, name) == 0) return &monitor->disks[i];
+    if (!monitor || !disk) return NULL;
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        const LsmDiskInfo *old = &monitor->disks[index];
+        if (strcmp(old->name, disk->name) == 0 &&
+            disk_instance_matches(old->instance_identity,
+                                  disk->instance_identity))
+            return old;
     }
     return NULL;
 }
@@ -182,6 +199,9 @@ static bool refresh_disks(LsmMonitor *monitor)
     for (size_t index = 0; index < record_count; index++) {
         LsmDiskInfo *disk = &discovered[discovered_count++];
         lsm_copy_string(disk->name, sizeof(disk->name), records[index].name);
+        lsm_copy_string(disk->instance_identity,
+                        sizeof(disk->instance_identity),
+                        records[index].instance_identity);
         lsm_copy_string(disk->model, sizeof(disk->model), records[index].model);
         lsm_copy_string(disk->media_type, sizeof(disk->media_type),
                         records[index].media_type);
@@ -193,7 +213,7 @@ static bool refresh_disks(LsmMonitor *monitor)
 
     for (size_t index = 0; index < discovered_count; index++) {
         LsmDiskInfo *disk = &discovered[index];
-        const LsmDiskInfo *old = find_old_disk(monitor, disk->name);
+        const LsmDiskInfo *old = find_old_disk(monitor, disk);
         if (old) {
             disk->read_bytes_per_sec = old->read_bytes_per_sec;
             disk->write_bytes_per_sec = old->write_bytes_per_sec;
@@ -214,7 +234,10 @@ static bool refresh_disks(LsmMonitor *monitor)
     bool changed = discovered_count != monitor->disk_count;
     if (!changed) {
         for (size_t i = 0; i < discovered_count; i++) {
-            if (strcmp(discovered[i].name, monitor->disks[i].name) != 0) {
+            if (strcmp(discovered[i].name, monitor->disks[i].name) != 0 ||
+                !disk_instance_matches(
+                    discovered[i].instance_identity,
+                    monitor->disks[i].instance_identity)) {
                 changed = true;
                 break;
             }

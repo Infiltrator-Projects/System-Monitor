@@ -25,7 +25,8 @@ typedef struct LsmSystemSources LsmSystemSources;
 
 /** One physical block device discovered through block-class sysfs. */
 typedef struct {
-    char name[64];             /**< Stable kernel name, such as nvme0n1. */
+    char name[64];             /**< Current kernel name, such as nvme0n1. */
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Kernel device-instance identity. */
     char model[LSM_NAME_LEN];  /**< Human-readable vendor/model text. */
     char media_type[16];       /**< SSD or HDD when the queue reports it. */
     char connection_type[32];  /**< Native storage transport when identifiable. */

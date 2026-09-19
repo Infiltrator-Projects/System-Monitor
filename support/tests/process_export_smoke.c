@@ -33,6 +33,11 @@ int main(void)
     strcpy(processes[0].name, "one, process");
     strcpy(processes[0].user, "tester");
     strcpy(processes[0].gpu_engine, "render");
+    processes[0].cpu_percent = 12.5;
+    processes[0].read_bytes_per_sec = 1234.5;
+    processes[0].write_bytes_per_sec = 6.25;
+    processes[0].gpu_available = true;
+    processes[0].gpu_percent = 33.75;
     strcpy(processes[0].command, "one \"quoted\" command");
     processes[1].pid = 11;
     processes[1].instance_id = 101U;
@@ -68,6 +73,8 @@ int main(void)
     contents[length] = '\0';
     fclose(file);
     assert(strstr(contents, "\"one, process\""));
+    assert(strstr(contents, ",12.500,"));
+    assert(strstr(contents, ",1234.500,6.250,33.750,"));
     assert(strstr(contents, "one \"\"quoted\"\" command"));
     assert(strstr(contents, "\"'=two\",11"));
     assert(strstr(contents, "\"'@SUM(1,1)line\""));

@@ -30,6 +30,7 @@ typedef struct LsmLinuxSamplerState LsmLinuxSamplerState;
 /** Retained Linux disk baselines keyed independently of the public snapshot. */
 typedef struct {
     char name[64];
+    char instance_identity[LSM_IDENTITY_LEN];
     LsmDiskAccountingState accounting;
 } LsmLinuxDiskState;
 

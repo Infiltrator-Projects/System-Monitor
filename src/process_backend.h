@@ -102,8 +102,10 @@ bool lsm_process_set_priority(LsmProcessId pid,
  *
  * @param pid Target process identifier.
  * @param instance_id Opaque instance token captured with @p pid.
- * @param enabled true to enable the lower-resource policy; false for defaults.
- * @return true when at least one supported native efficiency control succeeded.
+ * @param enabled true to enable the lower-resource policy; false to restore
+ *        the scheduling state captured when System Monitor enabled it.
+ * @return true only when the requested CPU policy and every changed native
+ *         I/O policy were established or restored completely.
  */
 bool lsm_process_set_efficiency(LsmProcessId pid,
                                 LsmProcessInstanceId instance_id,

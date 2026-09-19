@@ -252,7 +252,9 @@ LsmDevicePage *performance_build_disk_page(LsmApp *app, size_t index)
 {
     LsmDiskInfo *disk = &app->monitor.disks[index];
     char stack[96], capacity[64], friendly[LSM_NAME_LEN + 32];
-    snprintf(stack, sizeof(stack), "disk-%s", disk->name);
+    performance_stable_stack_name(
+        stack, sizeof(stack), "disk",
+        disk->instance_identity, disk->name);
     lsm_metric_format_disk_capacity(disk->size_bytes, capacity, sizeof(capacity));
     performance_numbered_device_name(friendly, sizeof(friendly), "Disk", index,
                          disk->model);

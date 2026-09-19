@@ -410,22 +410,35 @@ strict-check: | $(BUILD_DIR)
 			-std=c++17 $(CXX_STRICT_WARNINGS) -fsyntax-only $(CXX_SOURCES); \
 	fi
 
-# GCC's static analyser operates on source only. Keep linker artifacts out of
-# this gate so parallel verification has no archive-ordering race, and make the
-# analyser's exit status authoritative rather than allowing a later echo to
-# mask a diagnostic failure.
+# GCC's static analyser needs a real compilation pass; -fsyntax-only suppresses
+# the dataflow analysis on supported GCC releases. Objects are disposable, and
+# a known-bad fixture proves the gate still detects an analyser diagnostic.
 analyzer-check: check-deps | $(BUILD_DIR)
 	@set -e; \
 	if [ -n "$(ANALYZER_FLAG)" ]; then \
-		$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) $(ANALYZER_FLAG) \
-			-fsyntax-only   \
-			 src/process_backend_linux.c src/refresh_policy.c \
-			src/process_gpu.c  src/cpu_accounting.c \
-			src/memory_accounting.c \
-			src/disk_accounting.c src/mountinfo.c src/storage_metadata.c \
-			src/smbios_memory.c \
+		dir="$(BUILD_DIR)/analyzer"; \
+		rm -rf "$$dir"; mkdir -p "$$dir"; \
+		for source in \
+			src/process_backend_linux.c src/refresh_policy.c src/process_gpu.c \
+			src/cpu_accounting.c src/memory_accounting.c src/disk_accounting.c \
+			src/mountinfo.c src/storage_metadata.c src/smbios_memory.c \
 			src/logitech_hidpp_protocol.c src/application_catalog.c \
-			src/process_grouping.c; \
+			src/process_grouping.c; do \
+			stem=$$(basename "$$source" .c); \
+			$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+				$(ANALYZER_FLAG) -c "$$source" -o "$$dir/$$stem.o"; \
+		done; \
+		if $(CC) $(CPPFLAGS) -std=c17 $(ANALYZER_FLAG) \
+			-Werror=analyzer-use-after-free -c support/tests/analyzer_known_bad.c \
+			-o "$$dir/analyzer-known-bad.o" >"$$dir/analyzer-known-bad.log" 2>&1; then \
+			echo "GCC static-analyser gate failed to reject its known-bad fixture." >&2; \
+			exit 1; \
+		fi; \
+		grep -q 'analyzer-use-after-free' "$$dir/analyzer-known-bad.log" || { \
+			cat "$$dir/analyzer-known-bad.log" >&2; \
+			echo "Known-bad analyser fixture failed for an unexpected reason." >&2; \
+			exit 1; \
+		}; \
 		echo "GCC static-analyser pass completed."; \
 	else \
 		echo "Compiler has no -fanalyzer support; static-analyser gate skipped."; \

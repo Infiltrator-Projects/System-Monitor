@@ -8,6 +8,7 @@
  * @license GPL-3.0-or-later
  */
 #include "process_recorder.h"
+#include "numeric_io.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -79,11 +80,20 @@ static bool write_record(LsmProcessRecorder *recorder, const RecordNode *node)
         return false;
     }
 
+    char cpu_percent[64];
+    char memory_percent[64];
+    if (!lsm_numeric_format_fixed(cpu_percent, sizeof(cpu_percent),
+                                  node->cpu_percent, 3U) ||
+        !lsm_numeric_format_fixed(memory_percent, sizeof(memory_percent),
+                                  node->memory_percent, 3U)) {
+        errno = ERANGE;
+        return false;
+    }
     errno = 0;
     const int written = fprintf(
-        recorder->file, "%s,%llu,%.3f,%.3f,%llu,%llu,%llu,%u\n",
+        recorder->file, "%s,%llu,%s,%s,%llu,%llu,%llu,%u\n",
         timestamp, (unsigned long long)node->pid,
-        node->cpu_percent, node->memory_percent,
+        cpu_percent, memory_percent,
         (unsigned long long)node->rss_bytes,
         (unsigned long long)node->read_bytes,
         (unsigned long long)node->write_bytes, node->threads);

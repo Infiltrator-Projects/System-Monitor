@@ -24,6 +24,7 @@
 #include "atomic_file.h"
 #include "common.h"
 #include "duration_format.h"
+#include "numeric_io.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/core.h>
@@ -388,10 +389,23 @@ static int history_write_request(LsmHistorySaveRequest *request,
         char *safe_name = sanitise_field(entry->name);
         char *safe_user = sanitise_field(entry->user);
         char *safe_identity = sanitise_field(entry->identity);
+        char cpu_seconds[64];
+        char active_seconds[64];
+        if (!lsm_numeric_format_fixed(cpu_seconds, sizeof(cpu_seconds),
+                                      entry->cpu_seconds, 6U) ||
+            !lsm_numeric_format_fixed(active_seconds, sizeof(active_seconds),
+                                      entry->active_seconds, 6U)) {
+            g_free(safe_key);
+            g_free(safe_name);
+            g_free(safe_user);
+            g_free(safe_identity);
+            g_string_free(output, TRUE);
+            return ERANGE;
+        }
         g_string_append_printf(output,
-            "%s\t%s\t%s\t%s\t%.6f\t%.6f\t%llu\t%llu\t%llu\t%lld\t%lld\n",
+            "%s\t%s\t%s\t%s\t%s\t%s\t%llu\t%llu\t%llu\t%lld\t%lld\n",
             safe_key, safe_name, safe_user, safe_identity,
-            entry->cpu_seconds, entry->active_seconds,
+            cpu_seconds, active_seconds,
             (unsigned long long)entry->read_bytes,
             (unsigned long long)entry->write_bytes,
             (unsigned long long)entry->peak_rss_bytes,
@@ -440,8 +454,12 @@ static gboolean history_load_record(LsmApp *app, char *line)
     uint64_t peak_rss_bytes = 0U;
     int64_t first_seen = 0;
     int64_t last_seen = 0;
-    if (!infiltratr_parse_double(fields[4], &cpu_seconds) ||
-        !infiltratr_parse_double(fields[5], &active_seconds) ||
+    bool cpu_legacy_decimal = false;
+    bool active_legacy_decimal = false;
+    if (!lsm_numeric_parse_persisted_double(
+            fields[4], &cpu_seconds, &cpu_legacy_decimal) ||
+        !lsm_numeric_parse_persisted_double(
+            fields[5], &active_seconds, &active_legacy_decimal) ||
         !infiltratr_parse_u64(fields[6], 10U, &read_bytes) ||
         !infiltratr_parse_u64(fields[7], 10U, &write_bytes) ||
         !infiltratr_parse_u64(fields[8], 10U, &peak_rss_bytes) ||
@@ -464,7 +482,7 @@ static gboolean history_load_record(LsmApp *app, char *line)
     entry->first_seen = first_seen;
     entry->last_seen = last_seen;
 
-    gboolean truncated = FALSE;
+    gboolean truncated = cpu_legacy_decimal || active_legacy_decimal;
     const gboolean existed = g_hash_table_contains(
         app->history.app_history, entry->key);
     if (!existed &&

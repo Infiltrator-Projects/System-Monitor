@@ -74,6 +74,22 @@ static gboolean count_persisted_rows(const char *directory, unsigned *rows)
     return ok;
 }
 
+static gboolean history_contains_text(const char *path, const char *needle)
+{
+    FILE *file = fopen(path, "r");
+    if (!file) return FALSE;
+    char line[2048];
+    gboolean found = FALSE;
+    while (fgets(line, sizeof(line), file)) {
+        if (strstr(line, needle)) {
+            found = TRUE;
+            break;
+        }
+    }
+    (void)fclose(file);
+    return found;
+}
+
 static void fill_live_process(LsmProcessInfo *process, unsigned index)
 {
     memset(process, 0, sizeof(*process));
@@ -130,6 +146,27 @@ int main(void)
 
     char history_path[LSM_PATH_LEN];
     snprintf(history_path, sizeof(history_path), "%s/app-history.tsv", directory);
+
+    FILE *legacy = fopen(history_path, "w");
+    if (!legacy) return fail("unable to create decimal-comma history fixture");
+    if (fputs("# System-Monitor App History v1\n"
+              "uid:1000|/legacy\tlegacy\tuser\t/legacy"
+              "\t1,500000\t2,250000\t3\t4\t5\t10\t20\n",
+              legacy) == EOF ||
+        fclose(legacy) != 0)
+        return fail("unable to write decimal-comma history fixture");
+    LsmApp *legacy_app = calloc(1U, sizeof(*legacy_app));
+    if (!legacy_app || !lsm_history_test_init(legacy_app, directory))
+        return fail("unable to load decimal-comma history fixture");
+    if (lsm_history_test_retained_count(legacy_app) != 1U ||
+        !lsm_history_test_contains(legacy_app, "uid:1000|/legacy"))
+        return fail("legacy decimal-comma history was not recovered");
+    lsm_history_save(legacy_app);
+    if (!history_contains_text(history_path, "\t1.500000\t2.250000\t"))
+        return fail("legacy decimal-comma history was not canonicalised");
+    lsm_history_test_dispose(legacy_app);
+    free(legacy_app);
+
     if (unlink(history_path) != 0)
         return fail("unable to reset persistence fixture");
 

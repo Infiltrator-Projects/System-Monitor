@@ -633,6 +633,49 @@ static void read_block_characteristics(const char *root, const char *name,
                         connection ? connection : "SCSI");
 }
 
+typedef struct {
+    const char *suffix;
+    const char *kind;
+} LsmBlockIdentityAttribute;
+
+static void block_instance_identity(const char *root, const char *name,
+                                    const char *device_path,
+                                    char *identity, size_t identity_size)
+{
+    if (!identity || identity_size == 0U) return;
+    identity[0] = '\0';
+    if (!root || !name || !device_path) return;
+    static const LsmBlockIdentityAttribute attributes[] = {
+        {"/diskseq", "diskseq"},
+        {"/wwid", "wwid"},
+        {"/device/wwid", "wwid"},
+        {"/device/serial", "serial"}
+    };
+    char path[LSM_PATH_LEN];
+    char value[LSM_IDENTITY_LEN] = "";
+    for (size_t index = 0U; index < LSM_ARRAY_LENGTH(attributes); index++) {
+        if (!child_path(path, sizeof(path), root, name,
+                        attributes[index].suffix) ||
+            !lsm_read_text_file(path, value, sizeof(value)))
+            continue;
+        lsm_trim(value);
+        if (!value[0]) continue;
+        const int written = snprintf(identity, identity_size, "%s:%s",
+                                     attributes[index].kind, value);
+        if (written >= 0 && (size_t)written < identity_size) return;
+        identity[0] = '\0';
+        break;
+    }
+    char canonical[LSM_PATH_LEN] = "";
+    if (lsm_realpath_copy(device_path, canonical, sizeof(canonical)) &&
+        canonical[0]) {
+        const int written = snprintf(identity, identity_size, "path:%s",
+                                     canonical);
+        if (written >= 0 && (size_t)written < identity_size) return;
+    }
+    (void)snprintf(identity, identity_size, "name:%s", name);
+}
+
 /* Block and mount inventory. Device-node ioctls are preferred for capacity;
  * sysfs remains the unprivileged identity and topology fallback. */
 size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
@@ -657,6 +700,9 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
         LsmBlockDeviceRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
+        block_instance_identity(root, entry->d_name, device_path,
+                                record->instance_identity,
+                                sizeof(record->instance_identity));
         read_block_characteristics(root, entry->d_name, device_path, record);
 
         char path[LSM_PATH_LEN];

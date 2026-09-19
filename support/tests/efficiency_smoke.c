@@ -95,6 +95,14 @@ int main(void)
         waitpid(child, NULL, 0);
         return 1;
     }
+    errno = 0;
+    const int original_priority = getpriority(PRIO_PROCESS, child);
+    if (errno != 0) {
+        perror("getpriority");
+        kill(child, SIGKILL);
+        waitpid(child, NULL, 0);
+        return 1;
+    }
     if (!lsm_process_set_efficiency(child, child_instance_id, true)) {
         perror("lsm_process_set_efficiency");
         kill(child, SIGKILL);
@@ -106,6 +114,25 @@ int main(void)
     int priority = getpriority(PRIO_PROCESS, child);
     if (errno != 0 || priority < 10) {
         fprintf(stderr, "unexpected nice value: %d (errno=%d)\n", priority, errno);
+        kill(child, SIGKILL);
+        waitpid(child, NULL, 0);
+        return 1;
+    }
+
+    errno = 0;
+    const bool disabled =
+        lsm_process_set_efficiency(child, child_instance_id, false);
+    const int disable_error = errno;
+    errno = 0;
+    const int restored_priority = getpriority(PRIO_PROCESS, child);
+    if (errno != 0 ||
+        (disabled && restored_priority != original_priority) ||
+        (!disabled && disable_error == 0)) {
+        fprintf(stderr,
+                "Efficiency disable reporting/restoration was inconsistent: "
+                "ok=%d before=%d after=%d error=%d\n",
+                disabled ? 1 : 0, original_priority, restored_priority,
+                disable_error);
         kill(child, SIGKILL);
         waitpid(child, NULL, 0);
         return 1;

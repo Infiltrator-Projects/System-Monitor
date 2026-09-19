@@ -29,9 +29,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <math.h>
 #include <pwd.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -584,8 +586,13 @@ static int64_t read_boot_time(void)
 
 static double read_uptime_seconds(void)
 {
+    char text[128];
+    if (!lsm_read_text_file("/proc/uptime", text, sizeof(text))) return 0.0;
+    char *separator = strpbrk(text, " \t");
+    if (separator) *separator = '\0';
     double uptime = 0.0;
-    return lsm_read_double_file("/proc/uptime", &uptime) ? uptime : 0.0;
+    return infiltratr_parse_double(text, &uptime) &&
+           isfinite(uptime) && uptime >= 0.0 ? uptime : 0.0;
 }
 
 static int compare_process_cpu(const void *left, const void *right)
@@ -760,6 +767,70 @@ bool lsm_process_set_priority(LsmProcessId process_id,
     return setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
 }
 
+typedef struct {
+    pid_t pid;
+    LsmProcessInstanceId instance_id;
+    int original_nice;
+    int original_ioprio;
+    bool restore_ioprio;
+    bool captured;
+} LsmEfficiencyRestoreState;
+
+#define LSM_EFFICIENCY_RESTORE_CAPACITY 1024U
+static atomic_flag efficiency_restore_lock = ATOMIC_FLAG_INIT;
+static LsmEfficiencyRestoreState
+    efficiency_restore_states[LSM_EFFICIENCY_RESTORE_CAPACITY];
+
+static void efficiency_restore_lock_acquire(void)
+{
+    while (atomic_flag_test_and_set_explicit(
+               &efficiency_restore_lock, memory_order_acquire))
+        sched_yield();
+}
+
+static void efficiency_restore_lock_release(void)
+{
+    atomic_flag_clear_explicit(&efficiency_restore_lock, memory_order_release);
+}
+
+static LsmEfficiencyRestoreState *efficiency_restore_find(
+    pid_t pid, LsmProcessInstanceId instance_id)
+{
+    for (size_t index = 0U; index < LSM_EFFICIENCY_RESTORE_CAPACITY; index++) {
+        LsmEfficiencyRestoreState *state = &efficiency_restore_states[index];
+        if (state->captured && state->pid == pid &&
+            state->instance_id == instance_id)
+            return state;
+    }
+    return NULL;
+}
+
+static LsmEfficiencyRestoreState *efficiency_restore_reserve(
+    pid_t pid, LsmProcessInstanceId instance_id)
+{
+    LsmEfficiencyRestoreState *state =
+        efficiency_restore_find(pid, instance_id);
+    if (state) return state;
+    for (size_t index = 0U; index < LSM_EFFICIENCY_RESTORE_CAPACITY; index++) {
+        state = &efficiency_restore_states[index];
+        if (state->captured) continue;
+        memset(state, 0, sizeof(*state));
+        state->pid = pid;
+        state->instance_id = instance_id;
+        state->captured = true;
+        return state;
+    }
+    return NULL;
+}
+
+static void efficiency_restore_remove(pid_t pid,
+                                      LsmProcessInstanceId instance_id)
+{
+    LsmEfficiencyRestoreState *state =
+        efficiency_restore_find(pid, instance_id);
+    if (state) memset(state, 0, sizeof(*state));
+}
+
 bool lsm_process_set_efficiency(LsmProcessId process_id,
                                 LsmProcessInstanceId instance_id,
                                 bool enabled)
@@ -771,31 +842,101 @@ bool lsm_process_set_efficiency(LsmProcessId process_id,
         return false;
     }
 
-    /* Efficiency mode deliberately uses only standard scheduler controls:
-     * lower CPU priority plus the idle block-I/O class. No resident service,
-     * cgroup or external command is required. Linux may refuse a later CPU
-     * priority increase for an unprivileged caller; the UI reports that error
-     * rather than pretending the original priority was restored. */
-    const int nice_value = enabled ? 10 : 0;
-    const int io_value = enabled
-        ? LSM_IOPRIO_VALUE(IOPRIO_CLASS_IDLE, 0)
-        : LSM_IOPRIO_VALUE(IOPRIO_CLASS_BE, 4);
+    if (enabled) {
+        errno = 0;
+        const int original_nice = getpriority(PRIO_PROCESS, (id_t)pid);
+        if (errno != 0) return false;
 
-    bool io_ok = false;
-    int io_error = 0;
-#ifdef SYS_ioprio_set
-    io_ok = syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid, io_value) == 0;
-    if (!io_ok) io_error = errno;
+        int original_ioprio = 0;
+        bool have_original_ioprio = false;
+#ifdef SYS_ioprio_get
+        errno = 0;
+        const long current_ioprio =
+            syscall(SYS_ioprio_get, IOPRIO_WHO_PROCESS, pid);
+        if (current_ioprio >= 0) {
+            original_ioprio = (int)current_ioprio;
+            have_original_ioprio = true;
+        }
 #endif
 
-    const bool cpu_ok = setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
-    const int cpu_error = cpu_ok ? 0 : errno;
+        efficiency_restore_lock_acquire();
+        LsmEfficiencyRestoreState *state =
+            efficiency_restore_find(pid, instance_id);
+        const bool already_captured = state != NULL;
+        if (!state) state = efficiency_restore_reserve(pid, instance_id);
+        if (!state) {
+            efficiency_restore_lock_release();
+            errno = ENOSPC;
+            return false;
+        }
+        if (!already_captured) {
+            state->original_nice = original_nice;
+            state->original_ioprio = original_ioprio;
+            state->restore_ioprio = false;
+        }
+        efficiency_restore_lock_release();
 
-    /* Some containers and older kernels block ioprio_set. A successfully
-     * lowered CPU priority is still useful Efficiency mode, and vice versa. */
-    if (cpu_ok || io_ok) return true;
-    errno = cpu_error ? cpu_error : io_error;
-    return false;
+        bool io_changed = false;
+#ifdef SYS_ioprio_set
+        if (have_original_ioprio) {
+            const int idle_ioprio = LSM_IOPRIO_VALUE(IOPRIO_CLASS_IDLE, 0);
+            io_changed =
+                syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid,
+                        idle_ioprio) == 0;
+        }
+#endif
+        if (io_changed && !already_captured) {
+            efficiency_restore_lock_acquire();
+            state = efficiency_restore_find(pid, instance_id);
+            if (state) state->restore_ioprio = true;
+            efficiency_restore_lock_release();
+        }
+
+        if (setpriority(PRIO_PROCESS, (id_t)pid, 10) != 0) {
+            const int failure = errno ? errno : EACCES;
+#ifdef SYS_ioprio_set
+            if (io_changed && have_original_ioprio)
+                (void)syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid,
+                              original_ioprio);
+#endif
+            if (!already_captured) {
+                efficiency_restore_lock_acquire();
+                efficiency_restore_remove(pid, instance_id);
+                efficiency_restore_lock_release();
+            }
+            errno = failure;
+            return false;
+        }
+        return true;
+    }
+
+    LsmEfficiencyRestoreState saved = {
+        .pid = pid,
+        .instance_id = instance_id,
+        .original_nice = 0,
+        .original_ioprio = LSM_IOPRIO_VALUE(IOPRIO_CLASS_BE, 4),
+        .restore_ioprio = true,
+        .captured = false
+    };
+    efficiency_restore_lock_acquire();
+    LsmEfficiencyRestoreState *state =
+        efficiency_restore_find(pid, instance_id);
+    if (state) saved = *state;
+    efficiency_restore_lock_release();
+
+#ifdef SYS_ioprio_set
+    if (saved.restore_ioprio &&
+        syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid,
+                saved.original_ioprio) != 0)
+        return false;
+#endif
+    if (setpriority(PRIO_PROCESS, (id_t)pid, saved.original_nice) != 0)
+        return false;
+
+    efficiency_restore_lock_acquire();
+    efficiency_restore_remove(pid, instance_id);
+    efficiency_restore_lock_release();
+    return true;
 }
 
 size_t lsm_process_affinity_get(LsmProcessId process_id,
