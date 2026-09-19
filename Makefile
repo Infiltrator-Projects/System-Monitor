@@ -617,16 +617,17 @@ battery-smoke: backend-check
 		-o $(BUILD_DIR)/battery-smoke
 	./$(BUILD_DIR)/battery-smoke
 
-bluetooth-battery-smoke: | $(BUILD_DIR)
+bluetooth-battery-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/bluetooth_battery_smoke.c src/bluetooth_battery.c \
-		$(GTK_LIBS) -pthread -o $(BUILD_DIR)/bluetooth-battery-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread \
+		-o $(BUILD_DIR)/bluetooth-battery-smoke
 	./$(BUILD_DIR)/bluetooth-battery-smoke
 
-bluetooth-traffic-smoke: | $(BUILD_DIR)
+bluetooth-traffic-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/bluetooth_traffic_smoke.c src/bluetooth_traffic.c \
-		-lm -o $(BUILD_DIR)/bluetooth-traffic-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/bluetooth-traffic-smoke
 	./$(BUILD_DIR)/bluetooth-traffic-smoke
 
 wifi-metadata-smoke: | $(BUILD_DIR)
@@ -769,7 +770,8 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/application_catalog_smoke.c src/application_catalog.c \
-		-l:libglib-2.0.so.0 -o $(BUILD_DIR)/application-catalog-sanitized
+		$(INFILTRATR_COMMON_ARCHIVE) -l:libglib-2.0.so.0 -lm \
+		-o $(BUILD_DIR)/application-catalog-sanitized
 	ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		./$(BUILD_DIR)/application-catalog-sanitized
@@ -864,10 +866,11 @@ bundled-pci-smoke: | $(BUILD_DIR)
 		-o $(BUILD_DIR)/bundled-pci-smoke
 	./$(BUILD_DIR)/bundled-pci-smoke
 
-application-catalog-smoke: | $(BUILD_DIR)
+application-catalog-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/application_catalog_smoke.c src/application_catalog.c \
-		-l:libglib-2.0.so.0 -o $(BUILD_DIR)/application-catalog-smoke
+		$(INFILTRATR_COMMON_ARCHIVE) -l:libglib-2.0.so.0 -lm \
+		-o $(BUILD_DIR)/application-catalog-smoke
 	./$(BUILD_DIR)/application-catalog-smoke
 
 process-grouping-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
