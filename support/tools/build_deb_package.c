@@ -429,13 +429,13 @@ static void format_debian_date(time_t epoch, char *destination, size_t size)
 static void install_release_changelog(const char *version, time_t epoch)
 {
     static const char relative[] =
-        "usr/share/doc/system-monitor/changelog";
+        "usr/share/doc/infiltrator-system-monitor/changelog";
     char date[64];
     format_debian_date(epoch, date, sizeof(date));
     char text[1536];
     const int written = snprintf(
         text, sizeof(text),
-        "system-monitor (%s) unstable; urgency=medium\n\n"
+        "infiltrator-system-monitor (%s) unstable; urgency=medium\n\n"
         "  * Release %s. See the GitHub release notes for details.\n\n"
         " -- Shannon Smith <The-First-Infiltrator@users.noreply.github.com>  %s\n",
         version, version, date);
@@ -448,7 +448,7 @@ static void install_release_changelog(const char *version, time_t epoch)
     char destination[PATH_MAX];
     stage_path(source, sizeof(source), relative);
     stage_path(destination, sizeof(destination),
-               "usr/share/doc/system-monitor/changelog.gz");
+               "usr/share/doc/infiltrator-system-monitor/changelog.gz");
     gzip_changelog(source, destination);
     if (unlink(source) != 0)
         fail("remove temporary changelog: %s", strerror(errno));
@@ -511,17 +511,17 @@ int main(int argc, char **argv)
     copy_staged("support/resources/icons/system-monitor.png",
                 "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
-    copy_staged("LICENSE", "usr/share/doc/system-monitor/LICENSE", 0644);
+    copy_staged("LICENSE", "usr/share/doc/infiltrator-system-monitor/LICENSE", 0644);
     copy_staged("support/legal/THIRD_PARTY_NOTICES",
-                "usr/share/doc/system-monitor/THIRD_PARTY_NOTICES", 0644);
+                "usr/share/doc/infiltrator-system-monitor/THIRD_PARTY_NOTICES", 0644);
     copy_staged("support/packaging/copyright",
-                "usr/share/doc/system-monitor/copyright", 0644);
-    copy_staged("README.md", "usr/share/doc/system-monitor/README.md", 0644);
+                "usr/share/doc/infiltrator-system-monitor/copyright", 0644);
+    copy_staged("README.md", "usr/share/doc/infiltrator-system-monitor/README.md", 0644);
     copy_staged("support/resources/data/PCI_IDS_LICENSE",
-                "usr/share/doc/system-monitor/PCI_IDS_LICENSE", 0644);
+                "usr/share/doc/infiltrator-system-monitor/PCI_IDS_LICENSE", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",
-                    "usr/share/doc/system-monitor/BUILD-INFO", 0644);
+                    "usr/share/doc/infiltrator-system-monitor/BUILD-INFO", 0644);
 
     install_release_changelog(version, epoch);
 
@@ -544,7 +544,7 @@ int main(int argc, char **argv)
     char control[LSM_DEB_TEXT];
     const int written = snprintf(
         control, sizeof(control),
-        "Package: system-monitor\n"
+        "Package: infiltrator-system-monitor\n"
         "Version: %s\n"
         "Section: utils\n"
         "Priority: optional\n"
@@ -552,6 +552,8 @@ int main(int argc, char **argv)
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
         "Homepage: https://github.com/Infiltrator-Projects/System-Monitor\n"
         "Provides: linux-system-monitor\n"
+        "Breaks: system-monitor (<< 1.0.36)\n"
+        "Replaces: system-monitor (<< 1.0.36)\n"
         "Breaks: linux-system-monitor (<= 1.0.30)\n"
         "Replaces: linux-system-monitor (<= 1.0.30)\n"
         "Depends: libc6 (>= %u.%u), libcap2-bin, "
