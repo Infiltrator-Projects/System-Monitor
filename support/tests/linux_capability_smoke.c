@@ -4,7 +4,7 @@
  * @brief Verify dependency-free CAP_NET_RAW file-capability encoding.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "linux_capability.h"

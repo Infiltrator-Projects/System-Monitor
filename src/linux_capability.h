@@ -4,7 +4,7 @@
  * @brief Narrow Linux capability operations owned by System Monitor.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef SYSTEM_MONITOR_LINUX_CAPABILITY_H
