@@ -121,10 +121,15 @@ static void service_action_complete(GObject *source_object,
                                     GAsyncResult *async_result,
                                     gpointer user_data)
 {
-    (void)source_object;
-    LsmApp *app = user_data;
+    (void)user_data;
     ServiceActionResult *result = g_task_propagate_pointer(
         G_TASK(async_result), NULL);
+    LsmApp *app = source_object
+        ? g_object_get_data(source_object, "lsm-services-app") : NULL;
+    if (!app) {
+        service_action_result_free(result);
+        return;
+    }
     if (app->services.services_action_pending > 0) app->services.services_action_pending--;
     if (app->services.services_action_pending == 0 &&
         app->services.services_action_cancellable) {
@@ -153,8 +158,9 @@ static void perform_service_action(LsmApp *app, const char *name,
     if (!app->services.services_action_cancellable)
         app->services.services_action_cancellable = g_cancellable_new();
     app->services.services_action_pending++;
-    GTask *task = g_task_new(NULL, app->services.services_action_cancellable,
-                             service_action_complete, app);
+    GTask *task = g_task_new(G_OBJECT(app->services.services_store),
+                             app->services.services_action_cancellable,
+                             service_action_complete, NULL);
     g_task_set_task_data(task, result, NULL);
     g_task_run_in_thread(task, service_action_worker);
     g_object_unref(task);
@@ -359,10 +365,15 @@ static void service_refresh_complete(GObject *source_object,
                                      GAsyncResult *async_result,
                                      gpointer user_data)
 {
-    (void)source_object;
-    LsmApp *app = user_data;
+    (void)user_data;
     ServiceRefreshResult *result = g_task_propagate_pointer(
         G_TASK(async_result), NULL);
+    LsmApp *app = source_object
+        ? g_object_get_data(source_object, "lsm-services-app") : NULL;
+    if (!app) {
+        service_refresh_result_free(result);
+        return;
+    }
     app->services.services_refresh_pending = FALSE;
     if (app->services.services_refresh_cancellable) {
         g_object_unref(app->services.services_refresh_cancellable);
@@ -388,8 +399,9 @@ void lsm_services_refresh(LsmApp *app)
     app->services.services_refresh_pending = TRUE;
     app->services.services_refresh_cancellable = g_cancellable_new();
     lsm_ui_set_label_text(app->services.service_count_label, "Refreshing services…");
-    GTask *task = g_task_new(NULL, app->services.services_refresh_cancellable,
-                             service_refresh_complete, app);
+    GTask *task = g_task_new(G_OBJECT(app->services.services_store),
+                             app->services.services_refresh_cancellable,
+                             service_refresh_complete, NULL);
     g_task_set_task_data(task, result, NULL);
     g_task_run_in_thread(task, service_refresh_worker);
     g_object_unref(task);
@@ -435,6 +447,8 @@ void lsm_services_build(LsmApp *app, GtkWidget *container)
 
     app->services.services_store = gtk_list_store_new(SERVICE_N_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    g_object_set_data(G_OBJECT(app->services.services_store),
+                      "lsm-services-app", app);
     app->services.services_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->services.services_store));
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(app->services.services_tree), TRUE);
     service_column(GTK_TREE_VIEW(app->services.services_tree), "Service", SERVICE_COL_NAME, FALSE, 210);
@@ -466,8 +480,11 @@ void lsm_services_destroy(LsmApp *app)
         g_cancellable_cancel(app->services.services_refresh_cancellable);
     if (app->services.services_action_cancellable)
         g_cancellable_cancel(app->services.services_action_cancellable);
-    while (app->services.services_refresh_pending || app->services.services_action_pending > 0)
-        (void)g_main_context_iteration(NULL, TRUE);
+    if (app->services.services_store)
+        g_object_set_data(G_OBJECT(app->services.services_store),
+                          "lsm-services-app", NULL);
+    app->services.services_refresh_pending = FALSE;
+    app->services.services_action_pending = 0;
     if (app->services.services_refresh_cancellable) {
         g_object_unref(app->services.services_refresh_cancellable);
         app->services.services_refresh_cancellable = NULL;
