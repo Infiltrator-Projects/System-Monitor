@@ -278,17 +278,113 @@ cxx-check:
 check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
-build-check: check-deps strict-check portability-check atomic-file-smoke duration-format-smoke project-info-smoke common-smoke cpu-direct-smoke intel-gpu-smoke npu-telemetry-smoke memory-accounting-smoke pressure-smoke sample-history-smoke quality-policy-smoke ui-update-smoke performance-navigation-smoke gpu-metrics-smoke hardware-topology-smoke monitor-platform-smoke backend-smoke \
-	process-model-smoke process-management-smoke process-inspection-smoke filesystem-inventory-smoke history-retention-smoke async-workers-smoke efficiency-smoke mountinfo-smoke storage-metadata-smoke system-sources-smoke \
-	smbios-memory-smoke battery-smoke bluetooth-battery-smoke bluetooth-traffic-smoke linux-capability-smoke \
-	wifi-metadata-smoke \
-	hidpp-smoke nvml-smoke native-command-audit bundled-pci-smoke startup-smoke \
-	dbus-models-smoke application-catalog-smoke process-grouping-smoke \
-	task-manager-layout-smoke process-gpu-smoke disk-accounting-smoke \
-	cpu-accounting-smoke system-snapshot-smoke process-export-smoke \
-	preferences-smoke glibc-abi-smoke \
-	runtime-stability-smoke analyzer-check coverage-check
+build-check: check-deps strict-check portability-check \
+	core-suite-smoke backend-suite-smoke peripheral-suite-smoke \
+	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
+	ui-suite-smoke accelerator-suite-smoke \
+	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
+	system-snapshot-smoke process-export-smoke history-retention-smoke \
+	async-workers-smoke runtime-stability-smoke \
+	native-command-audit analyzer-check coverage-check
 	@echo "All application source, backend and feature checks passed."
+
+# Canonical regression execution is organised by subsystem. The focused
+# *_smoke.c files remain individual cases for readable diagnostics and for
+# specialised sanitizer/coverage instrumentation, but the normal verification
+# path links related cases into 17 executed smoke binaries rather than 49.
+.PHONY: core-suite-smoke backend-suite-smoke peripheral-suite-smoke \
+	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
+	ui-suite-smoke accelerator-suite-smoke
+
+CORE_SMOKE_CASES := atomic_file duration_format common project_info
+BACKEND_SMOKE_CASES := backend monitor_platform
+PERIPHERAL_SMOKE_CASES := bluetooth_battery bluetooth_traffic linux_capability logitech_hidpp wifi_metadata
+METRICS_SMOKE_CASES := cpu_accounting disk_accounting memory_accounting pressure cpu_direct quality_policy sample_history gpu_metrics performance_navigation
+STORAGE_SMOKE_CASES := mountinfo storage_metadata filesystem_inventory bundled_pci smbios_memory system_sources
+PROCESS_SMOKE_CASES := process_model process_grouping process_gpu process_inspection process_management efficiency
+UI_SMOKE_CASES := dbus_models preferences startup ui_update task_manager_layout
+ACCELERATOR_SMOKE_CASES := hardware_topology intel_gpu npu_telemetry
+
+smoke_case_objects = $(addprefix $(BUILD_DIR)/,$(addsuffix _case.o,$(1)))
+CORE_SMOKE_OBJECTS := $(call smoke_case_objects,$(CORE_SMOKE_CASES))
+BACKEND_SMOKE_OBJECTS := $(call smoke_case_objects,$(BACKEND_SMOKE_CASES))
+PERIPHERAL_SMOKE_OBJECTS := $(call smoke_case_objects,$(PERIPHERAL_SMOKE_CASES))
+METRICS_SMOKE_OBJECTS := $(call smoke_case_objects,$(METRICS_SMOKE_CASES))
+STORAGE_SMOKE_OBJECTS := $(call smoke_case_objects,$(STORAGE_SMOKE_CASES))
+PROCESS_SMOKE_OBJECTS := $(call smoke_case_objects,$(PROCESS_SMOKE_CASES))
+UI_SMOKE_OBJECTS := $(call smoke_case_objects,$(UI_SMOKE_CASES))
+ACCELERATOR_SMOKE_OBJECTS := $(call smoke_case_objects,$(ACCELERATOR_SMOKE_CASES))
+
+$(BUILD_DIR)/%_case.o: support/tests/%_smoke.c support/tests/suite_cases.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat \
+		-include support/tests/suite_cases.h -std=c17 $(STRICT_WARNINGS) \
+		-Dmain=lsm_case_$* -c $< -o $@
+
+core-suite-smoke: $(CORE_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_CORE \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(CORE_SMOKE_OBJECTS) src/project_info.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/core-suite-smoke
+	./$(BUILD_DIR)/core-suite-smoke
+
+backend-suite-smoke: $(BACKEND_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_BACKEND \
+		-D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(BACKEND_SMOKE_OBJECTS) $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
+		-o $(BUILD_DIR)/backend-suite-smoke
+	./$(BUILD_DIR)/backend-suite-smoke
+
+peripheral-suite-smoke: $(PERIPHERAL_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_PERIPHERAL \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(PERIPHERAL_SMOKE_OBJECTS) src/bluetooth_battery.c src/bluetooth_traffic.c \
+		src/linux_capability.c src/logitech_hidpp.c src/logitech_hidpp_protocol.c \
+		src/wifi_metadata.c $(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
+		-o $(BUILD_DIR)/peripheral-suite-smoke
+	./$(BUILD_DIR)/peripheral-suite-smoke
+
+metrics-suite-smoke: $(METRICS_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_METRICS \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(METRICS_SMOKE_OBJECTS) src/cpu_accounting.c src/disk_accounting.c \
+		src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c \
+		src/sample_history.c src/gpu_metrics.c src/performance_selection.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/metrics-suite-smoke
+	./$(BUILD_DIR)/metrics-suite-smoke
+
+storage-suite-smoke: $(STORAGE_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_STORAGE \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(STORAGE_SMOKE_OBJECTS) src/mountinfo.c src/storage_metadata.c \
+		src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c \
+		src/smbios_memory.c src/system_sources.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/storage-suite-smoke
+	./$(BUILD_DIR)/storage-suite-smoke
+
+process-suite-smoke: $(PROCESS_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_PROCESS \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(PROCESS_SMOKE_OBJECTS) src/process_model.c src/process_grouping.c \
+		src/process_gpu.c src/process_inspection.c src/process_backend_linux.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-suite-smoke
+	./$(BUILD_DIR)/process-suite-smoke
+
+ui-suite-smoke: $(UI_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_UI \
+		-std=c17 $(STRICT_WARNINGS) -ffunction-sections -fdata-sections \
+		support/tests/suite_runner.c $(UI_SMOKE_OBJECTS) src/preferences.c src/ui_helpers.c \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -Wl,--gc-sections -lm \
+		-o $(BUILD_DIR)/ui-suite-smoke
+	./$(BUILD_DIR)/ui-suite-smoke
+
+accelerator-suite-smoke: $(ACCELERATOR_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_ACCELERATOR \
+		-std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
+		$(ACCELERATOR_SMOKE_OBJECTS) src/hardware_topology.c src/intel_gpu.c \
+		src/npu_telemetry.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/accelerator-suite-smoke
+	./$(BUILD_DIR)/accelerator-suite-smoke
 
 COMMON_LINK_TARGETS := \
 	atomic-file-smoke duration-format-smoke common-smoke project-info-smoke \
