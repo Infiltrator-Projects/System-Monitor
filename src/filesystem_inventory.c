@@ -24,11 +24,12 @@
 
 #define FILESYSTEM_INITIAL_CAPACITY 32U
 
+/** Growable accumulator used while streaming one mount namespace inventory. */
 typedef struct {
-    LsmFilesystemInfo *items;
-    size_t count;
-    size_t capacity;
-    bool allocation_failed;
+    LsmFilesystemInfo *items; /**< Owned filesystem records collected so far. */
+    size_t count; /**< Number of populated records in @ref items. */
+    size_t capacity; /**< Allocated record capacity. */
+    bool allocation_failed; /**< Whether growth failed and collection stopped early. */
 } FilesystemCollector;
 
 static bool filesystem_type_is_desktop_storage(const char *type)
