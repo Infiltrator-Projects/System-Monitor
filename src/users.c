@@ -274,10 +274,15 @@ static void user_action_complete(GObject *source_object,
                                  GAsyncResult *async_result,
                                  gpointer user_data)
 {
-    (void)source_object;
-    LsmApp *app = user_data;
+    (void)user_data;
     UserActionResult *result = g_task_propagate_pointer(
         G_TASK(async_result), NULL);
+    LsmApp *app = source_object
+        ? g_object_get_data(source_object, "lsm-users-app") : NULL;
+    if (!app) {
+        user_action_result_free(result);
+        return;
+    }
     if (app->users.users_action_pending > 0) app->users.users_action_pending--;
     if (app->users.users_action_pending == 0 && app->users.users_action_cancellable) {
         g_object_unref(app->users.users_action_cancellable);
@@ -302,8 +307,9 @@ static void terminate_session_async(LsmApp *app, const char *session)
     if (!app->users.users_action_cancellable)
         app->users.users_action_cancellable = g_cancellable_new();
     app->users.users_action_pending++;
-    GTask *task = g_task_new(NULL, app->users.users_action_cancellable,
-                             user_action_complete, app);
+    GTask *task = g_task_new(G_OBJECT(app->users.users_store),
+                             app->users.users_action_cancellable,
+                             user_action_complete, NULL);
     g_task_set_task_data(task, result, NULL);
     g_task_run_in_thread(task, user_action_worker);
     g_object_unref(task);
@@ -485,10 +491,15 @@ static void user_refresh_complete(GObject *source_object,
                                   GAsyncResult *async_result,
                                   gpointer user_data)
 {
-    (void)source_object;
-    LsmApp *app = user_data;
+    (void)user_data;
     UserRefreshResult *result = g_task_propagate_pointer(
         G_TASK(async_result), NULL);
+    LsmApp *app = source_object
+        ? g_object_get_data(source_object, "lsm-users-app") : NULL;
+    if (!app) {
+        user_refresh_result_free(result);
+        return;
+    }
     app->users.users_refresh_pending = FALSE;
     if (app->users.users_refresh_cancellable) {
         g_object_unref(app->users.users_refresh_cancellable);
@@ -513,8 +524,9 @@ void lsm_users_refresh(LsmApp *app)
     app->users.users_refresh_pending = TRUE;
     app->users.users_refresh_cancellable = g_cancellable_new();
     lsm_ui_set_label_text(app->users.user_count_label, "Refreshing sessions…");
-    GTask *task = g_task_new(NULL, app->users.users_refresh_cancellable,
-                             user_refresh_complete, app);
+    GTask *task = g_task_new(G_OBJECT(app->users.users_store),
+                             app->users.users_refresh_cancellable,
+                             user_refresh_complete, NULL);
     g_task_set_task_data(task, result, NULL);
     g_task_run_in_thread(task, user_refresh_worker);
     g_object_unref(task);
@@ -554,6 +566,8 @@ void lsm_users_build(LsmApp *app, GtkWidget *container)
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING);
+    g_object_set_data(G_OBJECT(app->users.users_store),
+                      "lsm-users-app", app);
     app->users.users_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->users.users_store));
     gtk_tree_view_set_enable_tree_lines(GTK_TREE_VIEW(app->users.users_tree), TRUE);
     gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(app->users.users_tree), TRUE);
@@ -591,8 +605,11 @@ void lsm_users_destroy(LsmApp *app)
         g_cancellable_cancel(app->users.users_refresh_cancellable);
     if (app->users.users_action_cancellable)
         g_cancellable_cancel(app->users.users_action_cancellable);
-    while (app->users.users_refresh_pending || app->users.users_action_pending > 0)
-        (void)g_main_context_iteration(NULL, TRUE);
+    if (app->users.users_store)
+        g_object_set_data(G_OBJECT(app->users.users_store),
+                          "lsm-users-app", NULL);
+    app->users.users_refresh_pending = FALSE;
+    app->users.users_action_pending = 0;
     if (app->users.users_refresh_cancellable) {
         g_object_unref(app->users.users_refresh_cancellable);
         app->users.users_refresh_cancellable = NULL;
