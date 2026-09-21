@@ -4,11 +4,11 @@
  * @brief Headless representative workload for local profile-guided builds.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_PGO_TRAINING_H
-#define LINUX_SYSTEM_MONITOR_PGO_TRAINING_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_PGO_TRAINING_H
+#define INFILTRATOR_SYSTEM_MONITOR_PGO_TRAINING_H
 
 /**
  * Exercise the real native collection and process-accounting paths without
