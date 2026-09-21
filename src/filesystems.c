@@ -36,9 +36,10 @@ enum {
     FS_COL_USE_PERCENT
 };
 
+/** Plain-data filesystem inventory returned from the background collector. */
 typedef struct {
-    LsmFilesystemInfo *items;
-    size_t count;
+    LsmFilesystemInfo *items; /**< Owned records transferred to page state. */
+    size_t count; /**< Number of valid records in @ref items. */
 } FilesystemRefreshResult;
 
 static void filesystem_refresh_result_free(gpointer data)
@@ -268,6 +269,10 @@ void lsm_filesystems_destroy(LsmApp *app)
 gboolean lsm_filesystems_update(gpointer user_data)
 {
     LsmApp *app = user_data;
-    if (!app->runtime.paused) lsm_filesystems_refresh(app);
+    if (!app || app->runtime.paused) return G_SOURCE_CONTINUE;
+    if (!app->shell.notebook ||
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) ==
+            LSM_TAB_FILESYSTEMS)
+        lsm_filesystems_refresh(app);
     return G_SOURCE_CONTINUE;
 }
