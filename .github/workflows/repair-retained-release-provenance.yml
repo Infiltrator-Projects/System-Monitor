@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot retained release provenance repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-retained-release-provenance.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == 'Repair retained release provenance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Restore v1.0.59 through the release API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=v1.0.59
+          sha=1ecea9832ac6423de5cc455dfbdfd21254ed18b2
+
+          release_id="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n1)"
+          test -n "$release_id"
+
+          gh api --method PATCH "/repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+            -f target_commitish="$sha" \
+            -F draft=false \
+            -F prerelease=false >/dev/null
+
+          remote_sha="$(git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$tag" | awk '{print $1}')"
+          test "$remote_sha" = "$sha"
+          echo "$tag restored to $sha"
