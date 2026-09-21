@@ -4,11 +4,11 @@
  * @brief Canonical application identity exposed through Infiltratr Common.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_PROJECT_INFO_H
-#define LINUX_SYSTEM_MONITOR_PROJECT_INFO_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_PROJECT_INFO_H
+#define INFILTRATOR_SYSTEM_MONITOR_PROJECT_INFO_H
 
 #include <infiltratr/core.h>
 

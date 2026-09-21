@@ -15,11 +15,11 @@
  * the historic i386 limits.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_GLIBC_COMPAT_H
-#define LINUX_SYSTEM_MONITOR_GLIBC_COMPAT_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_GLIBC_COMPAT_H
+#define INFILTRATOR_SYSTEM_MONITOR_GLIBC_COMPAT_H
 
 #include <features.h>
 

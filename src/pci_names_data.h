@@ -3,11 +3,11 @@
  * @file pci_names_data.h
  * @brief Embedded PCI vendor and device name database.
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_PCI_NAMES_DATA_H
-#define LINUX_SYSTEM_MONITOR_PCI_NAMES_DATA_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_PCI_NAMES_DATA_H
+#define INFILTRATOR_SYSTEM_MONITOR_PCI_NAMES_DATA_H
 
 #include <stddef.h>
 
