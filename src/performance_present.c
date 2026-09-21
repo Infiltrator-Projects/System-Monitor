@@ -178,11 +178,9 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(widgets->user_time, "%.1f%%", cpu->user_percent);
     lsm_ui_set_label_text(widgets->kernel_time, "%.1f%%",
                           cpu->kernel_percent);
-    if (cpu->frequency_ghz > 0.0)
-        lsm_ui_set_label_text(widgets->speed, "%.2f GHz",
-                              cpu->frequency_ghz);
-    else
-        lsm_ui_set_label_text(widgets->speed, "N/A");
+    lsm_ui_set_label_text(widgets->speed, "%s",
+        lsm_metric_format_ghz(cpu->frequency_ghz > 0.0,
+                              cpu->frequency_ghz, metric, sizeof(metric)));
     lsm_ui_set_label_text(widgets->processes, "%u", cpu->process_count);
     lsm_ui_set_label_text(widgets->threads, "%u", cpu->thread_count);
     lsm_ui_set_label_text(widgets->handles, "%llu",
@@ -198,16 +196,14 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(widgets->cores, "%u", cpu->physical_cores);
     lsm_ui_set_label_text(widgets->logical_processors, "%u",
                           cpu->logical_cores);
-    if (cpu->base_frequency_ghz > 0.0)
-        lsm_ui_set_label_text(widgets->base_speed, "%.2f GHz",
-                              cpu->base_frequency_ghz);
-    else
-        lsm_ui_set_label_text(widgets->base_speed, "N/A");
-    if (cpu->max_frequency_ghz > 0.0)
-        lsm_ui_set_label_text(widgets->maximum_speed, "%.2f GHz",
-                              cpu->max_frequency_ghz);
-    else
-        lsm_ui_set_label_text(widgets->maximum_speed, "N/A");
+    lsm_ui_set_label_text(widgets->base_speed, "%s",
+        lsm_metric_format_ghz(cpu->base_frequency_ghz > 0.0,
+                              cpu->base_frequency_ghz, metric,
+                              sizeof(metric)));
+    lsm_ui_set_label_text(widgets->maximum_speed, "%s",
+        lsm_metric_format_ghz(cpu->max_frequency_ghz > 0.0,
+                              cpu->max_frequency_ghz, metric,
+                              sizeof(metric)));
     lsm_ui_set_label_text(widgets->virtualisation, "%s",
                           cpu->virtualization ? "Enabled" : "Disabled");
     lsm_ui_set_label_text(widgets->cache_l1, "%s", cpu->cache_l1);
@@ -266,10 +262,9 @@ static void update_memory_page(LsmApp *app, LsmDevicePage *page)
     lsm_format_bytes(memory->page_tables_bytes, a, sizeof(a));
     lsm_ui_set_label_text(widgets->page_tables, "%s", a);
     set_pressure_text(widgets->pressure, &app->monitor.memory_pressure);
-    if (memory->speed_mhz > 0)
-        lsm_ui_set_label_text(widgets->speed, "%u MHz", memory->speed_mhz);
-    else
-        lsm_ui_set_label_text(widgets->speed, "N/A");
+    lsm_ui_set_label_text(widgets->speed, "%s",
+        lsm_metric_format_mhz(memory->speed_mhz > 0U,
+                              (double)memory->speed_mhz, a, sizeof(a)));
     if (memory->slots_total > 0)
         lsm_ui_set_label_text(widgets->slots_used, "%u of %u",
                               memory->slots_used, memory->slots_total);
@@ -470,11 +465,9 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->wifi_network, "%s",
                               net->ssid[0] ? net->ssid : "N/A");
         lsm_ui_set_label_text(widgets->signal, "%.0f%%", net->signal_percent);
-        if (net->frequency_mhz > 0.0)
-            lsm_ui_set_label_text(widgets->frequency, "%.0f MHz",
-                                  net->frequency_mhz);
-        else
-            lsm_ui_set_label_text(widgets->frequency, "N/A");
+        lsm_ui_set_label_text(widgets->frequency, "%s",
+            lsm_metric_format_mhz(net->frequency_mhz > 0.0,
+                                  net->frequency_mhz, scale, sizeof(scale)));
         lsm_ui_set_label_text(widgets->access_point, "%s",
                            net->access_point[0] ? net->access_point : "N/A");
     }
@@ -780,15 +773,12 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
                                   gpu->decoder_percent);
         else
             lsm_ui_set_label_text(widgets->engine_3, "N/A");
-        if (gpu->memory_clock_available && isfinite(gpu->memory_clock_mhz))
-            lsm_ui_set_label_text(widgets->memory_clock, "%.0f MHz",
-                                  gpu->memory_clock_mhz);
-        else
-            lsm_ui_set_label_text(widgets->memory_clock, "N/A");
-        if (gpu->power_available && isfinite(gpu->power_watts))
-            lsm_ui_set_label_text(widgets->power, "%.1f W", gpu->power_watts);
-        else
-            lsm_ui_set_label_text(widgets->power, "N/A");
+        lsm_ui_set_label_text(widgets->memory_clock, "%s",
+            lsm_metric_format_mhz(gpu->memory_clock_available,
+                                  gpu->memory_clock_mhz, a, sizeof(a)));
+        lsm_ui_set_label_text(widgets->power, "%s",
+            lsm_metric_format_watts(gpu->power_available, gpu->power_watts,
+                                    a, sizeof(a)));
         if (gpu->fan_available && isfinite(gpu->fan_percent))
             lsm_ui_set_label_text(widgets->cooling, "%.0f%%", gpu->fan_percent);
         else
@@ -1021,7 +1011,9 @@ static void update_npu_page(LsmApp *app, LsmDevicePage *page)
             npu->utilization_percent < 0.5)
             lsm_ui_set_label_text(widgets->clock, "0 MHz (idle)");
         else
-            lsm_ui_set_label_text(widgets->clock, "%.0f MHz", npu->clock_mhz);
+            lsm_ui_set_label_text(widgets->clock, "%s",
+                lsm_metric_format_mhz(true, npu->clock_mhz,
+                                      metric, sizeof(metric)));
     } else {
         lsm_ui_set_label_text(widgets->clock, "N/A");
     }
