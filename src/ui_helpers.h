@@ -4,11 +4,11 @@
  * @brief Shared GTK presentation helpers used by multiple tabs.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_UI_HELPERS_H
-#define LINUX_SYSTEM_MONITOR_UI_HELPERS_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_UI_HELPERS_H
+#define INFILTRATOR_SYSTEM_MONITOR_UI_HELPERS_H
 
 #include <gtk/gtk.h>
 #include <stddef.h>

@@ -4,11 +4,11 @@
  * @brief Internal global-window, menu and navigation coordination API.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_APP_SHELL_H
-#define LINUX_SYSTEM_MONITOR_APP_SHELL_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_APP_SHELL_H
+#define INFILTRATOR_SYSTEM_MONITOR_APP_SHELL_H
 
 #include "app.h"
 

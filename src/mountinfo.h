@@ -8,11 +8,11 @@
  * used to associate aliases, UUID mounts and bind mounts with sysfs devices.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_MOUNTINFO_H
-#define LINUX_SYSTEM_MONITOR_MOUNTINFO_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_MOUNTINFO_H
+#define INFILTRATOR_SYSTEM_MONITOR_MOUNTINFO_H
 
 #include <stddef.h>
 
