@@ -407,7 +407,7 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->vendor, "%s", page->hardware_vendor);
     }
     char receive[64], send[64], total_received[64], total_sent[64];
-    char scale[64], mid_scale[64];
+    char scale[64], mid_scale[64], frequency[64];
     lsm_graph_push(page->graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
                    app->runtime.newer_on_right);
     lsm_graph_push(page->side_graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
@@ -467,7 +467,8 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->signal, "%.0f%%", net->signal_percent);
         lsm_ui_set_label_text(widgets->frequency, "%s",
             lsm_metric_format_mhz(net->frequency_mhz > 0.0,
-                                  net->frequency_mhz, scale, sizeof(scale)));
+                                  net->frequency_mhz, frequency,
+                                  sizeof(frequency)));
         lsm_ui_set_label_text(widgets->access_point, "%s",
                            net->access_point[0] ? net->access_point : "N/A");
     }
