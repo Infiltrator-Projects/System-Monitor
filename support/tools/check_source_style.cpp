@@ -908,6 +908,8 @@ static void check_shared_release_contract(void)
     char *doxyfile = read_file("support/Doxyfile", &size);
     if (doxyfile) {
         require_text_marker("support/Doxyfile", doxyfile,
+                            "INPUT                  = README.md CONTRIBUTING.md SECURITY.md docs src");
+        require_text_marker("support/Doxyfile", doxyfile,
                             "EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common");
         require_text_marker("support/Doxyfile", doxyfile,
                             "EXTRACT_LOCAL_CLASSES   = NO");
