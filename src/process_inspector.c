@@ -32,6 +32,7 @@
 
 #define INSPECTOR_OVERVIEW_LABELS 16U
 
+/** Runtime state owned by one non-modal Process Inspector window. */
 typedef struct {
     LsmApp *app;
     LsmProcessId pid;
@@ -59,15 +60,17 @@ typedef struct {
     gboolean inventory_pending;
 } ProcessInspector;
 
+/** Immutable identity token passed to the expensive inventory worker. */
 typedef struct {
-    LsmProcessId pid;
-    LsmProcessInstanceId instance_id;
+    LsmProcessId pid; /**< Process identifier captured at dispatch. */
+    LsmProcessInstanceId instance_id; /**< Start-time identity guarding PID reuse. */
 } ProcessInventoryRequest;
 
+/** Plain-data inventory snapshot returned from the worker to GTK. */
 typedef struct {
-    LsmProcessId pid;
-    LsmProcessInstanceId instance_id;
-    gboolean identity_valid;
+    LsmProcessId pid; /**< Process identifier represented by this result. */
+    LsmProcessInstanceId instance_id; /**< Identity token represented by this result. */
+    gboolean identity_valid; /**< Whether the original process instance still exists. */
     char executable[LSM_PATH_LEN];
     unsigned descriptor_count;
     LsmOpenFileInfo *open_files;
@@ -83,10 +86,11 @@ typedef struct {
     char *path; /**< Owned path copied from the chooser before worker dispatch. */
 } FileUsersRequest;
 
+/** Worker result for exact-file descriptor ownership discovery. */
 typedef struct {
-    char *path;
-    LsmFileUserInfo *items;
-    size_t count;
+    char *path; /**< Owned copy of the queried path. */
+    LsmFileUserInfo *items; /**< Owned result array from the native inspector backend. */
+    size_t count; /**< Number of valid entries in @ref items. */
 } FileUsersResult;
 
 #define LSM_INSPECTOR_OBJECT_KEY "lsm-process-inspector"
