@@ -279,7 +279,7 @@ check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
 build-check: check-deps strict-check portability-check \
-	core-suite-smoke backend-suite-smoke peripheral-suite-smoke \
+	core-suite-smoke backend-smoke monitor-platform-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
@@ -292,12 +292,11 @@ build-check: check-deps strict-check portability-check \
 # *_smoke.c files remain individual cases for readable diagnostics and for
 # specialised sanitizer/coverage instrumentation, but the normal verification
 # path links related cases into 17 executed smoke binaries rather than 49.
-.PHONY: core-suite-smoke backend-suite-smoke peripheral-suite-smoke \
+.PHONY: core-suite-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke
 
 CORE_SMOKE_CASES := atomic_file duration_format common project_info
-BACKEND_SMOKE_CASES := backend monitor_platform
 PERIPHERAL_SMOKE_CASES := bluetooth_battery bluetooth_traffic linux_capability logitech_hidpp wifi_metadata
 METRICS_SMOKE_CASES := cpu_accounting disk_accounting memory_accounting pressure cpu_direct quality_policy sample_history gpu_metrics performance_navigation
 STORAGE_SMOKE_CASES := mountinfo storage_metadata filesystem_inventory bundled_pci smbios_memory system_sources
@@ -307,7 +306,6 @@ ACCELERATOR_SMOKE_CASES := hardware_topology intel_gpu npu_telemetry
 
 smoke_case_objects = $(addprefix $(BUILD_DIR)/,$(addsuffix _case.o,$(1)))
 CORE_SMOKE_OBJECTS := $(call smoke_case_objects,$(CORE_SMOKE_CASES))
-BACKEND_SMOKE_OBJECTS := $(call smoke_case_objects,$(BACKEND_SMOKE_CASES))
 PERIPHERAL_SMOKE_OBJECTS := $(call smoke_case_objects,$(PERIPHERAL_SMOKE_CASES))
 METRICS_SMOKE_OBJECTS := $(call smoke_case_objects,$(METRICS_SMOKE_CASES))
 STORAGE_SMOKE_OBJECTS := $(call smoke_case_objects,$(STORAGE_SMOKE_CASES))
@@ -326,14 +324,6 @@ core-suite-smoke: $(CORE_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_D
 		$(CORE_SMOKE_OBJECTS) src/project_info.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/core-suite-smoke
 	./$(BUILD_DIR)/core-suite-smoke
-
-backend-suite-smoke: $(BACKEND_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_BACKEND \
-		-D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) support/tests/suite_runner.c \
-		$(BACKEND_SMOKE_OBJECTS) $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
-		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
-		-o $(BUILD_DIR)/backend-suite-smoke
-	./$(BUILD_DIR)/backend-suite-smoke
 
 peripheral-suite-smoke: $(PERIPHERAL_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_PERIPHERAL \
