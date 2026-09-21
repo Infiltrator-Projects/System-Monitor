@@ -3,7 +3,7 @@
  * @file wifi_metadata_smoke.c
  * @brief Verify that Wi-Fi enrichment never blocks the caller.
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "wifi_metadata.h"

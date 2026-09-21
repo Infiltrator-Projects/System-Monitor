@@ -8,7 +8,7 @@
  * cannot stall GTK or the regular monitor sampler.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "bluetooth_battery.h"

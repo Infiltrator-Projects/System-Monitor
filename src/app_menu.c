@@ -4,7 +4,7 @@
  * @brief Global menu construction and user-invoked application actions.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "app_menu.h"

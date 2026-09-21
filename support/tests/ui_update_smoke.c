@@ -3,7 +3,7 @@
  * @file ui_update_smoke.c
  * @brief Verify unchanged labels are suppressed before entering GTK.
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "ui_helpers.h"
