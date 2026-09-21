@@ -18,11 +18,19 @@
 
 #define LSM_HISTORY_LENGTH 100
 
+/**
+ * Fixed-capacity circular history backing one performance graph series.
+ *
+ * Slots are addressed through the logical oldest-to-newest API rather than by
+ * exposing the physical ring position. A slot may be present in the retained
+ * time window but marked unavailable when no finite sample existed for that
+ * interval.
+ */
 typedef struct {
-    double values[LSM_HISTORY_LENGTH];
-    bool valid[LSM_HISTORY_LENGTH];
-    size_t count;
-    size_t head;
+    double values[LSM_HISTORY_LENGTH]; /**< Retained numeric samples. */
+    bool valid[LSM_HISTORY_LENGTH];    /**< Whether each physical slot is a real sample. */
+    size_t count;                      /**< Number of retained logical samples. */
+    size_t head;                       /**< Physical index of the next insertion slot. */
 } LsmSampleHistory;
 
 /**
