@@ -19,6 +19,7 @@
 #include "refresh_policy.h"
 #include "system_sources.h"
 
+#include <infiltratr/posix_numeric.h>
 #include <infiltratr/quantity.h>
 
 #include <ctype.h>
@@ -90,13 +91,13 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
 
     for (unsigned cpu_index = 0; cpu_index < cpu->logical_cores; cpu_index++) {
         for (int index = 0; index < 32; index++) {
-            char path[LSM_PATH_LEN], level_text[32], type[32] = "", size_text[32] = "";
+            char path[LSM_PATH_LEN], type[32] = "", size_text[32] = "";
             char shared[128] = "";
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%u/cache/index%d/level",
                      cpu_index, index);
-            if (!lsm_read_text_file(path, level_text, sizeof(level_text))) continue;
             int64_t level_value = 0;
-            if (!lsm_parse_i64_range(level_text, 10U, 1, 3, &level_value))
+            if (!infiltratr_read_i64_file(path, &level_value) ||
+                level_value < 1 || level_value > 3)
                 continue;
             const int level = (int)level_value;
 
@@ -208,14 +209,12 @@ static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
         ? cpu->logical_cores : LSM_MAX_CPUS;
     for (unsigned index = 0U; index < logical; index++) {
         char path[LSM_PATH_LEN];
-        char value[64];
         (void)snprintf(path, sizeof(path),
                        "/sys/devices/system/cpu/cpu%u/topology/physical_package_id",
                        index);
-        if (!lsm_read_text_file(path, value, sizeof(value))) continue;
         int64_t package = 0;
-        if (!infiltratr_parse_i64_range(value, 10U, INT_MIN, INT_MAX,
-                                        &package))
+        if (!infiltratr_read_i64_file(path, &package) ||
+            package < INT_MIN || package > INT_MAX)
             continue;
         bool known = false;
         for (size_t current = 0U; current < count; current++)
