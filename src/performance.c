@@ -280,7 +280,14 @@ GtkWidget *performance_make_metric_block(const char *name, GtkWidget **value_out
 }
 
 
-/** Draw the original three-part physical-memory composition bar. */
+/**
+ * Draw the original three-part physical-memory composition bar.
+ *
+ * @param [in] widget Drawing-area widget whose allocation defines the bar size.
+ * @param [in,out] cr Cairo context receiving the composition rendering.
+ * @param [in] user_data Owning LsmApp supplying the retained memory snapshot.
+ * @return FALSE so GTK may continue normal draw-signal processing.
+ */
 gboolean performance_draw_memory_composition(GtkWidget *widget, cairo_t *cr,
                                         gpointer user_data)
 {
