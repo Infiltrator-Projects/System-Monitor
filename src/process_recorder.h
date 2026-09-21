@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file process_recorder.h
- * @brief Detached CSV process-recording writer.
+ * @brief Bounded-drain CSV process-recording writer.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
@@ -17,7 +17,7 @@
 typedef struct LsmProcessRecorder LsmProcessRecorder;
 
 /**
- * Open a CSV recording and start its detached writer.
+ * Open a CSV recording and start its background writer.
  *
  * The header is validated before success is returned. Recurring row writes and
  * flushes then occur only on the recorder worker.
@@ -48,7 +48,11 @@ bool lsm_process_recorder_append(LsmProcessRecorder *recorder,
 int lsm_process_recorder_error(LsmProcessRecorder *recorder);
 
 /**
- * Request ordered drain/close without waiting on storage.
+ * Request ordered drain/close with a bounded shutdown wait.
+ *
+ * Normal local writes are given a short opportunity to flush before return.
+ * If storage remains blocked, the worker detaches and retains its own lifetime
+ * so application shutdown cannot wait indefinitely.
  *
  * @param [in,out] recorder Recorder whose caller ownership is released.
  */

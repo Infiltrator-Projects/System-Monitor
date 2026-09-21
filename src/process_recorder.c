@@ -9,6 +9,7 @@
  */
 #include "process_recorder.h"
 #include "numeric_io.h"
+#include "common.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -30,6 +31,7 @@ typedef struct RecordNode {
 } RecordNode;
 
 #define LSM_PROCESS_RECORDER_MAX_QUEUED 4096U
+#define LSM_PROCESS_RECORDER_SHUTDOWN_WAIT_MS 250U
 
 struct LsmProcessRecorder {
     pthread_t thread;
@@ -215,17 +217,6 @@ LsmProcessRecorder *lsm_process_recorder_create(const char *path,
         recorder_release(recorder);
         return NULL;
     }
-    if (pthread_detach(recorder->thread) != 0) {
-        (void)pthread_mutex_lock(&recorder->mutex);
-        recorder->stop_requested = true;
-        (void)pthread_cond_signal(&recorder->condition);
-        (void)pthread_mutex_unlock(&recorder->mutex);
-        (void)pthread_join(recorder->thread, NULL);
-        atomic_store_explicit(&recorder->references, 1U, memory_order_release);
-        recorder_release(recorder);
-        if (error_code) *error_code = EAGAIN;
-        return NULL;
-    }
     return recorder;
 }
 
@@ -285,5 +276,18 @@ void lsm_process_recorder_stop(LsmProcessRecorder *recorder)
     recorder->stop_requested = true;
     (void)pthread_cond_signal(&recorder->condition);
     (void)pthread_mutex_unlock(&recorder->mutex);
+
+    /* Give ordinary local storage a bounded opportunity to drain the queued
+     * recording before process exit. A blocked filesystem must not turn GUI
+     * shutdown into an unbounded join, so ownership falls back to the worker
+     * after the same short-wait pattern used by the monitor sampler. */
+    struct timespec deadline;
+    int join_result = lsm_posix_deadline_after_milliseconds(
+        CLOCK_REALTIME, LSM_PROCESS_RECORDER_SHUTDOWN_WAIT_MS, &deadline);
+    if (join_result == 0)
+        join_result = pthread_timedjoin_np(recorder->thread, NULL, &deadline);
+    if (join_result != 0)
+        (void)pthread_detach(recorder->thread);
+
     recorder_release(recorder);
 }
