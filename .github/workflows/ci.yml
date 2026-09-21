@@ -85,7 +85,7 @@ jobs:
           if (( ${#tag_deletes[@]} == 1 )); then
             tag_delete_source="${tag_deletes[0]%%:*}"
             tag_delete_command="${tag_deletes[0]#*:*:}"
-            expected_tag_delete='              git pu''sh origin ":refs/tags/$tag"'
+            expected_tag_delete='                git pu''sh origin ":refs/tags/$tag"'
             if [[ "$tag_delete_source" != ".github/workflows/release.yml" ]] ||
                [[ "$tag_delete_command" != "$expected_tag_delete" ]]; then
               printf 'Unapproved tag deletion automation: %s\n' "${tag_deletes[0]}" >&2
