@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file mountinfo.c
- * @brief Native parser for the Linux /proc/<pid>/mountinfo interface.
+ * @brief Native parser for the Linux /proc/PID/mountinfo interface.
  *
  * Linux documents mountinfo as a stable procfs ABI. Parsing it internally
  * removes the libmount dependency while retaining device-number based mount
