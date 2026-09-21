@@ -30,14 +30,14 @@
 /** Maximum text retained for one memory-map pathname or annotation. */
 #define LSM_INSPECTION_MAP_PATH_LEN 1024U
 
-/** One descriptor from /proc/<pid>/fd. */
+/** One descriptor from /proc/PID/fd. */
 typedef struct {
     int descriptor;                              /**< Numeric file descriptor. */
     char kind[32];                               /**< File, socket, pipe, anon-inode or unknown. */
     char target[LSM_INSPECTION_TARGET_LEN];      /**< Kernel symlink target. */
 } LsmOpenFileInfo;
 
-/** One virtual-memory area from /proc/<pid>/maps. */
+/** One virtual-memory area from /proc/PID/maps. */
 typedef struct {
     uint64_t start_address;                      /**< Inclusive virtual start address. */
     uint64_t end_address;                        /**< Exclusive virtual end address. */
@@ -106,7 +106,7 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId pid,
 /**
  * Read the current thread-group membership of one process.
  *
- * @param [in] pid Process whose /proc/<pid>/task directory is inspected.
+ * @param [in] pid Process whose /proc/PID/task directory is inspected.
  * @param [out] out_items Receives a heap array owned by the caller.
  * @return Number of task records; zero on an empty snapshot or failure.
  */
