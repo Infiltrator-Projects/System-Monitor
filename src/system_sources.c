@@ -27,6 +27,8 @@
 #include "pci_names.h"
 #include "storage_metadata.h"
 
+#include <infiltratr/utf8.h>
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -270,7 +272,10 @@ static void read_identity_attribute(const char *base,
             !lsm_read_text_file(path, value, sizeof(value)))
             continue;
         lsm_trim(value);
-        if (!value[0]) continue;
+        const size_t value_length = strlen(value);
+        if (value_length == 0U ||
+            !infiltratr_utf8_validate(value, value_length))
+            continue;
         lsm_copy_string(destination, destination_size, value);
         return;
     }

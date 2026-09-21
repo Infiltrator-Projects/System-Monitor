@@ -23,6 +23,7 @@
 
 #include <infiltratr/endian.h>
 #include <infiltratr/posix_io.h>
+#include <infiltratr/utf8.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -112,7 +113,14 @@ static void copy_smbios_string(const uint8_t *table, size_t table_size,
                    (table[start + length - 1U] == ' ' ||
                     table[start + length - 1U] == '\t'))
                 length--;
-            if (length >= destination_size) length = destination_size - 1U;
+            if (!infiltratr_utf8_validate(table + start, length))
+                return;
+            if (length >= destination_size) {
+                length = destination_size - 1U;
+                while (length > 0U &&
+                       !infiltratr_utf8_validate(table + start, length))
+                    length--;
+            }
             memcpy(destination, table + start, length);
             destination[length] = '\0';
             if (!destination[0]) snprintf(destination, destination_size, "N/A");

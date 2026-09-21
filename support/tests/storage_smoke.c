@@ -411,6 +411,20 @@ int main(void)
     assert(strcmp(info.modules[0].part_number, "PART-99") == 0);
     assert(strcmp(info.modules[0].memory_type, "DDR5") == 0);
 
+    /* Firmware text is external input. Invalid UTF-8 must not escape into GTK
+     * presentation, while independent valid fields remain available. */
+    const size_t manufacturer_offset =
+        0x22U + sizeof("DIMM 0") + sizeof("BANK 0");
+    assert(manufacturer_offset < used);
+    table[manufacturer_offset] = 0xffU;
+    const int invalid_utf8 = open(path, O_WRONLY | O_TRUNC);
+    assert(invalid_utf8 >= 0);
+    assert(write(invalid_utf8, table, used) == (ssize_t)used);
+    close(invalid_utf8);
+    assert(lsm_smbios_memory_read(path, &info, error, sizeof(error)));
+    assert(strcmp(info.modules[0].manufacturer, "N/A") == 0);
+    assert(strcmp(info.modules[0].locator, "DIMM 0") == 0);
+
     const int malformed = open(path, O_WRONLY | O_TRUNC);
     assert(malformed >= 0);
     const uint8_t truncated[] = {17U, 3U, 0U, 0U, 0U, 0U};
@@ -544,6 +558,9 @@ static bool setup_fixture(char *root, size_t root_size)
     FIXTURE_FILE("/sys/block/sda/size", "4096\n");
     FIXTURE_FILE("/sys/block/sda/diskseq", "101\n");
     FIXTURE_FILE("/sys/block/sda/device/vendor", "ATA\n");
+    /* Invalid product text is skipped; the valid model remains the next
+     * human-readable identity candidate. */
+    FIXTURE_FILE("/sys/block/sda/device/product", "\xff\n");
     FIXTURE_FILE("/sys/block/sda/device/model", "Test Disk\n");
     FIXTURE_FILE("/sys/block/sda/device/protocol", "SATA\n");
     FIXTURE_FILE("/sys/block/sda/queue/rotational", "0\n");

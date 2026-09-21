@@ -4,6 +4,9 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+- Consume Common 1.19.20's strict bounded UTF-8 validator at genuine firmware/sysfs human-readable metadata boundaries without applying text semantics to arbitrary SSID, process-command or protocol bytes.
+- Reject malformed SMBIOS and sysfs identity strings before GTK presentation while preserving existing fallback discovery; UTF-8-safe SMBIOS truncation never splits a multibyte sequence.
+
 - Reduce the smoke-test estate from 49 focused `*_smoke.c` files to 18 physical smoke sources/executables by merging related regression cases into seven coherent subsystem suites while preserving the original case-level assertions and diagnostics.
 - Remove the obsolete suite-runner/header and per-case Make/CMake targets; sanitizer and deterministic-coverage gates now consume the consolidated subsystem sources directly instead of rebuilding one-case smoke programs.
 
