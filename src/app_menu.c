@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Menu callbacks contain presentation policy only; feature modules own data. */
 static void on_quit(GtkMenuItem *item, gpointer user_data)
