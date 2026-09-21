@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot release republish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/republish-retained-releases.yml
+
+permissions:
+  contents: write
+
+jobs:
+  republish:
+    if: github.event.head_commit.message == 'Republish retained releases'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Republish exact retained release records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          root="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          tags=(v1.0.59 v1.0.60 v1.0.61 v1.0.62 v1.0.63)
+
+          for tag in "${tags[@]}"; do
+            id="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100"               --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n1)"
+            test -n "$id"
+
+            gh api --method PATCH "/repos/${GITHUB_REPOSITORY}/releases/$id"               -F draft=false               -f target_commitish="$root" >/dev/null
+
+            gh api "/repos/${GITHUB_REPOSITORY}/releases/$id"               --jq 'select(.draft == false and .prerelease == false) | .tag_name' |
+              grep -Fx "$tag" >/dev/null
+
+            asset_count="$(gh api "/repos/${GITHUB_REPOSITORY}/releases/$id" --jq '.assets | length')"
+            test "$asset_count" -eq 2
+            echo "Published $tag with both retained assets."
+          done
+
+          published_count="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100"             --jq '[.[] | select(.draft == false)] | length' |
+            awk '{s += $1} END {print s+0}')"
+          test "$published_count" -eq 5
+          echo "Five retained releases are public."
