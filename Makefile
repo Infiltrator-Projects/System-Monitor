@@ -438,6 +438,7 @@ style-check: cxx-check $(STYLE_CHECKER)
 
 clang-doc-check: | $(BUILD_DIR)
 	@if command -v $(CLANG) >/dev/null 2>&1; then \
+		set -e; \
 		doc_flags="-Wdocumentation"; \
 		tmp=$$(mktemp); \
 		printf '/** test */\nint value;\n' | $(CLANG) -x c -c -o $$tmp \
@@ -460,6 +461,7 @@ clang-doc-check: | $(BUILD_DIR)
 doxygen-check:
 	@test -f support/Doxyfile
 	@if command -v $(DOXYGEN) >/dev/null 2>&1; then \
+		set -e; \
 		$(DOXYGEN) support/Doxyfile; \
 		echo "Doxygen generated-reference contract passed."; \
 	else \

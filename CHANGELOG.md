@@ -7,10 +7,15 @@ This changelog records user-visible, compatibility, architecture and validation 
 - Decouple persistent App History accounting from lazy GTK page construction so process history starts after first paint and is retained even when the App History tab has never been opened.
 - Keep App History persistence asynchronous without requiring its GTK list model by anchoring save completion to the application window while immutable save requests retain their own data lifetime.
 
+- Make the Clang and Doxygen documentation gates fail closed so checker errors cannot be masked by a following success message.
+- Scope generated Doxygen validation to System Monitor-owned source instead of recursively enforcing this repository's documentation policy on the pinned Common submodule, and remove the obsolete `CLASS_DIAGRAMS` setting.
+- Treat the existing `io.github.theinfiltratr.SystemMonitor` GApplication ID as an intentional stable compatibility key rather than accidental branding residue.
+- Strengthen the source audit so the CMake local smoke/CTest path must retain its source-coverage drift guard and test registration without replaying CTest in hosted CI.
+
 - Remove obsolete pre-rebrand package, configuration-directory and tab-layout migration code so current System Monitor starts and persists only the canonical identity and layout.
 - Remove the old `system-monitor` / `linux-system-monitor` Debian compatibility aliases and native-installer removal path; `infiltrator-system-monitor` is now the sole package identity.
 - Rename the remaining old `LINUX_SYSTEM_MONITOR_*` include-guard namespace to the current `INFILTRATOR_SYSTEM_MONITOR_*` namespace.
-- Normalize Shannon Smith-owned project copyright metadata to the actual 2016 project start while preserving third-party ancestry and licence notices unchanged.
+- Complete the Shannon Smith-owned project copyright normalization to the actual 2016 project start across production sources, tests, tools, packaging and icon metadata while preserving third-party ancestry and licence notices unchanged.
 
 - Remove the source-repository PAT dependency from APT publication. System Monitor now publishes only its own immutable release and the central APT repository independently discovers it.
 - Verify that the central catalogue advertises the exact System Monitor version within 15 minutes of publication, without requiring a custom cross-repository secret.

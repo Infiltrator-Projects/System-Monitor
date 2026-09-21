@@ -45,6 +45,10 @@ shared parsing / formatting / timing / path / durable-I/O / allocation primitive
 
 GTK consumes snapshots and application models. Presentation code should not need to know which Linux path, ioctl, D-Bus interface or driver supplied a metric.
 
+## Desktop application identity
+
+The GTK/GApplication identity `io.github.theinfiltratr.SystemMonitor` is an intentional stable compatibility key rather than current repository or Debian package branding. It participates in desktop application identity and single-instance behaviour, so changing it requires an explicit migration plan instead of an incidental rebrand.
+
 ## Contracts and ownership
 
 Public monitor and process structures are plain C data with explicit availability. Native details such as file descriptors, driver handles, Linux paths, worker synchronization and retained counter baselines remain below those contracts.
