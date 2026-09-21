@@ -1,5 +1,443 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
+ * @file storage_smoke.c
+ * @brief Consolidated storage regression smoke suite.
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include <stddef.h>
+#include <stdio.h>
+
+int smoke_case_mountinfo(void);
+int smoke_case_storage_metadata(void);
+int smoke_case_filesystem_inventory(void);
+int smoke_case_bundled_pci(void);
+int smoke_case_smbios_memory(void);
+int smoke_case_system_sources(void);
+
+/* ---- mountinfo ---- */
+#define main smoke_case_mountinfo
+#define write_fixture lsm_test_mountinfo_write_fixture
+#define collect_mount lsm_test_mountinfo_collect_mount
+/**
+ * @file mountinfo_smoke.c
+ * @brief Native mountinfo parser regression tests.
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "mountinfo.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+static bool write_fixture(const char *path)
+{
+    FILE *stream = fopen(path, "w");
+    if (!stream) return false;
+    const int written = fputs(
+        "36 25 259:4 / /media/My\\040Drive rw,nosuid shared:7 - ext4 "
+        "/dev/disk/by-label/My\\040Disk rw,errors=remount-ro\n"
+        "41 36 259:4 /Documents /home/user/Documents rw - ext4 /dev/nvme0n1p4 rw\n"
+        "52 25 0:42 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse "
+        "gvfsd-fuse rw,user_id=1000\n"
+        "this record is deliberately malformed\n",
+        stream);
+    const bool ok = written >= 0 && fclose(stream) == 0;
+    if (!ok) (void)fclose(stream);
+    return ok;
+}
+
+typedef struct {
+    LsmMountInfoEntry entries[8];
+    size_t count;
+} MountCollector;
+
+static bool collect_mount(const LsmMountInfoEntry *entry, void *user_data)
+{
+    MountCollector *collector = user_data;
+    if (!collector || !entry || collector->count >= 8) return false;
+    collector->entries[collector->count++] = *entry;
+    return collector->count < 8;
+}
+
+int main(void)
+{
+    char path[] = "/tmp/lsm-mountinfo-XXXXXX";
+    const int descriptor = mkstemp(path);
+    if (descriptor < 0) return 1;
+    close(descriptor);
+    if (!write_fixture(path)) {
+        unlink(path);
+        return 2;
+    }
+
+    MountCollector collector = {0};
+    const size_t visited = lsm_mountinfo_visit_file(path, collect_mount, &collector);
+    unlink(path);
+    if (visited != 3 || collector.count != 3) return 3;
+    if (collector.entries[0].major_number != 259 ||
+        collector.entries[0].minor_number != 4) return 4;
+    if (strcmp(collector.entries[0].target, "/media/My Drive") != 0) return 5;
+    if (strcmp(collector.entries[0].source, "/dev/disk/by-label/My Disk") != 0) return 6;
+    if (strcmp(collector.entries[0].filesystem, "ext4") != 0) return 7;
+    if (strcmp(collector.entries[1].target, "/home/user/Documents") != 0) return 8;
+    if (collector.entries[2].major_number != 0 ||
+        collector.entries[2].minor_number != 42) return 9;
+
+    printf("Native mountinfo parser passed (%zu records).\n", visited);
+    return 0;
+}
+
+#undef main
+#undef collect_mount
+#undef write_fixture
+
+/* ---- storage_metadata ---- */
+#define main smoke_case_storage_metadata
+#define write_record lsm_test_storage_metadata_write_record
+#define expect_label lsm_test_storage_metadata_expect_label
+/**
+ * @file storage_metadata_smoke.c
+ * @brief Cached block metadata parsing and classification regression test.
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#define _POSIX_C_SOURCE 200809L
+
+#include "storage_metadata.h"
+
+#include <errno.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+static bool write_record(const char *root, unsigned int major_number,
+                         unsigned int minor_number, const char *contents)
+{
+    char path[512];
+    const int written = snprintf(path, sizeof(path), "%s/b%u:%u",
+                                 root, major_number, minor_number);
+    if (written < 0 || (size_t)written >= sizeof(path)) return false;
+    FILE *file = fopen(path, "w");
+    if (!file) return false;
+    const bool ok = fputs(contents, file) >= 0 && fclose(file) == 0;
+    return ok;
+}
+
+static bool expect_label(const char *root, unsigned int minor_number,
+                         const char *expected)
+{
+    char label[64] = "stale";
+    return lsm_storage_metadata_type_label(root, 8U, minor_number,
+                                           label, sizeof(label)) &&
+           strcmp(label, expected) == 0;
+}
+
+int main(void)
+{
+    char root_template[] = "/tmp/lsm-storage-metadata-XXXXXX";
+    char *root = mkdtemp(root_template);
+    if (!root) return 1;
+
+    if (!write_record(root, 8U, 1U,
+                      "E:ID_FS_TYPE=vfat\nE:ID_FS_VERSION=FAT12\n") ||
+        !write_record(root, 8U, 2U,
+                      "E:ID_FS_VERSION=FAT16\nE:ID_FS_TYPE=msdos\n") ||
+        !write_record(root, 8U, 3U,
+                      "E:IGNORED=value\nE:ID_FS_VERSION=FAT32\n"
+                      "E:ID_FS_TYPE=vfat\n") ||
+        !write_record(root, 8U, 4U,
+                      "E:ID_FS_TYPE=ntfs\nE:ID_FS_VERSION=FAT32\n") ||
+        !write_record(root, 8U, 5U,
+                      "E:ID_PART_ENTRY_TYPE=e3c9e316-0b5c-4db8-817d-f92df00215ae\n") ||
+        !write_record(root, 8U, 6U,
+                      "E:ID_PART_ENTRY_TYPE=e3c9e316-0b5c-4db8-817d-f92df00215ae\n"
+                      "E:ID_FS_TYPE=ext4\n") ||
+        !write_record(root, 8U, 7U,
+                      "E:ID_PART_ENTRY_TYPE=00000000-0000-0000-0000-000000000000\n")) {
+        return 2;
+    }
+
+    if (!expect_label(root, 1U, "FAT12") ||
+        !expect_label(root, 2U, "FAT16") ||
+        !expect_label(root, 3U, "FAT32") ||
+        !expect_label(root, 4U, "ntfs") ||
+        !expect_label(root, 5U, "Microsoft Reserved") ||
+        !expect_label(root, 6U, "ext4"))
+        return 3;
+
+    char label[64] = "stale";
+    if (lsm_storage_metadata_type_label(root, 8U, 7U,
+                                        label, sizeof(label)) || label[0])
+        return 4;
+    label[0] = 'x';
+    label[1] = '\0';
+    if (lsm_storage_metadata_type_label(root, 8U, 99U,
+                                        label, sizeof(label)) || label[0])
+        return 5;
+    if (lsm_storage_metadata_type_label(root, 8U, 1U, NULL, 0U)) return 6;
+
+    for (unsigned int minor_number = 1U; minor_number <= 7U; minor_number++) {
+        char path[512];
+        const int written = snprintf(path, sizeof(path), "%s/b8:%u",
+                                     root, minor_number);
+        if (written >= 0 && (size_t)written < sizeof(path)) (void)unlink(path);
+    }
+    if (rmdir(root) != 0 && errno != ENOENT) return 7;
+
+    puts("Cached storage metadata classification passed.");
+    return 0;
+}
+
+#undef main
+#undef expect_label
+#undef write_record
+#undef _POSIX_C_SOURCE
+
+/* ---- filesystem_inventory ---- */
+#define main smoke_case_filesystem_inventory
+#define make_directory lsm_test_filesystem_inventory_make_directory
+/**
+ * @file filesystem_inventory_smoke.c
+ * @brief Regression test for mount classification and capacity snapshots.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#define _POSIX_C_SOURCE 200809L
+
+#include "filesystem_inventory.h"
+#include "common.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+static bool make_directory(const char *path)
+{
+    return mkdir(path, 0700) == 0 || errno == EEXIST;
+}
+
+int main(void)
+{
+    char root[] = "/tmp/lsm-filesystems-XXXXXX";
+    if (!mkdtemp(root)) return 1;
+
+    char self[512], mount_a[512], mount_b[512], mountinfo[512];
+    if (!lsm_join_path(self, sizeof(self), root, "/self") ||
+        !lsm_join_path(mount_a, sizeof(mount_a), root, "/storage") ||
+        !lsm_join_path(mount_b, sizeof(mount_b), root, "/kernel") ||
+        !lsm_join_path(mountinfo, sizeof(mountinfo), self, "/mountinfo"))
+        return 2;
+    if (!make_directory(self) || !make_directory(mount_a) ||
+        !make_directory(mount_b)) return 3;
+
+    FILE *stream = fopen(mountinfo, "w");
+    if (!stream) return 4;
+    fprintf(stream,
+        "31 20 8:1 / %s rw,relatime - ext4 /dev/sda1 rw\n"
+        "32 20 0:5 / %s rw,nosuid,nodev - proc proc rw\n",
+        mount_a, mount_b);
+    if (fclose(stream) != 0) return 5;
+    if (setenv("LSM_PROCFS_ROOT", root, 1) != 0) return 6;
+
+    LsmFilesystemInfo *items = NULL;
+    const size_t count = lsm_filesystem_inventory_collect(&items);
+    if (count != 2U || !items) return 7;
+
+    bool found_storage = false, found_kernel = false;
+    for (size_t index = 0U; index < count; index++) {
+        if (strcmp(items[index].filesystem, "ext4") == 0) {
+            found_storage = items[index].normally_visible &&
+                items[index].capacity_available &&
+                items[index].used_percent <= 100U;
+        } else if (strcmp(items[index].filesystem, "proc") == 0) {
+            found_kernel = !items[index].normally_visible;
+        }
+    }
+    lsm_filesystem_inventory_free(items);
+    unlink(mountinfo);
+    rmdir(mount_a);
+    rmdir(mount_b);
+    rmdir(self);
+    rmdir(root);
+    if (!found_storage || !found_kernel) return 8;
+    puts("Filesystem inventory classification and capacity sampling passed.");
+    return 0;
+}
+
+#undef main
+#undef make_directory
+#undef _POSIX_C_SOURCE
+
+/* ---- bundled_pci ---- */
+#define main smoke_case_bundled_pci
+/**
+ * @file bundled_pci_smoke.c
+ * @brief Bundled PCI name resolver regression test.
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "pci_names.h"
+
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    char vendor[256] = "";
+    char product[256] = "";
+    if (!lsm_pci_names_lookup("8086", "7e40",
+                              vendor, sizeof(vendor),
+                              product, sizeof(product))) {
+        fputs("PCI lookup returned no result.\n", stderr);
+        return 1;
+    }
+    if (strcmp(vendor, "Intel Corporation") != 0 ||
+        strcmp(product, "Meteor Lake PCH CNVi WiFi") != 0) {
+        fprintf(stderr, "Unexpected PCI identity: %s / %s\n", vendor, product);
+        return 2;
+    }
+    printf("%s — %s\n", vendor, product);
+    return 0;
+}
+
+#undef main
+
+/* ---- smbios_memory ---- */
+#define main smoke_case_smbios_memory
+#define write_le16 lsm_test_smbios_memory_write_le16
+#define add_memory_device lsm_test_smbios_memory_add_memory_device
+#define strings lsm_test_smbios_memory_strings
+/**
+ * @file smbios_memory_smoke.c
+ * @brief Synthetic SMBIOS Type-17 parser regression test.
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#define _POSIX_C_SOURCE 200809L
+#include "smbios_memory.h"
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+static void write_le16(uint8_t *destination, uint16_t value)
+{
+    destination[0] = (uint8_t)(value & 0xffu);
+    destination[1] = (uint8_t)(value >> 8);
+}
+
+static size_t add_memory_device(uint8_t *table, size_t offset,
+                                uint16_t size_mb, uint8_t form_factor,
+                                uint16_t rated_speed, uint16_t configured_speed,
+                                bool include_details)
+{
+    uint8_t *record = table + offset;
+    memset(record, 0, 0x24);
+    record[0] = 17;
+    record[1] = 0x22;
+    write_le16(record + 0x0c, size_mb);
+    record[0x0e] = form_factor;
+    record[0x12] = 0x22; /* DDR5 */
+    write_le16(record + 0x15, rated_speed);
+    write_le16(record + 0x20, configured_speed);
+    if (include_details) {
+        static const char strings[] =
+            "DIMM 0\0BANK 0\0Acme Memory\0SER123\0PART-99  \0";
+        record[0x10] = 1;
+        record[0x11] = 2;
+        record[0x17] = 3;
+        record[0x18] = 4;
+        record[0x1a] = 5;
+        memcpy(record + 0x22, strings, sizeof(strings));
+        return offset + 0x22 + sizeof(strings);
+    }
+    /* The structure's empty string set is the terminating pair at 0x22. */
+    return offset + 0x24;
+}
+
+int main(void)
+{
+    uint8_t table[256] = {0};
+    size_t used = 0;
+    used = add_memory_device(table, used, 8192, 0x0d, 4800, 5600, true);
+    used = add_memory_device(table, used, 0, 0x0d, 4800, 4800, false);
+    table[used] = 127;
+    table[used + 1] = 4;
+    used += 6; /* Four formatted bytes plus the empty string-set terminator. */
+
+    char path[] = "/tmp/lsm-smbios-XXXXXX";
+    const int descriptor = mkstemp(path);
+    assert(descriptor >= 0);
+    assert(write(descriptor, table, used) == (ssize_t)used);
+    close(descriptor);
+
+    LsmSmbiosMemoryInfo info;
+    char error[256];
+    assert(lsm_smbios_memory_read(path, &info, error, sizeof(error)));
+    assert(info.slots_total == 2);
+    assert(info.slots_used == 1);
+    assert(info.speed_mhz == 5600);
+    assert(strcmp(info.form_factor, "SODIMM") == 0);
+    assert(info.module_count == 1U);
+    assert(info.modules[0].size_bytes == 8192ULL * 1024ULL * 1024ULL);
+    assert(info.modules[0].speed_mhz == 5600U);
+    assert(strcmp(info.modules[0].locator, "DIMM 0") == 0);
+    assert(strcmp(info.modules[0].bank_locator, "BANK 0") == 0);
+    assert(strcmp(info.modules[0].manufacturer, "Acme Memory") == 0);
+    assert(strcmp(info.modules[0].serial_number, "SER123") == 0);
+    assert(strcmp(info.modules[0].part_number, "PART-99") == 0);
+    assert(strcmp(info.modules[0].memory_type, "DDR5") == 0);
+
+    const int malformed = open(path, O_WRONLY | O_TRUNC);
+    assert(malformed >= 0);
+    const uint8_t truncated[] = {17U, 3U, 0U, 0U, 0U, 0U};
+    assert(write(malformed, truncated, sizeof(truncated)) ==
+           (ssize_t)sizeof(truncated));
+    close(malformed);
+    assert(!lsm_smbios_memory_read(path, &info, error, sizeof(error)));
+
+    unlink(path);
+    puts("SMBIOS memory parser smoke test passed.");
+    return 0;
+}
+
+#undef main
+#undef strings
+#undef add_memory_device
+#undef write_le16
+#undef _POSIX_C_SOURCE
+
+/* ---- system_sources ---- */
+#define main smoke_case_system_sources
+#define make_directories lsm_test_system_sources_make_directories
+#define write_text lsm_test_system_sources_write_text
+#define make_link lsm_test_system_sources_make_link
+#define remove_tree lsm_test_system_sources_remove_tree
+#define setup_fixture lsm_test_system_sources_setup_fixture
+/**
  * @file system_sources_smoke.c
  * @brief Synthetic native procfs/sysfs discovery regression test.
  * @author Shannon Smith
@@ -358,4 +796,39 @@ int main(void)
     lsm_sources_destroy(sources);
     remove_tree(root);
     return ok ? 0 : 7;
+}
+
+#undef main
+#undef setup_fixture
+#undef remove_tree
+#undef make_link
+#undef write_text
+#undef make_directories
+#undef _POSIX_C_SOURCE
+#undef FIXTURE_FILE
+#undef FIXTURE_LINK
+
+typedef int (*LsmMergedSmokeCaseFunction)(void);
+typedef struct { const char *name; LsmMergedSmokeCaseFunction function; } LsmMergedSmokeCase;
+
+int main(void)
+{
+    static const LsmMergedSmokeCase cases[] = {
+        {"mountinfo", smoke_case_mountinfo},
+        {"storage_metadata", smoke_case_storage_metadata},
+        {"filesystem_inventory", smoke_case_filesystem_inventory},
+        {"bundled_pci", smoke_case_bundled_pci},
+        {"smbios_memory", smoke_case_smbios_memory},
+        {"system_sources", smoke_case_system_sources},
+    };
+    const size_t count = sizeof(cases) / sizeof(cases[0]);
+    for (size_t i = 0U; i < count; ++i) {
+        const int status = cases[i].function();
+        if (status != 0) {
+            fprintf(stderr, "storage smoke suite: %s failed with status %d\n", cases[i].name, status);
+            return status;
+        }
+    }
+    printf("storage smoke suite passed (%zu cases).\n", count);
+    return 0;
 }

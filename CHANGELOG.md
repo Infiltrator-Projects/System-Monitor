@@ -4,6 +4,9 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+- Reduce the smoke-test estate from 49 focused `*_smoke.c` files to 18 physical smoke sources/executables by merging related regression cases into seven coherent subsystem suites while preserving the original case-level assertions and diagnostics.
+- Remove the obsolete suite-runner/header and per-case Make/CMake targets; sanitizer and deterministic-coverage gates now consume the consolidated subsystem sources directly instead of rebuilding one-case smoke programs.
+
 - Decouple persistent App History accounting from lazy GTK page construction so process history starts after first paint and is retained even when the App History tab has never been opened.
 - Keep App History persistence asynchronous without requiring its GTK list model by anchoring save completion to the application window while immutable save requests retain their own data lifetime.
 

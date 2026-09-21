@@ -291,65 +291,11 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         target_link_libraries(${tool} PRIVATE lsm-developer-tool-policy)
     endforeach()
 
-    # Keep regression cases small and focused, but execute related cases through
-    # coherent subsystem binaries instead of compiling dozens of independent
-    # smoke executables. The original case source remains independently readable
-    # and can still be instrumented directly by sanitizer/coverage gates.
-    set(LSM_SMOKE_SUITE_RUNNER support/tests/suite_runner.c)
-
-    function(lsm_smoke_case source symbol)
-        set_source_files_properties(${source} PROPERTIES
-            COMPILE_DEFINITIONS "main=smoke_case_${symbol}"
-            COMPILE_OPTIONS "-include;${CMAKE_CURRENT_SOURCE_DIR}/support/tests/suite_cases.h")
-    endfunction()
-
-    lsm_smoke_case(support/tests/atomic_file_smoke.c atomic_file)
-    lsm_smoke_case(support/tests/duration_format_smoke.c duration_format)
-    lsm_smoke_case(support/tests/common_smoke.c common)
-    lsm_smoke_case(support/tests/project_info_smoke.c project_info)
-    lsm_smoke_case(support/tests/bluetooth_battery_smoke.c bluetooth_battery)
-    lsm_smoke_case(support/tests/bluetooth_traffic_smoke.c bluetooth_traffic)
-    lsm_smoke_case(support/tests/linux_capability_smoke.c linux_capability)
-    lsm_smoke_case(support/tests/logitech_hidpp_smoke.c logitech_hidpp)
-    lsm_smoke_case(support/tests/wifi_metadata_smoke.c wifi_metadata)
-    lsm_smoke_case(support/tests/cpu_accounting_smoke.c cpu_accounting)
-    lsm_smoke_case(support/tests/disk_accounting_smoke.c disk_accounting)
-    lsm_smoke_case(support/tests/memory_accounting_smoke.c memory_accounting)
-    lsm_smoke_case(support/tests/pressure_smoke.c pressure)
-    lsm_smoke_case(support/tests/cpu_direct_smoke.c cpu_direct)
-    lsm_smoke_case(support/tests/quality_policy_smoke.c quality_policy)
-    lsm_smoke_case(support/tests/sample_history_smoke.c sample_history)
-    lsm_smoke_case(support/tests/gpu_metrics_smoke.c gpu_metrics)
-    lsm_smoke_case(support/tests/performance_navigation_smoke.c performance_navigation)
-    lsm_smoke_case(support/tests/mountinfo_smoke.c mountinfo)
-    lsm_smoke_case(support/tests/storage_metadata_smoke.c storage_metadata)
-    lsm_smoke_case(support/tests/filesystem_inventory_smoke.c filesystem_inventory)
-    lsm_smoke_case(support/tests/bundled_pci_smoke.c bundled_pci)
-    lsm_smoke_case(support/tests/smbios_memory_smoke.c smbios_memory)
-    lsm_smoke_case(support/tests/system_sources_smoke.c system_sources)
-    lsm_smoke_case(support/tests/process_model_smoke.c process_model)
-    lsm_smoke_case(support/tests/process_grouping_smoke.c process_grouping)
-    lsm_smoke_case(support/tests/process_gpu_smoke.c process_gpu)
-    lsm_smoke_case(support/tests/process_inspection_smoke.c process_inspection)
-    lsm_smoke_case(support/tests/process_management_smoke.c process_management)
-    lsm_smoke_case(support/tests/efficiency_smoke.c efficiency)
-    lsm_smoke_case(support/tests/dbus_models_smoke.c dbus_models)
-    lsm_smoke_case(support/tests/preferences_smoke.c preferences)
-    lsm_smoke_case(support/tests/startup_smoke.c startup)
-    lsm_smoke_case(support/tests/ui_update_smoke.c ui_update)
-    lsm_smoke_case(support/tests/task_manager_layout_smoke.c task_manager_layout)
-    lsm_smoke_case(support/tests/hardware_topology_smoke.c hardware_topology)
-    lsm_smoke_case(support/tests/intel_gpu_smoke.c intel_gpu)
-    lsm_smoke_case(support/tests/npu_telemetry_smoke.c npu_telemetry)
-
+    # Physical smoke sources now match executable boundaries: seven coherent
+    # subsystem suites plus specialised integration/lifecycle fixtures.
     add_executable(lsm-core-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/atomic_file_smoke.c
-        support/tests/duration_format_smoke.c
-        support/tests/common_smoke.c
-        support/tests/project_info_smoke.c
+        support/tests/core_smoke.c
         src/project_info.c)
-    target_compile_definitions(lsm-core-suite-smoke PRIVATE LSM_SUITE_CORE)
 
     add_executable(lsm-backend-smoke support/tests/backend_smoke.c
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
@@ -359,32 +305,16 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         support/tests/monitor_platform_smoke.c src/monitor.c)
 
     add_executable(lsm-peripheral-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/bluetooth_battery_smoke.c
-        support/tests/bluetooth_traffic_smoke.c
-        support/tests/linux_capability_smoke.c
-        support/tests/logitech_hidpp_smoke.c
-        support/tests/wifi_metadata_smoke.c
+        support/tests/peripheral_smoke.c
         src/bluetooth_battery.c
         src/bluetooth_traffic.c
         src/linux_capability.c
         src/logitech_hidpp.c
         src/logitech_hidpp_protocol.c
         src/wifi_metadata.c)
-    target_compile_definitions(lsm-peripheral-suite-smoke PRIVATE
-        LSM_SUITE_PERIPHERAL)
 
     add_executable(lsm-metrics-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/cpu_accounting_smoke.c
-        support/tests/disk_accounting_smoke.c
-        support/tests/memory_accounting_smoke.c
-        support/tests/pressure_smoke.c
-        support/tests/cpu_direct_smoke.c
-        support/tests/quality_policy_smoke.c
-        support/tests/sample_history_smoke.c
-        support/tests/gpu_metrics_smoke.c
-        support/tests/performance_navigation_smoke.c
+        support/tests/metrics_smoke.c
         src/cpu_accounting.c
         src/disk_accounting.c
         src/memory_accounting.c
@@ -394,17 +324,9 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/sample_history.c
         src/gpu_metrics.c
         src/performance_selection.c)
-    target_compile_definitions(lsm-metrics-suite-smoke PRIVATE
-        LSM_SUITE_METRICS)
 
     add_executable(lsm-storage-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/mountinfo_smoke.c
-        support/tests/storage_metadata_smoke.c
-        support/tests/filesystem_inventory_smoke.c
-        support/tests/bundled_pci_smoke.c
-        support/tests/smbios_memory_smoke.c
-        support/tests/system_sources_smoke.c
+        support/tests/storage_smoke.c
         src/mountinfo.c
         src/storage_metadata.c
         src/filesystem_inventory.c
@@ -412,46 +334,25 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/pci_names_data.c
         src/smbios_memory.c
         src/system_sources.c)
-    target_compile_definitions(lsm-storage-suite-smoke PRIVATE
-        LSM_SUITE_STORAGE)
 
     add_executable(lsm-process-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/process_model_smoke.c
-        support/tests/process_grouping_smoke.c
-        support/tests/process_gpu_smoke.c
-        support/tests/process_inspection_smoke.c
-        support/tests/process_management_smoke.c
-        support/tests/efficiency_smoke.c
+        support/tests/process_smoke.c
         src/process_model.c
         src/process_grouping.c
         src/process_gpu.c
         src/process_inspection.c
         src/process_backend_linux.c)
-    target_compile_definitions(lsm-process-suite-smoke PRIVATE
-        LSM_SUITE_PROCESS)
 
     add_executable(lsm-ui-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/dbus_models_smoke.c
-        support/tests/preferences_smoke.c
-        support/tests/startup_smoke.c
-        support/tests/ui_update_smoke.c
-        support/tests/task_manager_layout_smoke.c
+        support/tests/ui_smoke.c
         src/preferences.c
         src/ui_helpers.c)
-    target_compile_definitions(lsm-ui-suite-smoke PRIVATE LSM_SUITE_UI)
 
     add_executable(lsm-accelerator-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/hardware_topology_smoke.c
-        support/tests/intel_gpu_smoke.c
-        support/tests/npu_telemetry_smoke.c
+        support/tests/accelerator_smoke.c
         src/hardware_topology.c
         src/intel_gpu.c
         src/npu_telemetry.c)
-    target_compile_definitions(lsm-accelerator-suite-smoke PRIVATE
-        LSM_SUITE_ACCELERATOR)
 
     # Specialised integration/lifecycle fixtures remain independent because
     # their setup, environment or failure domain is materially different.
@@ -507,9 +408,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         lsm-process-scan-benchmark
         lsm-runtime-stability-smoke)
 
-    # Every focused *_smoke.c regression case must still belong to one suite or
-    # specialised target. This prevents consolidation from silently dropping a
-    # case when new coverage is added.
+    # Every physical *_smoke.c source must belong to exactly one executable.
+    # This keeps the compact test estate complete as new regression coverage is added.
     file(GLOB LSM_ALL_SMOKE_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/support/tests/*_smoke.c")
     set(LSM_REGISTERED_SMOKE_SOURCES)
