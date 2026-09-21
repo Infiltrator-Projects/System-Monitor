@@ -9,7 +9,7 @@ This is a direction document, not a dated promise. The released source and tests
 - qualify direct hardware/accounting behaviour through the support/tests suite
 - keep the Linux build independent of BlueZ development headers, libcap command-line tooling and an explicit Fontconfig package/cache-helper dependency
 - preserve per-device Bluetooth traffic through the project-owned Linux HCI ABI and apply CAP_NET_RAW through the executable's own verified Linux xattr path
-- consume Common 1.19.18 for toolkit-neutral HOME/XDG paths, recursive directory creation, complete text reads, deterministic ASCII matching/ordering, stable non-cryptographic signature hashing, monotonic counter delta/rate mechanics and POSIX deadline conversion instead of retaining equivalent GLib/libc/private helper paths
+- consume Common 1.19.20 for toolkit-neutral HOME/XDG paths, recursive directory creation, complete text reads, deterministic ASCII matching/ordering, stable non-cryptographic signature hashing, monotonic counter delta/rate mechanics and POSIX deadline conversion instead of retaining equivalent GLib/libc/private helper paths
 
 ## Near-term priorities
 
