@@ -9,7 +9,7 @@
  * provider, so a power loss cannot leave a partially written configuration.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -91,7 +91,6 @@ void lsm_preferences_load(LsmApp *app)
     if (!app || !app->paths.preferences_path[0]) return;
     FILE *file = fopen(app->paths.preferences_path, "r");
     if (!file) return;
-    gint tab_layout_version = 0;
     char line[512];
     while (fgets(line, sizeof(line), file)) {
         char *key = NULL;
@@ -138,9 +137,6 @@ void lsm_preferences_load(LsmApp *app)
         else if (strcmp(key, "last_tab") == 0)
             app->runtime.last_tab = validated_integer(
                 value, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
-        else if (strcmp(key, "tab_layout_version") == 0)
-            tab_layout_version = validated_integer(
-                value, 0, LSM_TAB_LAYOUT_VERSION, 0);
         else if (strcmp(key, "performance_page") == 0 &&
                  valid_stack_name(value))
             lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
@@ -155,8 +151,6 @@ void lsm_preferences_load(LsmApp *app)
         }
     }
     fclose(file);
-    app->runtime.last_tab = (gint)lsm_tab_index_migrate(
-        app->runtime.last_tab, tab_layout_version);
 }
 
 static bool write_preferences(FILE *file, const void *user_data)
@@ -176,7 +170,6 @@ static bool write_preferences(FILE *file, const void *user_data)
         "window_width=%d\n"
         "window_height=%d\n"
         "window_maximized=%d\n"
-        "tab_layout_version=%d\n"
         "last_tab=%d\n",
         app->runtime.update_interval_ms,
         infiltratr_theme_mode_key(app->runtime.theme_mode),
@@ -188,7 +181,7 @@ static bool write_preferences(FILE *file, const void *user_data)
         app->runtime.always_on_top ? 1 : 0,
         app->runtime.compact_summary ? 1 : 0,
         app->runtime.window_width, app->runtime.window_height,
-        app->runtime.window_maximized ? 1 : 0, LSM_TAB_LAYOUT_VERSION,
+        app->runtime.window_maximized ? 1 : 0,
         app->runtime.last_tab);
     bool okay = result >= 0;
     for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++) {

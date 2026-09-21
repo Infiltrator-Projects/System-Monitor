@@ -4,6 +4,11 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+- Remove obsolete pre-rebrand package, configuration-directory and tab-layout migration code so current System Monitor starts and persists only the canonical identity and layout.
+- Remove the old `system-monitor` / `linux-system-monitor` Debian compatibility aliases and native-installer removal path; `infiltrator-system-monitor` is now the sole package identity.
+- Rename the remaining old `LINUX_SYSTEM_MONITOR_*` include-guard namespace to the current `INFILTRATOR_SYSTEM_MONITOR_*` namespace.
+- Normalize Shannon Smith-owned project copyright metadata to the actual 2016 project start while preserving third-party ancestry and licence notices unchanged.
+
 - Remove the source-repository PAT dependency from APT publication. System Monitor now publishes only its own immutable release and the central APT repository independently discovers it.
 - Verify that the central catalogue advertises the exact System Monitor version within 15 minutes of publication, without requiring a custom cross-repository secret.
 - Keep the APT repository authoritative for package discovery and indexing so release synchronisation remains tokenless and self-healing.

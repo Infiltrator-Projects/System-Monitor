@@ -10,7 +10,7 @@
  * installation of the verified local Debian package.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _GNU_SOURCE
@@ -870,20 +870,6 @@ int main(int argc, char **argv)
 
     puts("\nCompilation and package creation passed.");
     puts("Administrator permission is now required to replace the installed package.");
-
-    /* 1.0.31 completes the package rename. Remove the previous package identity
-     * only when it is actually installed; per-user configuration is migrated
-     * by the application on first start under the new name. */
-    const char *const legacy_status_arguments[] = {
-        dpkg, "--status", "linux-system-monitor", NULL
-    };
-    if (run_process(NULL, legacy_status_arguments, true) == 0) {
-        puts("Removing previous linux-system-monitor package identity...");
-        const char *const legacy_remove_arguments[] = {
-            sudo_path, "--", dpkg, "--remove", "linux-system-monitor", NULL
-        };
-        run_required(NULL, legacy_remove_arguments);
-    }
 
     const char *const install_arguments[] = {
         sudo_path, "--", dpkg, "--install", package_path, NULL

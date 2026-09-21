@@ -9,7 +9,7 @@
  * is installed.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -629,9 +629,6 @@ int main(int argc, char **argv)
         "Architecture: %s\n"
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
         "Homepage: https://github.com/Infiltrator-Projects/System-Monitor\n"
-        "Provides: system-monitor, linux-system-monitor\n"
-        "Breaks: system-monitor (<< 1.0.36), linux-system-monitor (<= 1.0.30)\n"
-        "Replaces: system-monitor (<< 1.0.36), linux-system-monitor (<= 1.0.30)\n"
         "Depends: libc6 (>= %u.%u), "
         "libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
         "Description: native GTK system and hardware monitor for Linux\n"

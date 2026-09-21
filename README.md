@@ -2,7 +2,7 @@
 
 # System Monitor
 
-**Project copyright:** © 1993-2026 Shannon Smith
+**Project copyright:** © 2016-2026 Shannon Smith
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -93,7 +93,7 @@ Each numbered release publishes:
 - `infiltrator-system-monitor_<version>_amd64.deb`
 - `infiltrator-system-monitor-<version>-native-installer.run`
 
-The `.deb` is the generic amd64 package. Its Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. Version 1.0.36 migrates existing `system-monitor` package installations through the repository transition package, leaving that old package name as compatibility-only; the protected `infiltrator-system-monitor` identity is authoritative for future APT releases. The `.run` performs a native local build/test/install. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
+The `.deb` is the generic amd64 package. Its sole Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. The `.run` performs a native local build/test/install. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
 
 ## Repository policy
 
@@ -103,6 +103,6 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 ## Licence
 
-Copyright © 1993-2026 Shannon Smith.
+Copyright © 2016-2026 Shannon Smith.
 
 Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry, bundled PCI-name data and the bundled MB Corpo typeface resources are preserved in `support/legal/THIRD_PARTY_NOTICES`.

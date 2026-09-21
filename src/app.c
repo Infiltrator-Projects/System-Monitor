@@ -7,7 +7,7 @@
  * owns construction order, subsystem lifetime and teardown order only.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "app.h"
@@ -35,7 +35,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 
 static bool app_paths_initialise(LsmApp *app)
 {
@@ -45,19 +44,6 @@ static bool app_paths_initialise(LsmApp *app)
         !lsm_join_path(app->paths.config_dir, sizeof(app->paths.config_dir),
                        config_root, LSM_CONFIG_DIRECTORY))
         return false;
-
-    /* Preserve the user's settings across the 1.0.31 technical-name rebrand.
-     * rename(2) is atomic within ~/.config; failure is non-fatal because the
-     * application can safely continue with a fresh System Monitor directory. */
-    char previous_config[LSM_PATH_LEN];
-    struct stat current_status;
-    struct stat previous_status;
-    if (stat(app->paths.config_dir, &current_status) != 0 &&
-        lsm_join_path(previous_config, sizeof(previous_config), config_root,
-                      LSM_PREVIOUS_CONFIG_DIRECTORY) &&
-        stat(previous_config, &previous_status) == 0 &&
-        S_ISDIR(previous_status.st_mode))
-        (void)rename(previous_config, app->paths.config_dir);
 
     return lsm_join_path(app->paths.filter_path, sizeof(app->paths.filter_path),
                          app->paths.config_dir, "filters.conf") &&
