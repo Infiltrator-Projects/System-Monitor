@@ -931,7 +931,7 @@ static void check_shared_release_contract(void)
                 ".github/workflows/release.yml: releases must upload only "
                 "the .deb and .run artifacts");
         require_text_marker(".github/workflows/release.yml", release,
-                            "test \"$main_commit\" = \"$EXPECTED_SHA\"");
+                            "test \"$head_commit\" = \"$EXPECTED_SHA\"");
         require_text_marker(".github/workflows/release.yml", release,
                             "make -j2 deb native-installer");
         require_text_marker(".github/workflows/release.yml", release,
