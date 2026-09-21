@@ -905,6 +905,17 @@ static void check_shared_release_contract(void)
         free(cmake);
     }
 
+    char *doxyfile = read_file("support/Doxyfile", &size);
+    if (doxyfile) {
+        require_text_marker("support/Doxyfile", doxyfile,
+                            "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
+        require_text_marker("support/Doxyfile", doxyfile,
+                            "EXTRACT_LOCAL_CLASSES   = NO");
+        if (strstr(doxyfile, "CLASS_DIAGRAMS"))
+            report_error("support/Doxyfile: obsolete CLASS_DIAGRAMS setting must not return");
+        free(doxyfile);
+    }
+
     char *ci = read_file(".github/workflows/ci.yml", &size);
     if (ci) {
         require_text_marker(".github/workflows/ci.yml", ci,

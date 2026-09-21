@@ -15,6 +15,8 @@ support/tests contains accounting, hardware, Bluetooth, GPU, battery, filesystem
 
 Automated checks should cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the project.
 
+Generated Doxygen API validation is intentionally scoped to System Monitor-owned source and header-defined API types. Private implementation compounds defined only inside `.c` files are not promoted into the generated API surface; Clang documentation syntax checks still cover the complete owned source set.
+
 ## Manual and environment-dependent evidence
 
 Hardware-specific telemetry and privileged actions still require real-device validation because synthetic CI cannot prove a particular firmware, driver or kernel exposes a metric correctly.

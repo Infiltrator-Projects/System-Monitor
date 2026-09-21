@@ -9,6 +9,7 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 - Make the Clang and Doxygen documentation gates fail closed so checker errors cannot be masked by a following success message.
 - Scope generated Doxygen validation to System Monitor-owned source instead of recursively enforcing this repository's documentation policy on the pinned Common submodule, and remove the obsolete `CLASS_DIAGRAMS` setting.
+- Limit generated API documentation to header-defined types so private implementation-only structs in `.c` files remain internal while public API documentation stays warning-clean.
 - Treat the existing `io.github.theinfiltratr.SystemMonitor` GApplication ID as an intentional stable compatibility key rather than accidental branding residue.
 - Strengthen the source audit so the CMake local smoke/CTest path must retain its source-coverage drift guard and test registration without replaying CTest in hosted CI.
 

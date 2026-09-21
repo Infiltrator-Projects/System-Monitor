@@ -19,6 +19,7 @@ EXCLUDE_PATTERNS        = */build/* */tests/compat/*
 EXTRACT_ALL             = NO
 EXTRACT_PRIVATE         = NO
 EXTRACT_STATIC          = NO
+EXTRACT_LOCAL_CLASSES   = NO
 HIDE_UNDOC_MEMBERS      = YES
 HIDE_UNDOC_CLASSES      = NO
 JAVADOC_AUTOBRIEF      = YES
