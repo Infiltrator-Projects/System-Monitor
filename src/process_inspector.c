@@ -11,7 +11,7 @@
  * avoids blocking GTK or turning an inspector into a second process scanner.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_inspector.h"
@@ -78,8 +78,9 @@ typedef struct {
     size_t thread_count;
 } ProcessInventoryResult;
 
+/** Immutable worker request for native file-user discovery. */
 typedef struct {
-    char *path;
+    char *path; /**< Owned path copied from the chooser before worker dispatch. */
 } FileUsersRequest;
 
 typedef struct {
