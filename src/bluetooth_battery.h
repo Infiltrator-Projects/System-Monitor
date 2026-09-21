@@ -25,6 +25,7 @@ typedef struct _GVariant GVariant;
 #define LSM_BLUETOOTH_DETAIL_LEN 128U
 #define LSM_BLUETOOTH_PATH_LEN 256U
 
+/** One BlueZ Adapter1 controller record and its bounded device summary. */
 typedef struct {
     char object_path[LSM_BLUETOOTH_PATH_LEN];
     char address[LSM_BLUETOOTH_ADDRESS_LEN];
