@@ -9,11 +9,11 @@
  * recovery cannot leave a category permanently frozen.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_REFRESH_POLICY_H
-#define LINUX_SYSTEM_MONITOR_REFRESH_POLICY_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_REFRESH_POLICY_H
+#define INFILTRATOR_SYSTEM_MONITOR_REFRESH_POLICY_H
 
 #include <infiltratr/timing.h>
 

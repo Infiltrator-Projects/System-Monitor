@@ -8,11 +8,11 @@
  * an idle monitor does not create avoidable wake-ups or hardware traffic.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_SAMPLING_POLICY_H
-#define LINUX_SYSTEM_MONITOR_SAMPLING_POLICY_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_SAMPLING_POLICY_H
+#define INFILTRATOR_SYSTEM_MONITOR_SAMPLING_POLICY_H
 
 #define LSM_DEFAULT_UPDATE_INTERVAL_MS 1000U
 #define LSM_PROCESS_UPDATE_INTERVAL_MS 2000U
