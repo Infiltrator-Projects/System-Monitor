@@ -10,10 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  # v3 starts a clean concurrency epoch after another self-hosted run remained
-  # stuck in GitHub's in-progress state even after force-cancellation. Future
-  # pushes still cancel older Verify runs within this v3 group.
-  group: verify-v3-${{ github.repository }}-${{ github.ref_name }}
+  # v4 starts a clean concurrency epoch after GitHub left a superseded hosted
+  # Verify run stuck in-progress with no executable steps. Future pushes still
+  # cancel older Verify runs within this v4 group.
+  group: verify-v4-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
