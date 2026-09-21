@@ -4,11 +4,11 @@
  * @brief Integrated searchable end-user help window.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_HELP_H
-#define LINUX_SYSTEM_MONITOR_HELP_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_HELP_H
+#define INFILTRATOR_SYSTEM_MONITOR_HELP_H
 
 #include "app.h"
 

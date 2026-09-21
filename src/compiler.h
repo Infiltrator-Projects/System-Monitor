@@ -11,11 +11,11 @@
  * intentionally left to the optimiser's profile-independent heuristics.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_COMPILER_H
-#define LINUX_SYSTEM_MONITOR_COMPILER_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_COMPILER_H
+#define INFILTRATOR_SYSTEM_MONITOR_COMPILER_H
 
 #include <infiltratr/compiler.h>
 

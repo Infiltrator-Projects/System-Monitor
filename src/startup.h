@@ -3,11 +3,11 @@
  * @file startup.h
  * @brief Public interface for the Startup Applications tab.
  * @author Shannon Smith
- * @copyright Copyright (c) 1993-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_STARTUP_H
-#define LINUX_SYSTEM_MONITOR_STARTUP_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_STARTUP_H
+#define INFILTRATOR_SYSTEM_MONITOR_STARTUP_H
 
 #include <gtk/gtk.h>
 
