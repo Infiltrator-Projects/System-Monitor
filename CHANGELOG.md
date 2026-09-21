@@ -4,6 +4,9 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+- Decouple persistent App History accounting from lazy GTK page construction so process history starts after first paint and is retained even when the App History tab has never been opened.
+- Keep App History persistence asynchronous without requiring its GTK list model by anchoring save completion to the application window while immutable save requests retain their own data lifetime.
+
 - Remove obsolete pre-rebrand package, configuration-directory and tab-layout migration code so current System Monitor starts and persists only the canonical identity and layout.
 - Remove the old `system-monitor` / `linux-system-monitor` Debian compatibility aliases and native-installer removal path; `infiltrator-system-monitor` is now the sole package identity.
 - Rename the remaining old `LINUX_SYSTEM_MONITOR_*` include-guard namespace to the current `INFILTRATOR_SYSTEM_MONITOR_*` namespace.

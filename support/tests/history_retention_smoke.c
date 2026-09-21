@@ -175,6 +175,8 @@ int main(void)
     if (!live) return fail("unable to allocate live-history app");
     if (!lsm_history_test_init(live, directory))
         return fail("unable to initialise live history");
+    if (live->history.history_store != NULL)
+        return fail("non-visual history tracking unexpectedly constructed a GTK view");
 
     LsmProcessInfo *processes = calloc(
         LIVE_HISTORY_ENTRIES, sizeof(*processes));

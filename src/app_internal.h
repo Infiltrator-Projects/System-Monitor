@@ -442,6 +442,7 @@ typedef struct {
     GHashTable *app_history_samples;
     char history_path[LSM_PATH_LEN];
     double history_last_sample;
+    guint history_initialise_source;
     guint history_save_timer;
     guint history_generation;
     guint history_entry_count;

@@ -635,8 +635,7 @@ void lsm_history_save(LsmApp *app)
     if (test_failure != 0) history_report_save_failure(app, test_failure);
     return;
 #endif
-    if (!app->history.history_store ||
-        !app->history.history_save_coordinator) {
+    if (!app->history.history_save_coordinator || !app->shell.window) {
         const int failure = history_save_checked_sync(app);
         if (failure != 0) history_report_save_failure(app, failure);
         return;
@@ -658,7 +657,7 @@ void lsm_history_save(LsmApp *app)
     app->history.history_save_generation = request->generation;
     app->history.history_save_pending = TRUE;
 
-    GTask *task = g_task_new(G_OBJECT(app->history.history_store), NULL,
+    GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
                              history_save_complete, NULL);
     g_task_set_task_data(task, request, history_save_request_free);
     g_task_run_in_thread(task, history_save_worker);
@@ -669,6 +668,74 @@ static gboolean history_save_timer(gpointer user_data)
 {
     lsm_history_save(user_data);
     return G_SOURCE_CONTINUE;
+}
+
+/* Persistent accounting is application state, not page state.  Initialise it
+ * independently of the lazily constructed GTK tab so process samples collected
+ * before the user first opens App History are still accounted and persisted. */
+static gboolean history_model_initialise(LsmApp *app)
+{
+    if (!app) return FALSE;
+    if (!app->history.app_history) {
+        app->history.app_history = g_hash_table_new_full(
+            g_str_hash, g_str_equal, g_free, history_entry_free);
+    }
+    if (!app->history.app_history_samples) {
+        app->history.app_history_samples = g_hash_table_new_full(
+            g_str_hash, g_str_equal, g_free, history_sample_free);
+    }
+    if (!app->history.history_save_coordinator)
+        app->history.history_save_coordinator = history_coordinator_create();
+
+    if (!app->history.history_path[0]) {
+        if (!lsm_join_path(app->history.history_path,
+                           sizeof(app->history.history_path),
+                           app->paths.config_dir, "app-history.tsv"))
+            return FALSE;
+        history_load(app);
+    }
+
+    if (app->shell.window) {
+        g_object_set_data(G_OBJECT(app->shell.window),
+                          "lsm-history-app", app);
+        if (!app->history.history_save_timer)
+            app->history.history_save_timer = g_timeout_add_seconds(
+                30U, history_save_timer, app);
+    }
+    return app->history.app_history && app->history.app_history_samples;
+}
+
+static void history_initialise_now(LsmApp *app)
+{
+    if (!app) return;
+    if (app->history.history_initialise_source) {
+        g_source_remove(app->history.history_initialise_source);
+        app->history.history_initialise_source = 0U;
+    }
+    (void)history_model_initialise(app);
+}
+
+static gboolean history_initialise_idle(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    app->history.history_initialise_source = 0U;
+    if (!app->runtime.shutting_down)
+        (void)history_model_initialise(app);
+    return G_SOURCE_REMOVE;
+}
+
+void lsm_history_start(LsmApp *app)
+{
+    if (!app || app->runtime.shutting_down ||
+        app->history.history_initialise_source)
+        return;
+    if (app->history.app_history && app->history.app_history_samples) {
+        (void)history_model_initialise(app);
+        return;
+    }
+    app->history.history_initialise_source =
+        g_idle_add(history_initialise_idle, app);
 }
 
 /* Executable identity plus user groups process instances into applications. */
@@ -724,7 +791,10 @@ static gboolean remove_stale_sample(gpointer key, gpointer value, gpointer user_
 /* Delta accounting validates PID start time before accepting cumulative data. */
 void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t count)
 {
-    if (!app || !app->history.app_history || !app->history.app_history_samples || !processes) return;
+    if (!app || !processes || app->runtime.shutting_down) return;
+    if (!app->history.app_history || !app->history.app_history_samples)
+        history_initialise_now(app);
+    if (!app->history.app_history || !app->history.app_history_samples) return;
 
     app->history.history_generation++;
     const double now_mono = lsm_monotonic_seconds();
@@ -883,14 +953,8 @@ static void history_reset(GtkButton *button, gpointer user_data)
 
 void lsm_history_build(LsmApp *app, GtkWidget *container)
 {
-    app->history.app_history = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, history_entry_free);
-    app->history.app_history_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, history_sample_free);
-    app->history.history_save_coordinator = history_coordinator_create();
-    if (!lsm_join_path(app->history.history_path,
-                       sizeof(app->history.history_path),
-                       app->paths.config_dir, "app-history.tsv"))
-        app->history.history_path[0] = '\0';
-    history_load(app);
+    if (!app || !container) return;
+    history_initialise_now(app);
 
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_container_set_border_width(GTK_CONTAINER(toolbar), 8);
@@ -906,8 +970,6 @@ void lsm_history_build(LsmApp *app, GtkWidget *container)
     app->history.history_store = gtk_list_store_new(HIST_N_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_DOUBLE, G_TYPE_DOUBLE,
         G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_INT64, G_TYPE_STRING);
-    g_object_set_data(G_OBJECT(app->history.history_store),
-                      "lsm-history-app", app);
     app->history.history_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->history.history_store));
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(app->history.history_tree), TRUE);
     gtk_tree_view_set_enable_search(GTK_TREE_VIEW(app->history.history_tree), FALSE);
@@ -937,19 +999,22 @@ void lsm_history_build(LsmApp *app, GtkWidget *container)
 
     g_signal_connect(app->history.history_search, "changed", G_CALLBACK(history_search_changed), app);
     g_signal_connect(app->history.history_reset_button, "clicked", G_CALLBACK(history_reset), app);
-    app->history.history_save_timer = g_timeout_add_seconds(30, history_save_timer, app);
     lsm_history_refresh(app);
 }
 
 void lsm_history_destroy(LsmApp *app)
 {
     if (!app) return;
+    if (app->history.history_initialise_source) {
+        g_source_remove(app->history.history_initialise_source);
+        app->history.history_initialise_source = 0U;
+    }
     if (app->history.history_save_timer) {
         g_source_remove(app->history.history_save_timer);
         app->history.history_save_timer = 0U;
     }
-    if (app->history.history_store)
-        g_object_set_data(G_OBJECT(app->history.history_store),
+    if (app->shell.window)
+        g_object_set_data(G_OBJECT(app->shell.window),
                           "lsm-history-app", NULL);
 
     if (app->history.history_dirty) {
@@ -981,16 +1046,7 @@ gboolean lsm_history_test_init(LsmApp *app, const char *config_dir)
 {
     if (!app || !config_dir || !*config_dir) return FALSE;
     lsm_copy_string(app->paths.config_dir, sizeof(app->paths.config_dir), config_dir);
-    app->history.app_history = g_hash_table_new_full(
-        g_str_hash, g_str_equal, g_free, history_entry_free);
-    app->history.app_history_samples = g_hash_table_new_full(
-        g_str_hash, g_str_equal, g_free, history_sample_free);
-    if (!lsm_join_path(app->history.history_path,
-                       sizeof(app->history.history_path),
-                       config_dir, "app-history.tsv"))
-        return FALSE;
-    history_load(app);
-    return TRUE;
+    return history_model_initialise(app);
 }
 
 guint lsm_history_test_retained_count(const LsmApp *app)
@@ -1011,6 +1067,8 @@ void lsm_history_test_dispose(LsmApp *app)
         g_hash_table_destroy(app->history.app_history);
     if (app->history.app_history_samples)
         g_hash_table_destroy(app->history.app_history_samples);
+    history_coordinator_release(app->history.history_save_coordinator);
+    app->history.history_save_coordinator = NULL;
     app->history.app_history = NULL;
     app->history.app_history_samples = NULL;
     app->history.history_entry_count = 0U;

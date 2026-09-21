@@ -296,6 +296,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     if (app->runtime.initial_tab_after_paint != LSM_TAB_PERFORMANCE)
         app->runtime.initial_tab_restore_source =
             g_idle_add(restore_initial_tab_after_first_paint, app);
+    lsm_history_start(app);
     lsm_performance_refresh(app);
     lsm_app_runtime_start(app);
 }

@@ -16,7 +16,19 @@
 typedef struct LsmApp LsmApp;
 
 /**
- * Construct the persistent App History tab and load saved accounting state.
+ * Schedule persistent App History accounting state after the first GTK frame.
+ *
+ * Tracking is application lifetime state and remains independent of whether
+ * the lazily constructed App History tab has ever been opened.
+ *
+ * @param [in,out] app Application that owns retained history state.
+ */
+void lsm_history_start(LsmApp *app);
+/**
+ * Construct the lazily created App History presentation.
+ *
+ * The retained accounting model is initialised independently; this function
+ * creates only the GTK view and binds it to the already-running model.
  *
  * @param [in,out] app Application that owns history models and hash tables.
  * @param [in] container Empty GTK container receiving the history view.
