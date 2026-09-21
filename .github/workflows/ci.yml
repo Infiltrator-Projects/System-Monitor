@@ -67,8 +67,10 @@ jobs:
               printf 'Unapproved release deletion automation: %s\n' "${release_deletes[0]}" >&2
               exit 1
             fi
-            grep -Fq 'name: Keep only the five newest GitHub releases and tags' .github/workflows/release.yml
-            grep -Fq 'if (( ${#remaining[@]} > 5 )); then' .github/workflows/release.yml
+            grep -Fq 'name: Keep only the five newest GitHub releases and release tags' .github/workflows/release.yml
+            grep -Fq 'needs: publish' .github/workflows/release.yml
+            grep -Fq 'sort -Vr' .github/workflows/release.yml
+            grep -Fq 'Pruning superseded published release and tag' .github/workflows/release.yml
           fi
 
           mapfile -t tag_deletes < <(
