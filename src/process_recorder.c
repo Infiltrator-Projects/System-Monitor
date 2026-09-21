@@ -8,8 +8,9 @@
  * @license GPL-3.0-or-later
  */
 #include "process_recorder.h"
-#include "numeric_io.h"
 #include "common.h"
+
+#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <pthread.h>
@@ -84,10 +85,11 @@ static bool write_record(LsmProcessRecorder *recorder, const RecordNode *node)
 
     char cpu_percent[64];
     char memory_percent[64];
-    if (!numeric_io_format_fixed(cpu_percent, sizeof(cpu_percent),
-                                  node->cpu_percent, 3U) ||
-        !numeric_io_format_fixed(memory_percent, sizeof(memory_percent),
-                                  node->memory_percent, 3U)) {
+    if (!infiltratr_format_fixed_ascii(
+            node->cpu_percent, 3U, cpu_percent, sizeof(cpu_percent)) ||
+        !infiltratr_format_fixed_ascii(
+            node->memory_percent, 3U, memory_percent,
+            sizeof(memory_percent))) {
         errno = ERANGE;
         return false;
     }

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file numeric_io.h
- * @brief Locale-independent numeric persistence helpers.
+ * @brief Backward-compatible parsing for persisted numeric values.
  *
- * Human-facing presentation may follow the active locale. Machine-readable
- * preferences, history and CSV files must not: decimal punctuation is part of
- * their on-disk grammar. These helpers format fixed-point values without the C
- * locale and accept the legacy decimal-comma files emitted before 1.0.39.
+ * Machine-readable writes use Common's locale-independent fixed-point
+ * formatter directly. This header retains only the System Monitor-specific
+ * recovery of legacy decimal-comma files emitted before 1.0.39.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
@@ -16,29 +15,11 @@
 #define INFILTRATOR_SYSTEM_MONITOR_NUMERIC_IO_H
 
 #include <infiltratr/core.h>
-#include <infiltratr/format.h>
-
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
-
-/**
- * Format a finite floating-point value for machine-readable storage.
- *
- * @param buffer Destination buffer.
- * @param size Destination-buffer capacity in bytes.
- * @param value Finite value to format.
- * @param precision Number of digits after the decimal point.
- * @return true when the complete representation was written.
- */
-static inline bool numeric_io_format_fixed(char *buffer, size_t size,
-                                            double value, unsigned precision)
-{
-    return infiltratr_format_fixed_ascii(value, precision, buffer, size);
-}
 
 /**
  * Parse a persisted floating-point value, accepting the historical comma form.

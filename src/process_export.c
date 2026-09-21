@@ -17,10 +17,10 @@
 #include "app_internal.h"
 #include "atomic_file.h"
 #include "common.h"
-#include "numeric_io.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/escape.h>
+#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -115,15 +115,15 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
     char read_rate[64];
     char write_rate[64];
     char gpu_percent[64];
-    if (!numeric_io_format_fixed(cpu_percent, sizeof(cpu_percent),
-                                  process->cpu_percent, 3U) ||
-        !numeric_io_format_fixed(read_rate, sizeof(read_rate),
-                                  process->read_bytes_per_sec, 3U) ||
-        !numeric_io_format_fixed(write_rate, sizeof(write_rate),
-                                  process->write_bytes_per_sec, 3U) ||
+    if (!infiltratr_format_fixed_ascii(
+            process->cpu_percent, 3U, cpu_percent, sizeof(cpu_percent)) ||
+        !infiltratr_format_fixed_ascii(
+            process->read_bytes_per_sec, 3U, read_rate, sizeof(read_rate)) ||
+        !infiltratr_format_fixed_ascii(
+            process->write_bytes_per_sec, 3U, write_rate, sizeof(write_rate)) ||
         (process->gpu_available &&
-         !numeric_io_format_fixed(gpu_percent, sizeof(gpu_percent),
-                                   process->gpu_percent, 3U)))
+         !infiltratr_format_fixed_ascii(
+             process->gpu_percent, 3U, gpu_percent, sizeof(gpu_percent))))
         return false;
     if (!csv_field(file, process->name)) return false;
     fprintf(file, ",%llu,%llu,",

@@ -29,6 +29,7 @@
 #include <infiltratr/config.h>
 #include <infiltratr/core.h>
 #include <infiltratr/design.h>
+#include <infiltratr/format.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -186,8 +187,9 @@ static bool write_preferences(FILE *file, const void *user_data)
     bool okay = result >= 0;
     for (size_t index = 0U; okay && index < LSM_TAB_COUNT; index++) {
         char scroll[64];
-        if (!numeric_io_format_fixed(scroll, sizeof(scroll),
-                                      app->runtime.page_scroll[index], 3U) ||
+        if (!infiltratr_format_fixed_ascii(
+                app->runtime.page_scroll[index], 3U, scroll,
+                sizeof(scroll)) ||
             fprintf(file, "page_scroll_%zu=%s\n", index, scroll) < 0)
             okay = false;
     }

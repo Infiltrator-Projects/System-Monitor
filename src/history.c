@@ -28,6 +28,7 @@
 #include "ui_helpers.h"
 
 #include <infiltratr/core.h>
+#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -390,10 +391,11 @@ static int history_write_request(LsmHistorySaveRequest *request,
         char *safe_identity = sanitise_field(entry->identity);
         char cpu_seconds[64];
         char active_seconds[64];
-        if (!numeric_io_format_fixed(cpu_seconds, sizeof(cpu_seconds),
-                                      entry->cpu_seconds, 6U) ||
-            !numeric_io_format_fixed(active_seconds, sizeof(active_seconds),
-                                      entry->active_seconds, 6U)) {
+        if (!infiltratr_format_fixed_ascii(
+                entry->cpu_seconds, 6U, cpu_seconds, sizeof(cpu_seconds)) ||
+            !infiltratr_format_fixed_ascii(
+                entry->active_seconds, 6U, active_seconds,
+                sizeof(active_seconds))) {
             g_free(safe_key);
             g_free(safe_name);
             g_free(safe_user);
