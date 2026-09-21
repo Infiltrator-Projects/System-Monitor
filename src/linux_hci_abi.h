@@ -29,16 +29,19 @@
 #define LSM_HCI_CHANNEL_MONITOR UINT16_C(2)
 #define LSM_HCIGETCONNLIST _IOR('H', 212, int)
 
+/** Six-byte Bluetooth device address in Linux HCI ABI byte order. */
 typedef struct {
     uint8_t bytes[6];
 } LsmBluetoothAddress;
 
+/** Minimal sockaddr layout used to bind a Linux HCI monitor socket. */
 typedef struct {
     sa_family_t family;
     unsigned short device;
     unsigned short channel;
 } LsmSockaddrHci;
 
+/** One kernel HCI connection record returned by HCIGETCONNLIST. */
 typedef struct {
     uint16_t handle;
     LsmBluetoothAddress address;
@@ -48,6 +51,7 @@ typedef struct {
     uint32_t link_mode;
 } LsmHciConnectionInfo;
 
+/** Header and flexible-array payload for the Linux HCI connection-list ioctl. */
 typedef struct {
     uint16_t device_id;
     uint16_t connection_count;
