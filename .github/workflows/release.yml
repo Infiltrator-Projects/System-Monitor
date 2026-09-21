@@ -1,0 +1,320 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Publish release
+
+on:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out exact tested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set reproducible release timestamp
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch=$(git show -s --format=%ct "$EXPECTED_SHA")
+          [[ "$epoch" =~ ^[0-9]+$ ]]
+          printf 'SOURCE_DATE_EPOCH=%s\n' "$epoch" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git libgtk-3-dev pkg-config
+
+      - name: Verify exact current main and Release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          main_commit=$(git rev-parse origin/main)
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
+          version=$(tr -d '[:space:]' < support/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          subject=$(git log -1 --format=%s "$head_commit")
+          if [[ "$subject" != "Release ${version}" && "$subject" != "Release ${version}:"* ]]; then
+            printf 'Release commit subject must begin with Release %s.\n' "$version" >&2
+            exit 1
+          fi
+
+      - name: Build release packages
+        run: make -j2 deb native-installer
+
+      - name: Verify Debian compatibility contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          test -f "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
+          dependencies=$(dpkg-deb -f "$deb" Depends)
+          grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
+          if grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"; then
+            printf 'Avoidable runtime dependency reappeared: %s\n' "$dependencies" >&2
+            exit 1
+          fi
+
+          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
+          actual_members=$(ar t "$deb")
+          if [[ "$actual_members" != "$expected_members" ]]; then
+            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
+            printf 'Found:\n%s\n' "$actual_members" >&2
+            exit 1
+          fi
+
+          contents=$(dpkg-deb --contents "$deb")
+          if grep -q '1970-01-01' <<<"$contents"; then
+            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
+            exit 1
+          fi
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          dpkg-deb -x "$deb" "$tmp/root"
+          dpkg-deb -e "$deb" "$tmp/control"
+          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
+          if grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"; then
+            printf 'Debian maintainer script regained an external setup helper.\n' >&2
+            exit 1
+          fi
+          fonts_dir="$tmp/root/usr/share/fonts/truetype/infiltrator"
+          test -d "$fonts_dir"
+          mapfile -t font_files < <(find "$fonts_dir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print)
+          if ((${#font_files[@]} < 2)); then
+            printf 'Debian package does not contain the bundled MB Corpo font files.\n' >&2
+            exit 1
+          fi
+          font_names=$(
+            for font in "${font_files[@]}"; do
+              strings -a "$font"
+              strings -a -e b "$font"
+            done
+          )
+          grep -Fq 'MB Corpo S Title WEB' <<<"$font_names"
+          grep -Fq 'MB Corpo A Title Cond WEB' <<<"$font_names"
+          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
+          gzip -t "$changelog"
+          first_line=$(gzip -cd "$changelog" | sed -n '1p')
+          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
+          if [[ "$first_line" != "$expected_line" ]]; then
+            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
+            exit 1
+          fi
+          gzip -cd "$changelog" > "$tmp/debian-changelog"
+          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
+
+      - name: Publish or resume exact immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          main_commit=$(git rev-parse origin/main)
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
+
+          version=$(tr -d '[:space:]' < support/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v${version}"
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          test -f "$deb"
+          test -x "$installer"
+          test "$(dpkg-deb -f "$deb" Version)" = "$version"
+          ./"$installer" --help >/dev/null
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "$tag")
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Release tag %s points to %s instead of verified commit %s.\n' \
+                "$tag" "$tag_commit" "$head_commit" >&2
+              exit 1
+            fi
+            printf 'Resuming exact existing tag %s at %s.\n' "$tag" "$head_commit"
+          else
+            git tag "$tag" "$head_commit"
+            git push origin "$tag"
+          fi
+
+          expected_assets=$(printf '%s\n%s\n' "$deb" "$installer" | sort)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+            if [[ "$published_assets" != "$expected_assets" ]]; then
+              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
+                "$tag" >&2
+              exit 1
+            fi
+            tmp=$(mktemp -d)
+            trap 'rm -rf "$tmp"' EXIT
+            gh release download "$tag" --dir "$tmp"
+            cmp -s "$deb" "$tmp/$deb" || {
+              printf 'Published Debian asset differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            cmp -s "$installer" "$tmp/$installer" || {
+              printf 'Published native installer differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            printf 'Resuming exact existing immutable release %s.\n' "$tag"
+          else
+            notes=$(git log -1 --format=%b "$head_commit")
+            if [[ -z "$notes" ]]; then
+              notes="Verified System Monitor ${version} release."
+            fi
+            gh release create "$tag" "$deb" "$installer" \
+              --verify-tag \
+              --target "$head_commit" \
+              --title "System Monitor $version" \
+              --notes "$notes" \
+              --latest
+          fi
+
+          published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+          if [[ "$published_assets" != "$expected_assets" ]]; then
+            printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
+            exit 1
+          fi
+
+      - name: Verify central APT publication
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_ID: system-monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < support/VERSION)"
+          test -n "$VERSION"
+
+          # Tokenless architecture: source repositories publish only themselves.
+          # The central APT repository independently discovers releases on its
+          # staggered scheduled refresh and remains the sole APT publisher.
+          catalogue='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
+          for attempt in $(seq 1 90); do
+            if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA&attempt=$attempt" \
+              | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
+                '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+              echo "APT repository advertises $APP_ID $VERSION."
+              exit 0
+            fi
+            echo "Waiting for tokenless central APT discovery of $APP_ID $VERSION ($attempt/90)..."
+            sleep 10
+          done
+
+          echo "::error::The central APT repository did not advertise $APP_ID $VERSION within 15 minutes."
+          echo "::error::The source release is valid, but central APT discovery did not complete inside the publication target."
+          exit 1
+
+  retention:
+    name: Keep only the five newest GitHub releases and tags
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository for tag retention
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Remove superseded GitHub releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t release_tags < <(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .tag_name'
+          )
+
+          printf 'Published releases found: %d\n' "${#release_tags[@]}"
+
+          if (( ${#release_tags[@]} > 5 )); then
+            for tag in "${release_tags[@]:5}"; do
+              echo "Deleting superseded release: $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            done
+          fi
+
+          mapfile -t remaining < <(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .tag_name'
+          )
+          if (( ${#remaining[@]} > 5 )); then
+            echo "Release retention failed: more than five published releases remain." >&2
+            exit 1
+          fi
+
+          declare -A keep=()
+          for tag in "${remaining[@]}"; do
+            keep["$tag"]=1
+          done
+
+          mapfile -t remote_tags < <(
+            git ls-remote --tags --refs origin |
+              awk '{sub("refs/tags/", "", $2); print $2}'
+          )
+          for tag in "${remote_tags[@]}"; do
+            if [[ -z "${keep[$tag]+x}" ]]; then
+              echo "Deleting superseded tag: $tag"
+              git push origin ":refs/tags/$tag"
+            fi
+          done
+
+          mapfile -t final_tags < <(
+            git ls-remote --tags --refs origin |
+              awk '{sub("refs/tags/", "", $2); print $2}' |
+              sort
+          )
+          mapfile -t expected_tags < <(printf '%s\n' "${remaining[@]}" | sort)
+          if [[ "$(printf '%s\n' "${final_tags[@]}")" != "$(printf '%s\n' "${expected_tags[@]}")" ]]; then
+            echo "Release/tag retention mismatch." >&2
+            printf 'Expected tags:\n%s\n' "$(printf '%s\n' "${expected_tags[@]}")" >&2
+            printf 'Actual tags:\n%s\n' "$(printf '%s\n' "${final_tags[@]}")" >&2
+            exit 1
+          fi
+
+          printf 'Release/tag retention verified: %s\n' "${remaining[*]}"

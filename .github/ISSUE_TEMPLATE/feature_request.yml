@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Feature request
+description: Propose an improvement to Linux System Monitor.
+title: "[Feature]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the problem first, then the proposed solution. New telemetry should use a native interface with known semantics and must not invent unsupported values.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What limitation or user need does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour, hardware support or API you would like to see.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Portable C architecture
+        - CPU / memory
+        - Storage / filesystems
+        - Network / Wi-Fi
+        - GPU
+        - NPU / accelerator
+        - Battery / peripherals
+        - Processes / controls
+        - Startup / users / services
+        - GTK interface / layout
+        - Packaging / native installer
+        - Build / CI / release engineering
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: portability
+    attributes:
+      label: Portability impact
+      description: If the proposal adds a platform-specific dependency or API, explain where it would live behind the existing platform boundary.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or references
+      description: For hardware metrics, include driver ABI documentation, reproducible captures, fixtures or other evidence of units and semantics where available.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Note other approaches or workarounds you considered.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for the same request.
+          required: true
+        - label: I understand that unsupported hardware data must remain unavailable rather than guessed.
+          required: true

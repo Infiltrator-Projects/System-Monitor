@@ -1,0 +1,245 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # v3 starts a clean concurrency epoch after another self-hosted run remained
+  # stuck in GitHub's in-progress state even after force-cancellation. Future
+  # pushes still cancel older Verify runs within this v3 group.
+  group: verify-v3-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reject destructive repository automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          force_push='git[[:space:]]+push[^#]*--'force
+          delete_ref='git[[:space:]]+push[^#]*--'delete
+          release_delete='gh[[:space:]]+relea''se[[:space:]]+dele''te([[:space:]-]|$)'
+          tag_delete='git[[:space:]]+push[^#]*:refs/tags/'
+          api_delete='gh[[:space:]]+api[^#]*(--method|-X)[[:space:]]+DEL''ETE'
+          http_delete='(curl|wget)[^#]*-X[[:space:]]+DEL''ETE'
+
+          if grep -REn --include='*.yml' --include='*.yaml' \
+            -e "$force_push" -e "$delete_ref" \
+            -e "$api_delete" -e "$http_delete" .github/workflows; then
+            echo "Destructive repository automation is forbidden." >&2
+            exit 1
+          fi
+
+          # The only permitted destructive operations are bounded release
+          # retention in release.yml: superseded GitHub release entries and
+          # their superseded tag refs may be removed after the newest five.
+          # Branch history and repository files remain protected here.
+          mapfile -t release_deletes < <(
+            grep -REn --include='*.yml' --include='*.yaml' \
+              -e "$release_delete" .github/workflows || true
+          )
+          if (( ${#release_deletes[@]} > 1 )); then
+            printf 'Unexpected release deletion automation:\n%s\n' \
+              "$(printf '%s\n' "${release_deletes[@]}")" >&2
+            exit 1
+          fi
+          if (( ${#release_deletes[@]} == 1 )); then
+            release_delete_source="${release_deletes[0]%%:*}"
+            release_delete_command="${release_deletes[0]#*:*:}"
+            expected_release_delete='              gh rele''ase dele''te "$tag" --repo "$GITHUB_REPOSITORY" --yes'
+            if [[ "$release_delete_source" != ".github/workflows/release.yml" ]] ||
+               [[ "$release_delete_command" != "$expected_release_delete" ]]; then
+              printf 'Unapproved release deletion automation: %s\n' "${release_deletes[0]}" >&2
+              exit 1
+            fi
+            grep -Fq 'name: Keep only the five newest GitHub releases and tags' .github/workflows/release.yml
+            grep -Fq 'if (( ${#remaining[@]} > 5 )); then' .github/workflows/release.yml
+          fi
+
+          mapfile -t tag_deletes < <(
+            grep -REn --include='*.yml' --include='*.yaml' \
+              -e "$tag_delete" .github/workflows || true
+          )
+          if (( ${#tag_deletes[@]} > 1 )); then
+            printf 'Unexpected tag deletion automation:\n%s\n' \
+              "$(printf '%s\n' "${tag_deletes[@]}")" >&2
+            exit 1
+          fi
+          if (( ${#tag_deletes[@]} == 1 )); then
+            tag_delete_source="${tag_deletes[0]%%:*}"
+            tag_delete_command="${tag_deletes[0]#*:*:}"
+            expected_tag_delete='              git pu''sh origin ":refs/tags/$tag"'
+            if [[ "$tag_delete_source" != ".github/workflows/release.yml" ]] ||
+               [[ "$tag_delete_command" != "$expected_tag_delete" ]]; then
+              printf 'Unapproved tag deletion automation: %s\n' "${tag_deletes[0]}" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Enforce main-only automatic immutable publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=.github/workflows/release.yml
+          grep -Fq '  workflow_run:' "$release"
+          grep -Fq 'workflows: ["Verify"]' "$release"
+          grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
+          grep -Fq "github.event.workflow_run.head_branch == 'main'" "$release"
+          grep -Fq 'published releases are immutable' "$release"
+          if grep -Eq '^  workflow_dispatch:|^  pull_request:|^  schedule:' "$release"; then
+            echo "Release publication must be automatic from tested main only." >&2
+            exit 1
+          fi
+          if grep -Eq '^  pull_request:|^  merge_group:' .github/workflows/ci.yml; then
+            echo "System Monitor CI must use main only." >&2
+            exit 1
+          fi
+
+      - name: Validate source version and immutable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Invalid source version: %s\n' "$version" >&2
+            exit 1
+          fi
+
+          readme_version=$(sed -nE \
+            's/^\*\*Current source version:\*\* ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' \
+            README.md)
+          if [[ "$readme_version" != "$version" ]]; then
+            printf 'README source version %s does not match support/VERSION %s.\n' \
+              "${readme_version:-missing}" "$version" >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "v${version}")
+            head_commit=$(git rev-parse HEAD)
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Source version %s is already published at %s; advance support/VERSION before changing main.\n' \
+                "$version" "$tag_commit" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake doxygen gcc-multilib g++-multilib git libc6-dev-i386 \
+            libgtk-3-dev pkg-config
+
+      - name: Verify CMake application build
+        run: |
+          # CMake is a supported build path, but Make owns the canonical
+          # project verification suite. Build only the application here so
+          # the same smoke executables are not compiled and executed twice.
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --target system-monitor --parallel 2
+
+      - name: Run canonical verification suite
+        run: REQUIRE_I386=1 make check
+
+      - name: Verify with sanitizers
+        run: make sanitizer-check
+
+      - name: Verify release packaging without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -j2 deb native-installer
+          version=$(tr -d '[:space:]' < support/VERSION)
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          test -f "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
+          dependencies=$(dpkg-deb -f "$deb" Depends)
+          grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
+          if grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"; then
+            printf 'Avoidable runtime dependency reappeared: %s\n' "$dependencies" >&2
+            exit 1
+          fi
+
+          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
+          actual_members=$(ar t "$deb")
+          if [[ "$actual_members" != "$expected_members" ]]; then
+            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
+            printf 'Found:\n%s\n' "$actual_members" >&2
+            exit 1
+          fi
+
+          contents=$(dpkg-deb --contents "$deb")
+          if grep -q '1970-01-01' <<<"$contents"; then
+            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
+            exit 1
+          fi
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          dpkg-deb -x "$deb" "$tmp/root"
+          dpkg-deb -e "$deb" "$tmp/control"
+          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
+          if grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"; then
+            printf 'Debian maintainer script regained an external setup helper.\n' >&2
+            exit 1
+          fi
+          fonts_dir="$tmp/root/usr/share/fonts/truetype/infiltrator"
+          test -d "$fonts_dir"
+          mapfile -t font_files < <(find "$fonts_dir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print)
+          if ((${#font_files[@]} < 2)); then
+            printf 'Debian package does not contain the bundled MB Corpo font files.\n' >&2
+            exit 1
+          fi
+          font_names=$(
+            for font in "${font_files[@]}"; do
+              strings -a "$font"
+              strings -a -e b "$font"
+            done
+          )
+          grep -Fq 'MB Corpo S Title WEB' <<<"$font_names"
+          grep -Fq 'MB Corpo A Title Cond WEB' <<<"$font_names"
+          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
+          gzip -t "$changelog"
+          first_line=$(gzip -cd "$changelog" | sed -n '1p')
+          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
+          if [[ "$first_line" != "$expected_line" ]]; then
+            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
+            exit 1
+          fi
+          gzip -cd "$changelog" > "$tmp/debian-changelog"
+          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
+
+      - name: Verify aggressive PGO native installer end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          test -x "$installer"
+          pgo_log=$(mktemp)
+          ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
+          if grep -Fq 'stringop-overread' "$pgo_log"; then
+            echo "Aggressive PGO build emitted a stringop-overread diagnostic." >&2
+            exit 1
+          fi
+          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" =             "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" =             "$version"
+
