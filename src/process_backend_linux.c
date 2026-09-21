@@ -318,7 +318,7 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     native_stat->cpu_ticks = lsm_u64_add_saturating(utime, stime);
     native_stat->nice_value = nice_value;
     process->page_faults = lsm_u64_add_saturating(minflt, majflt);
-    lsm_copy_string(process->state, sizeof(process->state), state_name(state));
+    snprintf(process->state, sizeof(process->state), "%s", state_name(state));
     return true;
 }
 
