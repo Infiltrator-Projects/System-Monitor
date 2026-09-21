@@ -14,8 +14,6 @@ int smoke_case_atomic_file(void);
 int smoke_case_duration_format(void);
 int smoke_case_common(void);
 int smoke_case_project_info(void);
-int smoke_case_backend(void);
-int smoke_case_monitor_platform(void);
 int smoke_case_bluetooth_battery(void);
 int smoke_case_bluetooth_traffic(void);
 int smoke_case_linux_capability(void);
