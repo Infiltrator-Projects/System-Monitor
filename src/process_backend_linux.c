@@ -235,7 +235,7 @@ static const char *state_name(char state)
     }
 }
 
-/* /proc/<pid>/stat field 2 may contain spaces and parentheses. The code
+/* /proc/PID/stat field 2 may contain spaces and parentheses. The code
  * locates that field first, then tokenises fields 3 onward by their documented
  * numeric positions. Complete numeric tokens use Common's strict parsers so a
  * malformed or overflowing kernel record is rejected rather than coerced. */
