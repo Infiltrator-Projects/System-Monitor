@@ -120,6 +120,7 @@ bool lsm_cpu_memory_initialise(LsmMonitor *monitor);
  * Refresh CPU scheduler rates, frequencies, temperatures and memory values.
  *
  * @param [in,out] monitor Retained monitor snapshot.
+ * @param [in] elapsed_seconds Monotonic seconds since the previous refresh.
  */
 void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds);
 /**
