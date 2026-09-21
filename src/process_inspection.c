@@ -152,8 +152,8 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
         LsmOpenFileInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
         item->descriptor = (int)descriptor;
-        (void)snprintf(item->kind, sizeof(item->kind), "%s",
-                       descriptor_kind(target));
+        lsm_copy_string(item->kind, sizeof(item->kind),
+                        descriptor_kind(target));
         lsm_copy_string(item->target, sizeof(item->target), target);
     }
     closedir(directory);

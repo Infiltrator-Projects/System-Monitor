@@ -253,7 +253,7 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
 
         char name[NVML_NAME_BUFFER_SIZE] = "";
         if (api.device_get_name(device, name, sizeof(name)) == NVML_SUCCESS && name[0])
-            snprintf(gpu->name, sizeof(gpu->name), "%s", name);
+            lsm_copy_string(gpu->name, sizeof(gpu->name), name);
         if (driver_version[0])
             snprintf(gpu->driver, sizeof(gpu->driver), "NVIDIA %.55s", driver_version);
         else if (!gpu->driver[0])

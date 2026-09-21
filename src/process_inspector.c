@@ -539,8 +539,8 @@ static gboolean inspector_update(gpointer user_data)
                               sizeof(elapsed));
     snprintf(threads, sizeof(threads), "%u", process.threads);
     snprintf(handles, sizeof(handles), "%u", process.handle_count);
-    snprintf(priority, sizeof(priority), "%s",
-             lsm_process_priority_name(process.priority));
+    lsm_copy_string(priority, sizeof(priority),
+                    lsm_process_priority_name(process.priority));
     infiltratr_format_duration_clock(process.cpu_time_seconds, cpu_time,
                               sizeof(cpu_time));
     if (process.gpu_available)

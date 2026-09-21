@@ -360,7 +360,7 @@ bool lsm_bluetooth_traffic_refresh_connections(const char *controller)
             slot->rx_bytes = 0U;
             slot->tx_bytes = 0U;
         }
-        (void)snprintf(slot->address, sizeof(slot->address), "%s", remote);
+        lsm_copy_string(slot->address, sizeof(slot->address), remote);
         slot->active = true;
     }
     (void)pthread_mutex_unlock(&capture_state.mutex);

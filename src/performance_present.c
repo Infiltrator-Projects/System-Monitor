@@ -82,7 +82,7 @@ static void format_battery_charge(const LsmBatteryInfo *battery,
     if (isfinite(battery->capacity_percent))
         snprintf(buffer, size, "%.0f%%", battery->capacity_percent);
     else if (usable_battery_level(battery->capacity_level))
-        snprintf(buffer, size, "%s", battery->capacity_level);
+        lsm_copy_string(buffer, size, battery->capacity_level);
     else
         snprintf(buffer, size, "N/A");
 }

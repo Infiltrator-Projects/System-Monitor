@@ -130,7 +130,7 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
             }
             if (duplicate || seen_count >= capacity) continue;
 
-            snprintf(seen[seen_count].key, sizeof(seen[seen_count].key), "%s", key);
+            lsm_copy_string(seen[seen_count].key, sizeof(seen[seen_count].key), key);
             seen[seen_count].level = level;
             seen[seen_count].bytes = bytes;
             seen_count++;
@@ -170,7 +170,7 @@ static void read_cpu_static(LsmMonitor *monitor)
             lsm_trim(line);
             lsm_trim(value);
             if (!model_found && strcmp(line, "model name") == 0) {
-                snprintf(monitor->cpu.model, sizeof(monitor->cpu.model), "%s", value);
+                lsm_copy_string(monitor->cpu.model, sizeof(monitor->cpu.model), value);
                 model_found = true;
             } else if (strcmp(line, "physical id") == 0) {
                 int64_t parsed = 0;

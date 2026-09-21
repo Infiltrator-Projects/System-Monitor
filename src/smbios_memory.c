@@ -19,6 +19,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "smbios_memory.h"
+#include "common.h"
 
 #include <infiltratr/endian.h>
 #include <infiltratr/posix_io.h>
@@ -246,7 +247,7 @@ bool lsm_smbios_memory_read(const char *path,
                 if (strcmp(info->form_factor, "N/A") == 0 && length > 0x0e) {
                     const char *name = form_factor_name(record[0x0e]);
                     if (strcmp(name, "Unknown") != 0 && name[0] != '\0')
-                        snprintf(info->form_factor, sizeof(info->form_factor), "%s", name);
+                        lsm_copy_string(info->form_factor, sizeof(info->form_factor), name);
                 }
 
                 if (info->module_count < LSM_SMBIOS_MAX_MODULES) {
@@ -255,12 +256,14 @@ bool lsm_smbios_memory_read(const char *path,
                     memset(module, 0, sizeof(*module));
                     module->size_bytes = memory_size_bytes(record, length);
                     module->speed_mhz = speed;
-                    snprintf(module->form_factor, sizeof(module->form_factor),
-                             "%s", length > 0x0e
-                                      ? form_factor_name(record[0x0e]) : "N/A");
-                    snprintf(module->memory_type, sizeof(module->memory_type),
-                             "%s", length > 0x12
-                                      ? memory_type_name(record[0x12]) : "N/A");
+                    lsm_copy_string(module->form_factor,
+                                    sizeof(module->form_factor),
+                                    length > 0x0e
+                                        ? form_factor_name(record[0x0e]) : "N/A");
+                    lsm_copy_string(module->memory_type,
+                                    sizeof(module->memory_type),
+                                    length > 0x12
+                                        ? memory_type_name(record[0x12]) : "N/A");
                     copy_smbios_string(table, table_size, strings_start, next,
                         length > 0x10 ? record[0x10] : 0U,
                         module->locator, sizeof(module->locator));

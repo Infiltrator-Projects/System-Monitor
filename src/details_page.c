@@ -208,8 +208,9 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_PRIORITY: {
             gint value = 0;
             gtk_tree_model_get(model, iter, column, &value, -1);
-            snprintf(text, sizeof(text), "%s",
-                     lsm_process_priority_name((LsmProcessPriority)value));
+            lsm_copy_string(
+                text, sizeof(text),
+                lsm_process_priority_name((LsmProcessPriority)value));
             break;
         }
         case CELL_TIME: {

@@ -410,7 +410,7 @@ static void grouped_cell_data(GtkTreeViewColumn *column,
     if (model_column == GROUPED_COL_STATUS) {
         char *value = NULL;
         gtk_tree_model_get(model, iter, model_column, &value, -1);
-        snprintf(text, sizeof(text), "%s", value ? value : "");
+        lsm_copy_string(text, sizeof(text), value ? value : "");
         g_free(value);
     } else if (model_column == GROUPED_COL_CPU) {
         double value = 0.0;
@@ -432,7 +432,7 @@ static void grouped_cell_data(GtkTreeViewColumn *column,
     } else if (model_column == GROUPED_COL_GPU_ENGINE) {
         char *value = NULL;
         gtk_tree_model_get(model, iter, model_column, &value, -1);
-        snprintf(text, sizeof(text), "%s", value && *value ? value : "N/A");
+        lsm_copy_string(text, sizeof(text), value && *value ? value : "N/A");
         g_free(value);
     } else if (model_column == GROUPED_COL_GPU) {
         gboolean available = FALSE;
