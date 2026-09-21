@@ -908,7 +908,7 @@ static void check_shared_release_contract(void)
     char *doxyfile = read_file("support/Doxyfile", &size);
     if (doxyfile) {
         require_text_marker("support/Doxyfile", doxyfile,
-                            "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
+                            "EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common");
         require_text_marker("support/Doxyfile", doxyfile,
                             "EXTRACT_LOCAL_CLASSES   = NO");
         if (strstr(doxyfile, "CLASS_DIAGRAMS"))
