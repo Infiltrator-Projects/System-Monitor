@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file mountinfo.h
- * @brief Native parser for the Linux /proc/<pid>/mountinfo interface.
+ * @brief Native parser for the Linux /proc/PID/mountinfo interface.
  *
  * The parser is intentionally independent of libmount. It exposes only the
  * fields required by the monitor and preserves the kernel block-device number
