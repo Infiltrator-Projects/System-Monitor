@@ -318,7 +318,7 @@ ACCELERATOR_SMOKE_OBJECTS := $(call smoke_case_objects,$(ACCELERATOR_SMOKE_CASES
 $(BUILD_DIR)/%_case.o: support/tests/%_smoke.c support/tests/suite_cases.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat \
 		-include support/tests/suite_cases.h -std=c17 $(STRICT_WARNINGS) \
-		-Dmain=lsm_case_$* -c $< -o $@
+		-Dmain=smoke_case_$* -c $< -o $@
 
 core-suite-smoke: $(CORE_SMOKE_OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -DLSM_SUITE_CORE \
