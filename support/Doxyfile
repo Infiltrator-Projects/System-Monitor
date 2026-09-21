@@ -11,7 +11,7 @@ MARKDOWN_SUPPORT       = YES
 USE_MDFILE_AS_MAINPAGE = README.md
 ALIASES                += "license=\\par License:"
 
-INPUT                  = README.md docs src
+INPUT                  = README.md CONTRIBUTING.md SECURITY.md docs src
 RECURSIVE              = YES
 FILE_PATTERNS           = *.h *.c *.cpp *.md
 EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common
