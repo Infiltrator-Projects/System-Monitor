@@ -307,8 +307,6 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     lsm_smoke_case(support/tests/duration_format_smoke.c duration_format)
     lsm_smoke_case(support/tests/common_smoke.c common)
     lsm_smoke_case(support/tests/project_info_smoke.c project_info)
-    lsm_smoke_case(support/tests/backend_smoke.c backend)
-    lsm_smoke_case(support/tests/monitor_platform_smoke.c monitor_platform)
     lsm_smoke_case(support/tests/bluetooth_battery_smoke.c bluetooth_battery)
     lsm_smoke_case(support/tests/bluetooth_traffic_smoke.c bluetooth_traffic)
     lsm_smoke_case(support/tests/linux_capability_smoke.c linux_capability)
@@ -353,15 +351,12 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/project_info.c)
     target_compile_definitions(lsm-core-suite-smoke PRIVATE LSM_SUITE_CORE)
 
-    add_executable(lsm-backend-suite-smoke
-        ${LSM_SMOKE_SUITE_RUNNER}
-        support/tests/backend_smoke.c
-        support/tests/monitor_platform_smoke.c
-        ${LSM_MONITOR_BACKEND_SOURCES}
-        ${LSM_PROCESS_CORE_SOURCES}
+    add_executable(lsm-backend-smoke support/tests/backend_smoke.c
+        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
-    target_compile_definitions(lsm-backend-suite-smoke PRIVATE
-        LSM_SUITE_BACKEND _DEFAULT_SOURCE)
+    target_compile_definitions(lsm-backend-smoke PRIVATE _DEFAULT_SOURCE)
+    add_executable(lsm-monitor-platform-smoke
+        support/tests/monitor_platform_smoke.c src/monitor.c)
 
     add_executable(lsm-peripheral-suite-smoke
         ${LSM_SMOKE_SUITE_RUNNER}
@@ -493,7 +488,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
 
     set(LSM_DEVELOPER_SMOKE_TARGETS
         lsm-core-suite-smoke
-        lsm-backend-suite-smoke
+        lsm-backend-smoke
+        lsm-monitor-platform-smoke
         lsm-peripheral-suite-smoke
         lsm-metrics-suite-smoke
         lsm-storage-suite-smoke
@@ -549,7 +545,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_options(lsm-ui-suite-smoke PRIVATE -Wl,--gc-sections)
 
     target_link_libraries(lsm-core-suite-smoke PRIVATE m)
-    target_link_libraries(lsm-backend-suite-smoke PRIVATE
+    target_link_libraries(lsm-backend-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
     target_link_libraries(lsm-peripheral-suite-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m)
