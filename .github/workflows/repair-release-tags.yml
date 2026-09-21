@@ -39,6 +39,7 @@ jobs:
           for tag in v1.0.59 v1.0.60 v1.0.61 v1.0.62 v1.0.63; do
             sha="${release_sha[$tag]}"
             version="${tag#v}"
+            git fetch --no-tags origin "$sha"
             git cat-file -e "${sha}^{commit}"
             actual_version="$(git show "${sha}:support/VERSION" | tr -d '[:space:]')"
             test "$actual_version" = "$version"
