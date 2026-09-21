@@ -299,7 +299,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
 
     function(lsm_smoke_case source symbol)
         set_source_files_properties(${source} PROPERTIES
-            COMPILE_DEFINITIONS "main=lsm_case_${symbol}"
+            COMPILE_DEFINITIONS "main=smoke_case_${symbol}"
             COMPILE_OPTIONS "-include;${CMAKE_CURRENT_SOURCE_DIR}/support/tests/suite_cases.h")
     endfunction()
 
