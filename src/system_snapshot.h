@@ -4,11 +4,11 @@
  * @brief Native human-readable diagnostic snapshot export.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_SYSTEM_SNAPSHOT_H
-#define LINUX_SYSTEM_MONITOR_SYSTEM_SNAPSHOT_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_SYSTEM_SNAPSHOT_H
+#define INFILTRATOR_SYSTEM_MONITOR_SYSTEM_SNAPSHOT_H
 
 #include <stdbool.h>
 #include <stddef.h>
