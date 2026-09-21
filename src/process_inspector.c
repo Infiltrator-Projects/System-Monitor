@@ -18,11 +18,12 @@
 #include "app_internal.h"
 
 #include "common.h"
-#include "duration_format.h"
 #include "graph.h"
 #include "process_backend.h"
 #include "process_inspection.h"
 #include "ui_helpers.h"
+
+#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -534,13 +535,13 @@ static gboolean inspector_update(gpointer user_data)
     } else {
         snprintf(started, sizeof(started), "N/A");
     }
-    lsm_duration_format_clock(process.elapsed_seconds, elapsed,
+    infiltratr_format_duration_clock(process.elapsed_seconds, elapsed,
                               sizeof(elapsed));
     snprintf(threads, sizeof(threads), "%u", process.threads);
     snprintf(handles, sizeof(handles), "%u", process.handle_count);
     snprintf(priority, sizeof(priority), "%s",
              lsm_process_priority_name(process.priority));
-    lsm_duration_format_clock(process.cpu_time_seconds, cpu_time,
+    infiltratr_format_duration_clock(process.cpu_time_seconds, cpu_time,
                               sizeof(cpu_time));
     if (process.gpu_available)
         snprintf(gpu, sizeof(gpu), "%.1f%%", process.gpu_percent);

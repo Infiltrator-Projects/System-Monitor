@@ -13,7 +13,6 @@
  */
 #include "details_page.h"
 #include "atomic_file.h"
-#include "duration_format.h"
 #include "refresh_policy.h"
 #include "monitor.h"
 #include "app_internal.h"
@@ -26,6 +25,7 @@
 #include "ui_helpers.h"
 
 #include <infiltratr/config.h>
+#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -226,7 +226,7 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_DURATION: {
             guint64 seconds = 0;
             gtk_tree_model_get(model, iter, column, &seconds, -1);
-            lsm_duration_format_clock(seconds, text, sizeof(text));
+            infiltratr_format_duration_clock(seconds, text, sizeof(text));
             break;
         }
     }

@@ -19,7 +19,7 @@
 static void expect_clock(uint64_t seconds, const char *expected)
 {
     char text[64];
-    lsm_duration_format_clock(seconds, text, sizeof(text));
+    infiltratr_format_duration_clock(seconds, text, sizeof(text));
     assert(strcmp(text, expected) == 0);
 }
 

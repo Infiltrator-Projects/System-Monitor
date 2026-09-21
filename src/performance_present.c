@@ -187,7 +187,7 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(widgets->threads, "%u", cpu->thread_count);
     lsm_ui_set_label_text(widgets->handles, "%llu",
                           (unsigned long long)cpu->file_handle_count);
-    lsm_duration_format_clock(cpu->uptime_seconds, metric, sizeof(metric));
+    infiltratr_format_duration_clock(cpu->uptime_seconds, metric, sizeof(metric));
     lsm_ui_set_label_text(widgets->uptime, "%s", metric);
     lsm_ui_set_label_text(widgets->temperature, "%s",
         lsm_metric_format_celsius(isfinite(cpu->temperature_c),
