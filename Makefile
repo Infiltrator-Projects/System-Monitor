@@ -728,9 +728,9 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	rm -rf $(COVERAGE_DIR)
 	mkdir -p $(COVERAGE_DIR)
 	@for source in $(COVERAGE_ALL_SOURCES); do \
-		stem=$(basename "$source" .c); \
+		stem=$$(basename "$$source" .c); \
 		$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 --coverage \
-			-c "$source" -o "$(COVERAGE_DIR)/$stem.o"; \
+			-c "$$source" -o "$(COVERAGE_DIR)/$$stem.o"; \
 	done
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 --coverage \
 		support/tests/metrics_smoke.c $(COVERAGE_METRICS_OBJECTS) \
