@@ -16,6 +16,7 @@
 #include "cpu_direct.h"
 #include "memory_accounting.h"
 #include "memory_hardware.h"
+#include "refresh_policy.h"
 #include "system_sources.h"
 
 #include <infiltratr/quantity.h>
@@ -42,13 +43,6 @@ static bool read_cpu_counters(LsmMonitor *monitor, bool initial,
     lsm_cpu_accounting_apply(&monitor->cpu, &state->cpu_accounting, &sample,
                              initial, elapsed_seconds);
     return true;
-}
-
-/* Non-x86 and incomplete-CPUID fallback for immutable cache geometry. */
-static uint64_t parse_cache_size_bytes(const char *text)
-{
-    uint64_t bytes = 0U;
-    return infiltratr_parse_binary_quantity_u64(text, &bytes) ? bytes : 0U;
 }
 
 static void format_cache_summary(uint64_t bytes, unsigned instances,
@@ -114,8 +108,10 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%u/cache/index%d/size",
                      cpu_index, index);
             if (!lsm_read_text_file(path, size_text, sizeof(size_text))) continue;
-            const uint64_t bytes = parse_cache_size_bytes(size_text);
-            if (!bytes) continue;
+            uint64_t bytes = 0U;
+            if (!infiltratr_parse_binary_quantity_u64(size_text, &bytes) ||
+                bytes == 0U)
+                continue;
 
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%u/cache/index%d/shared_cpu_list",
                      cpu_index, index);
@@ -471,8 +467,8 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
         monitor->cpu.max_frequency_ghz = read_cpu_frequency_ghz(monitor, true);
     monitor->cpu.temperature_c = read_temperature_c(monitor);
     const double now = lsm_monotonic_seconds();
-    const bool refresh_memory_details =
-        now - state->last_memory_detail_monotonic >= 10.0;
+    const bool refresh_memory_details = lsm_refresh_interval_due(
+        now, state->last_memory_detail_monotonic, 10.0);
     update_memory(monitor, refresh_memory_details);
     if (refresh_memory_details) state->last_memory_detail_monotonic = now;
 }

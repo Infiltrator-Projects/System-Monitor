@@ -16,6 +16,8 @@
 #include "common.h"
 #include "logitech_hidpp_protocol.h"
 
+#include <infiltratr/timing.h>
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -373,16 +375,14 @@ static bool create_cancel_pipe(int descriptors[2])
 static void timed_worker_wait_locked(double seconds)
 {
     if (seconds < 0.01) seconds = 0.01;
+    uint64_t milliseconds = 0U;
+    if (!infiltratr_seconds_to_milliseconds_ceil(
+            (long double)seconds, &milliseconds))
+        return;
     struct timespec deadline;
-    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) return;
-    const time_t whole_seconds = (time_t)seconds;
-    deadline.tv_sec += whole_seconds;
-    deadline.tv_nsec +=
-        (long)((seconds - (double)whole_seconds) * 1000000000.0);
-    if (deadline.tv_nsec >= 1000000000L) {
-        deadline.tv_sec++;
-        deadline.tv_nsec -= 1000000000L;
-    }
+    if (lsm_posix_deadline_after_milliseconds(
+            CLOCK_MONOTONIC, milliseconds, &deadline) != 0)
+        return;
     (void)pthread_cond_timedwait(&hidpp_state.condition, &hidpp_state.mutex,
                                  &deadline);
 }

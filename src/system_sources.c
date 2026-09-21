@@ -71,12 +71,6 @@ static void source_root(char *destination, size_t size,
         destination[--length] = '\0';
 }
 
-static bool source_path(char *destination, size_t size,
-                        const char *root, const char *suffix)
-{
-    return lsm_join_path(destination, size, root, suffix);
-}
-
 static uint64_t sector_count_bytes(uint64_t sectors)
 {
     uint64_t bytes = 0U;
@@ -106,7 +100,7 @@ static bool block_device_numbers(LsmSystemSources *sources,
     char root[LSM_PATH_LEN];
     char path[LSM_PATH_LEN];
     char text[64] = "";
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/block") ||
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/block") ||
         !child_path(path, sizeof(path), root, block_name, "/dev") ||
         !lsm_read_text_file(path, text, sizeof(text)))
         return false;
@@ -684,7 +678,7 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
 {
     if (!sources || !records || capacity == 0U) return 0U;
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/block")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/block")) return 0U;
     DIR *directory = opendir(root);
     if (!directory) return 0U;
 
@@ -748,7 +742,7 @@ static void resolve_block_identity(LsmSystemSources *sources,
                                  "/dev/block/%u:%u", major_number, minor_number);
     if (written < 0 || (size_t)written >= sizeof(relative)) return;
     char link[LSM_PATH_LEN];
-    if (!source_path(link, sizeof(link), sources->sysfs_root, relative)) return;
+    if (!lsm_join_path(link, sizeof(link), sources->sysfs_root, relative)) return;
 
     char canonical[LSM_PATH_LEN];
     if (!lsm_realpath_copy(link, canonical, sizeof(canonical))) return;
@@ -815,7 +809,7 @@ size_t lsm_sources_list_mounts(LsmSystemSources *sources,
 {
     if (!sources || !records || capacity == 0U) return 0U;
     char path[LSM_PATH_LEN];
-    if (!source_path(path, sizeof(path), sources->procfs_root, "/self/mountinfo"))
+    if (!lsm_join_path(path, sizeof(path), sources->procfs_root, "/self/mountinfo"))
         return 0U;
     LsmMountCollector collector = {
         .sources = sources,
@@ -858,7 +852,7 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
         ? lsm_sources_list_mounts(sources, mounts, mount_capacity) : 0U;
 
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/block")) {
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/block")) {
         free(mounts);
         return 0U;
     }
@@ -944,7 +938,7 @@ static size_t list_networks_sysfs(LsmSystemSources *sources,
 {
     if (!sources || !records || capacity == 0U) return 0U;
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
     DIR *directory = opendir(root);
     if (!directory) return 0U;
 
@@ -984,7 +978,7 @@ static size_t network_counters_sysfs(LsmSystemSources *sources,
 {
     if (!sources || !records || capacity == 0U) return 0U;
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
     DIR *directory = opendir(root);
     if (!directory) return 0U;
     size_t count = 0U;
@@ -1022,7 +1016,7 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
 
     size_t count = 0U;
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/net"))
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net"))
         return 0U;
     for (size_t index = 0U; index < link_count && count < capacity; index++) {
         if (links[index].operstate != IF_OPER_UP &&
@@ -1108,7 +1102,7 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
 {
     if (!sources || !records || capacity == 0U) return 0U;
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/drm")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/drm")) return 0U;
     DIR *directory = opendir(root);
     if (!directory) return 0U;
 
@@ -1183,7 +1177,7 @@ static bool valid_temperature(double celsius)
 static double hwmon_cpu_temperature(const LsmSystemSources *sources)
 {
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/hwmon")) return NAN;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/hwmon")) return NAN;
     DIR *directory = opendir(root);
     if (!directory) return NAN;
 
@@ -1229,7 +1223,7 @@ static double hwmon_cpu_temperature(const LsmSystemSources *sources)
 static double thermal_cpu_temperature(const LsmSystemSources *sources)
 {
     char root[LSM_PATH_LEN];
-    if (!source_path(root, sizeof(root), sources->sysfs_root, "/class/thermal")) return NAN;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/thermal")) return NAN;
     DIR *directory = opendir(root);
     if (!directory) return NAN;
 

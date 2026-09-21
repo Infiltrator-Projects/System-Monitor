@@ -20,6 +20,7 @@
 #include "wifi_metadata.h"
 
 #include "common.h"
+#include "refresh_policy.h"
 
 #include <errno.h>
 #include <linux/wireless.h>
@@ -267,8 +268,8 @@ void lsm_wifi_metadata_refresh(LsmWifiMetadata *metadata, LsmNetInfo *network)
     LsmWifiCacheRecord *record = find_record(metadata, network->name, true);
     if (!record) return;
 
-    if (record->last_sampled <= 0.0 ||
-        now - record->last_sampled >= LSM_WIFI_METADATA_INTERVAL_SECONDS) {
+    if (lsm_refresh_interval_due(
+            now, record->last_sampled, LSM_WIFI_METADATA_INTERVAL_SECONDS)) {
         LsmWifiCacheRecord collected;
         if (collect_wifi_metadata(metadata, network->name, &collected)) {
             collected.last_sampled = now;
