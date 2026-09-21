@@ -35,14 +35,6 @@ static const LsmSmokeCase suite_cases[] = {
     LSM_CASE(common),
     LSM_CASE(project_info),
 };
-#elif defined(LSM_SUITE_BACKEND)
-int smoke_case_backend(void);
-int smoke_case_monitor_platform(void);
-static const char suite_name[] = "backend";
-static const LsmSmokeCase suite_cases[] = {
-    LSM_CASE(backend),
-    LSM_CASE(monitor_platform),
-};
 #elif defined(LSM_SUITE_PERIPHERAL)
 int smoke_case_bluetooth_battery(void);
 int smoke_case_bluetooth_traffic(void);
