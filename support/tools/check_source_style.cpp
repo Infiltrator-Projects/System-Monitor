@@ -906,7 +906,17 @@ static void check_shared_release_contract(void)
         require_text_marker(".github/workflows/ci.yml", ci,
                             "REQUIRE_I386=1 make check");
         require_text_marker(".github/workflows/ci.yml", ci,
+                            "cmake --build build-cmake --target system-monitor");
+        require_text_marker(".github/workflows/ci.yml", ci,
                             "gcc-multilib");
+        if (strstr(ci, "ctest --test-dir"))
+            report_error(
+                ".github/workflows/ci.yml: CTest must remain a targeted local "
+                "tool; CI executes the canonical Make suite once");
+        if (strstr(ci, "local-native:"))
+            report_error(
+                ".github/workflows/ci.yml: duplicate hosted native verification "
+                "job must not return");
         free(ci);
     }
 
@@ -923,9 +933,14 @@ static void check_shared_release_contract(void)
         require_text_marker(".github/workflows/release.yml", release,
                             "test \"$main_commit\" = \"$EXPECTED_SHA\"");
         require_text_marker(".github/workflows/release.yml", release,
-                            "REQUIRE_I386=1 make check");
+                            "make -j2 deb native-installer");
         require_text_marker(".github/workflows/release.yml", release,
                             "published releases are immutable");
+        if (strstr(release, "REQUIRE_I386=1 make check") ||
+            strstr(release, "ctest --test-dir"))
+            report_error(
+                ".github/workflows/release.yml: publication must trust the "
+                "exact successful Verify SHA instead of replaying the full suite");
         free(release);
     }
 }
