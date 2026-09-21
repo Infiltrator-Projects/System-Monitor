@@ -911,6 +911,8 @@ static void check_shared_release_contract(void)
                             "EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common");
         require_text_marker("support/Doxyfile", doxyfile,
                             "EXTRACT_LOCAL_CLASSES   = NO");
+        require_text_marker("support/Doxyfile", doxyfile,
+                            "ALIASES                += \"license=\\\\par License:\"");
         if (strstr(doxyfile, "CLASS_DIAGRAMS"))
             report_error("support/Doxyfile: obsolete CLASS_DIAGRAMS setting must not return");
         free(doxyfile);
