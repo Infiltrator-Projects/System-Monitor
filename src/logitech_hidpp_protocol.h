@@ -8,11 +8,11 @@
  * worker lifetime management.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_LOGITECH_HIDPP_PROTOCOL_H
-#define LINUX_SYSTEM_MONITOR_LOGITECH_HIDPP_PROTOCOL_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_LOGITECH_HIDPP_PROTOCOL_H
+#define INFILTRATOR_SYSTEM_MONITOR_LOGITECH_HIDPP_PROTOCOL_H
 
 #include "logitech_hidpp.h"
 

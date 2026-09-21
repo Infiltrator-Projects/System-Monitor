@@ -4,11 +4,11 @@
  * @brief Native BlueZ Battery1 discovery with a non-blocking cache.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef LINUX_SYSTEM_MONITOR_BLUETOOTH_BATTERY_H
-#define LINUX_SYSTEM_MONITOR_BLUETOOTH_BATTERY_H
+#ifndef INFILTRATOR_SYSTEM_MONITOR_BLUETOOTH_BATTERY_H
+#define INFILTRATOR_SYSTEM_MONITOR_BLUETOOTH_BATTERY_H
 
 #include <stdbool.h>
 #include <stddef.h>
