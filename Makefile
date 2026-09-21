@@ -291,7 +291,7 @@ build-check: check-deps strict-check portability-check \
 # Canonical regression execution is organised by subsystem. The focused
 # *_smoke.c files remain individual cases for readable diagnostics and for
 # specialised sanitizer/coverage instrumentation, but the normal verification
-# path links related cases into 17 executed smoke binaries rather than 49.
+# path links related cases into 18 executed smoke binaries rather than 49.
 .PHONY: core-suite-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke
