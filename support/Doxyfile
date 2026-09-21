@@ -13,7 +13,7 @@ USE_MDFILE_AS_MAINPAGE = README.md
 INPUT                  = README.md docs src
 RECURSIVE              = YES
 FILE_PATTERNS           = *.h *.c *.cpp *.md
-EXCLUDE                 = src/pci_names_data.c src/infiltratr-common
+EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common
 EXCLUDE_PATTERNS        = */build/* */tests/compat/*
 
 EXTRACT_ALL             = NO
