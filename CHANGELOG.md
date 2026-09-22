@@ -2,6 +2,13 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.69 - 2026-09-22
+
+- Pin Make, CMake and the source gitlink to released Common 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`, keeping all build paths on the same exact shared revision.
+- Align maintained README, architecture and portability documentation with the new Common pin.
+- Re-audit Common 1.19.24's graphics hardening against System Monitor and keep the GTK/Cairo graph renderer local: Common's changed bitmap-surface clipping/copy/blit/scale/rotation contracts are a different abstraction and do not replace System Monitor presentation code.
+- Re-audit the remaining large source files and retain their present module boundaries where splitting would introduce new internal state-sharing APIs without reducing coupling.
+
 ## 1.0.68 - 2026-09-22
 
 - Restore the exact `/proc/uptime` first-field boundary contract after the Common token-parser migration: numeric prefixes followed by junk are rejected, while complete standalone and whitespace-delimited records remain accepted; add a permanent process-suite regression.
