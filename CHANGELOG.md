@@ -2,7 +2,13 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
-## Unreleased
+## 1.0.66 - 2026-09-22
+
+- Complete the forensic maintenance pass for the declared Linux product scope and document System Monitor as feature-complete rather than treating optional expansion as unfinished work.
+- Remove redistribution of proprietary MB Corpo font binaries while preserving the Common typography family preference and required GTK/system fallback.
+- Make source policy and release-package validation reject any future bundled proprietary font payload.
+- Document the retained-snapshot, PID-instance identity, presentation-only and lazy-shell invariants directly at the implementation boundaries where regressions would be most expensive to diagnose.
+
 
 - Consume Common 1.19.22's strict bounded UTF-8 validator at genuine firmware/sysfs human-readable metadata boundaries without applying text semantics to arbitrary SSID, process-command or protocol bytes.
 - Reject malformed SMBIOS and sysfs identity strings before GTK presentation while preserving existing fallback discovery; UTF-8-safe SMBIOS truncation never splits a multibyte sequence.
