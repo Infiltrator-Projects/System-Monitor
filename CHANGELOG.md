@@ -2,6 +2,13 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.67 - 2026-09-22
+
+- Pin Make, CMake, maintained documentation and the source gitlink to released Common 1.19.23 at `a9cf2957cffeefe6001830916b8a32c2ef58a551`.
+- Replace two remaining manual parent-directory slices in block-device identity and partition discovery with Common's lexical dirname contract, preserving the same canonical sysfs inputs while removing duplicate path mechanics.
+- Parse the first `/proc/uptime` field directly with Common's locale-independent floating-point token parser instead of mutating the procfs record into a standalone number.
+- Route cached storage-metadata CR/LF cleanup through Common's line-ending trim primitive while keeping Linux record grammar and hardware policy local to System Monitor.
+
 ## 1.0.66 - 2026-09-22
 
 - Complete the forensic maintenance pass for the declared Linux product scope and document System Monitor as feature-complete rather than treating optional expansion as unfinished work.

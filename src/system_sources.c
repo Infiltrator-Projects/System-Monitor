@@ -763,10 +763,8 @@ static void resolve_block_identity(LsmSystemSources *sources,
     }
 
     char parent_path[LSM_PATH_LEN];
-    lsm_copy_string(parent_path, sizeof(parent_path), canonical);
-    char *separator = strrchr(parent_path, '/');
-    if (!separator) return;
-    *separator = '\0';
+    if (!lsm_path_dirname(canonical, parent_path, sizeof(parent_path)))
+        return;
     if (parent && parent_size)
         lsm_copy_string(parent, parent_size, lsm_path_basename(parent_path));
 }
@@ -884,11 +882,10 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
         char parent_name[64] = "";
         if (is_partition) {
             char parent_path[LSM_PATH_LEN];
-            lsm_copy_string(parent_path, sizeof(parent_path), canonical);
-            char *separator = strrchr(parent_path, '/');
-            if (!separator) continue;
-            *separator = '\0';
-            lsm_copy_string(parent_name, sizeof(parent_name), lsm_path_basename(parent_path));
+            if (!lsm_path_dirname(canonical, parent_path, sizeof(parent_path)))
+                continue;
+            lsm_copy_string(parent_name, sizeof(parent_name),
+                            lsm_path_basename(parent_path));
         } else {
             lsm_copy_string(parent_name, sizeof(parent_name), entry->d_name);
         }

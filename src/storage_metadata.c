@@ -57,7 +57,7 @@ static void capture_property(char *destination, size_t destination_size,
     if (!destination || destination_size == 0U || !value) return;
     char clean[128];
     lsm_copy_string(clean, sizeof(clean), value);
-    clean[strcspn(clean, "\r\n")] = '\0';
+    lsm_trim_line_end(clean);
     if (clean[0]) lsm_copy_string(destination, destination_size, clean);
 }
 

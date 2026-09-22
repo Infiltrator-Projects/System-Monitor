@@ -623,10 +623,9 @@ static double read_uptime_seconds(void)
 {
     char text[128];
     if (!lsm_read_text_file("/proc/uptime", text, sizeof(text))) return 0.0;
-    char *separator = strpbrk(text, " \t");
-    if (separator) *separator = '\0';
+    const char *cursor = text;
     double uptime = 0.0;
-    return infiltratr_parse_double(text, &uptime) &&
+    return lsm_parse_double_token(&cursor, false, &uptime) &&
            isfinite(uptime) && uptime >= 0.0 ? uptime : 0.0;
 }
 
