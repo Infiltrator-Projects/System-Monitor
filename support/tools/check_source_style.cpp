@@ -429,8 +429,12 @@ static void check_public_header_documentation(const char *path, const char *text
 
 static void check_platform_path_boundary(const char *path, const char *text)
 {
+    const bool performance_presentation =
+        strcmp(path, "src/performance_present.c") == 0 ||
+        strcmp(path, "src/performance_present_core.c") == 0 ||
+        strcmp(path, "src/performance_present_devices.c") == 0;
     if (strcmp(path, "src/performance.c") != 0 &&
-        strcmp(path, "src/performance_present.c") != 0 &&
+        !performance_presentation &&
         strcmp(path, "src/monitor_types.h") != 0)
         return;
 
@@ -445,7 +449,7 @@ static void check_platform_path_boundary(const char *path, const char *text)
                          path, line_number_at(text, found));
     }
 
-    if (strcmp(path, "src/performance_present.c") == 0) {
+    if (performance_presentation) {
         static const char *const collector_markers[] = {
             "wifi_metadata.h", "lsm_wifi_metadata_refresh(",
             "ioctl(", "socket(", "g_dbus_connection_call"
@@ -549,6 +553,8 @@ static void check_process_platform_boundary(const char *path, const char *text)
         "src/monitor_types.h",
         "src/app.h",
         "src/process_inspector.h",
+        "src/process_file_users.h",
+        "src/process_table_ui.h",
         "src/process_inspection.h"
     };
     bool checked = false;

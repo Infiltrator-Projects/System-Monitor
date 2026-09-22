@@ -58,6 +58,8 @@ static void capture_property(char *destination, size_t destination_size,
     char clean[128];
     lsm_copy_string(clean, sizeof(clean), value);
     lsm_trim_line_end(clean);
+    char *embedded_line_end = strpbrk(clean, "\r\n");
+    if (embedded_line_end) *embedded_line_end = '\0';
     if (clean[0]) lsm_copy_string(destination, destination_size, clean);
 }
 

@@ -16,7 +16,7 @@
 #include "details_page.h"
 #include "help.h"
 #include "process_export.h"
-#include "process_inspector.h"
+#include "process_file_users.h"
 #include "project_info.h"
 #include "preferences.h"
 #include "system_snapshot.h"

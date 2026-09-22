@@ -24,6 +24,8 @@ performance.c
 performance_pages_core.c
 performance_pages_devices.c
 performance_present.c
+performance_present_core.c
+performance_present_devices.c
 details_page.c
 process_actions.c
 process_recorder.c
@@ -35,6 +37,8 @@ process_grouping.c
 process_model.c
 task_launcher.c
 process_inspector.c
+process_file_users.c
+process_table_ui.c
 process_inspection.c
 history.c
 startup.c
@@ -53,6 +57,7 @@ cpu_direct.c
 monitor_storage_network.c
 disk_accounting.c
 monitor_hardware.c
+monitor_bluetooth.c
 hardware_topology.c
 intel_gpu.c
 npu_telemetry.c

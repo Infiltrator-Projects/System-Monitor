@@ -2,6 +2,15 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.68 - 2026-09-22
+
+- Restore the exact `/proc/uptime` first-field boundary contract after the Common token-parser migration: numeric prefixes followed by junk are rejected, while complete standalone and whitespace-delimited records remain accepted; add a permanent process-suite regression.
+- Preserve cached storage-metadata framing while retaining Common line-ending trimming: embedded CR/LF still terminates the captured property exactly as before 1.0.67; add a malformed-record regression fixture.
+- Split Performance snapshot presentation into core-resource and device-oriented modules, retain one small dispatcher/shared temperature-state boundary, and remove the duplicate hardware-name predicate/title composition in favour of the existing Performance helpers.
+- Split exact-file process-owner search out of the Process Inspector and share its sortable text-table construction instead of duplicating GTK table mechanics.
+- Split monitor-level Bluetooth membership/traffic baseline handling out of accelerator collection while retaining raw HCI accounting in the existing Bluetooth transport module.
+- Align README platform wording with the feature-complete roadmap: additional native backends are optional expansion rather than unfinished mandatory work.
+
 ## 1.0.67 - 2026-09-22
 
 - Pin Make, CMake, maintained documentation and the source gitlink to released Common 1.19.23 at `a9cf2957cffeefe6001830916b8a32c2ef58a551`.

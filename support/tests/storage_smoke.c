@@ -162,7 +162,9 @@ int main(void)
                       "E:ID_PART_ENTRY_TYPE=e3c9e316-0b5c-4db8-817d-f92df00215ae\n"
                       "E:ID_FS_TYPE=ext4\n") ||
         !write_record(root, 8U, 7U,
-                      "E:ID_PART_ENTRY_TYPE=00000000-0000-0000-0000-000000000000\n")) {
+                      "E:ID_PART_ENTRY_TYPE=00000000-0000-0000-0000-000000000000\n") ||
+        !write_record(root, 8U, 8U,
+                      "E:ID_FS_TYPE=ext4\rinjected\n")) {
         return 2;
     }
 
@@ -171,7 +173,8 @@ int main(void)
         !expect_label(root, 3U, "FAT32") ||
         !expect_label(root, 4U, "ntfs") ||
         !expect_label(root, 5U, "Microsoft Reserved") ||
-        !expect_label(root, 6U, "ext4"))
+        !expect_label(root, 6U, "ext4") ||
+        !expect_label(root, 8U, "ext4"))
         return 3;
 
     char label[64] = "stale";
@@ -185,7 +188,7 @@ int main(void)
         return 5;
     if (lsm_storage_metadata_type_label(root, 8U, 1U, NULL, 0U)) return 6;
 
-    for (unsigned int minor_number = 1U; minor_number <= 7U; minor_number++) {
+    for (unsigned int minor_number = 1U; minor_number <= 8U; minor_number++) {
         char path[512];
         const int written = snprintf(path, sizeof(path), "%s/b8:%u",
                                      root, minor_number);

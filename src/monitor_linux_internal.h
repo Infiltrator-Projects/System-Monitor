@@ -49,6 +49,34 @@ typedef struct {
     LsmBluetoothTrafficState accounting;
 } LsmLinuxBluetoothDeviceState;
 
+/**
+ * Reconcile retained Bluetooth traffic baselines against the current device set.
+ *
+ * @param [in,out] monitor Monitor containing current Bluetooth device records.
+ */
+void lsm_monitor_bluetooth_reconcile_states(LsmMonitor *monitor);
+
+/**
+ * Refresh per-device Bluetooth traffic from the native HCI accounting layer.
+ *
+ * @param [in,out] monitor Monitor containing current device records.
+ * @param [in] elapsed Seconds since the prior traffic sample.
+ */
+void lsm_monitor_bluetooth_update_traffic(LsmMonitor *monitor, double elapsed);
+
+/**
+ * Compare prior Bluetooth membership with the current monitor snapshot.
+ *
+ * @param [in] old_records Prior device records.
+ * @param [in] old_count Number of prior records.
+ * @param [in] monitor Current monitor snapshot.
+ * @return true when device membership changed.
+ */
+bool lsm_monitor_bluetooth_membership_changed(
+    const LsmBluetoothDeviceInfo *old_records,
+    size_t old_count,
+    const LsmMonitor *monitor);
+
 /** Linux-only GPU identity and cumulative-counter state. */
 typedef struct {
     char platform_identity[LSM_IDENTITY_LEN];

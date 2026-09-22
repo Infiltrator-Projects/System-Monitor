@@ -52,7 +52,8 @@ OBJECTS := $(C_OBJECTS) $(CXX_OBJECTS)
 APP_LINKER := $(if $(strip $(CXX_SOURCES)),$(CXX),$(CC))
 
 HARDWARE_MONITOR_SOURCES := \
-	src/monitor_hardware.c src/hardware_topology.c src/intel_gpu.c \
+	src/monitor_hardware.c src/monitor_bluetooth.c \
+	src/hardware_topology.c src/intel_gpu.c \
 	src/npu_telemetry.c \
 	src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c \
 	src/linux_capability.c src/logitech_hidpp.c \

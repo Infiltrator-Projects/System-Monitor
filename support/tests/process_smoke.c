@@ -515,6 +515,7 @@ int main(void)
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
+#include "process_backend_linux_internal.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -655,6 +656,17 @@ static bool exercise_process_tree_control(void)
 
 int main(void)
 {
+    double uptime = -1.0;
+    if (!lsm_process_linux_parse_uptime_record("123.5 42.0", &uptime) ||
+        uptime != 123.5 ||
+        !lsm_process_linux_parse_uptime_record("7", &uptime) ||
+        uptime != 7.0 ||
+        lsm_process_linux_parse_uptime_record("123.5junk 42.0", &uptime) ||
+        lsm_process_linux_parse_uptime_record("-1.0 42.0", &uptime)) {
+        fputs("/proc/uptime field-boundary parsing regressed\n", stderr);
+        return 1;
+    }
+
     /*
      * Some build sandboxes virtualise getpid() without mounting the matching
      * procfs namespace. The application is not run in that arrangement, and

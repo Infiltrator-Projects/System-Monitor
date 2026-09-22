@@ -20,6 +20,7 @@
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
+#include "process_backend_linux_internal.h"
 #include "common.h"
 #include "compiler.h"
 #include "process_gpu.h"
@@ -619,14 +620,26 @@ static int64_t read_boot_time(void)
     return boot;
 }
 
+bool lsm_process_linux_parse_uptime_record(const char *text, double *uptime)
+{
+    if (!text || !uptime) return false;
+    const char *cursor = text;
+    double value = 0.0;
+    if (!lsm_parse_double_token(&cursor, false, &value) ||
+        (*cursor != '\0' &&
+         !lsm_ascii_is_space((unsigned char)*cursor)) ||
+        !isfinite(value) || value < 0.0)
+        return false;
+    *uptime = value;
+    return true;
+}
+
 static double read_uptime_seconds(void)
 {
     char text[128];
     if (!lsm_read_text_file("/proc/uptime", text, sizeof(text))) return 0.0;
-    const char *cursor = text;
     double uptime = 0.0;
-    return lsm_parse_double_token(&cursor, false, &uptime) &&
-           isfinite(uptime) && uptime >= 0.0 ? uptime : 0.0;
+    return lsm_process_linux_parse_uptime_record(text, &uptime) ? uptime : 0.0;
 }
 
 static int compare_process_cpu(const void *left, const void *right)

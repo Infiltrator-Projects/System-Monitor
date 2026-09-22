@@ -45,6 +45,8 @@ shared parsing / formatting / timing / path / durable-I/O / allocation primitive
 
 GTK consumes snapshots and application models. Presentation code should not need to know which Linux path, ioctl, D-Bus interface or driver supplied a metric.
 
+Performance presentation is partitioned by responsibility: CPU/memory/disk/network snapshot projection is separate from Bluetooth/GPU/battery/NPU projection, with a small dispatcher owning only shared presentation state. Process Inspector and exact-file ownership search are separate UI modules and share only generic process-table construction. Bluetooth monitor-level membership and traffic baselines are likewise separate from accelerator telemetry; raw HCI counter collection remains below that monitor boundary.
+
 ## Desktop application identity
 
 The GTK/GApplication identity `io.github.theinfiltratr.SystemMonitor` is an intentional stable compatibility key rather than current repository or Debian package branding. It participates in desktop application identity and single-instance behaviour, so changing it requires an explicit migration plan instead of an incidental rebrand.

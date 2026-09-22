@@ -27,14 +27,4 @@
 void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
                                 LsmProcessInstanceId instance_id);
 
-/**
- * Open a graphical file chooser and show processes using the selected file.
- *
- * The search is implemented by the active process-inspection backend and does
- * not invoke lsof, fuser or another executable.
- *
- * @param [in,out] app Owning GUI application, used only on the GTK main thread.
- */
-void lsm_process_file_users_show(LsmApp *app);
-
 #endif
