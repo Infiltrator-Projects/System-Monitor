@@ -740,7 +740,6 @@ static void check_licensing_contract(void)
         "LICENSE", "src/infiltratr-common/LICENSE",
         "support/legal/THIRD_PARTY_NOTICES",
         "support/resources/icons/system-monitor.png.license",
-        "support/resources/fonts/mb-corpo-fonts.tar.xz.license",
         "support/resources/data/pci-names.tsv.license",
         "support/resources/data/PCI_IDS_LICENSE",
         "support/packaging/copyright"
@@ -767,10 +766,8 @@ static void check_licensing_contract(void)
                         "SPDX-FileCopyrightText: 2016-2026 Shannon Smith");
     require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: GPL-3.0-or-later");
-    if (!regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
-        report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: bundled font archive is missing");
-    require_file_marker("support/resources/fonts/mb-corpo-fonts.tar.xz.license",
-                        "SPDX-License-Identifier: LicenseRef-MB-Corpo");
+    if (regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
+        report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: proprietary font binaries must not be redistributed");
     require_file_marker("support/resources/data/pci-names.tsv.license",
                         "SPDX-License-Identifier: BSD-3-Clause");
     require_file_marker("support/packaging/copyright", "License: GPL-3+");

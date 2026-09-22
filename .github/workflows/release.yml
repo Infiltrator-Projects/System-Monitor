@@ -106,21 +106,12 @@ jobs:
             printf 'Debian maintainer script regained an external setup helper.\n' >&2
             exit 1
           fi
-          fonts_dir="$tmp/root/usr/share/fonts/truetype/infiltrator"
-          test -d "$fonts_dir"
-          mapfile -t font_files < <(find "$fonts_dir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print)
-          if ((${#font_files[@]} < 2)); then
-            printf 'Debian package does not contain the bundled MB Corpo font files.\n' >&2
+          if find "$tmp/root/usr/share/fonts" -type f \
+              \( -iname '*mb*corpo*' -o -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) \
+              -print -quit 2>/dev/null | grep -q .; then
+            printf 'System Monitor package must not redistribute proprietary font binaries.\n' >&2
             exit 1
           fi
-          font_names=$(
-            for font in "${font_files[@]}"; do
-              strings -a "$font"
-              strings -a -e b "$font"
-            done
-          )
-          grep -Fq 'MB Corpo S Title WEB' <<<"$font_names"
-          grep -Fq 'MB Corpo A Title Cond WEB' <<<"$font_names"
           changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')

@@ -7,6 +7,12 @@
  * refresh policy, formatting and regression testing independent of widget
  * creation and topology reconciliation.
  *
+ * Presentation is intentionally side-effect free with respect to collection:
+ * these routines consume one retained monitor snapshot and update existing
+ * widgets only. They must never open device files, query D-Bus or mutate the
+ * sampling cadence. Missing metrics stay visibly unavailable; presentation
+ * must not manufacture a plausible value merely to keep a graph populated.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later

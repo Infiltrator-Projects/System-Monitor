@@ -7,6 +7,11 @@
  * Details page. Related processes are grouped beneath XDG application names;
  * unmatched rows remain visible as background or system processes.
  *
+ * Grouping is a projection of immutable snapshot rows, not an alternate source
+ * of process truth. Rows retain PID plus backend instance identity so expanding
+ * a group or invoking a later action cannot accidentally transfer selection to
+ * a recycled PID from a newer snapshot.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later

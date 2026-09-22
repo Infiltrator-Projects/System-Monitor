@@ -7,6 +7,12 @@
  * Details table model/rendering code. All actions operate on the retained
  * process snapshot and the native process backend.
  *
+ * A visible PID is never sufficient identity for a mutating action. Selection
+ * carries the backend instance identifier derived from process start time, and
+ * actions re-resolve the (PID, instance) pair against the retained snapshot
+ * before signalling or changing scheduler state. This prevents PID reuse from
+ * redirecting a delayed menu action at an unrelated process.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later

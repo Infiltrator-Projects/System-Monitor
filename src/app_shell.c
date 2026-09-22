@@ -3,6 +3,12 @@
  * @file app_shell.c
  * @brief Global window state, navigation, keyboard policy and shell styling.
  *
+ * The shell owns presentation lifecycle only: page creation, selected-tab
+ * restoration, theme projection and window geometry. Collectors and blocking
+ * platform I/O stay below their page/backend contracts. Lazy pages are created
+ * on first selection, while first-paint state is restored only after the
+ * initial Performance frame is eligible to display.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
  * @license GPL-3.0-or-later

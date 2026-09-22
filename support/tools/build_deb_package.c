@@ -252,40 +252,6 @@ static bool regular_file(const char *path)
     return path && stat(path, &status) == 0 && S_ISREG(status.st_mode);
 }
 
-static bool bundled_font_name(const char *name)
-{
-    if (!name) return false;
-    const char *extension = strrchr(name, '.');
-    return extension &&
-           (strcmp(extension, ".ttf") == 0 || strcmp(extension, ".TTF") == 0 ||
-            strcmp(extension, ".otf") == 0 || strcmp(extension, ".OTF") == 0 ||
-            strcmp(extension, ".ttc") == 0 || strcmp(extension, ".TTC") == 0);
-}
-
-static size_t bundled_font_count(const char *path)
-{
-    struct stat status;
-    if (!path || lstat(path, &status) != 0) return 0U;
-    if (S_ISREG(status.st_mode))
-        return bundled_font_name(path) ? 1U : 0U;
-    if (!S_ISDIR(status.st_mode) || S_ISLNK(status.st_mode)) return 0U;
-
-    DIR *directory = opendir(path);
-    if (!directory) return 0U;
-    size_t count = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
-        if (strcmp(entry->d_name, ".") == 0 ||
-            strcmp(entry->d_name, "..") == 0)
-            continue;
-        char child[PATH_MAX];
-        if (join_path(child, sizeof(child), path, entry->d_name))
-            count += bundled_font_count(child);
-    }
-    closedir(directory);
-    return count;
-}
-
 static bool find_executable(const char *name, char *destination, size_t size)
 {
     const char *path = getenv("PATH");
@@ -439,38 +405,6 @@ static void write_staged(const char *relative, mode_t mode, const char *text)
     write_text(destination, mode, text);
 }
 
-static void install_bundled_fonts(void)
-{
-    char archive[] = "support/resources/fonts/mb-corpo-fonts.tar.xz";
-    if (!regular_file(archive))
-        fail("bundled MB Corpo font archive is missing");
-
-    char destination[PATH_MAX];
-    stage_path(destination, sizeof(destination),
-               "usr/share/fonts/truetype/infiltrator");
-    make_directories(destination, 0755);
-
-    char tar_path[PATH_MAX];
-    if (!find_executable("tar", tar_path, sizeof(tar_path)))
-        fail("tar is required to unpack the bundled MB Corpo fonts");
-
-    char no_owner[] = "--no-same-owner";
-    char no_permissions[] = "--no-same-permissions";
-    char extract[] = "-xJf";
-    char directory_option[] = "-C";
-    char *arguments[] = {
-        tar_path, no_owner, no_permissions, extract, archive,
-        directory_option, destination, NULL
-    };
-    const int result = run_process(tar_path, arguments, -1);
-    if (result != 0)
-        fail("unable to unpack bundled MB Corpo fonts (tar status %d)", result);
-
-    const size_t count = bundled_font_count(destination);
-    if (count < 2U)
-        fail("bundled MB Corpo archive did not provide the required font files");
-}
-
 static void format_debian_date(time_t epoch, char *destination, size_t size)
 {
     static const char *weekdays[] = {
@@ -557,7 +491,6 @@ int main(int argc, char **argv)
     if (!keep_debug || strcmp(keep_debug, "1") != 0)
         strip_binary_if_available(staged_application);
 
-    install_bundled_fonts();
 
     unsigned required_glibc_major = 0U;
     unsigned required_glibc_minor = 0U;

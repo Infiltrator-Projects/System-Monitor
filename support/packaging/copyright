@@ -48,11 +48,3 @@ License: BSD-3-clause
 Comment: This data is embedded in src/pci_names_data.c. The generated C wrapper
  is covered by the project-wide GPL-3+ declaration above; the embedded names
  retain these BSD 3-Clause terms.
-
-Files: support/resources/fonts/mb-corpo-fonts.tar.xz
-Copyright: See bundled font metadata and the respective rights holders
-License: LicenseRef-MB-Corpo
- The MB Corpo font archive is bundled from the MBLINK project for System
- Monitor's user interface. It is not relicensed under GPL-3+ by this project.
- Copyright and licence rights in the typefaces remain with their respective
- rights holders.

@@ -1,33 +1,38 @@
 # Roadmap
 
-This is a direction document, not a dated promise. The released source and tests define what is actually supported.
+System Monitor is feature-complete for its current Linux desktop product scope.
+This document defines the maintenance and optional-expansion boundary; it is not
+a backlog of work required before the application can be considered finished.
 
-## Current foundation
+## Completion baseline
 
-- maintain process, performance, hardware, service, user and filesystem views
-- keep collectors portable behind platform contracts where practical
-- qualify direct hardware/accounting behaviour through the support/tests suite
-- keep the Linux build independent of BlueZ development headers, libcap command-line tooling and an explicit Fontconfig package/cache-helper dependency
-- preserve per-device Bluetooth traffic through the project-owned Linux HCI ABI and apply CAP_NET_RAW through the executable's own verified Linux xattr path
-- consume Common 1.19.22 for toolkit-neutral HOME/XDG paths, recursive directory creation, complete text reads, deterministic ASCII matching/ordering, stable non-cryptographic signature hashing, monotonic counter delta/rate mechanics and POSIX deadline conversion instead of retaining equivalent GLib/libc/private helper paths
+- preserve process, performance, hardware, service, user and filesystem views
+- preserve one retained snapshot model across friendly and technical process views
+- keep slow collectors and persistence away from the GTK main thread
+- keep Linux-specific collection behind explicit platform contracts
+- represent inaccessible or unsupported telemetry as unavailable rather than guessed
+- preserve direct native collection where it is stronger than external helper programs
+- consume Common only for genuinely generic mechanisms that are at least as strong as the local implementation
+- keep proprietary font binaries outside redistributed source and packages while retaining the preferred-family/system-fallback presentation contract
+- require the exact release revision to pass warnings-as-errors, sanitizers, portability, documentation and package gates
 
-## Near-term priorities
+## Maintenance priorities
 
-- continue auditing direct and transitive dependencies, removing only those that can be replaced from a stable Linux, libc or project-owned Common contract without weakening correctness, security, accessibility or desktop integration
-- expand hardware coverage only with explicit availability and provenance
-- continue reducing duplicated generic helpers in favour of stronger Common contracts
-- preserve UI responsiveness while enriching expensive views asynchronously
+Correctness, security, supported-kernel/desktop regressions, hardware evidence and
+UI responsiveness take priority over new features. Fixed defects should gain the
+narrowest useful permanent regression. Tests completely subsumed by stronger
+coverage should be consolidated instead of preserved as historical ceremony.
 
-## Longer-term direction
+## Optional expansion
 
-- evaluate the GTK/GLib/GIO presentation boundary as the remaining major third-party code dependency, but replace any part of it only when a project-owned backend can match the required windowing, input, text, accessibility and desktop-integration semantics
-- add additional native platform backends where the architecture can preserve the same snapshot contracts
-- broaden device telemetry without turning optional vendor libraries into mandatory runtime dependencies
-
-## Admission rule
-
-A proposed capability enters the roadmap only when its ownership is clear and there is a credible way to validate it. Features that require pretending uncertain behaviour is known do not qualify.
+Additional devices, telemetry, native platform backends or presentation work are
+optional expansion, not missing completion work. A new collector is admitted
+only when its source semantics, availability rules, ownership and validation
+strategy are explicit.
 
 ## Completion rule
 
-An item is complete when implementation, tests, user-visible behaviour and maintained documentation agree. A checkbox or release number cannot substitute for missing evidence.
+System Monitor is complete when implementation, tests, packaging and maintained
+documentation agree for the declared Linux product scope. Completion does not
+mean every future kernel, driver or device is already known; it means there is
+no known mandatory feature tranche left to implement.

@@ -33,7 +33,7 @@ Storage and memory use 1024-based scaling with traditional KB, MB, GB and TB lab
 
 ## Appearance
 
-System Monitor packages the MB Corpo typefaces used by its interface. The family names and role weights are taken directly from the pinned Common 1.19.22 typography contract: normal UI text uses **MB Corpo S Title WEB** and title text uses **MB Corpo A Title Cond WEB**, with the S family as the only application-level fallback.
+System Monitor prefers the MB Corpo family names defined by the pinned Common 1.19.22 typography contract when those typefaces are already available on the system, but it does not redistribute proprietary MB Corpo font binaries. Normal UI text requests **MB Corpo S Title WEB** and title text requests **MB Corpo A Title Cond WEB**; GTK's system font is the required fallback when those families are unavailable.
 
 **View → Theme** provides **Follow system**, **Day** and **Night**. Follow system detects the current GTK/Mint light/dark preference and resolves it to the same Day or Night presentation used by the explicit choices; it never inherits an unrelated toolkit palette. Day is the white Infiltrator palette. Night consumes the complete Common 1.19.22 Linux MBLINK reference face: the `#050608` canvas, distinct graphite titlebar/connection/card/surface layers, their matching borders and text greys, and the canonical `#00ADEF` accent. System Monitor follows the same Linux presentation grammar used by MBLINK: layered graphite surfaces use subtle gradients and Common radii, the performance rail uses MBLINK's translucent cyan selection and cyan selected-title treatment, active notebook tabs use the canonical cyan accent, and performance pages are composed from rounded header/detail/graph cards rather than flat GTK regions. Primary graphs are rounded Common-card surfaces, hot-temperature states become MBLINK-style gold/red status pills, CPU and battery telemetry use the canonical cyan and gold accents, and metric captions/values use the Common detail/heading roles. General GTK controls use the Common button background/foreground contract rather than being flattened into one dark surface. The choice is stored per user.
 
@@ -105,4 +105,4 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 Copyright © 2016-2026 Shannon Smith.
 
-Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry, bundled PCI-name data and the bundled MB Corpo typeface resources are preserved in `support/legal/THIRD_PARTY_NOTICES`.
+Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`. Preferred proprietary typeface family names are presentation hints only; the font binaries are not redistributed by System Monitor.
