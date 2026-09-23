@@ -299,8 +299,16 @@ jobs:
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             throw 'Windows GUI startup smoke timed out.'
           }
-          if ($process.ExitCode -ne 0) { throw "Windows GUI startup smoke failed with exit code $($process.ExitCode)." }
-          if (-not (Test-Path windows-startup-smoke.txt)) { throw 'Windows GUI startup smoke did not produce its status file.' }
-          $status = (Get-Content windows-startup-smoke.txt -Raw).Trim()
-          Write-Host "Windows startup smoke status: $status"
-          if ($status -ne 'success') { throw "Windows GUI startup stage failed: $status" }
+          if (Test-Path windows-startup-smoke.txt) {
+            $status = (Get-Content windows-startup-smoke.txt -Raw).Trim()
+            Write-Host "Windows startup smoke status: $status"
+          } else {
+            $status = 'missing'
+            Write-Host 'Windows startup smoke status: missing'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Windows GUI startup smoke failed with exit code $($process.ExitCode); stage: $status"
+          }
+          if ($status -ne 'success') {
+            throw "Windows GUI startup stage failed: $status"
+          }
