@@ -296,11 +296,6 @@ static COLORREF performance_colour_ref(LsmPageType type)
     return RGB(colour.red, colour.green, colour.blue);
 }
 
-static double bytes_to_gb(uint64_t bytes)
-{
-    return (double)bytes / (1024.0 * 1024.0 * 1024.0);
-}
-
 static void select_font(HDC dc, HFONT font)
 {
     if (dc && font) (void)SelectObject(dc, font);
@@ -1007,28 +1002,6 @@ static void draw_memory_composition(
         SelectObject(dc, previous);
         DeleteObject(marker);
     }
-}
-
-static void format_optional_percent(
-    wchar_t *buffer, size_t capacity, double value, bool available)
-{
-    if (!buffer || capacity == 0U) return;
-    if (!available) {
-        lstrcpynW(buffer, L"N/A", (int)capacity);
-        return;
-    }
-    (void)swprintf(buffer, capacity, L"%.1f%%", value);
-}
-
-static void format_optional_ghz(
-    wchar_t *buffer, size_t capacity, double value)
-{
-    if (!buffer || capacity == 0U) return;
-    if (value <= 0.0) {
-        lstrcpynW(buffer, L"N/A", (int)capacity);
-        return;
-    }
-    (void)swprintf(buffer, capacity, L"%.2f GHz", value);
 }
 
 static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
