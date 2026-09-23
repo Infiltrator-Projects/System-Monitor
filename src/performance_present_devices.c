@@ -12,6 +12,7 @@
  */
 #include "performance_present_internal.h"
 #include "performance_internal.h"
+#include "performance_view.h"
 
 #include "common.h"
 #include "duration_format.h"
@@ -150,6 +151,8 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmGpuInfo *gpu = &app->monitor.gpus[page->index];
     LsmGpuPageWidgets *widgets = &page->widgets.gpu;
+    LsmDevicePerformanceView view;
+    lsm_gpu_performance_view(gpu, page->index, &view);
     char a[64];
     const gboolean temperature_available = gpu->temperature_available &&
         isfinite(gpu->temperature_c);
@@ -233,36 +236,20 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
     const double busiest_percent = gpu->active_engine_percent;
     const char *busiest = gpu->active_engine[0]
         ? gpu->active_engine : "N/A";
-    if (gpu->engine_metrics_capable && gpu->utilization_available) {
-        if (temperature_available)
-            lsm_ui_set_label_text(page->button_value, "%s %.0f%% %.0f °C",
-                                  busiest, gpu->utilization_percent,
-                                  gpu->temperature_c);
-        else
-            lsm_ui_set_label_text(page->button_value, "%s %.0f%% N/A",
-                                  busiest, gpu->utilization_percent);
-    } else if (gpu->utilization_available && temperature_available) {
-        lsm_ui_set_label_text(page->button_value, "%.0f%% %.0f °C",
-                              gpu->utilization_percent, gpu->temperature_c);
-    } else if (gpu->utilization_available) {
-        lsm_ui_set_label_text(page->button_value, "%.0f%% N/A",
-                              gpu->utilization_percent);
-    } else {
-        lsm_ui_set_label_text(page->button_value, "N/A");
-    }
+    lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
 
     lsm_ui_set_label_text(widgets->product, "%s", product);
-    lsm_ui_set_label_text(widgets->utilisation, "%s",
-        lsm_metric_format_percent(gpu->utilization_available,
-                                  gpu->utilization_percent, a, sizeof(a)));
+    lsm_ui_set_label_text(
+        widgets->utilisation, "%s",
+        view.metric_values[LSM_GPU_VIEW_UTILISATION]);
     if (gpu->shared_system_memory)
         lsm_ui_set_label_text(widgets->memory_usage, "Dynamic");
     else
         lsm_ui_set_label_text(widgets->memory_usage, "%.0f%%",
                               gpu->memory_percent);
-    lsm_ui_set_label_text(widgets->temperature, "%s",
-        lsm_metric_format_celsius(temperature_available, gpu->temperature_c,
-                                  a, sizeof(a)));
+    lsm_ui_set_label_text(
+        widgets->temperature, "%s",
+        view.metric_values[LSM_GPU_VIEW_TEMPERATURE]);
     performance_present_set_temperature_state(widgets->temperature, temperature_available,
                           gpu->temperature_c, 80.0, 95.0);
     lsm_ui_set_label_text(widgets->core_clock, "%s",
@@ -281,10 +268,12 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->memory_used, "N/A");
         lsm_ui_set_label_text(widgets->memory_total, "N/A");
     }
-    lsm_ui_set_label_text(widgets->driver, "%s", gpu->driver);
-    lsm_ui_set_label_text(widgets->driver_version, "%s",
-                          gpu->driver_version[0]
-                              ? gpu->driver_version : "N/A");
+    lsm_ui_set_label_text(
+        widgets->driver, "%s",
+        view.metric_values[LSM_GPU_VIEW_DRIVER]);
+    lsm_ui_set_label_text(
+        widgets->driver_version, "%s",
+        view.metric_values[LSM_GPU_VIEW_DRIVER_VERSION]);
     lsm_ui_set_label_text(widgets->pci_location, "%s",
                           gpu->pci_location[0] ? gpu->pci_location : "N/A");
     if (strcmp(busiest, "N/A") == 0 || strcmp(busiest, "Idle") == 0)
@@ -292,12 +281,9 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
     else
         lsm_ui_set_label_text(widgets->active_engine, "%s (%.0f%%)",
                               busiest, busiest_percent);
-    lsm_ui_set_label_text(widgets->metrics, "%s",
-                       gpu->metrics_source[0]
-                           ? gpu->metrics_source
-                           : (gpu->supported_metrics
-                                  ? "Native driver telemetry"
-                                  : "Basic identification only"));
+    lsm_ui_set_label_text(
+        widgets->metrics, "%s",
+        view.metric_values[LSM_GPU_VIEW_TELEMETRY]);
     if (gpu->engine_metrics_capable) {
         lsm_ui_set_label_text(widgets->engine_1, "%s",
             lsm_metric_format_percent(gpu->render_available, gpu->render_percent,
