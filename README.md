@@ -8,12 +8,14 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.71 ([version file](support/VERSION))\
+**Current source version:** 1.0.72 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.24 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; experimental native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
 
 The Windows preview now has a native Win32 GUI shell. It opens as a normal System Monitor desktop window with the same eight top-level areas as the Linux product. Performance is populated from the existing Win32/PSAPI CPU and memory backend, and Processes uses the read-only Tool Help/Win32 process backend with SID-derived ownership. App History, Startup Apps, Users, Details, Services and File Systems are deliberately visible but explicitly unimplemented placeholders so the Windows product shape can be tested before their native backends exist. Windows process control, command-line/GPU enrichment and device collectors remain unavailable, and the Linux desktop remains the feature-complete product.
+
+The Windows shell is painted before any monitoring or process backend is initialised. Backend startup is lazy and fail-open: unavailable telemetry is reported inside the already-visible GUI rather than preventing the application window from appearing.
 
 ## Engineering ethos
 
