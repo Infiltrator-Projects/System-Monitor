@@ -375,3 +375,237 @@ void lsm_memory_performance_view(const LsmMonitor *monitor,
             module->serial_number[0] ? module->serial_number : "N/A");
     }
 }
+
+
+static void device_view_unavailable(
+    const char *title, LsmDevicePerformanceView *view)
+{
+    if (!view) return;
+    memset(view, 0, sizeof(*view));
+    copy_or_na(view->title, sizeof(view->title), title);
+    infiltratr_copy_string(
+        view->subtitle, sizeof(view->subtitle), "No device available");
+    infiltratr_copy_string(
+        view->rail_value, sizeof(view->rail_value), "N/A");
+}
+
+static void device_view_metric(
+    LsmDevicePerformanceView *view, const char *label, const char *value)
+{
+    if (!view || view->metric_count >= LSM_DEVICE_PERFORMANCE_METRIC_COUNT)
+        return;
+    const size_t index = view->metric_count++;
+    infiltratr_copy_string(
+        view->metric_labels[index], sizeof(view->metric_labels[index]),
+        label ? label : "");
+    infiltratr_copy_string(
+        view->metric_values[index], sizeof(view->metric_values[index]),
+        value && value[0] ? value : "N/A");
+}
+
+void lsm_disk_performance_view(const LsmDiskInfo *disk, size_t index,
+                               LsmDevicePerformanceView *view)
+{
+    if (!view) return;
+    if (!disk) {
+        char fallback[64];
+        (void)snprintf(fallback, sizeof(fallback), "Disk %zu", index);
+        device_view_unavailable(fallback, view);
+        return;
+    }
+
+    memset(view, 0, sizeof(*view));
+    if (disk->model[0]) {
+        (void)snprintf(
+            view->title, sizeof(view->title),
+            "Disk %zu — %s", index, disk->model);
+    } else {
+        (void)snprintf(
+            view->title, sizeof(view->title), "Disk %zu", index);
+    }
+
+    char capacity[64];
+    infiltratr_format_disk_capacity(
+        disk->size_bytes, capacity, sizeof(capacity));
+    (void)snprintf(
+        view->subtitle, sizeof(view->subtitle),
+        "%s — %s", disk->name[0] ? disk->name : "Disk", capacity);
+    (void)snprintf(
+        view->rail_value, sizeof(view->rail_value),
+        "%.0f%%", disk->active_percent);
+
+    char value[128];
+    (void)snprintf(
+        value, sizeof(value), "%.1f MB/s",
+        disk->read_bytes_per_sec / (1024.0 * 1024.0));
+    device_view_metric(view, "Read speed", value);
+    (void)snprintf(
+        value, sizeof(value), "%.1f MB/s",
+        disk->write_bytes_per_sec / (1024.0 * 1024.0));
+    device_view_metric(view, "Write speed", value);
+    (void)snprintf(value, sizeof(value), "%.0f%%", disk->active_percent);
+    device_view_metric(view, "Active time", value);
+    (void)snprintf(
+        value, sizeof(value), "%.1f ms", disk->average_response_ms);
+    device_view_metric(view, "Average response", value);
+    (void)snprintf(value, sizeof(value), "%.2f", disk->queue_length);
+    device_view_metric(view, "Queue length", value);
+    device_view_metric(view, "Capacity", capacity);
+    device_view_metric(
+        view, "Media type",
+        disk->media_type[0] ? disk->media_type : "N/A");
+    device_view_metric(
+        view, "Connection",
+        disk->connection_type[0] ? disk->connection_type : "N/A");
+    device_view_metric(
+        view, "System disk", disk->system_disk ? "Yes" : "No");
+}
+
+void lsm_network_performance_view(const LsmNetInfo *net, size_t index,
+                                  bool use_bits,
+                                  LsmDevicePerformanceView *view)
+{
+    if (!view) return;
+    const char *kind = net && net->wireless ? "Wi-Fi" : "Ethernet";
+    if (!net) {
+        char fallback[64];
+        (void)snprintf(fallback, sizeof(fallback), "%s %zu", kind, index);
+        device_view_unavailable(fallback, view);
+        return;
+    }
+
+    memset(view, 0, sizeof(*view));
+    if (net->product[0]) {
+        (void)snprintf(
+            view->title, sizeof(view->title),
+            "%s %zu — %s", kind, index, net->product);
+    } else {
+        (void)snprintf(
+            view->title, sizeof(view->title), "%s %zu", kind, index);
+    }
+    (void)snprintf(
+        view->subtitle, sizeof(view->subtitle),
+        "%s — %s",
+        net->name[0] ? net->name : kind,
+        net->connection_state[0] ? net->connection_state : "N/A");
+
+    infiltratr_format_network_pair(
+        (long double)net->tx_bytes_per_sec,
+        (long double)net->rx_bytes_per_sec,
+        use_bits, view->rail_value, sizeof(view->rail_value));
+
+    char value[128];
+    infiltratr_format_network(
+        (long double)net->rx_bytes_per_sec,
+        use_bits, true, value, sizeof(value));
+    device_view_metric(view, "Receive", value);
+    infiltratr_format_network(
+        (long double)net->tx_bytes_per_sec,
+        use_bits, true, value, sizeof(value));
+    device_view_metric(view, "Send", value);
+    infiltratr_format_link_speed_mbps(
+        net->link_speed_mbps, value, sizeof(value));
+    device_view_metric(view, "Link speed", value);
+    infiltratr_format_percent(
+        net->utilisation_available, net->utilisation_percent,
+        value, sizeof(value));
+    device_view_metric(view, "Utilisation", value);
+    device_view_metric(view, "IPv4 address", net->ipv4);
+    device_view_metric(view, "IPv6 address", net->ipv6);
+    device_view_metric(view, "MAC address", net->mac);
+    device_view_metric(view, "State", net->connection_state);
+    device_view_metric(view, "Adapter", net->product);
+}
+
+void lsm_gpu_performance_view(const LsmGpuInfo *gpu, size_t index,
+                              LsmDevicePerformanceView *view)
+{
+    if (!view) return;
+    if (!gpu) {
+        char fallback[64];
+        (void)snprintf(fallback, sizeof(fallback), "GPU %zu", index);
+        device_view_unavailable(fallback, view);
+        return;
+    }
+
+    memset(view, 0, sizeof(*view));
+    if (gpu->name[0]) {
+        (void)snprintf(
+            view->title, sizeof(view->title),
+            "GPU %zu — %s", index, gpu->name);
+    } else {
+        (void)snprintf(view->title, sizeof(view->title), "GPU %zu", index);
+    }
+    infiltratr_copy_string(
+        view->subtitle, sizeof(view->subtitle),
+        gpu->metrics_source[0] ? gpu->metrics_source : "Graphics adapter");
+
+    if (gpu->engine_metrics_capable && gpu->utilization_available) {
+        if (gpu->temperature_available && isfinite(gpu->temperature_c)) {
+            (void)snprintf(
+                view->rail_value, sizeof(view->rail_value),
+                "%s %.0f%% %.0f °C",
+                gpu->active_engine[0] ? gpu->active_engine : "GPU",
+                gpu->utilization_percent, gpu->temperature_c);
+        } else {
+            (void)snprintf(
+                view->rail_value, sizeof(view->rail_value),
+                "%s %.0f%% N/A",
+                gpu->active_engine[0] ? gpu->active_engine : "GPU",
+                gpu->utilization_percent);
+        }
+    } else if (gpu->utilization_available) {
+        if (gpu->temperature_available && isfinite(gpu->temperature_c)) {
+            (void)snprintf(
+                view->rail_value, sizeof(view->rail_value),
+                "%.0f%% %.0f °C",
+                gpu->utilization_percent, gpu->temperature_c);
+        } else {
+            (void)snprintf(
+                view->rail_value, sizeof(view->rail_value),
+                "%.0f%% N/A", gpu->utilization_percent);
+        }
+    } else {
+        infiltratr_copy_string(
+            view->rail_value, sizeof(view->rail_value), "N/A");
+    }
+
+    char value[128];
+    device_view_metric(
+        view, "Product", gpu->name[0] ? gpu->name : "N/A");
+    infiltratr_format_percent(
+        gpu->utilization_available, gpu->utilization_percent,
+        value, sizeof(value));
+    device_view_metric(view, "Utilisation", value);
+    infiltratr_format_celsius(
+        gpu->temperature_available && isfinite(gpu->temperature_c),
+        gpu->temperature_c, value, sizeof(value));
+    device_view_metric(view, "Temperature", value);
+
+    if (gpu->shared_system_memory) {
+        device_view_metric(view, "Memory", "Dynamic system RAM");
+    } else if (gpu->memory_total_bytes > 0U) {
+        char used[64];
+        char total[64];
+        infiltratr_format_bytes(
+            gpu->memory_used_bytes, used, sizeof(used));
+        infiltratr_format_bytes(
+            gpu->memory_total_bytes, total, sizeof(total));
+        (void)snprintf(value, sizeof(value), "%s / %s", used, total);
+        device_view_metric(view, "Memory", value);
+    } else {
+        device_view_metric(view, "Memory", "N/A");
+    }
+
+    device_view_metric(
+        view, "Driver", gpu->driver[0] ? gpu->driver : "N/A");
+    device_view_metric(
+        view, "Driver version",
+        gpu->driver_version[0] ? gpu->driver_version : "N/A");
+    device_view_metric(
+        view, "Active engine",
+        gpu->active_engine[0] ? gpu->active_engine : "N/A");
+    device_view_metric(
+        view, "Telemetry",
+        gpu->metrics_source[0] ? gpu->metrics_source : "N/A");
+}
