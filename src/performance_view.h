@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file performance_view.h
- * @brief Platform-neutral formatted CPU and memory Performance view models.
+ * @brief Platform-neutral formatted Performance view models.
  *
  * Native collectors publish plain monitor data. This layer converts that data
  * into one canonical user-facing representation before GTK or Win32 renders it,
@@ -57,6 +57,44 @@ typedef struct {
                       [LSM_PERFORMANCE_VIEW_VALUE_LEN];
     size_t metric_count;
 } LsmDevicePerformanceView;
+
+/** Stable indices for values produced by lsm_disk_performance_view(). */
+typedef enum {
+    LSM_DISK_VIEW_READ_SPEED = 0,
+    LSM_DISK_VIEW_WRITE_SPEED,
+    LSM_DISK_VIEW_ACTIVE_TIME,
+    LSM_DISK_VIEW_AVERAGE_RESPONSE,
+    LSM_DISK_VIEW_QUEUE_LENGTH,
+    LSM_DISK_VIEW_CAPACITY,
+    LSM_DISK_VIEW_MEDIA_TYPE,
+    LSM_DISK_VIEW_CONNECTION,
+    LSM_DISK_VIEW_SYSTEM_DISK
+} LsmDiskPerformanceMetric;
+
+/** Stable indices for values produced by lsm_network_performance_view(). */
+typedef enum {
+    LSM_NETWORK_VIEW_RECEIVE = 0,
+    LSM_NETWORK_VIEW_SEND,
+    LSM_NETWORK_VIEW_LINK_SPEED,
+    LSM_NETWORK_VIEW_UTILISATION,
+    LSM_NETWORK_VIEW_IPV4,
+    LSM_NETWORK_VIEW_IPV6,
+    LSM_NETWORK_VIEW_MAC,
+    LSM_NETWORK_VIEW_STATE,
+    LSM_NETWORK_VIEW_ADAPTER
+} LsmNetworkPerformanceMetric;
+
+/** Stable indices for values produced by lsm_gpu_performance_view(). */
+typedef enum {
+    LSM_GPU_VIEW_PRODUCT = 0,
+    LSM_GPU_VIEW_UTILISATION,
+    LSM_GPU_VIEW_TEMPERATURE,
+    LSM_GPU_VIEW_MEMORY,
+    LSM_GPU_VIEW_DRIVER,
+    LSM_GPU_VIEW_DRIVER_VERSION,
+    LSM_GPU_VIEW_ACTIVE_ENGINE,
+    LSM_GPU_VIEW_TELEMETRY
+} LsmGpuPerformanceMetric;
 
 /**
  * Project one monitor snapshot into the canonical CPU presentation.
