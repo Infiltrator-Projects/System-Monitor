@@ -19,6 +19,8 @@
 #include "presentation_contract.h"
 #include "performance_view.h"
 
+#include <infiltratr/core.h>
+
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
 #endif
@@ -33,6 +35,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 #ifndef LSM_VERSION
@@ -1515,15 +1518,21 @@ static void draw_device_performance_page(
 
     if (view->metric_count == 0U) {
         wchar_t resource[64];
+        wchar_t message_text[192];
         text_to_wide(
             lsm_performance_page_title(type), resource,
             sizeof(resource) / sizeof(resource[0]));
+        (void)swprintf(
+            message_text,
+            sizeof(message_text) / sizeof(message_text[0]),
+            L"No native %ls telemetry is currently available.",
+            resource);
         RECT message = {
             metrics.left + 18, metrics.top + 18,
             metrics.right - 18, metrics.top + 72
         };
         draw_text(
-            dc, L"No native telemetry is currently available for this resource.",
+            dc, message_text,
             message, state->body_font, state->palette.summary,
             DT_LEFT | DT_TOP | DT_WORDBREAK);
     }
