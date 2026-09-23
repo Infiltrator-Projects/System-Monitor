@@ -2,6 +2,13 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.84 - 2026-09-23
+
+- Preserve the currently selected Performance device when delayed topology discovery changes a device's presentation stack identity while the semantic device is unchanged.
+- Retain a separate semantic selection identity for each Performance page: disk kernel name, network interface, Bluetooth address and the corresponding stable identifier for other device classes.
+- Restore topology rebuild selection by exact stack identity first and by same-type semantic identity second; fall back to CPU only when the selected resource genuinely no longer exists.
+- Add deterministic regression coverage for Disk identity promotion so Bluetooth discovery cannot move an unchanged Disk selection back to CPU.
+
 ## 1.0.83 - 2026-09-23
 
 - Preserve the currently selected Linux Performance device when asynchronous topology discovery adds Bluetooth devices by validating Disk pages with the same stable identity key used to build them, rather than the retired literal `disk-<name>` form.
