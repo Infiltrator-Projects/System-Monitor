@@ -2,6 +2,16 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.74 - 2026-09-23
+
+- Refine the native Windows presentation toward Linux visual parity without changing backend semantics.
+- Add compact live CPU and Memory sparklines to the Performance resource rail and use the Linux resource colours: cyan for CPU and blue for Memory.
+- Add View → Theme with Follow system, Day and Night; consume Common 1.19.24's exact Day/Night palette roles and persist the Windows theme choice per user.
+- Add hover states to the custom menu strip, top tabs and Performance rail so interactive regions no longer feel like static painted labels.
+- Detect unavailable MB Corpo faces and explicitly fall back to Segoe UI instead of relying on opaque GDI font substitution.
+- Theme the Windows process-list rows and header and remove harsh stock gridlines while retaining the native read-only list control.
+- Refresh Follow system when Windows appearance settings change and update the DWM title-bar preference together with the client palette.
+
 ## 1.0.73 - 2026-09-23
 
 - Replace the raw white Win32 preview layout with the current System Monitor/Infiltratr presentation hierarchy: top-level product tabs across the top and a dedicated Performance resource rail on the left.
