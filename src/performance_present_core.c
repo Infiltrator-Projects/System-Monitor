@@ -185,34 +185,45 @@ static void update_disk_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmDiskInfo *disk = &app->monitor.disks[page->index];
     LsmDiskPageWidgets *widgets = &page->widgets.disk;
+    LsmDevicePerformanceView view;
+    lsm_disk_performance_view(disk, page->index, &view);
     const double megabyte = 1024.0 * 1024.0;
     const double read_mb = disk->read_bytes_per_sec / megabyte;
     const double write_mb = disk->write_bytes_per_sec / megabyte;
-    char total[64], used[96], capacity[64];
+    char total[64], used[96];
 
     lsm_graph_push(page->graph, disk->active_percent, 0.0, app->runtime.newer_on_right);
     lsm_graph_push(page->secondary_graph, read_mb, write_mb,
                    app->runtime.newer_on_right);
     lsm_graph_push(page->side_graph, disk->active_percent, 0.0, app->runtime.newer_on_right);
-    lsm_ui_set_label_text(page->button_value, "%.0f%%", disk->active_percent);
-    lsm_ui_set_label_text(widgets->read_speed, "%.1f MB/s", read_mb);
-    lsm_ui_set_label_text(widgets->active_time, "%.0f%%",
-                          disk->active_percent);
-    lsm_ui_set_label_text(widgets->write_speed, "%.1f MB/s", write_mb);
-    lsm_ui_set_label_text(widgets->average_response, "%.1f ms",
-                          disk->average_response_ms);
-    lsm_ui_set_label_text(widgets->queue_length, "%.2f",
-                          disk->queue_length);
+    lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+    lsm_ui_set_label_text(
+        widgets->read_speed, "%s",
+        view.metric_values[LSM_DISK_VIEW_READ_SPEED]);
+    lsm_ui_set_label_text(
+        widgets->active_time, "%s",
+        view.metric_values[LSM_DISK_VIEW_ACTIVE_TIME]);
+    lsm_ui_set_label_text(
+        widgets->write_speed, "%s",
+        view.metric_values[LSM_DISK_VIEW_WRITE_SPEED]);
+    lsm_ui_set_label_text(
+        widgets->average_response, "%s",
+        view.metric_values[LSM_DISK_VIEW_AVERAGE_RESPONSE]);
+    lsm_ui_set_label_text(
+        widgets->queue_length, "%s",
+        view.metric_values[LSM_DISK_VIEW_QUEUE_LENGTH]);
     lsm_ui_set_label_text(widgets->current_requests, "%u",
                           disk->in_progress_operations);
     set_pressure_text(widgets->io_pressure, &app->monitor.io_pressure);
-    lsm_ui_set_label_text(widgets->media_type, "%s",
-                          disk->media_type[0] ? disk->media_type : "N/A");
-    lsm_ui_set_label_text(widgets->connection_type, "%s",
-                          disk->connection_type[0]
-                              ? disk->connection_type : "N/A");
-    lsm_ui_set_label_text(widgets->system_disk, "%s",
-                          disk->system_disk ? "Yes" : "No");
+    lsm_ui_set_label_text(
+        widgets->media_type, "%s",
+        view.metric_values[LSM_DISK_VIEW_MEDIA_TYPE]);
+    lsm_ui_set_label_text(
+        widgets->connection_type, "%s",
+        view.metric_values[LSM_DISK_VIEW_CONNECTION]);
+    lsm_ui_set_label_text(
+        widgets->system_disk, "%s",
+        view.metric_values[LSM_DISK_VIEW_SYSTEM_DISK]);
     lsm_ui_set_label_text(widgets->read_total, "%s",
                           lsm_format_bytes(disk->read_bytes_total,
                                            total, sizeof(total)));
@@ -221,8 +232,7 @@ static void update_disk_page(LsmApp *app, LsmDevicePage *page)
                                            used, sizeof(used)));
     lsm_ui_set_label_text(page->scale_label, "%.0f MB/s",
                        lsm_graph_get_maximum(page->secondary_graph));
-    lsm_metric_format_disk_capacity(disk->size_bytes, capacity, sizeof(capacity));
-    lsm_ui_set_label_text(page->subtitle, "%s — %s", disk->name, capacity);
+    lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
 
     if (page->partition_store) {
         const uint64_t signature = partition_store_signature(disk);
@@ -261,6 +271,9 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmNetInfo *net = &app->monitor.nets[page->index];
     LsmNetworkPageWidgets *widgets = &page->widgets.network;
+    LsmDevicePerformanceView view;
+    lsm_network_performance_view(
+        net, page->index, app->runtime.network_use_bits, &view);
     /* Identity comes from the backend snapshot. Raw bus identifiers are
        intentionally not promoted into the product-name position. */
     const char *product = performance_present_preferred_hardware_name(net->product, net->vendor);
@@ -283,19 +296,13 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
                         sizeof(page->hardware_vendor), net->vendor);
         lsm_ui_set_label_text(widgets->vendor, "%s", page->hardware_vendor);
     }
-    char receive[64], send[64], total_received[64], total_sent[64];
+    char total_received[64], total_sent[64];
     char scale[64], mid_scale[64], frequency[64];
     lsm_graph_push(page->graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
                    app->runtime.newer_on_right);
     lsm_graph_push(page->side_graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
                    app->runtime.newer_on_right);
 
-    lsm_metric_format_network(
-        (long double)net->rx_bytes_per_sec, app->runtime.network_use_bits, true,
-        receive, sizeof(receive));
-    lsm_metric_format_network(
-        (long double)net->tx_bytes_per_sec, app->runtime.network_use_bits, true,
-        send, sizeof(send));
     lsm_metric_format_network(
         (long double)net->rx_bytes_total, app->runtime.network_use_bits, false,
         total_received, sizeof(total_received));
@@ -310,34 +317,33 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
         (long double)(graph_maximum / 2.0),
         app->runtime.network_use_bits, true, mid_scale, sizeof(mid_scale));
 
-    char compact_rates[64];
-    lsm_metric_format_network_pair(
-        (long double)net->tx_bytes_per_sec,
-        (long double)net->rx_bytes_per_sec,
-        app->runtime.network_use_bits, compact_rates, sizeof(compact_rates));
-    lsm_ui_set_label_text(page->button_value, "%s", compact_rates);
-    lsm_ui_set_label_text(widgets->receive_rate, "%s", receive);
+    lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+    lsm_ui_set_label_text(
+        widgets->receive_rate, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_RECEIVE]);
     lsm_ui_set_label_text(widgets->received_total, "%s", total_received);
-    lsm_ui_set_label_text(widgets->send_rate, "%s", send);
+    lsm_ui_set_label_text(
+        widgets->send_rate, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_SEND]);
     lsm_ui_set_label_text(widgets->sent_total, "%s", total_sent);
-    lsm_ui_set_label_text(widgets->ipv4, "%s",
-                          net->ipv4[0] ? net->ipv4 : "N/A");
-    lsm_ui_set_label_text(widgets->ipv6, "%s",
-                          net->ipv6[0] ? net->ipv6 : "N/A");
-    lsm_ui_set_label_text(widgets->mac, "%s",
-                          net->mac[0] ? net->mac : "N/A");
-    lsm_ui_set_label_text(widgets->connection_state, "%s",
-                          net->connection_state[0]
-                              ? net->connection_state : "N/A");
-    if (net->utilisation_available)
-        lsm_ui_set_label_text(widgets->utilisation, "%.1f%%",
-                              net->utilisation_percent);
-    else
-        lsm_ui_set_label_text(widgets->utilisation, "N/A");
-    char link_speed[64];
-    lsm_metric_format_link_speed_mbps(net->link_speed_mbps, link_speed,
-                                      sizeof(link_speed));
-    lsm_ui_set_label_text(widgets->link_speed, "%s", link_speed);
+    lsm_ui_set_label_text(
+        widgets->ipv4, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_IPV4]);
+    lsm_ui_set_label_text(
+        widgets->ipv6, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_IPV6]);
+    lsm_ui_set_label_text(
+        widgets->mac, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_MAC]);
+    lsm_ui_set_label_text(
+        widgets->connection_state, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_STATE]);
+    lsm_ui_set_label_text(
+        widgets->utilisation, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_UTILISATION]);
+    lsm_ui_set_label_text(
+        widgets->link_speed, "%s",
+        view.metric_values[LSM_NETWORK_VIEW_LINK_SPEED]);
     if (net->wireless) {
         lsm_ui_set_label_text(widgets->wifi_network, "%s",
                               net->ssid[0] ? net->ssid : "N/A");
