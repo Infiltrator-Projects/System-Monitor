@@ -28,11 +28,13 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <dxgi1_4.h>
+#include <devguid.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <psapi.h>
+#include <setupapi.h>
 #include <winioctl.h>
 
 #include <limits.h>
@@ -1361,6 +1363,158 @@ static void update_gpu_dxgi_memory(
     IDXGIFactory1_Release(factory);
 }
 
+static bool multi_string_contains_identity(
+    const char *multi, size_t multi_size, const char *identity)
+{
+    if (!multi || multi_size == 0U || !identity || !identity[0])
+        return false;
+
+    size_t offset = 0U;
+    while (offset < multi_size && multi[offset] != '\0') {
+        const char *entry = multi + offset;
+        const size_t remaining = multi_size - offset;
+        size_t length = 0U;
+        while (length < remaining && entry[length] != '\0')
+            length++;
+        if (length == remaining)
+            break;
+        if (_stricmp(entry, identity) == 0)
+            return true;
+        offset += length + 1U;
+    }
+    return false;
+}
+
+static bool query_registry_string(
+    HKEY key, const char *name, char *destination,
+    size_t destination_size)
+{
+    if (!key || !name || !destination || destination_size == 0U ||
+        destination_size > (size_t)DWORD_MAX)
+        return false;
+
+    destination[0] = '\0';
+    DWORD type = 0U;
+    DWORD bytes = (DWORD)destination_size;
+    const LSTATUS status = RegQueryValueExA(
+        key, name, NULL, &type, (BYTE *)destination, &bytes);
+    if (status != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        destination[0] = '\0';
+        return false;
+    }
+
+    destination[destination_size - 1U] = '\0';
+    return destination[0] != '\0';
+}
+
+static void populate_gpu_setupapi_metadata(LsmMonitor *monitor)
+{
+    if (!monitor || monitor->gpu_count == 0U)
+        return;
+
+    HDEVINFO devices = SetupDiGetClassDevsA(
+        &GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
+    if (devices == INVALID_HANDLE_VALUE)
+        return;
+
+    for (DWORD device_index = 0U; ; device_index++) {
+        SP_DEVINFO_DATA device;
+        memset(&device, 0, sizeof(device));
+        device.cbSize = sizeof(device);
+        if (!SetupDiEnumDeviceInfo(devices, device_index, &device)) {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        char instance[LSM_IDENTITY_LEN];
+        instance[0] = '\0';
+        DWORD required = 0U;
+        (void)SetupDiGetDeviceInstanceIdA(
+            devices, &device, instance,
+            (DWORD)sizeof(instance), &required);
+
+        char hardware_ids[2048];
+        memset(hardware_ids, 0, sizeof(hardware_ids));
+        DWORD property_type = 0U;
+        DWORD hardware_bytes = 0U;
+        if (!SetupDiGetDeviceRegistryPropertyA(
+                devices, &device, SPDRP_HARDWAREID,
+                &property_type, (BYTE *)hardware_ids,
+                (DWORD)sizeof(hardware_ids), &hardware_bytes) ||
+            property_type != REG_MULTI_SZ) {
+            hardware_ids[0] = '\0';
+            hardware_bytes = 0U;
+        }
+
+        HKEY driver_key = SetupDiOpenDevRegKey(
+            devices, &device, DICS_FLAG_GLOBAL, 0U,
+            DIREG_DRV, KEY_READ);
+
+        for (size_t gpu_index = 0U;
+             gpu_index < monitor->gpu_count; gpu_index++) {
+            LsmGpuInfo *gpu = &monitor->gpus[gpu_index];
+            const bool exact_instance =
+                instance[0] &&
+                _stricmp(instance, gpu->platform_identity) == 0;
+            const bool hardware_match =
+                multi_string_contains_identity(
+                    hardware_ids, (size_t)hardware_bytes,
+                    gpu->platform_identity);
+            if (!exact_instance && !hardware_match)
+                continue;
+
+            if (driver_key != INVALID_HANDLE_VALUE) {
+                char provider[64];
+                char version[96];
+                provider[0] = '\0';
+                version[0] = '\0';
+                if (!query_registry_string(
+                        driver_key, "ProviderName",
+                        provider, sizeof(provider))) {
+                    (void)query_registry_string(
+                        driver_key, "DriverDesc",
+                        provider, sizeof(provider));
+                }
+                (void)query_registry_string(
+                    driver_key, "DriverVersion",
+                    version, sizeof(version));
+                if (provider[0])
+                    infiltratr_copy_string(
+                        gpu->driver, sizeof(gpu->driver), provider);
+                if (version[0])
+                    infiltratr_copy_string(
+                        gpu->driver_version,
+                        sizeof(gpu->driver_version), version);
+            }
+
+            if (exact_instance) {
+                char location[128];
+                DWORD location_type = 0U;
+                DWORD location_bytes = 0U;
+                memset(location, 0, sizeof(location));
+                if (SetupDiGetDeviceRegistryPropertyA(
+                        devices, &device,
+                        SPDRP_LOCATION_INFORMATION,
+                        &location_type, (BYTE *)location,
+                        (DWORD)sizeof(location),
+                        &location_bytes) &&
+                    location_type == REG_SZ && location[0]) {
+                    infiltratr_copy_string(
+                        gpu->pci_location,
+                        sizeof(gpu->pci_location), location);
+                }
+            }
+        }
+
+        if (driver_key != INVALID_HANDLE_VALUE)
+            RegCloseKey(driver_key);
+    }
+
+    SetupDiDestroyDeviceInfoList(devices);
+}
+
 static bool gpu_identity_changed(
     const LsmGpuInfo *old_gpus, size_t old_count,
     const LsmGpuInfo *new_gpus, size_t new_count)
@@ -1445,6 +1599,7 @@ static void enumerate_gpus(
     if (count > 0U)
         memcpy(monitor->gpus, discovered, count * sizeof(discovered[0]));
     monitor->gpu_count = count;
+    populate_gpu_setupapi_metadata(monitor);
 }
 
 static void refresh_topology_and_devices(
