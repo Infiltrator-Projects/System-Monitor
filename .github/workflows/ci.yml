@@ -162,10 +162,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version=$(tr -d '[:space:]' < support/VERSION)
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 \
-            -DLSM_VERSION="\\\"${version}\\\"" \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc \

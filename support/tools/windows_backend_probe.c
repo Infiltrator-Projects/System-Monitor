@@ -24,10 +24,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef LSM_VERSION
-#define LSM_VERSION "development"
-#endif
-
 static double bytes_to_gib(uint64_t bytes)
 {
     return (double)bytes / (1024.0 * 1024.0 * 1024.0);
@@ -35,8 +31,7 @@ static double bytes_to_gib(uint64_t bytes)
 
 int main(void)
 {
-    printf("System Monitor %s experimental Windows backend probe\n\n",
-           LSM_VERSION);
+    printf("System Monitor experimental Windows backend probe\n\n");
 
     LsmMonitor monitor;
     if (!lsm_monitor_platform_init(&monitor)) {
