@@ -148,6 +148,7 @@ typedef struct {
     HWND process_list;
     HFONT body_font;
     HFONT body_bold_font;
+    HFONT rail_value_font;
     HFONT title_font;
     HFONT heading_font;
     HFONT metric_font;
@@ -674,7 +675,7 @@ static void draw_performance_rail_item(
         active ? line_colour : state->palette.text,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     draw_text(
-        dc, value, value_rect, state->body_font,
+        dc, value, value_rect, state->rail_value_font,
         active ? state->palette.selected_summary : state->palette.summary,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
@@ -701,11 +702,26 @@ static void draw_metric_block(
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+static int measure_text_width(HDC dc, HFONT font, const wchar_t *text)
+{
+    if (!dc || !font || !text) return 0;
+    HGDIOBJ previous = SelectObject(dc, font);
+    SIZE size = {0, 0};
+    const int length = lstrlenW(text);
+    if (length > 0)
+        (void)GetTextExtentPoint32W(dc, text, length, &size);
+    SelectObject(dc, previous);
+    return size.cx;
+}
+
 static void draw_detail_pair(
     LsmWindowsUiState *state, HDC dc, RECT rect,
-    const wchar_t *label, const wchar_t *value)
+    const wchar_t *label, const wchar_t *value, int label_width)
 {
-    const int split = rect.left + 116;
+    const int available = rect.right - rect.left;
+    if (label_width < 40) label_width = 40;
+    if (label_width > available - 48) label_width = available - 48;
+    const int split = rect.left + label_width + 10;
     RECT label_rect = {
         rect.left, rect.top,
         split - 8, rect.bottom
@@ -1032,6 +1048,19 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     const int info_width = details.right - pad - info_left;
     const int info_col_width = (info_width - 18) / 2;
     const int info_row_height = 25;
+    int detail_label_width[2] = {0, 0};
+    for (int index = 0; index < 13; index++) {
+        const int group = index / 7;
+        const int measured = measure_text_width(
+            dc, state->body_font, detail_names[index]);
+        if (measured > detail_label_width[group])
+            detail_label_width[group] = measured;
+    }
+    for (int group = 0; group < 2; group++) {
+        if (detail_label_width[group] > info_col_width - 58)
+            detail_label_width[group] = info_col_width - 58;
+    }
+
     for (int index = 0; index < 13; index++) {
         const int group = index / 7;
         const int row = index % 7;
@@ -1044,7 +1073,8 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
         };
         draw_detail_pair(
             state, dc, pair,
-            detail_names[index], detail_values[index]);
+            detail_names[index], detail_values[index],
+            detail_label_width[group]);
     }
 }
 
@@ -1289,6 +1319,16 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 
     const int info_left = separator_x + 18;
     const int info_width = details.right - pad - info_left;
+    int hardware_label_width = 0;
+    for (int index = 0; index < 5; index++) {
+        const int measured = measure_text_width(
+            dc, state->body_font, hardware_names[index]);
+        if (measured > hardware_label_width)
+            hardware_label_width = measured;
+    }
+    if (hardware_label_width > info_width - 72)
+        hardware_label_width = info_width - 72;
+
     for (int index = 0; index < 5; index++) {
         RECT pair = {
             info_left,
@@ -1298,7 +1338,8 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         };
         draw_detail_pair(
             state, dc, pair,
-            hardware_names[index], hardware_values[index]);
+            hardware_names[index], hardware_values[index],
+            hardware_label_width);
     }
 }
 
@@ -1315,17 +1356,24 @@ static void draw_performance_page(
     wchar_t cpu_value[96] = L"Initialising...";
     wchar_t memory_value[96] = L"Initialising...";
     if (state->monitor_ready) {
-        (void)swprintf(
-            cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]),
-            L"%.0f%%  %u logical processors",
-            state->monitor.cpu.usage_percent,
-            state->monitor.cpu.logical_cores);
+        if (state->monitor.cpu.frequency_ghz > 0.0) {
+            (void)swprintf(
+                cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]),
+                L"%.0f%% %.2f GHz",
+                state->monitor.cpu.usage_percent,
+                state->monitor.cpu.frequency_ghz);
+        } else {
+            (void)swprintf(
+                cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]),
+                L"%.0f%% N/A",
+                state->monitor.cpu.usage_percent);
+        }
         (void)swprintf(
             memory_value, sizeof(memory_value) / sizeof(memory_value[0]),
-            L"%.0f%%  %.1f / %.1f GB",
-            state->monitor.memory.usage_percent,
+            L"%.1f/%.1f GB (%.0f%%)",
             bytes_to_gb(state->monitor.memory.used_bytes),
-            bytes_to_gb(state->monitor.memory.total_bytes));
+            bytes_to_gb(state->monitor.memory.total_bytes),
+            state->monitor.memory.usage_percent);
     }
 
     RECT cpu = {
@@ -1558,6 +1606,8 @@ static bool create_fonts(LsmWindowsUiState *state)
         -17, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
     state->body_bold_font = create_font_with_fallback(
         -17, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
+    state->rail_value_font = create_font_with_fallback(
+        -15, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
     state->title_font = create_font_with_fallback(
         -24, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
     state->heading_font = create_font_with_fallback(
@@ -1566,8 +1616,8 @@ static bool create_fonts(LsmWindowsUiState *state)
         -21, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
 
     return state->body_font && state->body_bold_font &&
-        state->title_font && state->heading_font &&
-        state->metric_font;
+        state->rail_value_font && state->title_font &&
+        state->heading_font && state->metric_font;
 }
 
 static bool create_children(LsmWindowsUiState *state)
@@ -1874,11 +1924,13 @@ static void destroy_state(LsmWindowsUiState *state)
 
     if (state->body_font) DeleteObject(state->body_font);
     if (state->body_bold_font) DeleteObject(state->body_bold_font);
+    if (state->rail_value_font) DeleteObject(state->rail_value_font);
     if (state->title_font) DeleteObject(state->title_font);
     if (state->heading_font) DeleteObject(state->heading_font);
     if (state->metric_font) DeleteObject(state->metric_font);
     state->body_font = NULL;
     state->body_bold_font = NULL;
+    state->rail_value_font = NULL;
     state->title_font = NULL;
     state->heading_font = NULL;
     state->metric_font = NULL;
