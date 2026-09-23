@@ -158,25 +158,21 @@ jobs:
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake --target system-monitor --parallel 2
 
-      - name: Cross-compile and link experimental Windows backends
+      - name: Cross-compile experimental Windows backend probe
         shell: bash
         run: |
           set -euo pipefail
-          for source in monitor_backend_windows process_backend_windows; do
-            x86_64-w64-mingw32-gcc \
-              -std=c17 -D_WIN32_WINNT=0x0601 \
-              -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
-              -Wstrict-prototypes -Wmissing-prototypes \
-              -Isrc -c "src/${source}.c" \
-              -o "build-cmake/${source}.o"
-          done
-          printf 'int main(void) { return 0; }\n' > build-cmake/windows-backend-link.c
+          version=$(tr -d '[:space:]' < support/VERSION)
           x86_64-w64-mingw32-gcc \
-            -std=c17 build-cmake/windows-backend-link.c \
-            build-cmake/monitor_backend_windows.o \
-            build-cmake/process_backend_windows.o \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 \
+            -DLSM_VERSION="\\\"${version}\\\"" \
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            -Wstrict-prototypes -Wmissing-prototypes \
+            -Isrc \
+            support/tools/windows_backend_probe.c \
+            src/monitor_backend_windows.c src/process_backend_windows.c \
             -lpsapi -ladvapi32 \
-            -o build-cmake/windows-backend-link.exe
+            -o build-cmake/windows-backend-probe.exe
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check
