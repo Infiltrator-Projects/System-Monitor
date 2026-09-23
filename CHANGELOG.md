@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.76 - 2026-09-23
+
+- Size Windows CPU and Memory detail-label columns from the actual native font metrics instead of a fixed 116-pixel split, preventing avoidable ellipsis in labels such as "Logical processors", "Maximum speed" and "Context switches/s".
+- Match the Linux CPU side-rail value semantics: usage plus current speed when available, otherwise usage plus `N/A`, instead of displaying the Windows-only logical-processor count in the value line.
+- Keep the canonical 220-pixel Performance rail while using a dedicated compact native value font so CPU and Memory summaries fit the same geometry more naturally.
+
 ## 1.0.75 - 2026-09-23
 
 - Mirror the actual Linux Performance-page composition in the native Windows preview instead of only approximating its colour scheme.
