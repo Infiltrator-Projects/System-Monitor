@@ -47,8 +47,8 @@
 #define LSM_WINDOWS_CONTROL_SPACING 10
 #define LSM_WINDOWS_CARD_RADIUS 12
 #define LSM_WINDOWS_CONTROL_RADIUS 10
-#define LSM_WINDOWS_RAIL_WIDTH 250
-#define LSM_WINDOWS_RAIL_ITEM_HEIGHT 82
+#define LSM_WINDOWS_RAIL_WIDTH 220
+#define LSM_WINDOWS_RAIL_ITEM_HEIGHT 68
 #define LSM_WINDOWS_MESSAGE_START_BACKEND (WM_APP + 1)
 
 typedef enum {
@@ -536,18 +536,23 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
     RECT strip = {0, top, width, top + LSM_WINDOWS_TAB_HEIGHT};
     fill_solid(dc, &strip, state->palette.panel);
 
-    const int left = LSM_WINDOWS_SCREEN_PADDING;
-    const int available = width - (2 * LSM_WINDOWS_SCREEN_PADDING);
-    const int tab_width = available / LSM_WINDOWS_PAGE_COUNT;
+    int x = LSM_WINDOWS_SCREEN_PADDING;
+    select_font(dc, state->body_bold_font);
     for (int index = 0; index < LSM_WINDOWS_PAGE_COUNT; index++) {
+        SIZE text_size = {0, 0};
+        (void)GetTextExtentPoint32W(
+            dc, page_names[index],
+            lstrlenW(page_names[index]), &text_size);
+        int tab_width = text_size.cx + 28;
+        if (tab_width < 92) tab_width = 92;
+
         RECT tab = {
-            left + index * tab_width,
-            top,
-            index == LSM_WINDOWS_PAGE_COUNT - 1
-                ? width - LSM_WINDOWS_SCREEN_PADDING
-                : left + (index + 1) * tab_width,
+            x, top,
+            x + tab_width,
             top + LSM_WINDOWS_TAB_HEIGHT
         };
+        if (tab.right > width - LSM_WINDOWS_SCREEN_PADDING)
+            tab.right = width - LSM_WINDOWS_SCREEN_PADDING;
         state->page_tabs[index] = tab;
 
         const bool active = index == (int)state->active_page;
@@ -566,6 +571,14 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
             active ? state->body_bold_font : state->body_font,
             active ? state->palette.accent : state->palette.summary,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        x = tab.right;
+        if (x >= width - LSM_WINDOWS_SCREEN_PADDING) {
+            for (int hidden = index + 1;
+                 hidden < LSM_WINDOWS_PAGE_COUNT; hidden++)
+                SetRectEmpty(&state->page_tabs[hidden]);
+            break;
+        }
     }
 
     RECT divider = {
@@ -642,19 +655,19 @@ static void draw_performance_rail_item(
         LSM_WINDOWS_CONTROL_RADIUS);
 
     RECT sparkline = {
-        rect.left + 10, rect.top + 17,
-        rect.left + 82, rect.bottom - 17
+        rect.left + 8, rect.top + 12,
+        rect.left + 72, rect.top + 56
     };
     draw_mini_history(
         state, dc, sparkline, history, line_colour);
 
     RECT title_rect = {
-        sparkline.right + 12, rect.top + 12,
-        rect.right - 10, rect.top + 37
+        sparkline.right + 8, rect.top + 8,
+        rect.right - 8, rect.top + 31
     };
     RECT value_rect = {
-        sparkline.right + 12, rect.top + 39,
-        rect.right - 10, rect.bottom - 9
+        sparkline.right + 8, rect.top + 32,
+        rect.right - 8, rect.bottom - 7
     };
     draw_text(
         dc, title, title_rect, state->body_bold_font,
@@ -893,8 +906,8 @@ static void draw_performance_page(
     }
 
     RECT cpu = {
-        rail.left + 7, rail.top + 8,
-        rail.right - 7, rail.top + 8 + LSM_WINDOWS_RAIL_ITEM_HEIGHT
+        rail.left + 4, rail.top + 8,
+        rail.left + 216, rail.top + 8 + LSM_WINDOWS_RAIL_ITEM_HEIGHT
     };
     RECT memory = {
         cpu.left,
