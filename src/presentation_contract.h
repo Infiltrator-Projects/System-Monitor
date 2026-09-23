@@ -127,59 +127,140 @@ typedef enum {
     LSM_MEMORY_DETAIL_COUNT
 } LsmMemoryDetailField;
 
-/** Return the canonical label for one top-level application tab. */
+/**
+ * Return the canonical label for one top-level application tab.
+ *
+ * @param tab Top-level application tab identity.
+ * @return Static UTF-8 label owned by the presentation contract.
+ */
 const char *lsm_tab_label(LsmTabIndex tab);
 
-/** Return the canonical default title for one Performance resource type. */
+/**
+ * Return the canonical default title for one Performance resource.
+ *
+ * @param type Performance resource identity.
+ * @return Static UTF-8 title owned by the presentation contract.
+ */
 const char *lsm_performance_page_title(LsmPageType type);
 
-/** Return the canonical stack-name prefix for one Performance resource type. */
+/**
+ * Return the canonical stack-name prefix for one Performance resource.
+ *
+ * @param type Performance resource identity.
+ * @return Static ASCII stack prefix owned by the presentation contract.
+ */
 const char *lsm_performance_stack_prefix(LsmPageType type);
 
-/** Return the canonical hexadecimal graph/accent colour for a resource type. */
+/**
+ * Return the canonical hexadecimal graph/accent colour for a resource.
+ *
+ * @param type Performance resource identity.
+ * @return Static CSS-style hexadecimal colour string.
+ */
 const char *lsm_performance_colour_hex(LsmPageType type);
 
-/** Return the canonical RGB graph/accent colour for a resource type. */
+/**
+ * Return the canonical RGB graph/accent colour for a resource.
+ *
+ * @param type Performance resource identity.
+ * @return Toolkit-neutral RGB triplet for the resource.
+ */
 LsmPresentationColour lsm_performance_colour_rgb(LsmPageType type);
 
-/** Return one canonical CPU metric caption. */
+/**
+ * Return one canonical CPU headline-metric caption.
+ *
+ * @param field CPU headline metric identity.
+ * @return Static UTF-8 metric caption.
+ */
 const char *lsm_cpu_metric_label(LsmCpuMetricField field);
 
-/** Return one canonical CPU detail caption. */
+/**
+ * Return one canonical CPU detail caption.
+ *
+ * @param field CPU detail-field identity.
+ * @return Static UTF-8 detail caption.
+ */
 const char *lsm_cpu_detail_label(LsmCpuDetailField field);
 
-/** Return one canonical memory metric caption. */
+/**
+ * Return one canonical memory headline-metric caption.
+ *
+ * @param field Memory headline metric identity.
+ * @return Static UTF-8 metric caption.
+ */
 const char *lsm_memory_metric_label(LsmMemoryMetricField field);
 
-/** Return one canonical memory detail caption. */
+/**
+ * Return one canonical memory hardware-detail caption.
+ *
+ * @param field Memory hardware-detail identity.
+ * @return Static UTF-8 detail caption.
+ */
 const char *lsm_memory_detail_label(LsmMemoryDetailField field);
 
-/** Return the canonical two-column placement for one CPU headline metric. */
+/**
+ * Return the canonical two-column placement for one CPU headline metric.
+ *
+ * @param field CPU headline metric identity.
+ * @return Toolkit-neutral column and row coordinates.
+ */
 LsmPresentationGridPosition
 lsm_cpu_metric_position(LsmCpuMetricField field);
 
-/** Return the canonical two-group placement for one CPU detail field. */
+/**
+ * Return the canonical two-group placement for one CPU detail field.
+ *
+ * @param field CPU detail-field identity.
+ * @return Toolkit-neutral group-column and row coordinates.
+ */
 LsmPresentationGridPosition
 lsm_cpu_detail_position(LsmCpuDetailField field);
 
-/** Return the canonical two-column placement for one memory headline metric. */
+/**
+ * Return the canonical two-column placement for one memory headline metric.
+ *
+ * @param field Memory headline metric identity.
+ * @return Toolkit-neutral column and row coordinates.
+ */
 LsmPresentationGridPosition
 lsm_memory_metric_position(LsmMemoryMetricField field);
 
-/** Return the canonical single-column placement for one memory detail field. */
+/**
+ * Return the canonical single-column placement for one memory detail field.
+ *
+ * @param field Memory hardware-detail identity.
+ * @return Toolkit-neutral column and row coordinates.
+ */
 LsmPresentationGridPosition
 lsm_memory_detail_position(LsmMemoryDetailField field);
 
-/** Return the shared CPU primary-graph caption. */
+/**
+ * Return the shared CPU primary-graph caption.
+ *
+ * @return Static UTF-8 caption for the CPU utilisation graph.
+ */
 const char *lsm_cpu_graph_caption(void);
 
-/** Return the shared memory primary-graph caption. */
+/**
+ * Return the shared memory primary-graph caption.
+ *
+ * @return Static UTF-8 caption for the memory-usage graph.
+ */
 const char *lsm_memory_graph_caption(void);
 
-/** Return the shared memory-composition caption. */
+/**
+ * Return the shared memory-composition caption.
+ *
+ * @return Static UTF-8 caption for the memory-composition region.
+ */
 const char *lsm_memory_composition_caption(void);
 
-/** Return the shared percentage-axis maximum label. */
+/**
+ * Return the shared percentage-axis maximum label.
+ *
+ * @return Static UTF-8 label representing the 100 percent scale maximum.
+ */
 const char *lsm_percent_scale_max_label(void);
 
 #endif
