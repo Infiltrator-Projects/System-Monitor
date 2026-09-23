@@ -397,6 +397,7 @@ bool performance_present_core_page(LsmApp *app, LsmDevicePage *page)
         case LSM_PAGE_GPU:
         case LSM_PAGE_BATTERY:
         case LSM_PAGE_NPU:
+        case LSM_PAGE_COUNT:
             return false;
     }
     return false;
