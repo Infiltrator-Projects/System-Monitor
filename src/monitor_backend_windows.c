@@ -484,9 +484,9 @@ static void enumerate_physical_disks(
         DISK_PERFORMANCE performance;
         if (query_disk_performance(disk, &performance))
             update_disk_performance(
-                info, &state->disks[count], &performance, elapsed);
+                info, &state->disks[number], &performance, elapsed);
         else
-            state->disks[count].valid = false;
+            state->disks[number].valid = false;
 
         CloseHandle(disk);
         count++;
