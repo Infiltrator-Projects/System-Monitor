@@ -354,3 +354,16 @@ jobs:
           if ($status -ne 'success') {
             throw "Windows GUI startup stage failed: $status"
           }
+
+          # The lightweight startup-smoke path intentionally exits before
+          # backend initialisation. Also exercise the real launch path long
+          # enough to initialise and refresh native collectors so a backend
+          # crash cannot masquerade as successful GUI startup.
+          $normal = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -PassThru
+          Start-Sleep -Seconds 5
+          if ($normal.HasExited) {
+            throw "Windows GUI exited during normal backend startup with code $($normal.ExitCode)."
+          }
+          Stop-Process -Id $normal.Id -Force
+          $normal.WaitForExit()
+          Write-Host 'Windows normal-mode backend startup remained alive for 5 seconds.'
