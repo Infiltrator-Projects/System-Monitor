@@ -2469,7 +2469,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                     if (PtInRect(
                             &state->performance_items[index], point)) {
                         state->active_performance_item =
-                            (LsmWindowsPerformanceItem)index;
+                            (LsmPageType)index;
                         set_status(
                             state,
                             index == LSM_PAGE_CPU
