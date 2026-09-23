@@ -16,6 +16,7 @@
 #include "monitor_platform.h"
 #include "process_backend.h"
 #include "presentation_contract.h"
+#include "performance_view.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -1032,124 +1033,29 @@ static void format_optional_ghz(
 
 static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
 {
-    wchar_t model[256] = L"Unavailable";
-    wchar_t utilisation[64] = L"N/A";
-    wchar_t speed[64] = L"N/A";
-    wchar_t processes[64] = L"N/A";
-    wchar_t threads[64] = L"N/A";
-    wchar_t handles[64] = L"N/A";
-    wchar_t uptime[64] = L"N/A";
-    wchar_t temperature[64] = L"N/A";
-    wchar_t pressure[64] = L"N/A";
-    wchar_t user_time[64] = L"N/A";
-    wchar_t kernel_time[64] = L"N/A";
-    wchar_t physical_cores[64] = L"N/A";
-    wchar_t logical_cores[64] = L"N/A";
-    wchar_t base_speed[64] = L"N/A";
-    wchar_t maximum_speed[64] = L"N/A";
-    wchar_t virtualization[64] = L"N/A";
-    wchar_t cache_l1[64] = L"N/A";
-    wchar_t cache_l2[64] = L"N/A";
-    wchar_t cache_l3[64] = L"N/A";
-    wchar_t load_average[64] = L"N/A";
-    wchar_t sockets[64] = L"N/A";
-    wchar_t numa_nodes[64] = L"N/A";
-    wchar_t interrupts[64] = L"N/A";
-    wchar_t context_switches[64] = L"N/A";
+    LsmCpuPerformanceView view;
+    lsm_cpu_performance_view(
+        state->monitor_ready ? &state->monitor : NULL, &view);
 
-    if (state->monitor_ready) {
-        const LsmCpuInfo *cpu = &state->monitor.cpu;
-        text_to_wide(cpu->model, model, sizeof(model) / sizeof(model[0]));
-        if (!model[0]) lstrcpyW(model, L"Unavailable");
-
-        (void)swprintf(
-            utilisation, sizeof(utilisation) / sizeof(utilisation[0]),
-            L"%.0f%%", cpu->usage_percent);
-        format_optional_ghz(
-            speed, sizeof(speed) / sizeof(speed[0]), cpu->frequency_ghz);
-        (void)swprintf(
-            processes, sizeof(processes) / sizeof(processes[0]),
-            L"%u", cpu->process_count);
-        (void)swprintf(
-            threads, sizeof(threads) / sizeof(threads[0]),
-            L"%u", cpu->thread_count);
-        (void)swprintf(
-            handles, sizeof(handles) / sizeof(handles[0]),
-            L"%llu", (unsigned long long)cpu->file_handle_count);
-
-        const uint64_t seconds = cpu->uptime_seconds;
-        (void)swprintf(
-            uptime, sizeof(uptime) / sizeof(uptime[0]),
-            L"%llu:%02llu:%02llu:%02llu",
-            (unsigned long long)(seconds / 86400ULL),
-            (unsigned long long)((seconds % 86400ULL) / 3600ULL),
-            (unsigned long long)((seconds % 3600ULL) / 60ULL),
-            (unsigned long long)(seconds % 60ULL));
-
-        if (cpu->temperature_c > 0.0) {
-            (void)swprintf(
-                temperature,
-                sizeof(temperature) / sizeof(temperature[0]),
-                L"%.1f C", cpu->temperature_c);
-        }
-        format_optional_percent(
-            pressure, sizeof(pressure) / sizeof(pressure[0]),
-            state->monitor.cpu_pressure.some_avg10,
-            state->monitor.cpu_pressure.available);
-        (void)swprintf(
-            user_time, sizeof(user_time) / sizeof(user_time[0]),
-            L"%.1f%%", cpu->user_percent);
-        (void)swprintf(
-            kernel_time, sizeof(kernel_time) / sizeof(kernel_time[0]),
-            L"%.1f%%", cpu->kernel_percent);
-
-        if (cpu->physical_cores > 0U)
-            (void)swprintf(
-                physical_cores,
-                sizeof(physical_cores) / sizeof(physical_cores[0]),
-                L"%u", cpu->physical_cores);
-        if (cpu->logical_cores > 0U)
-            (void)swprintf(
-                logical_cores,
-                sizeof(logical_cores) / sizeof(logical_cores[0]),
-                L"%u", cpu->logical_cores);
-        format_optional_ghz(
-            base_speed, sizeof(base_speed) / sizeof(base_speed[0]),
-            cpu->base_frequency_ghz);
-        format_optional_ghz(
-            maximum_speed,
-            sizeof(maximum_speed) / sizeof(maximum_speed[0]),
-            cpu->max_frequency_ghz);
-
-        if (cpu->cache_l1[0])
-            text_to_wide(
-                cpu->cache_l1, cache_l1,
-                sizeof(cache_l1) / sizeof(cache_l1[0]));
-        if (cpu->cache_l2[0])
-            text_to_wide(
-                cpu->cache_l2, cache_l2,
-                sizeof(cache_l2) / sizeof(cache_l2[0]));
-        if (cpu->cache_l3[0])
-            text_to_wide(
-                cpu->cache_l3, cache_l3,
-                sizeof(cache_l3) / sizeof(cache_l3[0]));
-        if (cpu->socket_count > 0U)
-            (void)swprintf(
-                sockets, sizeof(sockets) / sizeof(sockets[0]),
-                L"%u", cpu->socket_count);
-        if (cpu->numa_node_count > 0U)
-            (void)swprintf(
-                numa_nodes, sizeof(numa_nodes) / sizeof(numa_nodes[0]),
-                L"%u", cpu->numa_node_count);
-        if (cpu->interrupts_per_sec > 0.0)
-            (void)swprintf(
-                interrupts, sizeof(interrupts) / sizeof(interrupts[0]),
-                L"%.0f", cpu->interrupts_per_sec);
-        if (cpu->context_switches_per_sec > 0.0)
-            (void)swprintf(
-                context_switches,
-                sizeof(context_switches) / sizeof(context_switches[0]),
-                L"%.0f", cpu->context_switches_per_sec);
+    wchar_t model[LSM_NAME_LEN];
+    wchar_t metric_values[LSM_CPU_METRIC_COUNT]
+                         [LSM_PERFORMANCE_VIEW_VALUE_LEN];
+    wchar_t detail_values[LSM_CPU_DETAIL_COUNT]
+                         [LSM_PERFORMANCE_VIEW_VALUE_LEN];
+    text_to_wide(
+        view.subtitle, model,
+        sizeof(model) / sizeof(model[0]));
+    for (int index = 0; index < LSM_CPU_METRIC_COUNT; index++) {
+        text_to_wide(
+            view.metrics[index], metric_values[index],
+            sizeof(metric_values[index]) /
+                sizeof(metric_values[index][0]));
+    }
+    for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
+        text_to_wide(
+            view.details[index], detail_values[index],
+            sizeof(detail_values[index]) /
+                sizeof(detail_values[index][0]));
     }
 
     const int header_height = 54;
@@ -1252,14 +1158,6 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
             metric_names[index],
             sizeof(metric_names[index]) / sizeof(metric_names[index][0]));
     }
-    const wchar_t *metric_values[LSM_CPU_METRIC_COUNT] = {
-        utilisation, speed,
-        processes, threads,
-        handles, uptime,
-        temperature, pressure,
-        user_time, kernel_time
-    };
-
     const int metric_col_width = (metrics_width - 28) / 2;
     const int metric_row_height = 36;
     for (int index = 0; index < LSM_CPU_METRIC_COUNT; index++) {
@@ -1286,13 +1184,6 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
             detail_names[index],
             sizeof(detail_names[index]) / sizeof(detail_names[index][0]));
     }
-    const wchar_t *detail_values[LSM_CPU_DETAIL_COUNT] = {
-        physical_cores, logical_cores, base_speed,
-        maximum_speed, virtualization, cache_l1,
-        cache_l2, cache_l3, load_average, sockets,
-        numa_nodes, interrupts, context_switches
-    };
-
     const int info_left = separator_x + 18;
     const int info_width = details.right - pad - info_left;
     const int info_col_width = (info_width - 18) / 2;
@@ -1333,100 +1224,29 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
 
 static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 {
-    wchar_t total_text[64] = L"N/A";
-    wchar_t in_use[64] = L"N/A";
-    wchar_t available[64] = L"N/A";
-    wchar_t committed[96] = L"N/A";
-    wchar_t cached[64] = L"N/A";
-    wchar_t buffers[64] = L"N/A";
-    wchar_t swap[64] = L"N/A";
-    wchar_t reclaimable[64] = L"N/A";
-    wchar_t nonreclaimable[64] = L"N/A";
-    wchar_t page_tables[64] = L"N/A";
-    wchar_t pressure[64] = L"N/A";
-    wchar_t speed[64] = L"N/A";
-    wchar_t slots[64] = L"N/A";
-    wchar_t form_factor[96] = L"N/A";
-    wchar_t corrupted[64] = L"N/A";
-    wchar_t modules[128] = L"N/A";
+    LsmMemoryPerformanceView view;
+    lsm_memory_performance_view(
+        state->monitor_ready ? &state->monitor : NULL, &view);
 
-    if (state->monitor_ready) {
-        const LsmMemoryInfo *memory = &state->monitor.memory;
-        if (memory->total_bytes > 0U)
-            (void)swprintf(
-                total_text, sizeof(total_text) / sizeof(total_text[0]),
-                L"%.1f GB", bytes_to_gb(memory->total_bytes));
-        (void)swprintf(
-            in_use, sizeof(in_use) / sizeof(in_use[0]),
-            L"%.1f GB", bytes_to_gb(memory->used_bytes));
-        (void)swprintf(
-            available, sizeof(available) / sizeof(available[0]),
-            L"%.1f GB", bytes_to_gb(memory->available_bytes));
-        if (memory->commit_limit_bytes > 0U) {
-            (void)swprintf(
-                committed, sizeof(committed) / sizeof(committed[0]),
-                L"%.1f / %.1f GB",
-                bytes_to_gb(memory->committed_bytes),
-                bytes_to_gb(memory->commit_limit_bytes));
-        }
-        if (memory->cached_bytes > 0U)
-            (void)swprintf(
-                cached, sizeof(cached) / sizeof(cached[0]),
-                L"%.1f GB", bytes_to_gb(memory->cached_bytes));
-        if (memory->buffers_bytes > 0U)
-            (void)swprintf(
-                buffers, sizeof(buffers) / sizeof(buffers[0]),
-                L"%.1f GB", bytes_to_gb(memory->buffers_bytes));
-        if (memory->swap_total_bytes > 0U)
-            (void)swprintf(
-                swap, sizeof(swap) / sizeof(swap[0]),
-                L"%.1f / %.1f GB",
-                bytes_to_gb(memory->swap_used_bytes),
-                bytes_to_gb(memory->swap_total_bytes));
-        if (memory->kernel_reclaimable_bytes > 0U)
-            (void)swprintf(
-                reclaimable, sizeof(reclaimable) / sizeof(reclaimable[0]),
-                L"%.1f GB",
-                bytes_to_gb(memory->kernel_reclaimable_bytes));
-        if (memory->kernel_nonreclaimable_bytes > 0U)
-            (void)swprintf(
-                nonreclaimable,
-                sizeof(nonreclaimable) / sizeof(nonreclaimable[0]),
-                L"%.1f GB",
-                bytes_to_gb(memory->kernel_nonreclaimable_bytes));
-        if (memory->page_tables_bytes > 0U)
-            (void)swprintf(
-                page_tables,
-                sizeof(page_tables) / sizeof(page_tables[0]),
-                L"%.1f GB", bytes_to_gb(memory->page_tables_bytes));
-        format_optional_percent(
-            pressure, sizeof(pressure) / sizeof(pressure[0]),
-            state->monitor.memory_pressure.some_avg10,
-            state->monitor.memory_pressure.available);
-        if (memory->speed_mhz > 0U)
-            (void)swprintf(
-                speed, sizeof(speed) / sizeof(speed[0]),
-                L"%u MHz", memory->speed_mhz);
-        if (memory->slots_total > 0U)
-            (void)swprintf(
-                slots, sizeof(slots) / sizeof(slots[0]),
-                L"%u of %u", memory->slots_used, memory->slots_total);
-        if (memory->form_factor[0])
-            text_to_wide(
-                memory->form_factor, form_factor,
-                sizeof(form_factor) / sizeof(form_factor[0]));
-        if (memory->hardware_corrupted_bytes > 0U)
-            (void)swprintf(
-                corrupted, sizeof(corrupted) / sizeof(corrupted[0]),
-                L"%.1f MB",
-                (double)memory->hardware_corrupted_bytes /
-                    (1024.0 * 1024.0));
-        if (memory->module_details_available)
-            (void)swprintf(
-                modules, sizeof(modules) / sizeof(modules[0]),
-                L"%zu populated module%s",
-                memory->module_count,
-                memory->module_count == 1U ? L"" : L"s");
+    wchar_t total_text[LSM_PERFORMANCE_VIEW_VALUE_LEN];
+    wchar_t usage_values[LSM_MEMORY_METRIC_COUNT]
+                        [LSM_PERFORMANCE_VIEW_VALUE_LEN];
+    wchar_t hardware_values[LSM_MEMORY_DETAIL_COUNT]
+                           [LSM_MEMORY_MODULE_VIEW_LEN];
+    text_to_wide(
+        view.subtitle, total_text,
+        sizeof(total_text) / sizeof(total_text[0]));
+    for (int index = 0; index < LSM_MEMORY_METRIC_COUNT; index++) {
+        text_to_wide(
+            view.metrics[index], usage_values[index],
+            sizeof(usage_values[index]) /
+                sizeof(usage_values[index][0]));
+    }
+    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
+        text_to_wide(
+            view.details[index], hardware_values[index],
+            sizeof(hardware_values[index]) /
+                sizeof(hardware_values[index][0]));
     }
 
     const int header_height = 72;
@@ -1547,14 +1367,6 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
             usage_names[index],
             sizeof(usage_names[index]) / sizeof(usage_names[index][0]));
     }
-    const wchar_t *usage_values[LSM_MEMORY_METRIC_COUNT] = {
-        in_use, available,
-        committed, cached,
-        buffers, swap,
-        reclaimable, nonreclaimable,
-        page_tables, pressure
-    };
-
     const int pad = 14;
     const int usage_width = 460;
     const int separator_x = details.left + pad + usage_width;
@@ -1591,10 +1403,6 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
             sizeof(hardware_names[index]) /
                 sizeof(hardware_names[index][0]));
     }
-    const wchar_t *hardware_values[LSM_MEMORY_DETAIL_COUNT] = {
-        speed, slots, form_factor, corrupted, modules
-    };
-
     const int info_left = separator_x + 18;
     const int info_width = details.right - pad - info_left;
     int hardware_label_width = 0;
@@ -1634,28 +1442,21 @@ static void draw_performance_page(
     };
     fill_solid(dc, &rail, state->palette.panel);
 
-    wchar_t cpu_value[96] = L"Initialising...";
-    wchar_t memory_value[96] = L"Initialising...";
-    if (state->monitor_ready) {
-        if (state->monitor.cpu.frequency_ghz > 0.0) {
-            (void)swprintf(
-                cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]),
-                L"%.0f%% %.2f GHz",
-                state->monitor.cpu.usage_percent,
-                state->monitor.cpu.frequency_ghz);
-        } else {
-            (void)swprintf(
-                cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]),
-                L"%.0f%% N/A",
-                state->monitor.cpu.usage_percent);
-        }
-        (void)swprintf(
-            memory_value, sizeof(memory_value) / sizeof(memory_value[0]),
-            L"%.1f/%.1f GB (%.0f%%)",
-            bytes_to_gb(state->monitor.memory.used_bytes),
-            bytes_to_gb(state->monitor.memory.total_bytes),
-            state->monitor.memory.usage_percent);
-    }
+    LsmCpuPerformanceView cpu_view;
+    LsmMemoryPerformanceView memory_view;
+    lsm_cpu_performance_view(
+        state->monitor_ready ? &state->monitor : NULL, &cpu_view);
+    lsm_memory_performance_view(
+        state->monitor_ready ? &state->monitor : NULL, &memory_view);
+
+    wchar_t cpu_value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
+    wchar_t memory_value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
+    text_to_wide(
+        state->monitor_ready ? cpu_view.rail_value : "Initialising...",
+        cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]));
+    text_to_wide(
+        state->monitor_ready ? memory_view.rail_value : "Initialising...",
+        memory_value, sizeof(memory_value) / sizeof(memory_value[0]));
 
     RECT cpu = {
         rail.left + 4, rail.top + 8,
