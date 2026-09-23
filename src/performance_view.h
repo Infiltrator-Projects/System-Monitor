@@ -19,7 +19,7 @@
 #include "presentation_contract.h"
 
 #define LSM_PERFORMANCE_VIEW_VALUE_LEN 128
-#define LSM_PERFORMANCE_VIEW_RAIL_LEN 128
+#define LSM_PERFORMANCE_VIEW_RAIL_LEN 512
 #define LSM_MEMORY_MODULE_VIEW_LEN 8192
 
 /** Canonical formatted CPU presentation consumed by every native renderer. */
