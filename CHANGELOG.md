@@ -2,6 +2,14 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.71 - 2026-09-23
+
+- Add the first native Win32 System Monitor GUI so Windows testing starts with the visible product shell rather than a console-only backend probe.
+- Present all eight top-level product areas in the Windows window; populate Performance with live CPU/memory telemetry and Processes with the existing read-only Windows process backend.
+- Keep App History, Startup Apps, Users, Details, Services and File Systems visible as explicit placeholders until their native Windows backends are implemented.
+- Build the Windows preview as a GUI-subsystem executable with no console window and publish `system-monitor-1.0.71-windows.exe` as the Windows release asset.
+- Keep Linux Make/CMake builds unchanged by treating the Win32 entry point as platform-specific source, while the Linux i386 gate continues to exclude Windows translation units.
+
 ## 1.0.70 - 2026-09-23
 
 - Add the first deliberately limited Windows native monitor backend behind the existing `monitor_platform.h` seam.
