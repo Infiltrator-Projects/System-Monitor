@@ -767,10 +767,15 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
     int x = LSM_WINDOWS_SCREEN_PADDING;
     select_font(dc, state->body_bold_font);
     for (int index = 0; index < LSM_TAB_COUNT; index++) {
+        wchar_t page_label[64];
+        text_to_wide(
+            lsm_tab_label((LsmTabIndex)index),
+            page_label,
+            sizeof(page_label) / sizeof(page_label[0]));
         SIZE text_size = {0, 0};
         (void)GetTextExtentPoint32W(
-            dc, page_names[index],
-            lstrlenW(page_names[index]), &text_size);
+            dc, page_label,
+            lstrlenW(page_label), &text_size);
         int tab_width = text_size.cx + 28;
         if (tab_width < 92) tab_width = 92;
 
@@ -795,7 +800,7 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
             fill_solid(dc, &underline, state->palette.accent);
         }
         draw_text(
-            dc, page_names[index], tab,
+            dc, page_label, tab,
             active ? state->body_bold_font : state->body_font,
             active ? state->palette.accent : state->palette.summary,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
