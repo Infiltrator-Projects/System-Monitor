@@ -32,6 +32,10 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+#ifndef LSM_VERSION
+#define LSM_VERSION "development"
+#endif
+
 #define LSM_WINDOWS_TIMER_ID 1U
 #define LSM_WINDOWS_REFRESH_MS 1000U
 #define LSM_WINDOWS_HISTORY_CAPACITY 120U
@@ -201,6 +205,8 @@ enum {
 
 static LRESULT CALLBACK lsm_windows_window_proc(
     HWND window, UINT message, WPARAM wparam, LPARAM lparam);
+static LRESULT CALLBACK lsm_windows_about_proc(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
                    LPSTR command_line, int show_command);
 
@@ -362,6 +368,208 @@ static void draw_text(HDC dc, const wchar_t *text, RECT rect, HFONT font,
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, colour);
     DrawTextW(dc, text, -1, &rect, flags | DT_NOPREFIX);
+}
+
+static RECT about_ok_rect(HWND window)
+{
+    RECT client = {0, 0, 0, 0};
+    (void)GetClientRect(window, &client);
+    RECT button = {
+        client.right - 112,
+        client.bottom - 54,
+        client.right - 24,
+        client.bottom - 20
+    };
+    return button;
+}
+
+static void paint_about_window(
+    LsmWindowsUiState *state, HWND window, HDC dc)
+{
+    if (!state || !window || !dc) return;
+
+    RECT client = {0, 0, 0, 0};
+    if (!GetClientRect(window, &client)) return;
+    fill_solid(dc, &client, state->palette.background);
+
+    RECT card = {
+        18, 18,
+        client.right - 18,
+        client.bottom - 72
+    };
+    draw_round_panel(
+        dc, &card, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+
+    wchar_t version[64] = L"development";
+    text_to_wide(
+        LSM_VERSION, version,
+        sizeof(version) / sizeof(version[0]));
+    wchar_t heading[128];
+    (void)swprintf(
+        heading, sizeof(heading) / sizeof(heading[0]),
+        L"System Monitor %ls", version);
+
+    RECT title = {
+        card.left + 18, card.top + 14,
+        card.right - 18, card.top + 48
+    };
+    draw_text(
+        dc, heading, title, state->heading_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    RECT divider = {
+        card.left + 18, card.top + 52,
+        card.right - 18, card.top + 53
+    };
+    fill_solid(dc, &divider, state->palette.border);
+
+    RECT body = {
+        card.left + 18, card.top + 66,
+        card.right - 18, card.bottom - 18
+    };
+    draw_text(
+        dc,
+        L"Native Windows presentation using the Infiltratr "
+        L"Day/Night design contract and Linux product layout.\r\n\r\n"
+        L"CPU, memory and processes are live and read-only. "
+        L"Additional Windows collectors remain under active development.",
+        body, state->body_font, state->palette.summary,
+        DT_LEFT | DT_TOP | DT_WORDBREAK);
+
+    RECT button = about_ok_rect(window);
+    draw_round_panel(
+        dc, &button, state->palette.card_hover,
+        state->palette.accent, LSM_WINDOWS_CONTROL_RADIUS);
+    draw_text(
+        dc, L"OK", button, state->body_bold_font,
+        state->palette.heading,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+static LRESULT CALLBACK lsm_windows_about_proc(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    LsmWindowsUiState *state =
+        (LsmWindowsUiState *)GetWindowLongPtrW(window, GWLP_USERDATA);
+
+    if (message == WM_NCCREATE) {
+        const CREATESTRUCTW *create = (const CREATESTRUCTW *)lparam;
+        state = create
+            ? (LsmWindowsUiState *)create->lpCreateParams
+            : NULL;
+        SetWindowLongPtrW(
+            window, GWLP_USERDATA, (LONG_PTR)state);
+    }
+
+    switch (message) {
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT: {
+            PAINTSTRUCT paint;
+            HDC dc = BeginPaint(window, &paint);
+            paint_about_window(state, window, dc);
+            EndPaint(window, &paint);
+            return 0;
+        }
+
+        case WM_LBUTTONUP:
+            if (state) {
+                POINT point = {
+                    GET_X_LPARAM(lparam),
+                    GET_Y_LPARAM(lparam)
+                };
+                RECT button = about_ok_rect(window);
+                if (PtInRect(&button, point)) {
+                    DestroyWindow(window);
+                    return 0;
+                }
+            }
+            break;
+
+        case WM_KEYDOWN:
+            if (wparam == VK_RETURN || wparam == VK_ESCAPE) {
+                DestroyWindow(window);
+                return 0;
+            }
+            break;
+
+        case WM_CLOSE:
+            DestroyWindow(window);
+            return 0;
+
+        default:
+            break;
+    }
+
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+
+static void show_about_window(LsmWindowsUiState *state)
+{
+    if (!state || !state->window || !state->instance) return;
+
+    static const wchar_t about_class_name[] =
+        L"InfiltratorSystemMonitorAbout";
+
+    WNDCLASSEXW window_class;
+    ZeroMemory(&window_class, sizeof(window_class));
+    window_class.cbSize = sizeof(window_class);
+    window_class.lpfnWndProc = lsm_windows_about_proc;
+    window_class.hInstance = state->instance;
+    window_class.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    window_class.hbrBackground = NULL;
+    window_class.lpszClassName = about_class_name;
+
+    if (!RegisterClassExW(&window_class) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return;
+
+    RECT owner = {0, 0, 0, 0};
+    (void)GetWindowRect(state->window, &owner);
+    const int width = 560;
+    const int height = 285;
+    const int x =
+        owner.left + ((owner.right - owner.left) - width) / 2;
+    const int y =
+        owner.top + ((owner.bottom - owner.top) - height) / 2;
+
+    HWND about = CreateWindowExW(
+        WS_EX_DLGMODALFRAME,
+        about_class_name,
+        L"About System Monitor",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        x, y, width, height,
+        state->window, NULL, state->instance, state);
+    if (!about) return;
+
+    const BOOL dark_titlebar =
+        theme_is_dark(state) ? TRUE : FALSE;
+    (void)DwmSetWindowAttribute(
+        about, 20U, &dark_titlebar, sizeof(dark_titlebar));
+
+    EnableWindow(state->window, FALSE);
+    ShowWindow(about, SW_SHOW);
+    UpdateWindow(about);
+    SetForegroundWindow(about);
+
+    MSG message;
+    while (IsWindow(about)) {
+        const BOOL result = GetMessageW(
+            &message, NULL, 0U, 0U);
+        if (result <= 0) {
+            if (result == 0)
+                PostQuitMessage((int)message.wParam);
+            break;
+        }
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
+    EnableWindow(state->window, TRUE);
+    SetForegroundWindow(state->window);
 }
 
 static void format_percentage(wchar_t *buffer, size_t capacity, double value)
@@ -2204,14 +2412,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 return 0;
             }
             if (LOWORD(wparam) == LSM_WINDOWS_ID_ABOUT) {
-                MessageBoxW(
-                    window,
-                    L"System Monitor 1.0.74\r\n\r\n"
-                    L"Native Windows GUI preview using the Infiltratr "
-                    L"Night palette and Linux product layout.\r\n"
-                    L"CPU, memory and processes are live and read-only.",
-                    L"About System Monitor",
-                    MB_OK | MB_ICONINFORMATION);
+                show_about_window(state);
                 return 0;
             }
             break;
