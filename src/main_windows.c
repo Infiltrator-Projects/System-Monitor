@@ -56,6 +56,11 @@
 #define LSM_WINDOWS_CARD_RADIUS 12
 #define LSM_WINDOWS_CONTROL_RADIUS 10
 #define LSM_WINDOWS_MESSAGE_START_BACKEND (WM_APP + 1)
+#define LSM_WINDOWS_PERFORMANCE_ITEM_GAP 6
+#define LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE \
+    (LSM_SIDE_BUTTON_HEIGHT + LSM_WINDOWS_PERFORMANCE_ITEM_GAP)
+#define LSM_WINDOWS_MAX_PERFORMANCE_ITEMS \
+    (2U + LSM_MAX_DISKS + LSM_MAX_NETS + LSM_MAX_GPUS)
 
 typedef enum {
     LSM_WINDOWS_THEME_SYSTEM,
@@ -130,6 +135,12 @@ static const LsmWindowsPalette windows_night_palette = {
 };
 
 typedef struct {
+    LsmPageType type;
+    size_t index;
+    RECT rect;
+} LsmWindowsPerformanceItem;
+
+typedef struct {
     HINSTANCE instance;
     HWND window;
     HWND process_list;
@@ -149,6 +160,7 @@ typedef struct {
     size_t process_count;
     LsmTabIndex active_page;
     LsmPageType active_performance_item;
+    size_t active_performance_index;
     LsmWindowsThemeMode theme_mode;
     LsmWindowsPalette palette;
     int hovered_tab;
@@ -156,7 +168,10 @@ typedef struct {
     int hovered_menu;
     bool tracking_mouse_leave;
     RECT page_tabs[LSM_TAB_COUNT];
-    RECT performance_items[LSM_PAGE_COUNT];
+    LsmWindowsPerformanceItem
+        performance_items[LSM_WINDOWS_MAX_PERFORMANCE_ITEMS];
+    size_t performance_item_count;
+    int performance_scroll_y;
     RECT file_menu_rect;
     RECT view_menu_rect;
     RECT help_menu_rect;
@@ -873,13 +888,19 @@ static void draw_mini_history(
 }
 
 static void draw_performance_rail_item(
-    LsmWindowsUiState *state, HDC dc, int index, RECT rect,
+    LsmWindowsUiState *state, HDC dc, size_t slot,
+    LsmPageType type, size_t device_index, RECT rect,
     const wchar_t *title, const wchar_t *value,
     const double *history, COLORREF line_colour)
 {
-    state->performance_items[index] = rect;
-    const bool active = index == (int)state->active_performance_item;
-    const bool hovered = index == state->hovered_performance_item;
+    if (!state || slot >= LSM_WINDOWS_MAX_PERFORMANCE_ITEMS) return;
+    state->performance_items[slot].type = type;
+    state->performance_items[slot].index = device_index;
+    state->performance_items[slot].rect = rect;
+    const bool active =
+        type == state->active_performance_item &&
+        device_index == state->active_performance_index;
+    const bool hovered = (int)slot == state->hovered_performance_item;
     draw_round_panel(
         dc, &rect,
         active ? state->palette.selection :
@@ -1411,7 +1432,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 }
 
 static bool build_device_performance_view(
-    const LsmWindowsUiState *state, LsmPageType type,
+    const LsmWindowsUiState *state, LsmPageType type, size_t device_index,
     LsmDevicePerformanceView *view)
 {
     if (!state || !view) return false;
@@ -1419,21 +1440,24 @@ static bool build_device_performance_view(
     switch (type) {
         case LSM_PAGE_DISK:
             lsm_disk_performance_view(
-                state->monitor_ready && state->monitor.disk_count > 0U
-                    ? &state->monitor.disks[0] : NULL,
-                0U, view);
+                state->monitor_ready &&
+                        device_index < state->monitor.disk_count
+                    ? &state->monitor.disks[device_index] : NULL,
+                device_index, view);
             return true;
         case LSM_PAGE_NETWORK:
             lsm_network_performance_view(
-                state->monitor_ready && state->monitor.net_count > 0U
-                    ? &state->monitor.nets[0] : NULL,
-                0U, false, view);
+                state->monitor_ready &&
+                        device_index < state->monitor.net_count
+                    ? &state->monitor.nets[device_index] : NULL,
+                device_index, false, view);
             return true;
         case LSM_PAGE_GPU:
             lsm_gpu_performance_view(
-                state->monitor_ready && state->monitor.gpu_count > 0U
-                    ? &state->monitor.gpus[0] : NULL,
-                0U, view);
+                state->monitor_ready &&
+                        device_index < state->monitor.gpu_count
+                    ? &state->monitor.gpus[device_index] : NULL,
+                device_index, view);
             return true;
         default:
             return false;
@@ -1547,83 +1571,113 @@ static void draw_performance_page(
         content.bottom
     };
     fill_solid(dc, &rail, state->palette.panel);
-    memset(state->performance_items, 0, sizeof(state->performance_items));
+    memset(
+        state->performance_items, 0,
+        sizeof(state->performance_items));
+    state->performance_item_count = 0U;
 
     LsmCpuPerformanceView cpu_view;
     LsmMemoryPerformanceView memory_view;
-    LsmDevicePerformanceView disk_view;
-    LsmDevicePerformanceView network_view;
-    LsmDevicePerformanceView gpu_view;
     lsm_cpu_performance_view(
         state->monitor_ready ? &state->monitor : NULL, &cpu_view);
     lsm_memory_performance_view(
         state->monitor_ready ? &state->monitor : NULL, &memory_view);
-    (void)build_device_performance_view(
-        state, LSM_PAGE_DISK, &disk_view);
-    (void)build_device_performance_view(
-        state, LSM_PAGE_NETWORK, &network_view);
-    (void)build_device_performance_view(
-        state, LSM_PAGE_GPU, &gpu_view);
 
-    const LsmPageType page_types[] = {
-        LSM_PAGE_CPU,
-        LSM_PAGE_MEMORY,
-        LSM_PAGE_DISK,
-        LSM_PAGE_NETWORK,
-        LSM_PAGE_GPU
-    };
-    const double *histories[] = {
-        state->cpu_history,
-        state->memory_history,
-        NULL,
-        NULL,
-        NULL
-    };
+    const size_t disk_count =
+        state->monitor_ready ? state->monitor.disk_count : 0U;
+    const size_t net_count =
+        state->monitor_ready ? state->monitor.net_count : 0U;
+    const size_t gpu_count =
+        state->monitor_ready ? state->monitor.gpu_count : 0U;
+    const size_t item_count =
+        2U + disk_count + net_count + gpu_count;
+    const int available_height =
+        (rail.bottom - rail.top) - 16;
+    const int total_height = item_count > 0U
+        ? (int)item_count * LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE -
+            LSM_WINDOWS_PERFORMANCE_ITEM_GAP
+        : 0;
+    const int maximum_scroll =
+        total_height > available_height
+            ? total_height - available_height : 0;
+    if (state->performance_scroll_y < 0)
+        state->performance_scroll_y = 0;
+    if (state->performance_scroll_y > maximum_scroll)
+        state->performance_scroll_y = maximum_scroll;
 
-    int top = rail.top + 8;
-    for (size_t slot = 0U;
-         slot < sizeof(page_types) / sizeof(page_types[0]); slot++) {
-        const LsmPageType type = page_types[slot];
-        const char *title_text = lsm_performance_page_title(type);
-        const char *value_text = "N/A";
+    const int saved_dc = SaveDC(dc);
+    IntersectClipRect(
+        dc, rail.left, rail.top, rail.right, rail.bottom);
 
-        if (type == LSM_PAGE_CPU) {
-            value_text =
-                state->monitor_ready ? cpu_view.rail_value : "Initialising...";
-        } else if (type == LSM_PAGE_MEMORY) {
-            value_text =
-                state->monitor_ready ? memory_view.rail_value : "Initialising...";
-        } else if (type == LSM_PAGE_DISK) {
-            title_text = disk_view.title;
-            value_text =
-                state->monitor_ready ? disk_view.rail_value : "Initialising...";
-        } else if (type == LSM_PAGE_NETWORK) {
-            title_text = network_view.title;
-            value_text =
-                state->monitor_ready ? network_view.rail_value : "Initialising...";
-        } else if (type == LSM_PAGE_GPU) {
-            title_text = gpu_view.title;
-            value_text =
-                state->monitor_ready ? gpu_view.rail_value : "Initialising...";
-        }
+    size_t slot = 0U;
+    int top = rail.top + 8 - state->performance_scroll_y;
 
-        wchar_t title[LSM_PERFORMANCE_VIEW_VALUE_LEN];
-        wchar_t value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
-        text_to_wide(
-            title_text, title, sizeof(title) / sizeof(title[0]));
-        text_to_wide(
-            value_text, value, sizeof(value) / sizeof(value[0]));
+#define DRAW_WINDOWS_PERFORMANCE_ITEM(resource_type, device_index, title_text, value_text, history_ptr) \
+    do { \
+        if (slot < LSM_WINDOWS_MAX_PERFORMANCE_ITEMS) { \
+            wchar_t item_title[LSM_PERFORMANCE_VIEW_VALUE_LEN]; \
+            wchar_t item_value[LSM_PERFORMANCE_VIEW_RAIL_LEN]; \
+            text_to_wide( \
+                (title_text), item_title, \
+                sizeof(item_title) / sizeof(item_title[0])); \
+            text_to_wide( \
+                (value_text), item_value, \
+                sizeof(item_value) / sizeof(item_value[0])); \
+            RECT item = { \
+                rail.left + 4, top, \
+                rail.left + 4 + LSM_SIDE_BUTTON_WIDTH, \
+                top + LSM_SIDE_BUTTON_HEIGHT \
+            }; \
+            draw_performance_rail_item( \
+                state, dc, slot, (resource_type), (device_index), \
+                item, item_title, item_value, (history_ptr), \
+                performance_colour_ref((resource_type))); \
+            slot++; \
+            top += LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE; \
+        } \
+    } while (0)
 
-        RECT item = {
-            rail.left + 4, top,
-            rail.left + 4 + LSM_SIDE_BUTTON_WIDTH,
-            top + LSM_SIDE_BUTTON_HEIGHT
-        };
-        draw_performance_rail_item(
-            state, dc, (int)type, item, title, value,
-            histories[slot], performance_colour_ref(type));
-        top = item.bottom + 6;
+    DRAW_WINDOWS_PERFORMANCE_ITEM(
+        LSM_PAGE_CPU, 0U,
+        lsm_performance_page_title(LSM_PAGE_CPU),
+        state->monitor_ready ? cpu_view.rail_value : "Initialising...",
+        state->cpu_history);
+    DRAW_WINDOWS_PERFORMANCE_ITEM(
+        LSM_PAGE_MEMORY, 0U,
+        lsm_performance_page_title(LSM_PAGE_MEMORY),
+        state->monitor_ready ? memory_view.rail_value : "Initialising...",
+        state->memory_history);
+
+    for (size_t index = 0U; index < disk_count; index++) {
+        LsmDevicePerformanceView view;
+        (void)build_device_performance_view(
+            state, LSM_PAGE_DISK, index, &view);
+        DRAW_WINDOWS_PERFORMANCE_ITEM(
+            LSM_PAGE_DISK, index,
+            view.title, view.rail_value, NULL);
     }
+    for (size_t index = 0U; index < net_count; index++) {
+        LsmDevicePerformanceView view;
+        (void)build_device_performance_view(
+            state, LSM_PAGE_NETWORK, index, &view);
+        DRAW_WINDOWS_PERFORMANCE_ITEM(
+            LSM_PAGE_NETWORK, index,
+            view.title, view.rail_value, NULL);
+    }
+    for (size_t index = 0U; index < gpu_count; index++) {
+        LsmDevicePerformanceView view;
+        (void)build_device_performance_view(
+            state, LSM_PAGE_GPU, index, &view);
+        DRAW_WINDOWS_PERFORMANCE_ITEM(
+            LSM_PAGE_GPU, index,
+            view.title, view.rail_value, NULL);
+    }
+
+#undef DRAW_WINDOWS_PERFORMANCE_ITEM
+
+    state->performance_item_count = slot;
+    if (saved_dc != 0)
+        RestoreDC(dc, saved_dc);
 
     RECT separator = {
         rail.right, rail.top,
@@ -1646,17 +1700,17 @@ static void draw_performance_page(
             draw_memory_page(state, dc, page);
             break;
         case LSM_PAGE_DISK:
-            draw_device_performance_page(
-                state, dc, page, &disk_view, LSM_PAGE_DISK);
-            break;
         case LSM_PAGE_NETWORK:
+        case LSM_PAGE_GPU: {
+            LsmDevicePerformanceView view;
+            (void)build_device_performance_view(
+                state, state->active_performance_item,
+                state->active_performance_index, &view);
             draw_device_performance_page(
-                state, dc, page, &network_view, LSM_PAGE_NETWORK);
+                state, dc, page, &view,
+                state->active_performance_item);
             break;
-        case LSM_PAGE_GPU:
-            draw_device_performance_page(
-                state, dc, page, &gpu_view, LSM_PAGE_GPU);
-            break;
+        }
         default: {
             LsmDevicePerformanceView unavailable;
             memset(&unavailable, 0, sizeof(unavailable));
@@ -2035,10 +2089,52 @@ static void set_performance_status(LsmWindowsUiState *state)
     text_to_wide(
         lsm_performance_page_title(state->active_performance_item),
         resource, sizeof(resource) / sizeof(resource[0]));
-    (void)swprintf(
-        status, sizeof(status) / sizeof(status[0]),
-        L"Performance - %ls", resource);
+    if (state->active_performance_item == LSM_PAGE_DISK ||
+        state->active_performance_item == LSM_PAGE_NETWORK ||
+        state->active_performance_item == LSM_PAGE_GPU) {
+        (void)swprintf(
+            status, sizeof(status) / sizeof(status[0]),
+            L"Performance - %ls %zu",
+            resource, state->active_performance_index);
+    } else {
+        (void)swprintf(
+            status, sizeof(status) / sizeof(status[0]),
+            L"Performance - %ls", resource);
+    }
     set_status(state, status);
+}
+
+static void validate_performance_selection(LsmWindowsUiState *state)
+{
+    if (!state || !state->monitor_ready) return;
+
+    bool available = true;
+    switch (state->active_performance_item) {
+        case LSM_PAGE_DISK:
+            available =
+                state->active_performance_index < state->monitor.disk_count;
+            break;
+        case LSM_PAGE_NETWORK:
+            available =
+                state->active_performance_index < state->monitor.net_count;
+            break;
+        case LSM_PAGE_GPU:
+            available =
+                state->active_performance_index < state->monitor.gpu_count;
+            break;
+        case LSM_PAGE_CPU:
+        case LSM_PAGE_MEMORY:
+            state->active_performance_index = 0U;
+            break;
+        default:
+            available = false;
+            break;
+    }
+
+    if (!available) {
+        state->active_performance_item = LSM_PAGE_CPU;
+        state->active_performance_index = 0U;
+    }
 }
 
 static void initialise_monitor_backend(LsmWindowsUiState *state)
@@ -2070,6 +2166,7 @@ static void refresh_active_page(LsmWindowsUiState *state)
         if (state->monitor_ready) {
             (void)lsm_monitor_platform_update(&state->monitor);
             append_history(state);
+            validate_performance_selection(state);
         }
         set_performance_status(state);
         InvalidateRect(state->window, NULL, FALSE);
@@ -2262,6 +2359,8 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             state->active_page = LSM_TAB_PERFORMANCE;
             state->active_performance_item =
                 LSM_PAGE_CPU;
+            state->active_performance_index = 0U;
+            state->performance_scroll_y = 0;
             state->hovered_tab = -1;
             state->hovered_performance_item = -1;
             state->hovered_menu = -1;
@@ -2388,11 +2487,11 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
             int hovered_performance = -1;
             if (state->active_page == LSM_TAB_PERFORMANCE) {
-                for (int index = 0;
-                     index < LSM_PAGE_COUNT; index++) {
+                for (size_t index = 0U;
+                     index < state->performance_item_count; index++) {
                     if (PtInRect(
-                            &state->performance_items[index], point)) {
-                        hovered_performance = index;
+                            &state->performance_items[index].rect, point)) {
+                        hovered_performance = (int)index;
                         break;
                     }
                 }
@@ -2418,6 +2517,22 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 InvalidateRect(window, NULL, FALSE);
             }
             return 0;
+
+        case WM_MOUSEWHEEL:
+            if (state &&
+                state->active_page == LSM_TAB_PERFORMANCE) {
+                const int delta = GET_WHEEL_DELTA_WPARAM(wparam);
+                if (delta != 0) {
+                    state->performance_scroll_y -=
+                        (delta / WHEEL_DELTA) *
+                        LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE;
+                    if (state->performance_scroll_y < 0)
+                        state->performance_scroll_y = 0;
+                    InvalidateRect(window, NULL, FALSE);
+                }
+                return 0;
+            }
+            break;
 
         case WM_LBUTTONUP: {
             if (!state) break;
@@ -2448,13 +2563,14 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
             if (state->active_page ==
                 LSM_TAB_PERFORMANCE) {
-                for (int index = 0;
-                     index < LSM_PAGE_COUNT;
+                for (size_t index = 0U;
+                     index < state->performance_item_count;
                      index++) {
-                    if (PtInRect(
-                            &state->performance_items[index], point)) {
-                        state->active_performance_item =
-                            (LsmPageType)index;
+                    const LsmWindowsPerformanceItem *item =
+                        &state->performance_items[index];
+                    if (PtInRect(&item->rect, point)) {
+                        state->active_performance_item = item->type;
+                        state->active_performance_index = item->index;
                         set_performance_status(state);
                         InvalidateRect(window, NULL, FALSE);
                         return 0;
