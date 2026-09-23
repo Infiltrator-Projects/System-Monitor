@@ -607,5 +607,9 @@ void lsm_gpu_performance_view(const LsmGpuInfo *gpu, size_t index,
         gpu->active_engine[0] ? gpu->active_engine : "N/A");
     device_view_metric(
         view, "Telemetry",
-        gpu->metrics_source[0] ? gpu->metrics_source : "N/A");
+        gpu->metrics_source[0]
+            ? gpu->metrics_source
+            : (gpu->supported_metrics
+                   ? "Native driver telemetry"
+                   : "Basic identification only"));
 }
