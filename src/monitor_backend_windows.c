@@ -24,8 +24,10 @@
 #define PSAPI_VERSION 1
 #endif
 #define WIN32_LEAN_AND_MEAN
+#define COBJMACROS
 #include <winsock2.h>
 #include <windows.h>
+#include <dxgi1_4.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <pdh.h>
@@ -1282,6 +1284,83 @@ static void update_gpu_engine_metrics(
         finalise_gpu_engine_metrics(&monitor->gpus[index]);
 }
 
+static void update_gpu_dxgi_memory(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state || monitor->gpu_count == 0U)
+        return;
+
+    IDXGIFactory1 *factory = NULL;
+    const HRESULT factory_result = CreateDXGIFactory1(
+        &IID_IDXGIFactory1, (void **)&factory);
+    if (FAILED(factory_result) || !factory)
+        return;
+
+    for (UINT adapter_index = 0U; ; adapter_index++) {
+        IDXGIAdapter1 *adapter = NULL;
+        const HRESULT enumerated = IDXGIFactory1_EnumAdapters1(
+            factory, adapter_index, &adapter);
+        if (enumerated == DXGI_ERROR_NOT_FOUND)
+            break;
+        if (FAILED(enumerated) || !adapter)
+            continue;
+
+        DXGI_ADAPTER_DESC1 description;
+        memset(&description, 0, sizeof(description));
+        if (SUCCEEDED(IDXGIAdapter1_GetDesc1(adapter, &description)) &&
+            (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0U) {
+            const int matched = gpu_index_for_luid(
+                state, monitor->gpu_count, description.AdapterLuid);
+            if (matched >= 0) {
+                LsmGpuInfo *gpu = &monitor->gpus[(size_t)matched];
+                gpu->shared_system_memory =
+                    description.DedicatedVideoMemory == 0U &&
+                    description.SharedSystemMemory > 0U;
+
+                if (!gpu->shared_system_memory)
+                    gpu->memory_total_bytes =
+                        (uint64_t)description.DedicatedVideoMemory;
+                else
+                    gpu->memory_total_bytes = 0U;
+
+                IDXGIAdapter3 *adapter3 = NULL;
+                const HRESULT queried = IDXGIAdapter1_QueryInterface(
+                    adapter, &IID_IDXGIAdapter3, (void **)&adapter3);
+                if (SUCCEEDED(queried) && adapter3) {
+                    DXGI_QUERY_VIDEO_MEMORY_INFO memory;
+                    memset(&memory, 0, sizeof(memory));
+                    if (SUCCEEDED(IDXGIAdapter3_QueryVideoMemoryInfo(
+                            adapter3, 0U,
+                            DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory))) {
+                        gpu->memory_used_bytes =
+                            (uint64_t)memory.CurrentUsage;
+                        if (!gpu->shared_system_memory &&
+                            gpu->memory_total_bytes > 0U) {
+                            gpu->memory_percent = percent_u64(
+                                gpu->memory_used_bytes,
+                                gpu->memory_total_bytes);
+                        } else {
+                            gpu->memory_percent = 0.0;
+                        }
+                        gpu->supported_metrics = true;
+                        infiltratr_copy_string(
+                            gpu->metrics_source,
+                            sizeof(gpu->metrics_source),
+                            gpu->engine_metrics_capable
+                                ? "Windows PDH + DXGI telemetry"
+                                : "Windows DXGI adapter memory");
+                    }
+                    IDXGIAdapter3_Release(adapter3);
+                }
+            }
+        }
+
+        IDXGIAdapter1_Release(adapter);
+    }
+
+    IDXGIFactory1_Release(factory);
+}
+
 static bool gpu_identity_changed(
     const LsmGpuInfo *old_gpus, size_t old_count,
     const LsmGpuInfo *new_gpus, size_t new_count)
@@ -1434,6 +1513,7 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     const bool memory_ok = update_memory_snapshot(monitor);
     refresh_topology_and_devices(monitor, state, elapsed, false);
     update_gpu_engine_metrics(monitor, state);
+    update_gpu_dxgi_memory(monitor, state);
     return cpu_ok && memory_ok;
 }
 
