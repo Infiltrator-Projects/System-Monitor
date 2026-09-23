@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file check_portability.c
- * @brief Compile every application translation unit for the i386 ILP32 model.
+ * @brief Compile every Linux application translation unit for the i386 ILP32 model.
  *
  * The portability gate is implemented in C so validation does not depend on a
  * shell-language test harness. It invokes the configured C or C++ compiler for
- * each translation unit, then validates each output object from its ELF header
- * rather than delegating that check to the external file(1) utility.
+ * each Linux translation unit, then validates each output object from its ELF
+ * header rather than delegating that check to the external file(1) utility.
+ * Windows-native translation units are validated independently by the MinGW
+ * CI gate and are intentionally excluded from this Linux/ELF check.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
@@ -347,6 +349,10 @@ int main(int argc, char **argv)
     }
 
     for (size_t index = 0U; index < sources.count; index++) {
+        if (ends_with(sources.items[index], "_windows.c") ||
+            ends_with(sources.items[index], "_windows.cpp"))
+            continue;
+
         char source_path[LSM_PORTABILITY_PATH_LEN];
         char object_path[LSM_PORTABILITY_PATH_LEN];
         if (!join_path(source_path, sizeof(source_path), root, "src")) {
@@ -387,6 +393,6 @@ int main(int argc, char **argv)
 
     remove_temporary_files(temporary, sources.count);
     source_list_destroy(&sources);
-    puts("All application translation units compiled as ELF 32-bit Intel i386 objects.\n");
+    puts("All Linux application translation units compiled as ELF 32-bit Intel i386 objects.\n");
     return EXIT_SUCCESS;
 }
