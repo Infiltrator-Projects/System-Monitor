@@ -401,7 +401,7 @@ static void draw_history_graph(LsmWindowsUiState *state, HDC dc, RECT rect,
 {
     draw_round_panel(
         dc, &rect, state->palette.surface,
-        state->palette.connection_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.connection_border, LSM_WINDOWS_CARD_RADIUS);
 
     RECT inner = {
         rect.left + 14, rect.top + 14,
@@ -494,7 +494,7 @@ static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
     };
     draw_round_panel(
         dc, &bar, state->palette.connection,
-        state->palette.connection_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.connection_border, LSM_WINDOWS_CARD_RADIUS);
 
     static const wchar_t *const captions[] = {
         L"CPU", L"Memory", L"Disk", L"Network", L"GPU"
