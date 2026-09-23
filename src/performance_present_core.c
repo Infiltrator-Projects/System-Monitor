@@ -12,6 +12,7 @@
  */
 #include "performance_present_internal.h"
 #include "performance_internal.h"
+#include "performance_view.h"
 
 #include "common.h"
 #include "duration_format.h"
@@ -71,66 +72,63 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmCpuInfo *cpu = &app->monitor.cpu;
     LsmCpuPageWidgets *widgets = &page->widgets.cpu;
-    char metric[64];
-    lsm_ui_set_label_text(page->subtitle, "%s",
-                          cpu->model[0] ? cpu->model : "N/A");
-    lsm_graph_push(page->graph, cpu->usage_percent, 0.0, app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, cpu->usage_percent, 0.0, app->runtime.newer_on_right);
-    if (cpu->frequency_ghz > 0.0)
-        lsm_ui_set_label_text(page->button_value, "%.0f%% %.2f GHz",
-                              cpu->usage_percent, cpu->frequency_ghz);
-    else
-        lsm_ui_set_label_text(page->button_value, "%.0f%% N/A",
-                              cpu->usage_percent);
-    lsm_ui_set_label_text(widgets->utilisation, "%.0f%%", cpu->usage_percent);
-    lsm_ui_set_label_text(widgets->user_time, "%.1f%%", cpu->user_percent);
-    lsm_ui_set_label_text(widgets->kernel_time, "%.1f%%",
-                          cpu->kernel_percent);
-    lsm_ui_set_label_text(widgets->speed, "%s",
-        lsm_metric_format_ghz(cpu->frequency_ghz > 0.0,
-                              cpu->frequency_ghz, metric, sizeof(metric)));
-    lsm_ui_set_label_text(widgets->processes, "%u", cpu->process_count);
-    lsm_ui_set_label_text(widgets->threads, "%u", cpu->thread_count);
-    lsm_ui_set_label_text(widgets->handles, "%llu",
-                          (unsigned long long)cpu->file_handle_count);
-    infiltratr_format_duration_clock(cpu->uptime_seconds, metric, sizeof(metric));
-    lsm_ui_set_label_text(widgets->uptime, "%s", metric);
-    lsm_ui_set_label_text(widgets->temperature, "%s",
-        lsm_metric_format_celsius(isfinite(cpu->temperature_c),
-                                  cpu->temperature_c, metric, sizeof(metric)));
-    performance_present_set_temperature_state(widgets->temperature, isfinite(cpu->temperature_c),
-                          cpu->temperature_c, 80.0, 95.0);
-    set_pressure_text(widgets->pressure, &app->monitor.cpu_pressure);
-    lsm_ui_set_label_text(widgets->cores, "%u", cpu->physical_cores);
-    lsm_ui_set_label_text(widgets->logical_processors, "%u",
-                          cpu->logical_cores);
-    lsm_ui_set_label_text(widgets->base_speed, "%s",
-        lsm_metric_format_ghz(cpu->base_frequency_ghz > 0.0,
-                              cpu->base_frequency_ghz, metric,
-                              sizeof(metric)));
-    lsm_ui_set_label_text(widgets->maximum_speed, "%s",
-        lsm_metric_format_ghz(cpu->max_frequency_ghz > 0.0,
-                              cpu->max_frequency_ghz, metric,
-                              sizeof(metric)));
-    lsm_ui_set_label_text(widgets->virtualisation, "%s",
-                          cpu->virtualization ? "Enabled" : "Disabled");
-    lsm_ui_set_label_text(widgets->cache_l1, "%s", cpu->cache_l1);
-    lsm_ui_set_label_text(widgets->cache_l2, "%s", cpu->cache_l2);
-    lsm_ui_set_label_text(widgets->cache_l3, "%s", cpu->cache_l3);
-    lsm_ui_set_label_text(widgets->load_average, "%.2f  %.2f  %.2f",
-                          cpu->load_average_1, cpu->load_average_5,
-                          cpu->load_average_15);
-    lsm_ui_set_label_text(widgets->sockets, "%u", cpu->socket_count);
-    lsm_ui_set_label_text(widgets->numa_nodes, "%u", cpu->numa_node_count);
-    lsm_ui_set_label_text(widgets->interrupts, "%.0f",
-                          cpu->interrupts_per_sec);
-    lsm_ui_set_label_text(widgets->context_switches, "%.0f",
-                          cpu->context_switches_per_sec);
-    for (unsigned i = 0; i < cpu->logical_cores; i++) {
-        lsm_graph_push(app->performance.cpu_core_graphs[i], cpu->core_usage[i], 0.0,
-                       app->runtime.newer_on_right);
-        lsm_ui_set_label_text(app->performance.cpu_core_labels[i], "CPU %u — %.0f%%",
-                           i, cpu->core_usage[i]);
+    LsmCpuPerformanceView view;
+    lsm_cpu_performance_view(&app->monitor, &view);
+
+    lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
+    lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+    lsm_graph_push(
+        page->graph, cpu->usage_percent, 0.0,
+        app->runtime.newer_on_right);
+    lsm_graph_push(
+        page->side_graph, cpu->usage_percent, 0.0,
+        app->runtime.newer_on_right);
+
+    GtkWidget *metric_widgets[LSM_CPU_METRIC_COUNT] = {
+        widgets->utilisation, widgets->speed,
+        widgets->processes, widgets->threads,
+        widgets->handles, widgets->uptime,
+        widgets->temperature, widgets->pressure,
+        widgets->user_time, widgets->kernel_time
+    };
+    for (size_t index = 0U; index < LSM_CPU_METRIC_COUNT; index++) {
+        lsm_ui_set_label_text(
+            metric_widgets[index], "%s", view.metrics[index]);
+    }
+
+    performance_present_set_temperature_state(
+        widgets->temperature,
+        cpu->temperature_available && isfinite(cpu->temperature_c),
+        cpu->temperature_c, 80.0, 95.0);
+
+    GtkWidget *detail_widgets[LSM_CPU_DETAIL_COUNT] = {
+        widgets->cores,
+        widgets->logical_processors,
+        widgets->base_speed,
+        widgets->maximum_speed,
+        widgets->virtualisation,
+        widgets->cache_l1,
+        widgets->cache_l2,
+        widgets->cache_l3,
+        widgets->load_average,
+        widgets->sockets,
+        widgets->numa_nodes,
+        widgets->interrupts,
+        widgets->context_switches
+    };
+    for (size_t index = 0U; index < LSM_CPU_DETAIL_COUNT; index++) {
+        lsm_ui_set_label_text(
+            detail_widgets[index], "%s", view.details[index]);
+    }
+
+    for (unsigned index = 0U; index < cpu->logical_cores; index++) {
+        lsm_graph_push(
+            app->performance.cpu_core_graphs[index],
+            cpu->core_usage[index], 0.0,
+            app->runtime.newer_on_right);
+        lsm_ui_set_label_text(
+            app->performance.cpu_core_labels[index],
+            "CPU %u — %.0f%%", index, cpu->core_usage[index]);
     }
 }
 
@@ -138,78 +136,49 @@ static void update_memory_page(LsmApp *app, LsmDevicePage *page)
 {
     LsmMemoryInfo *memory = &app->monitor.memory;
     LsmMemoryPageWidgets *widgets = &page->widgets.memory;
-    char a[64], b[64];
-    lsm_graph_push(page->graph, memory->usage_percent, 0.0, app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, memory->usage_percent, 0.0, app->runtime.newer_on_right);
-    lsm_format_bytes(memory->used_bytes, a, sizeof(a));
-    lsm_format_bytes(memory->total_bytes, b, sizeof(b));
-    lsm_ui_set_label_text(page->button_value, "%s/%s (%.0f%%)", a, b,
-                          memory->usage_percent);
-    lsm_metric_format_memory_gb(memory->total_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(page->subtitle, "%s", a);
+    LsmMemoryPerformanceView view;
+    lsm_memory_performance_view(&app->monitor, &view);
 
-    lsm_metric_format_memory_gb(memory->used_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->in_use, "%s", a);
-    lsm_metric_format_memory_gb(memory->available_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->available, "%s", a);
-    lsm_format_bytes(memory->committed_bytes, a, sizeof(a));
-    lsm_format_bytes(memory->commit_limit_bytes, b, sizeof(b));
-    lsm_ui_set_label_text(widgets->committed, "%s/%s", a, b);
-    lsm_metric_format_memory_gb(memory->buffers_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->buffers, "%s", a);
-    lsm_metric_format_memory_gb(memory->cached_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->cached, "%s", a);
-    snprintf(a, sizeof(a), "%.1Lf/%.1Lf GB",
-             (long double)memory->swap_used_bytes / 1073741824.0L,
-             (long double)memory->swap_total_bytes / 1073741824.0L);
-    lsm_ui_set_label_text(widgets->swap, "%s", a);
-    lsm_format_bytes(memory->kernel_reclaimable_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->kernel_reclaimable, "%s", a);
-    lsm_format_bytes(memory->kernel_nonreclaimable_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->kernel_nonreclaimable, "%s", a);
-    lsm_format_bytes(memory->page_tables_bytes, a, sizeof(a));
-    lsm_ui_set_label_text(widgets->page_tables, "%s", a);
-    set_pressure_text(widgets->pressure, &app->monitor.memory_pressure);
-    lsm_ui_set_label_text(widgets->speed, "%s",
-        lsm_metric_format_mhz(memory->speed_mhz > 0U,
-                              (double)memory->speed_mhz, a, sizeof(a)));
-    if (memory->slots_total > 0)
-        lsm_ui_set_label_text(widgets->slots_used, "%u of %u",
-                              memory->slots_used, memory->slots_total);
-    else
-        lsm_ui_set_label_text(widgets->slots_used, "N/A");
-    lsm_ui_set_label_text(widgets->form_factor, "%s",
-                       memory->form_factor[0] ? memory->form_factor : "N/A");
-    lsm_ui_set_label_text(widgets->hardware_corrupted, "%s",
-                       lsm_format_bytes(memory->hardware_corrupted_bytes,
-                                        a, sizeof(a)));
-    if (memory->module_details_available && memory->module_count > 0U) {
-        GString *modules = g_string_new(NULL);
-        for (size_t index = 0U; index < memory->module_count; index++) {
-            const LsmMemoryModuleInfo *module = &memory->modules[index];
-            char size[64];
-            lsm_format_bytes(module->size_bytes, size, sizeof(size));
-            if (index > 0U) g_string_append_printf(modules, "\n");
-            g_string_append_printf(
-                modules, "%s — %s %s, ",
-                module->locator[0] ? module->locator : "Module",
-                size, module->memory_type[0] ? module->memory_type : "N/A");
-            if (module->speed_mhz > 0U)
-                g_string_append_printf(modules, "%u MHz", module->speed_mhz);
-            else
-                g_string_append(modules, "N/A");
-            g_string_append_printf(modules, ", %s %s, S/N %s",
-                module->manufacturer[0] ? module->manufacturer : "N/A",
-                module->part_number[0] ? module->part_number : "N/A",
-                module->serial_number[0]
-                    ? module->serial_number : "N/A");
-        }
-        lsm_ui_set_label_text(widgets->modules, "%s", modules->str);
-        g_string_free(modules, TRUE);
-    } else {
-        lsm_ui_set_label_text(widgets->modules, "N/A");
+    lsm_graph_push(
+        page->graph, memory->usage_percent, 0.0,
+        app->runtime.newer_on_right);
+    lsm_graph_push(
+        page->side_graph, memory->usage_percent, 0.0,
+        app->runtime.newer_on_right);
+    lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+    lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
+
+    GtkWidget *metric_widgets[LSM_MEMORY_METRIC_COUNT] = {
+        widgets->in_use,
+        widgets->available,
+        widgets->committed,
+        widgets->cached,
+        widgets->buffers,
+        widgets->swap,
+        widgets->kernel_reclaimable,
+        widgets->kernel_nonreclaimable,
+        widgets->page_tables,
+        widgets->pressure
+    };
+    for (size_t index = 0U; index < LSM_MEMORY_METRIC_COUNT; index++) {
+        lsm_ui_set_label_text(
+            metric_widgets[index], "%s", view.metrics[index]);
     }
-    if (page->composition_area) gtk_widget_queue_draw(page->composition_area);
+
+    GtkWidget *detail_widgets[LSM_MEMORY_DETAIL_COUNT] = {
+        widgets->speed,
+        widgets->slots_used,
+        widgets->form_factor,
+        widgets->hardware_corrupted,
+        widgets->modules
+    };
+    for (size_t index = 0U; index < LSM_MEMORY_DETAIL_COUNT; index++) {
+        lsm_ui_set_label_text(
+            detail_widgets[index], "%s", view.details[index]);
+    }
+
+    if (page->composition_area)
+        gtk_widget_queue_draw(page->composition_area);
 }
 
 static void update_disk_page(LsmApp *app, LsmDevicePage *page)
