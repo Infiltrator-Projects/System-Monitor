@@ -33,7 +33,7 @@
 #include <wchar.h>
 
 #ifndef LSM_VERSION
-#define LSM_VERSION "development"
+#error "LSM_VERSION must be supplied from support/VERSION by the Windows build"
 #endif
 
 #define LSM_WINDOWS_TIMER_ID 1U
