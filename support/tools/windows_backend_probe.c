@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static double bytes_to_gib(uint64_t bytes)
+static double bytes_to_gb(uint64_t bytes)
 {
     return (double)bytes / (1024.0 * 1024.0 * 1024.0);
 }
@@ -63,14 +63,14 @@ int main(void)
            (unsigned long long)monitor.cpu.file_handle_count);
 
     printf("Memory\n");
-    printf("  Physical: %.2f GiB total, %.2f GiB used, %.2f GiB available\n",
-           bytes_to_gib(monitor.memory.total_bytes),
-           bytes_to_gib(monitor.memory.used_bytes),
-           bytes_to_gib(monitor.memory.available_bytes));
+    printf("  Physical: %.2f GB total, %.2f GB used, %.2f GB available\n",
+           bytes_to_gb(monitor.memory.total_bytes),
+           bytes_to_gb(monitor.memory.used_bytes),
+           bytes_to_gb(monitor.memory.available_bytes));
     printf("  Usage: %.1f%%\n", monitor.memory.usage_percent);
-    printf("  Commit: %.2f GiB / %.2f GiB\n\n",
-           bytes_to_gib(monitor.memory.committed_bytes),
-           bytes_to_gib(monitor.memory.commit_limit_bytes));
+    printf("  Commit: %.2f GB / %.2f GB\n\n",
+           bytes_to_gb(monitor.memory.committed_bytes),
+           bytes_to_gb(monitor.memory.commit_limit_bytes));
 
     LsmProcessBackend *process_backend = lsm_process_backend_create();
     if (!process_backend) {
