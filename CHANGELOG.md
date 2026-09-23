@@ -9,6 +9,9 @@ This changelog records user-visible, compatibility, architecture and validation 
 - Keep Linux-only graph mechanics, pressure data, partition tables, cumulative network totals, wireless details and advanced GPU engine telemetry local to GTK while sharing only semantics that are genuinely common to both platforms.
 - Preserve the richer Linux GPU telemetry-source fallback in the shared model: native driver telemetry and basic-identification states remain meaningful instead of being weakened to `N/A` for reuse.
 - Extend deterministic presentation regression coverage to lock the named device-value contract and GPU telemetry fallbacks.
+- Fix the Windows normal-start crash introduced by physical-disk discovery: the collector no longer places multi-megabyte arrays of partition-rich `LsmDiskInfo` objects on the GUI thread's default stack; discovery staging now lives on the heap and is copied into the shared monitor snapshot only after identity reconciliation.
+- Remove unnecessary duplicate old-network and old-GPU stack snapshots by comparing newly discovered identities against the retained shared model before publication.
+- Strengthen native Windows CI so verification now exercises both the lightweight first-paint smoke path and the real normal startup/backend path for five seconds, preventing collector-start crashes from passing as successful GUI startup.
 
 ## 1.0.81 - 2026-09-23
 
