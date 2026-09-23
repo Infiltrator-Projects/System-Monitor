@@ -2,6 +2,15 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.80 - 2026-09-23
+
+- Correct the cross-platform architecture so Linux and Windows consume one platform-neutral System Monitor presentation contract instead of maintaining independent copies of page identity, tab labels, Performance resource identity, colours, geometry and CPU/Memory field ordering.
+- Move top-level tab labels, Performance titles/stack identities, canonical rail/graph geometry, resource colours, CPU/Memory metric captions, detail captions and grid positions into `presentation_contract.[ch]`.
+- Convert the GTK CPU/Memory builders to consume the shared field-placement schema instead of hard-coded grid attachments.
+- Convert the Win32 renderer to consume the same `LsmTabIndex`, `LsmPageType`, labels, colours, geometry and field-placement schema.
+- Build the same shared presentation module into Linux, MinGW cross-builds, native Windows startup verification and Windows release artifacts.
+- Keep toolkit mechanics native: GTK remains the Linux renderer and Win32/GDI remains the Windows renderer; product semantics and layout specification no longer fork by operating system.
+
 ## 1.0.79 - 2026-09-23
 
 - Correct release verification after 1.0.78 by treating central Infiltrator-Repository APT discovery as asynchronous instead of failing a valid GitHub release while the scheduled central publisher has not yet run.
