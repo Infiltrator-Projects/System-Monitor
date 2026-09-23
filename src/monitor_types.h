@@ -53,6 +53,7 @@ typedef struct {
     unsigned logical_cores;
     unsigned physical_cores;
     bool virtualization;
+    bool virtualization_available;    /**< Backend established virtualization capability state. */
     char cache_l1[64];
     char cache_l2[64];
     char cache_l3[64];
@@ -63,6 +64,7 @@ typedef struct {
     double base_frequency_ghz;
     double max_frequency_ghz;
     double temperature_c;
+    bool temperature_available;       /**< CPU temperature is a valid sampled value. */
     unsigned process_count;
     unsigned thread_count;
     uint64_t uptime_seconds;          /**< Seconds elapsed since the current boot. */
@@ -70,8 +72,11 @@ typedef struct {
     double load_average_1;
     double load_average_5;
     double load_average_15;
+    bool load_average_available;      /**< All three load-average windows are valid. */
     double interrupts_per_sec;
+    bool interrupts_per_sec_available; /**< Scheduler interrupt rate is sampled. */
     double context_switches_per_sec;
+    bool context_switches_per_sec_available; /**< Scheduler context-switch rate is sampled. */
     uint64_t interrupt_count;
     uint64_t context_switch_count;
     unsigned socket_count;
