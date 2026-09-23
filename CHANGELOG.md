@@ -2,6 +2,15 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.75 - 2026-09-23
+
+- Mirror the actual Linux Performance-page composition in the native Windows preview instead of only approximating its colour scheme.
+- Rebuild CPU with the compact horizontal title/model header, separate "% Utilisation / 100%" scale row, primary history graph and the Linux-style lower metrics/details panel.
+- Rebuild Memory with the title/total and usage-scale header, primary graph, memory-composition bar, usage metrics grid and hardware-information section.
+- Keep unimplemented Windows telemetry fields visible as explicit `N/A` values so presentation can reach parity before collector coverage does.
+- Correct Windows Performance typography to use the Common UI sans family, matching Linux page titles instead of incorrectly applying the brand serif face.
+- Reduce the headline summary and notebook-strip heights to better match the GTK composition and return vertical space to useful page content.
+
 ## 1.0.74 - 2026-09-23
 
 - Refine the native Windows presentation toward Linux visual parity without changing backend semantics.
