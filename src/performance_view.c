@@ -418,7 +418,7 @@ void lsm_disk_performance_view(const LsmDiskInfo *disk, size_t index,
     if (disk->model[0]) {
         (void)snprintf(
             view->title, sizeof(view->title),
-            "Disk %zu — %s", index, disk->model);
+            "Disk %zu — %.96s", index, disk->model);
     } else {
         (void)snprintf(
             view->title, sizeof(view->title), "Disk %zu", index);
@@ -478,7 +478,7 @@ void lsm_network_performance_view(const LsmNetInfo *net, size_t index,
     if (net->product[0]) {
         (void)snprintf(
             view->title, sizeof(view->title),
-            "%s %zu — %s", kind, index, net->product);
+            "%s %zu — %.88s", kind, index, net->product);
     } else {
         (void)snprintf(
             view->title, sizeof(view->title), "%s %zu", kind, index);
@@ -532,7 +532,7 @@ void lsm_gpu_performance_view(const LsmGpuInfo *gpu, size_t index,
     if (gpu->name[0]) {
         (void)snprintf(
             view->title, sizeof(view->title),
-            "GPU %zu — %s", index, gpu->name);
+            "GPU %zu — %.96s", index, gpu->name);
     } else {
         (void)snprintf(view->title, sizeof(view->title), "GPU %zu", index);
     }
@@ -591,7 +591,7 @@ void lsm_gpu_performance_view(const LsmGpuInfo *gpu, size_t index,
             gpu->memory_used_bytes, used, sizeof(used));
         infiltratr_format_bytes(
             gpu->memory_total_bytes, total, sizeof(total));
-        (void)snprintf(value, sizeof(value), "%s / %s", used, total);
+        (void)snprintf(value, sizeof(value), "%.56s / %.56s", used, total);
         device_view_metric(view, "Memory", value);
     } else {
         device_view_metric(view, "Memory", "N/A");
