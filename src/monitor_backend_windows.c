@@ -455,12 +455,9 @@ static void enumerate_physical_disks(
 {
     if (!monitor || !state) return;
 
-    LsmDiskInfo old_disks[LSM_MAX_DISKS];
-    const size_t old_count = monitor->disk_count;
-    memcpy(old_disks, monitor->disks, sizeof(old_disks));
-
-    LsmDiskInfo discovered[LSM_MAX_DISKS];
-    memset(discovered, 0, sizeof(discovered));
+    LsmDiskInfo *discovered =
+        (LsmDiskInfo *)calloc(LSM_MAX_DISKS, sizeof(*discovered));
+    if (!discovered) return;
     size_t count = 0U;
 
     for (unsigned number = 0U;
@@ -492,7 +489,8 @@ static void enumerate_physical_disks(
         count++;
     }
 
-    if (disk_identity_changed(old_disks, old_count, discovered, count)) {
+    if (disk_identity_changed(
+            monitor->disks, monitor->disk_count, discovered, count)) {
         monitor->disk_generation++;
         monitor->topology_generation++;
     }
@@ -501,6 +499,7 @@ static void enumerate_physical_disks(
     if (count > 0U)
         memcpy(monitor->disks, discovered, count * sizeof(discovered[0]));
     monitor->disk_count = count;
+    free(discovered);
 }
 
 static int physical_disk_index(
@@ -766,10 +765,6 @@ static void enumerate_networks(
         return;
     }
 
-    LsmNetInfo old_nets[LSM_MAX_NETS];
-    const size_t old_count = monitor->net_count;
-    memcpy(old_nets, monitor->nets, sizeof(old_nets));
-
     LsmNetInfo discovered[LSM_MAX_NETS];
     memset(discovered, 0, sizeof(discovered));
     size_t count = 0U;
@@ -839,7 +834,8 @@ static void enumerate_networks(
         count++;
     }
 
-    if (network_identity_changed(old_nets, old_count, discovered, count))
+    if (network_identity_changed(
+            monitor->nets, monitor->net_count, discovered, count))
         monitor->topology_generation++;
 
     memset(monitor->nets, 0, sizeof(monitor->nets));
@@ -876,10 +872,6 @@ static bool gpu_already_present(
 static void enumerate_gpus(LsmMonitor *monitor)
 {
     if (!monitor) return;
-
-    LsmGpuInfo old_gpus[LSM_MAX_GPUS];
-    const size_t old_count = monitor->gpu_count;
-    memcpy(old_gpus, monitor->gpus, sizeof(old_gpus));
 
     LsmGpuInfo discovered[LSM_MAX_GPUS];
     memset(discovered, 0, sizeof(discovered));
@@ -918,7 +910,8 @@ static void enumerate_gpus(LsmMonitor *monitor)
         gpu->engine_metrics_capable = false;
     }
 
-    if (gpu_identity_changed(old_gpus, old_count, discovered, count))
+    if (gpu_identity_changed(
+            monitor->gpus, monitor->gpu_count, discovered, count))
         monitor->topology_generation++;
 
     memset(monitor->gpus, 0, sizeof(monitor->gpus));
