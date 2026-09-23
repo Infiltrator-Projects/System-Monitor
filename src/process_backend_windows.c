@@ -9,9 +9,10 @@
  * priority, executable path and handle count when permissions allow. Retained
  * samples calculate CPU and I/O rates without confusing PID reuse.
  *
- * User/account identity, command-line recovery, GPU/cgroup enrichment and all
- * process-control operations are intentionally unsupported in this first
- * backend. Callers receive partial rows rather than guessed values.
+ * Process ownership and account identity come from native access-token SIDs.
+ * Command-line recovery, GPU/cgroup enrichment and all process-control
+ * operations are intentionally unsupported in this first backend. Callers
+ * receive partial rows rather than guessed values.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
@@ -28,6 +29,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <psapi.h>
+#include <sddl.h>
 #include <tlhelp32.h>
 
 #include <limits.h>
@@ -53,7 +55,7 @@ struct LsmProcessBackend {
     unsigned generation;
     uint64_t previous_system_cpu_100ns;
     uint64_t total_memory_bytes;
-    DWORD current_pid;
+    PSID current_user_sid;
 };
 
 static bool reserve_array(void **items, size_t *capacity,
@@ -166,6 +168,105 @@ static bool native_pid(LsmProcessId id, DWORD *pid)
     return true;
 }
 
+static void copy_text(char *destination, size_t capacity,
+                      const char *source)
+{
+    if (!destination || capacity == 0U) return;
+    destination[0] = '\0';
+    if (!source) return;
+
+    const size_t length = strlen(source);
+    const size_t copied = length < capacity - 1U ? length : capacity - 1U;
+    if (copied > 0U)
+        memcpy(destination, source, copied);
+    destination[copied] = '\0';
+}
+
+static PSID copy_process_user_sid(HANDLE process)
+{
+    if (!process) return NULL;
+
+    HANDLE token = NULL;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token))
+        return NULL;
+
+    DWORD required = 0U;
+    (void)GetTokenInformation(token, TokenUser, NULL, 0U, &required);
+    if (required == 0U || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        CloseHandle(token);
+        return NULL;
+    }
+
+    TOKEN_USER *token_user = malloc((size_t)required);
+    if (!token_user) {
+        CloseHandle(token);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+
+    if (!GetTokenInformation(token, TokenUser, token_user, required, &required) ||
+        !IsValidSid(token_user->User.Sid)) {
+        free(token_user);
+        CloseHandle(token);
+        return NULL;
+    }
+
+    const DWORD sid_size = GetLengthSid(token_user->User.Sid);
+    PSID sid = malloc((size_t)sid_size);
+    if (!sid) {
+        free(token_user);
+        CloseHandle(token);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+    if (!CopySid(sid_size, sid, token_user->User.Sid)) {
+        free(sid);
+        sid = NULL;
+    }
+
+    free(token_user);
+    CloseHandle(token);
+    return sid;
+}
+
+static void populate_process_account(LsmProcessBackend *backend,
+                                     HANDLE process,
+                                     LsmProcessInfo *info)
+{
+    if (!backend || !process || !info || !backend->current_user_sid)
+        return;
+
+    PSID sid = copy_process_user_sid(process);
+    if (!sid) return;
+
+    info->owned_by_current_user =
+        EqualSid(sid, backend->current_user_sid) != FALSE;
+
+    LPSTR sid_text = NULL;
+    if (ConvertSidToStringSidA(sid, &sid_text) && sid_text) {
+        static const char prefix[] = "sid:";
+        const size_t prefix_length = sizeof(prefix) - 1U;
+        const size_t sid_length = strlen(sid_text);
+        if (prefix_length + sid_length < sizeof(info->account_identity)) {
+            memcpy(info->account_identity, prefix, prefix_length);
+            memcpy(info->account_identity + prefix_length, sid_text,
+                   sid_length + 1U);
+        }
+        LocalFree(sid_text);
+    }
+
+    char account[256];
+    char domain[256];
+    DWORD account_length = (DWORD)sizeof(account);
+    DWORD domain_length = (DWORD)sizeof(domain);
+    SID_NAME_USE use = SidTypeUnknown;
+    if (LookupAccountSidA(NULL, sid, account, &account_length,
+                          domain, &domain_length, &use))
+        copy_text(info->user, sizeof(info->user), account);
+
+    free(sid);
+}
+
 static void wide_to_utf8(const WCHAR *source, char *destination,
                          size_t capacity)
 {
@@ -219,7 +320,7 @@ static void prune_process_samples(LsmProcessBackend *backend)
 static HANDLE open_process_for_query(DWORD pid)
 {
     HANDLE process = OpenProcess(
-        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
     if (!process)
         process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     return process;
@@ -295,6 +396,7 @@ static void populate_process_metrics(LsmProcessBackend *backend,
     if (priority_class != 0U)
         info->priority = priority_from_class(priority_class);
 
+    populate_process_account(backend, process, info);
     populate_optional_process_fields(process, info, scan_flags);
 
     LsmWindowsProcessSample *sample =
@@ -336,7 +438,11 @@ LsmProcessBackend *lsm_process_backend_create(void)
     LsmProcessBackend *backend = calloc(1U, sizeof(*backend));
     if (!backend) return NULL;
 
-    backend->current_pid = GetCurrentProcessId();
+    backend->current_user_sid = copy_process_user_sid(GetCurrentProcess());
+    if (!backend->current_user_sid) {
+        free(backend);
+        return NULL;
+    }
 
     MEMORYSTATUSEX memory;
     memset(&memory, 0, sizeof(memory));
@@ -352,6 +458,7 @@ void lsm_process_backend_destroy(LsmProcessBackend *backend)
 {
     if (!backend) return;
     free(backend->samples);
+    free(backend->current_user_sid);
     free(backend);
 }
 
@@ -405,10 +512,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         info->ppid = (LsmProcessId)entry.th32ParentProcessID;
         info->threads = (unsigned)entry.cntThreads;
         info->priority = LSM_PROCESS_PRIORITY_NORMAL;
-        info->owned_by_current_user =
-            entry.th32ProcessID == backend->current_pid;
         wide_to_utf8(entry.szExeFile, info->name, sizeof(info->name));
-        (void)snprintf(info->state, sizeof(info->state), "%s", "Running");
+        (void)snprintf(info->state, sizeof(info->state), "%s", "Unknown");
 
         HANDLE process = open_process_for_query(entry.th32ProcessID);
         if (process) {
@@ -551,7 +656,7 @@ void lsm_process_error_message(char *buffer, size_t size)
     const DWORD length = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         NULL, error, 0U, buffer,
-        size > (size_t)DWORD_MAX ? DWORD_MAX : (DWORD)size,
+        size > (size_t)UINT32_MAX ? UINT32_MAX : (DWORD)size,
         NULL);
     if (length == 0U) {
         (void)snprintf(
