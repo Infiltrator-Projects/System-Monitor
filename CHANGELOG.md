@@ -4,6 +4,7 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## 1.0.72 - 2026-09-23
 
+- Move the large retained Windows application state, including `LsmMonitor`, from the default GUI-thread stack to heap ownership; native Windows validation reproduced the previous startup failure as `STATUS_STACK_OVERFLOW` before first paint.
 - Make first paint independent of Windows backend startup: create and show the Win32 shell before initialising Performance telemetry, and defer the process backend until the Processes page is selected.
 - Keep the GUI open when a Windows backend is unavailable instead of allowing backend initialisation or process scanning to block the initial window.
 - Link the Windows GUI with the MinGW runtime statically and make CI/release validation prove that the published PE is a Windows GUI-subsystem executable with only approved Windows system DLL imports.
