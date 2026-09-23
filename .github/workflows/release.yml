@@ -228,13 +228,13 @@ jobs:
 
 
   apt-publication:
-    name: Verify central APT publication
+    name: Record central APT publication state
     needs: publish
     if: needs.publish.result == 'success'
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - name: Check out exact published commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -242,7 +242,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 1
 
-      - name: Wait for tokenless central APT discovery
+      - name: Confirm or defer tokenless central APT discovery
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           APP_ID: system-monitor
@@ -253,19 +253,13 @@ jobs:
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 
           catalogue='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
-          for attempt in $(seq 1 90); do
-            if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA&attempt=$attempt" \
-              | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
-                '.[] | select(.id == $id and .version == $version)' >/dev/null; then
-              echo "APT repository advertises $APP_ID $VERSION."
-              exit 0
-            fi
-            echo "Waiting for tokenless central APT discovery of $APP_ID $VERSION ($attempt/90)..."
-            sleep 10
-          done
-
-          echo "::error::GitHub release publication succeeded, but central APT discovery did not advertise $APP_ID $VERSION within 15 minutes."
-          exit 1
+          if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA" \
+            | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
+              '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+            echo "APT repository already advertises $APP_ID $VERSION."
+          else
+            echo "::notice::Central APT publication is asynchronous; discovery of $APP_ID $VERSION is deferred to Infiltrator-Repository."
+          fi
 
   retention:
     name: Keep only the five newest GitHub releases and release tags
