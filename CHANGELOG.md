@@ -2,6 +2,17 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.81 - 2026-09-23
+
+- Extend the native Windows monitor adapter behind the existing shared `monitor_platform.h` seam instead of creating Windows-only application models.
+- Discover physical disks through native storage IOCTLs, retain stable `PhysicalDriveN` counter baselines, publish size/model/bus/media identity, read/write throughput, active time, response time and queue depth, and map Windows volumes back to physical disks for filesystem/usage/system-disk presentation.
+- Discover network interfaces through IP Helper, publishing friendly/product identity, IPv4/IPv6, MAC address, connection state, negotiated link speed, cumulative traffic, live receive/send rates and link utilisation into the existing `LsmNetInfo` model.
+- Add native Windows graphics-adapter identification without inventing unsupported telemetry: adapter identity is published into `LsmGpuInfo`, while utilisation, temperature and other uncollected GPU metrics remain explicitly unavailable.
+- Extend `performance_view.[ch]` with toolkit-neutral disk, network and GPU projections so native renderers consume the same titles, rail summaries, units and availability-to-text policy rather than maintaining Windows-specific formatting rules.
+- Replace the Win32 Performance rail's one-device-per-category assumption with type-plus-device-index selection, enumerate every discovered disk/network/GPU instance, add bounded wheel scrolling, and clip hit targets to the visible rail.
+- Add deterministic shared-view regression coverage for disk/network/GPU projection and update both MinGW and native Windows verification/release link contracts for IP Helper and Winsock.
+- Verify the completed change through the native Windows GUI build/launch gate, MinGW cross-build, CMake application build, canonical verification suite, sanitizers, release-package verification and aggressive PGO installer test.
+
 ## 1.0.80 - 2026-09-23
 
 - Correct the cross-platform architecture so Linux and Windows consume one platform-neutral System Monitor presentation contract instead of maintaining independent copies of page identity, tab labels, Performance resource identity, colours, geometry, CPU/Memory field ordering and value-formatting policy.
