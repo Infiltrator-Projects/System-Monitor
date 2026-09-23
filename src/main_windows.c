@@ -75,6 +75,7 @@ typedef struct {
     HFONT title_font;
     HFONT section_font;
     LsmMonitor monitor;
+    bool startup_smoke;
     bool monitor_initialised;
     bool monitor_ready;
     bool process_backend_attempted;
@@ -110,6 +111,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
 static LsmWindowsUiState *window_state(HWND window)
 {
     return (LsmWindowsUiState *)GetWindowLongPtrW(window, GWLP_USERDATA);
+}
+
+static void write_startup_smoke_status(const char *status)
+{
+    if (!status) return;
+
+    HANDLE file = CreateFileW(
+        L"windows-startup-smoke.txt", GENERIC_WRITE, FILE_SHARE_READ,
+        NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return;
+
+    DWORD written = 0U;
+    (void)WriteFile(
+        file, status, (DWORD)lstrlenA(status), &written, NULL);
+    CloseHandle(file);
 }
 
 static HWND create_control(LsmWindowsUiState *state, DWORD extended_style,
@@ -713,8 +729,17 @@ static LRESULT CALLBACK lsm_windows_window_proc(
         }
 
         case WM_CREATE:
-            if (!state || !create_fonts(state) || !create_children(state))
+            if (!state) return -1;
+            if (!create_fonts(state)) {
+                if (state->startup_smoke)
+                    write_startup_smoke_status("create_fonts_failed\n");
                 return -1;
+            }
+            if (!create_children(state)) {
+                if (state->startup_smoke)
+                    write_startup_smoke_status("create_children_failed\n");
+                return -1;
+            }
             SetMenu(window, create_application_menu());
             state->active_page = LSM_WINDOWS_PAGE_PERFORMANCE;
             show_page(state, state->active_page);
@@ -794,14 +819,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
                     PWSTR command_line, int show_command)
 {
     (void)previous_instance;
-    (void)command_line;
+    const bool startup_smoke =
+        command_line && wcscmp(command_line, L"--startup-smoke") == 0;
+    if (startup_smoke)
+        write_startup_smoke_status("entry\n");
 
     INITCOMMONCONTROLSEX common_controls;
     ZeroMemory(&common_controls, sizeof(common_controls));
     common_controls.dwSize = sizeof(common_controls);
     common_controls.dwICC = ICC_LISTVIEW_CLASSES;
-    if (!InitCommonControlsEx(&common_controls))
+    if (!InitCommonControlsEx(&common_controls)) {
+        if (startup_smoke)
+            write_startup_smoke_status("common_controls_failed\n");
         return EXIT_FAILURE;
+    }
 
     (void)SetProcessDPIAware();
 
@@ -821,15 +852,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
     window_class.lpszClassName = class_name;
 
     if (!RegisterClassExW(&window_class)) {
-        MessageBoxW(
-            NULL, L"Unable to register the System Monitor window.",
-            L"System Monitor", MB_OK | MB_ICONERROR);
+        if (startup_smoke) {
+            write_startup_smoke_status("register_class_failed\n");
+        } else {
+            MessageBoxW(
+                NULL, L"Unable to register the System Monitor window.",
+                L"System Monitor", MB_OK | MB_ICONERROR);
+        }
         return EXIT_FAILURE;
     }
 
     LsmWindowsUiState state;
     ZeroMemory(&state, sizeof(state));
     state.instance = instance;
+    state.startup_smoke = startup_smoke;
 
     HWND window = CreateWindowExW(
         0U, class_name, L"System Monitor",
@@ -837,20 +873,30 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         CW_USEDEFAULT, CW_USEDEFAULT, 1120, 720,
         NULL, NULL, instance, &state);
     if (!window) {
-        MessageBoxW(
-            NULL, L"Unable to create the System Monitor window.",
-            L"System Monitor", MB_OK | MB_ICONERROR);
+        if (startup_smoke) {
+            write_startup_smoke_status("create_window_failed\n");
+        } else {
+            MessageBoxW(
+                NULL, L"Unable to create the System Monitor window.",
+                L"System Monitor", MB_OK | MB_ICONERROR);
+        }
         return EXIT_FAILURE;
     }
 
     ShowWindow(window, show_command == SW_HIDE ? SW_SHOWNORMAL : show_command);
     UpdateWindow(window);
 
-    if (command_line && wcscmp(command_line, L"--startup-smoke") == 0) {
+    if (startup_smoke) {
         const bool visible = IsWindowVisible(window) != FALSE;
         RECT client;
         const bool sized = GetClientRect(window, &client) != FALSE &&
             client.right > client.left && client.bottom > client.top;
+        if (!visible)
+            write_startup_smoke_status("window_not_visible\n");
+        else if (!sized)
+            write_startup_smoke_status("client_rect_invalid\n");
+        else
+            write_startup_smoke_status("success\n");
         DestroyWindow(window);
         return visible && sized ? EXIT_SUCCESS : EXIT_FAILURE;
     }
