@@ -158,19 +158,20 @@ jobs:
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake --target system-monitor --parallel 2
 
-      - name: Cross-compile experimental Windows backend probe
+      - name: Cross-compile experimental Windows GUI
         shell: bash
         run: |
           set -euo pipefail
           x86_64-w64-mingw32-gcc \
-            -std=c17 -O2 -D_WIN32_WINNT=0x0601 \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc \
-            support/tools/windows_backend_probe.c \
+            src/main_windows.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
-            -lpsapi -ladvapi32 \
-            -o build-cmake/windows-backend-probe.exe
+            -lpsapi -ladvapi32 -lcomctl32 -lgdi32 \
+            -municode -mwindows \
+            -o build-cmake/system-monitor-windows.exe
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check
