@@ -294,7 +294,7 @@ jobs:
             '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
             '-Wstrict-prototypes', '-Wmissing-prototypes', '-Isrc',
             '-include', $versionHeader,
-            'src/main_windows.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'src/main_windows.c', 'src/presentation_contract.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
             '-lpsapi', '-ladvapi32', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
             '-o', 'system-monitor-windows.exe'
           )
