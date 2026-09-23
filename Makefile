@@ -275,7 +275,7 @@ check: style-check docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
 build-check: check-deps strict-check portability-check \
-	core-suite-smoke backend-smoke monitor-platform-smoke peripheral-suite-smoke \
+	core-suite-smoke presentation-smoke backend-smoke monitor-platform-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
@@ -287,7 +287,7 @@ build-check: check-deps strict-check portability-check \
 # Canonical regression execution is organised by subsystem. Each subsystem now
 # owns one physical smoke source and one executable, preserving the original
 # case-level diagnostics without carrying dozens of tiny translation units.
-.PHONY: core-suite-smoke peripheral-suite-smoke \
+.PHONY: core-suite-smoke presentation-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke
 
@@ -296,6 +296,13 @@ core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/core_smoke.c src/project_info.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/core-suite-smoke
 	./$(BUILD_DIR)/core-suite-smoke
+
+presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
+		support/tests/presentation_smoke.c src/presentation_contract.c \
+		src/performance_view.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		-o $(BUILD_DIR)/presentation-smoke
+	./$(BUILD_DIR)/presentation-smoke
 
 peripheral-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
@@ -343,7 +350,7 @@ accelerator-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	./$(BUILD_DIR)/accelerator-suite-smoke
 
 COMMON_LINK_TARGETS := \
-	core-suite-smoke peripheral-suite-smoke metrics-suite-smoke storage-suite-smoke \
+	core-suite-smoke presentation-smoke peripheral-suite-smoke metrics-suite-smoke storage-suite-smoke \
 	process-suite-smoke ui-suite-smoke accelerator-suite-smoke \
 	backend-smoke monitor-platform-smoke battery-smoke nvml-smoke \
 	application-catalog-smoke system-snapshot-smoke process-export-smoke \
