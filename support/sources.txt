@@ -20,6 +20,7 @@ wifi_metadata.c
 graph.c
 sample_history.c
 performance_selection.c
+presentation_contract.c
 gpu_metrics.c
 performance.c
 performance_pages_core.c
