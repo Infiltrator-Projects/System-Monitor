@@ -165,13 +165,28 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           version_header=build-cmake/windows-version.h
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          common_portable=( \
+            src/infiltratr-common/src/core.c \
+            src/infiltratr-common/src/arithmetic.c \
+            src/infiltratr-common/src/config.c \
+            src/infiltratr-common/src/i18n.c \
+            src/infiltratr-common/src/token.c \
+            src/infiltratr-common/src/timing.c \
+            src/infiltratr-common/src/temporal.c \
+            src/infiltratr-common/src/format.c \
+            src/infiltratr-common/src/quantity.c \
+            src/infiltratr-common/src/graphics.c \
+            src/infiltratr-common/src/escape.c \
+            src/infiltratr-common/src/design.c \
+          )
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc -include "$version_header" \
-            src/main_windows.c src/presentation_contract.c \
+            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
+            src/main_windows.c src/presentation_contract.c src/performance_view.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
+            "${common_portable[@]}" \
             -lpsapi -ladvapi32 -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o build-cmake/system-monitor-windows.exe
@@ -270,7 +285,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-          submodules: false
+          submodules: recursive
 
       - name: Build and launch native Windows GUI
         shell: pwsh
@@ -292,9 +307,23 @@ jobs:
           $arguments = @(
             '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
             '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
-            '-Wstrict-prototypes', '-Wmissing-prototypes', '-Isrc',
+            '-Wstrict-prototypes', '-Wmissing-prototypes',
+            '-Isrc', '-Isrc/infiltratr-common/include',
             '-include', $versionHeader,
-            'src/main_windows.c', 'src/presentation_contract.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'src/main_windows.c', 'src/presentation_contract.c', 'src/performance_view.c',
+            'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'src/infiltratr-common/src/core.c',
+            'src/infiltratr-common/src/arithmetic.c',
+            'src/infiltratr-common/src/config.c',
+            'src/infiltratr-common/src/i18n.c',
+            'src/infiltratr-common/src/token.c',
+            'src/infiltratr-common/src/timing.c',
+            'src/infiltratr-common/src/temporal.c',
+            'src/infiltratr-common/src/format.c',
+            'src/infiltratr-common/src/quantity.c',
+            'src/infiltratr-common/src/graphics.c',
+            'src/infiltratr-common/src/escape.c',
+            'src/infiltratr-common/src/design.c',
             '-lpsapi', '-ladvapi32', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
             '-o', 'system-monitor-windows.exe'
           )
