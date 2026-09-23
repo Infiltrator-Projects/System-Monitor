@@ -28,24 +28,34 @@ The first dependency-reduction sequence is complete: BlueZ development headers, 
 ## Structure
 
 ```text
-GTK 3 presentation
-        ↓
-LsmMonitor / process model / application state
-        ↓
-platform contracts
-        ↓
-Linux backend and collectors
-        ↓
-procfs / PSI / cgroup v2 / sysfs / ioctls / D-Bus / optional driver APIs
+                    System Monitor application semantics
+                                ↓
+          presentation_contract / performance_view
+          (page identity, layout schema, labels, colours,
+             availability interpretation and value formatting)
+                    ↙                         ↘
+          GTK renderer                     Win32 renderer
+             ↓                                 ↓
+     Linux platform adapters           Windows platform adapters
+             ↓                                 ↓
+ procfs / sysfs / ioctls /         Win32 / Tool Help / IP Helper /
+ D-Bus / driver APIs                    storage / graphics APIs
 
-Common 1.19.24
-        ↓
-shared parsing / formatting / timing / path / durable-I/O / allocation primitives
+                         LsmMonitor / process model
+                                  ↑
+                         platform contracts
+
+                         Common 1.19.24
+                                  ↓
+              shared portable formatting / parsing /
+                arithmetic / timing / design primitives
 ```
 
-GTK consumes snapshots and application models. Presentation code should not need to know which Linux path, ioctl, D-Bus interface or driver supplied a metric.
+The operating-system renderers consume the same application-facing presentation contract and formatted view models. GTK and Win32 are responsible for native widget creation, drawing, event delivery and accessibility integration; they do not own separate product labels, resource identity, field order, unit policy or availability semantics.
 
-Performance presentation is partitioned by responsibility: CPU/memory/disk/network snapshot projection is separate from Bluetooth/GPU/battery/NPU projection, with a small dispatcher owning only shared presentation state. Process Inspector and exact-file ownership search are separate UI modules and share only generic process-table construction. Bluetooth monitor-level membership and traffic baselines are likewise separate from accelerator telemetry; raw HCI counter collection remains below that monitor boundary.
+Likewise, collectors publish the same plain-C monitor/process models through platform contracts. Linux-specific paths, ioctls and D-Bus details stay below the Linux adapter; Win32 handles and native APIs stay below the Windows adapter. A renderer should not need to know which native interface supplied a metric.
+
+Performance presentation is partitioned by responsibility. `presentation_contract.[ch]` owns toolkit-neutral page identity, canonical geometry, resource colours, captions and field placement. `performance_view.[ch]` projects CPU and memory snapshots into canonical user-facing values using portable Common formatters. Native renderers map that shared description onto GTK or Win32 mechanics. Device-specific projection continues to move behind the same shared boundary as those Windows collectors are implemented. Process Inspector and exact-file ownership search remain separate UI modules and share only generic process-table construction. Bluetooth monitor-level membership and traffic baselines are likewise separate from accelerator telemetry; raw HCI counter collection remains below that monitor boundary.
 
 ## Desktop application identity
 
@@ -53,9 +63,9 @@ The GTK/GApplication identity `io.github.theinfiltratr.SystemMonitor` is an inte
 
 ## Contracts and ownership
 
-Public monitor and process structures are plain C data with explicit availability. Native details such as file descriptors, driver handles, Linux paths, worker synchronization and retained counter baselines remain below those contracts.
+Public monitor and process structures are plain C data with explicit availability. A zero or false value is not overloaded to mean unavailable when that value is itself legitimate; optional CPU telemetry such as virtualisation state, temperature, load average and scheduler rates therefore carries explicit availability. Native details such as file descriptors, Win32 handles, operating-system paths, worker synchronization and retained counter baselines remain below those contracts.
 
-The Linux backend owns Linux-specific retained state and collector lifetimes. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths. Device-oriented state is reconciled by stable identity where possible so topology changes cannot silently transfer baselines between different devices.
+Each platform backend owns only its native retained state and collector lifetimes. Resource-owning subsystems use explicit create/initialise, update and destroy/shutdown paths. Device-oriented state is reconciled by stable identity where possible so topology changes cannot silently transfer baselines between different devices. Platform capability differences are represented in the shared model as unavailable data rather than by deleting, renaming or independently rearranging product fields in one renderer.
 
 Ownership is intentionally visible at API boundaries. Caller-owned buffers, returned heap objects, borrowed data and subsystem-owned resources are documented rather than inferred from implementation details.
 
