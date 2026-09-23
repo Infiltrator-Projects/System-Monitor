@@ -11,25 +11,7 @@
 #define INFILTRATOR_SYSTEM_MONITOR_PERFORMANCE_INTERNAL_H
 
 #include "app_internal.h"
-
-enum {
-    LSM_PRIMARY_GRAPH_MIN_HEIGHT = 120,
-    LSM_SIDEBAR_WIDTH = 220,
-    LSM_SIDE_BUTTON_WIDTH = 212,
-    LSM_SIDE_BUTTON_HEIGHT = 68,
-    LSM_SIDE_GRAPH_WIDTH = 64,
-    LSM_SIDE_GRAPH_HEIGHT = 44
-};
-
-#define LSM_COLOUR_CPU      "#00adef"
-#define LSM_COLOUR_MEMORY   "#5c9efa"
-#define LSM_COLOUR_DISK     "#638d1e"
-#define LSM_COLOUR_NETWORK  "#f5628e"
-#define LSM_COLOUR_BLUETOOTH "#4b9cff"
-#define LSM_COLOUR_GPU      "#de68f2"
-#define LSM_COLOUR_GPU_AUX  "#f0a0fa"
-#define LSM_COLOUR_BATTERY  "#d19e47"
-#define LSM_COLOUR_NPU      "#45b7a8"
+#include "presentation_contract.h"
 
 GtkWidget *performance_new_vertical_box(int spacing);
 void performance_style_card(GtkWidget *widget);
