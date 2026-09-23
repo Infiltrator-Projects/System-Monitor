@@ -51,25 +51,80 @@
 #define LSM_WINDOWS_RAIL_ITEM_HEIGHT 82
 #define LSM_WINDOWS_MESSAGE_START_BACKEND (WM_APP + 1)
 
-#define LSM_RGB_BACKGROUND RGB(0x05, 0x06, 0x08)
-#define LSM_RGB_PANEL RGB(0x10, 0x13, 0x18)
-#define LSM_RGB_CARD RGB(0x17, 0x1B, 0x20)
-#define LSM_RGB_SURFACE RGB(0x0D, 0x10, 0x14)
-#define LSM_RGB_INPUT RGB(0x0E, 0x11, 0x15)
-#define LSM_RGB_BORDER RGB(0x35, 0x3A, 0x40)
-#define LSM_RGB_TEXT RGB(0xE8, 0xEC, 0xEF)
-#define LSM_RGB_TITLE RGB(0xEE, 0xF1, 0xF3)
-#define LSM_RGB_MUTED RGB(0xAE, 0xB6, 0xBD)
-#define LSM_RGB_SUBTLE RGB(0x89, 0x91, 0x98)
-#define LSM_RGB_SELECTION RGB(0x2B, 0x31, 0x37)
-#define LSM_RGB_ACCENT RGB(0x00, 0xAD, 0xEF)
-#define LSM_RGB_SELECTED_SUMMARY RGB(0x79, 0xCA, 0xE8)
-#define LSM_RGB_HEADING RGB(0xE7, 0xEB, 0xEE)
-#define LSM_RGB_SUMMARY RGB(0x98, 0xA1, 0xA9)
-#define LSM_RGB_DETAIL RGB(0x7E, 0x85, 0x8C)
-#define LSM_RGB_CONNECTION RGB(0x0E, 0x11, 0x15)
-#define LSM_RGB_CONNECTION_BORDER RGB(0x31, 0x36, 0x3B)
-#define LSM_RGB_CARD_HOVER RGB(0x22, 0x27, 0x2D)
+typedef enum {
+    LSM_WINDOWS_THEME_SYSTEM,
+    LSM_WINDOWS_THEME_DAY,
+    LSM_WINDOWS_THEME_NIGHT
+} LsmWindowsThemeMode;
+
+typedef struct {
+    COLORREF background;
+    COLORREF panel;
+    COLORREF card;
+    COLORREF surface;
+    COLORREF input;
+    COLORREF border;
+    COLORREF text;
+    COLORREF title;
+    COLORREF muted;
+    COLORREF subtle;
+    COLORREF selection;
+    COLORREF accent;
+    COLORREF selected_summary;
+    COLORREF heading;
+    COLORREF summary;
+    COLORREF detail;
+    COLORREF connection;
+    COLORREF connection_border;
+    COLORREF card_hover;
+} LsmWindowsPalette;
+
+static const LsmWindowsPalette windows_day_palette = {
+    RGB(0xFF, 0xFF, 0xFF),
+    RGB(0xFF, 0xFF, 0xFF),
+    RGB(0xF8, 0xF9, 0xFA),
+    RGB(0xEC, 0xEF, 0xF2),
+    RGB(0xFF, 0xFF, 0xFF),
+    RGB(0xC7, 0xCD, 0xD3),
+    RGB(0x20, 0x25, 0x2B),
+    RGB(0x11, 0x14, 0x18),
+    RGB(0x59, 0x63, 0x6C),
+    RGB(0x73, 0x7D, 0x86),
+    RGB(0xDD, 0xE2, 0xE7),
+    RGB(0x00, 0xAD, 0xEF),
+    RGB(0x46, 0x7A, 0xA3),
+    RGB(0x11, 0x14, 0x18),
+    RGB(0x59, 0x63, 0x6C),
+    RGB(0x73, 0x7D, 0x86),
+    RGB(0xF8, 0xF9, 0xFA),
+    RGB(0xC7, 0xCD, 0xD3),
+    RGB(0xEE, 0xF1, 0xF3)
+};
+
+static const LsmWindowsPalette windows_night_palette = {
+    RGB(0x05, 0x06, 0x08),
+    RGB(0x10, 0x13, 0x18),
+    RGB(0x17, 0x1B, 0x20),
+    RGB(0x0D, 0x10, 0x14),
+    RGB(0x0E, 0x11, 0x15),
+    RGB(0x35, 0x3A, 0x40),
+    RGB(0xE8, 0xEC, 0xEF),
+    RGB(0xEE, 0xF1, 0xF3),
+    RGB(0xAE, 0xB6, 0xBD),
+    RGB(0x89, 0x91, 0x98),
+    RGB(0x2B, 0x31, 0x37),
+    RGB(0x00, 0xAD, 0xEF),
+    RGB(0x79, 0xCA, 0xE8),
+    RGB(0xE7, 0xEB, 0xEE),
+    RGB(0x98, 0xA1, 0xA9),
+    RGB(0x7E, 0x85, 0x8C),
+    RGB(0x0E, 0x11, 0x15),
+    RGB(0x31, 0x36, 0x3B),
+    RGB(0x22, 0x27, 0x2D)
+};
+
+#define LSM_WINDOWS_CPU_COLOUR RGB(0x00, 0xAD, 0xEF)
+#define LSM_WINDOWS_MEMORY_COLOUR RGB(0x5C, 0x9E, 0xFA)
 
 typedef enum {
     LSM_WINDOWS_PAGE_PERFORMANCE,
@@ -106,9 +161,16 @@ typedef struct {
     size_t process_count;
     LsmWindowsPage active_page;
     LsmWindowsPerformanceItem active_performance_item;
+    LsmWindowsThemeMode theme_mode;
+    LsmWindowsPalette palette;
+    int hovered_tab;
+    int hovered_performance_item;
+    int hovered_menu;
+    bool tracking_mouse_leave;
     RECT page_tabs[LSM_WINDOWS_PAGE_COUNT];
     RECT performance_items[LSM_WINDOWS_PERFORMANCE_ITEM_COUNT];
     RECT file_menu_rect;
+    RECT view_menu_rect;
     RECT help_menu_rect;
     wchar_t status_text[256];
     double cpu_history[LSM_WINDOWS_HISTORY_CAPACITY];
@@ -130,7 +192,10 @@ static const wchar_t *const page_names[LSM_WINDOWS_PAGE_COUNT] = {
 
 enum {
     LSM_WINDOWS_ID_EXIT = 2000,
-    LSM_WINDOWS_ID_ABOUT = 2001
+    LSM_WINDOWS_ID_ABOUT = 2001,
+    LSM_WINDOWS_ID_THEME_SYSTEM = 2100,
+    LSM_WINDOWS_ID_THEME_DAY = 2101,
+    LSM_WINDOWS_ID_THEME_NIGHT = 2102
 };
 
 static LRESULT CALLBACK lsm_windows_window_proc(
@@ -141,6 +206,70 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
 static LsmWindowsUiState *window_state(HWND window)
 {
     return (LsmWindowsUiState *)GetWindowLongPtrW(window, GWLP_USERDATA);
+}
+
+static bool system_prefers_dark(void)
+{
+    DWORD light_theme = 1U;
+    DWORD size = sizeof(light_theme);
+    const LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme",
+        RRF_RT_REG_DWORD, NULL, &light_theme, &size);
+    return status == ERROR_SUCCESS && light_theme == 0U;
+}
+
+static bool theme_is_dark(const LsmWindowsUiState *state)
+{
+    if (!state) return true;
+    if (state->theme_mode == LSM_WINDOWS_THEME_NIGHT) return true;
+    if (state->theme_mode == LSM_WINDOWS_THEME_DAY) return false;
+    return system_prefers_dark();
+}
+
+static void resolve_theme(LsmWindowsUiState *state)
+{
+    if (!state) return;
+    state->palette = theme_is_dark(state)
+        ? windows_night_palette : windows_day_palette;
+}
+
+static void load_theme_preference(LsmWindowsUiState *state)
+{
+    if (!state) return;
+    /* Preserve the established black/graphite preview unless the user
+     * explicitly selects Follow system or Day. */
+    state->theme_mode = LSM_WINDOWS_THEME_NIGHT;
+
+    DWORD mode = 0U;
+    DWORD size = sizeof(mode);
+    const LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Infiltrator\\System Monitor",
+        L"ThemeMode",
+        RRF_RT_REG_DWORD, NULL, &mode, &size);
+    if (status == ERROR_SUCCESS && mode <= (DWORD)LSM_WINDOWS_THEME_NIGHT)
+        state->theme_mode = (LsmWindowsThemeMode)mode;
+    resolve_theme(state);
+}
+
+static void save_theme_preference(const LsmWindowsUiState *state)
+{
+    if (!state) return;
+    HKEY key = NULL;
+    if (RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            L"Software\\Infiltrator\\System Monitor",
+            0U, NULL, 0U, KEY_SET_VALUE, NULL, &key, NULL) !=
+        ERROR_SUCCESS)
+        return;
+
+    const DWORD mode = (DWORD)state->theme_mode;
+    (void)RegSetValueExW(
+        key, L"ThemeMode", 0U, REG_DWORD,
+        (const BYTE *)&mode, sizeof(mode));
+    RegCloseKey(key);
 }
 
 static void write_startup_smoke_status(const char *status)
@@ -266,12 +395,13 @@ static double history_value(const double *history, size_t count,
     return history[index];
 }
 
-static void draw_history_graph(HDC dc, RECT rect, const double *history,
-                               size_t count, size_t position)
+static void draw_history_graph(LsmWindowsUiState *state, HDC dc, RECT rect,
+                               const double *history, size_t count,
+                               size_t position, COLORREF line_colour)
 {
     draw_round_panel(
-        dc, &rect, LSM_RGB_SURFACE,
-        LSM_RGB_CONNECTION_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &rect, state->palette.surface,
+        state->palette.connection_BORDER, LSM_WINDOWS_CARD_RADIUS);
 
     RECT inner = {
         rect.left + 14, rect.top + 14,
@@ -292,7 +422,7 @@ static void draw_history_graph(HDC dc, RECT rect, const double *history,
 
     if (count < 2U) return;
 
-    HPEN graph_pen = CreatePen(PS_SOLID, 2, LSM_RGB_ACCENT);
+    HPEN graph_pen = CreatePen(PS_SOLID, 2, line_colour);
     if (!graph_pen) return;
     HGDIOBJ previous = SelectObject(dc, graph_pen);
     const int width = inner.right - inner.left;
@@ -320,22 +450,37 @@ static void draw_history_graph(HDC dc, RECT rect, const double *history,
 static void draw_menu_strip(LsmWindowsUiState *state, HDC dc, int width)
 {
     RECT menu = {0, 0, width, LSM_WINDOWS_MENU_HEIGHT};
-    fill_solid(dc, &menu, LSM_RGB_PANEL);
+    fill_solid(dc, &menu, state->palette.panel);
 
     RECT divider = {
         0, LSM_WINDOWS_MENU_HEIGHT - 1,
         width, LSM_WINDOWS_MENU_HEIGHT
     };
-    fill_solid(dc, &divider, LSM_RGB_BORDER);
+    fill_solid(dc, &divider, state->palette.border);
 
     SetRect(&state->file_menu_rect, 16, 0, 62, LSM_WINDOWS_MENU_HEIGHT);
-    SetRect(&state->help_menu_rect, 68, 0, 120, LSM_WINDOWS_MENU_HEIGHT);
-    draw_text(
-        dc, L"File", state->file_menu_rect, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(
-        dc, L"Help", state->help_menu_rect, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    SetRect(&state->view_menu_rect, 68, 0, 122, LSM_WINDOWS_MENU_HEIGHT);
+    SetRect(&state->help_menu_rect, 128, 0, 182, LSM_WINDOWS_MENU_HEIGHT);
+
+    const RECT menu_rects[] = {
+        state->file_menu_rect,
+        state->view_menu_rect,
+        state->help_menu_rect
+    };
+    const wchar_t *const names[] = {L"File", L"View", L"Help"};
+    for (int index = 0; index < 3; index++) {
+        if (state->hovered_menu == index) {
+            RECT hover = menu_rects[index];
+            hover.left -= 6;
+            hover.right += 6;
+            fill_solid(dc, &hover, state->palette.card_hover);
+        }
+        draw_text(
+            dc, names[index], menu_rects[index], state->body_font,
+            state->hovered_menu == index
+                ? state->palette.title : state->palette.summary,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
 }
 
 static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
@@ -348,8 +493,8 @@ static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
             LSM_WINDOWS_SUMMARY_HEIGHT
     };
     draw_round_panel(
-        dc, &bar, LSM_RGB_CONNECTION,
-        LSM_RGB_CONNECTION_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &bar, state->palette.connection,
+        state->palette.connection_BORDER, LSM_WINDOWS_CARD_RADIUS);
 
     static const wchar_t *const captions[] = {
         L"CPU", L"Memory", L"Disk", L"Network", L"GPU"
@@ -376,10 +521,10 @@ static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
         };
         draw_text(
             dc, captions[index], caption, state->body_font,
-            LSM_RGB_SUMMARY, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            state->palette.summary, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         draw_text(
             dc, values[index], value, state->body_bold_font,
-            LSM_RGB_HEADING, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            state->palette.heading, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 }
 
@@ -389,7 +534,7 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
         LSM_WINDOWS_MENU_HEIGHT + LSM_WINDOWS_CONTROL_SPACING +
         LSM_WINDOWS_SUMMARY_HEIGHT + LSM_WINDOWS_CONTROL_SPACING;
     RECT strip = {0, top, width, top + LSM_WINDOWS_TAB_HEIGHT};
-    fill_solid(dc, &strip, LSM_RGB_PANEL);
+    fill_solid(dc, &strip, state->palette.panel);
 
     const int left = LSM_WINDOWS_SCREEN_PADDING;
     const int available = width - (2 * LSM_WINDOWS_SCREEN_PADDING);
@@ -406,24 +551,27 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
         state->page_tabs[index] = tab;
 
         const bool active = index == (int)state->active_page;
+        const bool hovered = index == state->hovered_tab;
+        if (hovered && !active)
+            fill_solid(dc, &tab, state->palette.card_hover);
         if (active) {
             RECT underline = {
                 tab.left + 8, tab.bottom - 3,
                 tab.right - 8, tab.bottom
             };
-            fill_solid(dc, &underline, LSM_RGB_ACCENT);
+            fill_solid(dc, &underline, state->palette.accent);
         }
         draw_text(
             dc, page_names[index], tab,
             active ? state->body_bold_font : state->body_font,
-            active ? LSM_RGB_ACCENT : LSM_RGB_SUMMARY,
+            active ? state->palette.accent : state->palette.summary,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
 
     RECT divider = {
         0, strip.bottom - 1, width, strip.bottom
     };
-    fill_solid(dc, &divider, LSM_RGB_BORDER);
+    fill_solid(dc, &divider, state->palette.border);
 }
 
 static RECT content_rect_for_client(int width, int height)
@@ -442,34 +590,80 @@ static RECT content_rect_for_client(int width, int height)
     return rect;
 }
 
+static void draw_mini_history(
+    LsmWindowsUiState *state, HDC dc, RECT rect,
+    const double *history, COLORREF line_colour)
+{
+    draw_round_panel(
+        dc, &rect, state->palette.surface,
+        state->palette.connection_border, 6);
+
+    if (state->history_count < 2U) return;
+
+    HPEN pen = CreatePen(PS_SOLID, 2, line_colour);
+    if (!pen) return;
+    HGDIOBJ previous = SelectObject(dc, pen);
+    const int width = rect.right - rect.left - 8;
+    const int height = rect.bottom - rect.top - 8;
+    for (size_t index = 0U; index < state->history_count; index++) {
+        const double value = history_value(
+            history, state->history_count,
+            state->history_position, index);
+        const double bounded =
+            value < 0.0 ? 0.0 : (value > 100.0 ? 100.0 : value);
+        const int x = rect.left + 4 +
+            (int)((index * (size_t)width) /
+                  (state->history_count - 1U));
+        const int y = rect.bottom - 4 -
+            (int)((bounded / 100.0) * (double)height);
+        if (index == 0U)
+            MoveToEx(dc, x, y, NULL);
+        else
+            LineTo(dc, x, y);
+    }
+    SelectObject(dc, previous);
+    DeleteObject(pen);
+}
+
 static void draw_performance_rail_item(
     LsmWindowsUiState *state, HDC dc, int index, RECT rect,
-    const wchar_t *title, const wchar_t *value)
+    const wchar_t *title, const wchar_t *value,
+    const double *history, COLORREF line_colour)
 {
     state->performance_items[index] = rect;
     const bool active = index == (int)state->active_performance_item;
+    const bool hovered = index == state->hovered_performance_item;
     draw_round_panel(
         dc, &rect,
-        active ? LSM_RGB_SELECTION : LSM_RGB_PANEL,
-        active ? LSM_RGB_ACCENT : LSM_RGB_PANEL,
+        active ? state->palette.selection :
+            (hovered ? state->palette.card_hover : state->palette.panel),
+        active ? line_colour :
+            (hovered ? state->palette.border : state->palette.panel),
         LSM_WINDOWS_CONTROL_RADIUS);
 
+    RECT sparkline = {
+        rect.left + 10, rect.top + 17,
+        rect.left + 82, rect.bottom - 17
+    };
+    draw_mini_history(
+        state, dc, sparkline, history, line_colour);
+
     RECT title_rect = {
-        rect.left + 14, rect.top + 12,
-        rect.right - 12, rect.top + 37
+        sparkline.right + 12, rect.top + 12,
+        rect.right - 10, rect.top + 37
     };
     RECT value_rect = {
-        rect.left + 14, rect.top + 39,
-        rect.right - 12, rect.bottom - 9
+        sparkline.right + 12, rect.top + 39,
+        rect.right - 10, rect.bottom - 9
     };
     draw_text(
         dc, title, title_rect, state->body_bold_font,
-        active ? LSM_RGB_ACCENT : LSM_RGB_TEXT,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        active ? line_colour : state->palette.text,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     draw_text(
         dc, value, value_rect, state->body_font,
-        active ? LSM_RGB_SELECTED_SUMMARY : LSM_RGB_SUMMARY,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        active ? state->palette.selected_summary : state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
@@ -510,8 +704,8 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right, content.top + 96
     };
     draw_round_panel(
-        dc, &header, LSM_RGB_CARD,
-        LSM_RGB_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &header, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
 
     RECT title = {
         header.left + 18, header.top + 13,
@@ -519,14 +713,14 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_text(
         dc, L"CPU", title, state->title_font,
-        LSM_RGB_HEADING, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT subtitle = {
         header.left + 18, header.top + 50,
         header.right - 18, header.bottom - 10
     };
     draw_text(
         dc, model, subtitle, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE |
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE |
         DT_END_ELLIPSIS);
 
     RECT graph = {
@@ -534,8 +728,9 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right, content.bottom - 122
     };
     draw_history_graph(
-        dc, graph, state->cpu_history,
-        state->history_count, state->history_position);
+        state, dc, graph, state->cpu_history,
+        state->history_count, state->history_position,
+        LSM_WINDOWS_CPU_COLOUR);
 
     RECT graph_caption = {
         graph.left + 18, graph.top + 12,
@@ -543,22 +738,22 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_text(
         dc, L"Utilisation", graph_caption, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT graph_value = {
         graph.right - 180, graph.top + 8,
         graph.right - 18, graph.top + 52
     };
     draw_text(
         dc, utilisation, graph_value, state->metric_font,
-        LSM_RGB_ACCENT, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.accent, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     RECT details_card = {
         content.left, graph.bottom + LSM_WINDOWS_CONTROL_SPACING,
         content.right, content.bottom
     };
     draw_round_panel(
-        dc, &details_card, LSM_RGB_CARD,
-        LSM_RGB_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &details_card, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
     RECT first = {
         details_card.left + 18, details_card.top + 16,
         details_card.right - 18, details_card.top + 46
@@ -569,10 +764,10 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_text(
         dc, details, first, state->body_bold_font,
-        LSM_RGB_HEADING, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
         dc, uptime, second, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
@@ -608,52 +803,53 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right, content.top + 96
     };
     draw_round_panel(
-        dc, &header, LSM_RGB_CARD,
-        LSM_RGB_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &header, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
     RECT title = {
         header.left + 18, header.top + 13,
         header.right - 18, header.top + 48
     };
     draw_text(
         dc, L"Memory", title, state->title_font,
-        LSM_RGB_HEADING, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT sub = {
         header.left + 18, header.top + 50,
         header.right - 18, header.bottom - 10
     };
     draw_text(
         dc, subtitle, sub, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     RECT graph = {
         content.left, header.bottom + LSM_WINDOWS_CONTROL_SPACING,
         content.right, content.bottom - 122
     };
     draw_history_graph(
-        dc, graph, state->memory_history,
-        state->history_count, state->history_position);
+        state, dc, graph, state->memory_history,
+        state->history_count, state->history_position,
+        LSM_WINDOWS_MEMORY_COLOUR);
     RECT graph_caption = {
         graph.left + 18, graph.top + 12,
         graph.right - 18, graph.top + 38
     };
     draw_text(
         dc, L"Memory usage", graph_caption, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT graph_value = {
         graph.right - 180, graph.top + 8,
         graph.right - 18, graph.top + 52
     };
     draw_text(
         dc, usage, graph_value, state->metric_font,
-        LSM_RGB_ACCENT, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+        LSM_WINDOWS_MEMORY_COLOUR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     RECT details_card = {
         content.left, graph.bottom + LSM_WINDOWS_CONTROL_SPACING,
         content.right, content.bottom
     };
     draw_round_panel(
-        dc, &details_card, LSM_RGB_CARD,
-        LSM_RGB_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &details_card, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
     RECT first = {
         details_card.left + 18, details_card.top + 16,
         details_card.right - 18, details_card.top + 46
@@ -664,10 +860,10 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_text(
         dc, row_one, first, state->body_bold_font,
-        LSM_RGB_HEADING, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
         dc, row_two, second, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void draw_performance_page(
@@ -678,7 +874,7 @@ static void draw_performance_page(
         content.left + LSM_WINDOWS_RAIL_WIDTH,
         content.bottom
     };
-    fill_solid(dc, &rail, LSM_RGB_PANEL);
+    fill_solid(dc, &rail, state->palette.panel);
 
     wchar_t cpu_value[96] = L"Initialising...";
     wchar_t memory_value[96] = L"Initialising...";
@@ -708,16 +904,18 @@ static void draw_performance_page(
     };
     draw_performance_rail_item(
         state, dc, LSM_WINDOWS_PERFORMANCE_CPU,
-        cpu, L"CPU", cpu_value);
+        cpu, L"CPU", cpu_value,
+        state->cpu_history, LSM_WINDOWS_CPU_COLOUR);
     draw_performance_rail_item(
         state, dc, LSM_WINDOWS_PERFORMANCE_MEMORY,
-        memory, L"Memory", memory_value);
+        memory, L"Memory", memory_value,
+        state->memory_history, LSM_WINDOWS_MEMORY_COLOUR);
 
     RECT separator = {
         rail.right, rail.top,
         rail.right + 1, rail.bottom
     };
-    fill_solid(dc, &separator, LSM_RGB_BORDER);
+    fill_solid(dc, &separator, state->palette.border);
 
     RECT page = {
         rail.right + LSM_WINDOWS_SECTION_SPACING,
@@ -740,7 +938,7 @@ static void draw_placeholder_page(
     };
     draw_text(
         dc, page_names[state->active_page], title,
-        state->title_font, LSM_RGB_HEADING,
+        state->title_font, state->palette.heading,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     RECT card = {
@@ -748,8 +946,8 @@ static void draw_placeholder_page(
         content.right, content.top + 190
     };
     draw_round_panel(
-        dc, &card, LSM_RGB_CARD,
-        LSM_RGB_BORDER, LSM_WINDOWS_CARD_RADIUS);
+        dc, &card, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
 
     RECT message = {
         card.left + 22, card.top + 22,
@@ -759,7 +957,7 @@ static void draw_placeholder_page(
         dc,
         L"This page is part of the Windows System Monitor shell. "
         L"Its native Windows backend is not implemented yet.",
-        message, state->body_font, LSM_RGB_SUMMARY,
+        message, state->body_font, state->palette.summary,
         DT_LEFT | DT_TOP | DT_WORDBREAK);
 }
 
@@ -772,7 +970,7 @@ static void draw_process_page_header(
     };
     draw_text(
         dc, L"Processes", title, state->title_font,
-        LSM_RGB_HEADING, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT subtitle = {
         content.left, content.top + 40,
         content.right, content.top + 68
@@ -780,7 +978,7 @@ static void draw_process_page_header(
     draw_text(
         dc, L"Read-only native Windows process inventory",
         subtitle, state->body_font,
-        LSM_RGB_SUMMARY, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void draw_status_bar(
@@ -790,7 +988,7 @@ static void draw_status_bar(
         0, height - LSM_WINDOWS_STATUS_HEIGHT - 1,
         width, height - LSM_WINDOWS_STATUS_HEIGHT
     };
-    fill_solid(dc, &line, LSM_RGB_BORDER);
+    fill_solid(dc, &line, state->palette.border);
 
     RECT status = {
         LSM_WINDOWS_SCREEN_PADDING,
@@ -800,7 +998,7 @@ static void draw_status_bar(
     };
     draw_text(
         dc, state->status_text, status,
-        state->body_font, LSM_RGB_SUBTLE,
+        state->body_font, state->palette.subtle,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
@@ -822,7 +1020,7 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
     }
 
     HGDIOBJ previous_bitmap = SelectObject(dc, bitmap);
-    fill_solid(dc, &client, LSM_RGB_BACKGROUND);
+    fill_solid(dc, &client, state->palette.background);
     draw_menu_strip(state, dc, width);
     draw_summary_bar(state, dc, width);
     draw_page_tabs(state, dc, width);
@@ -843,16 +1041,25 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
     DeleteDC(dc);
 }
 
+static void apply_process_list_theme(LsmWindowsUiState *state)
+{
+    if (!state || !state->process_list) return;
+    ListView_SetBkColor(state->process_list, state->palette.input);
+    ListView_SetTextBkColor(state->process_list, state->palette.input);
+    ListView_SetTextColor(state->process_list, state->palette.text);
+    HWND header = ListView_GetHeader(state->process_list);
+    if (header) InvalidateRect(header, NULL, TRUE);
+    InvalidateRect(state->process_list, NULL, TRUE);
+}
+
 static void initialise_process_list(LsmWindowsUiState *state)
 {
     if (!state || !state->process_list) return;
 
     SendMessageW(
         state->process_list, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
-        LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_GRIDLINES);
-    ListView_SetBkColor(state->process_list, LSM_RGB_INPUT);
-    ListView_SetTextBkColor(state->process_list, LSM_RGB_INPUT);
-    ListView_SetTextColor(state->process_list, LSM_RGB_TEXT);
+        LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    apply_process_list_theme(state);
 
     static const wchar_t *const headings[] = {
         L"Name", L"PID", L"CPU", L"Memory", L"User", L"Threads"
@@ -872,35 +1079,55 @@ static void initialise_process_list(LsmWindowsUiState *state)
     }
 }
 
+static HFONT create_font_with_fallback(
+    int height, int weight,
+    const wchar_t *preferred, const wchar_t *fallback)
+{
+    HFONT font = CreateFontW(
+        height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, preferred);
+    if (!font) {
+        return CreateFontW(
+            height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, fallback);
+    }
+
+    HDC dc = GetDC(NULL);
+    if (!dc) return font;
+
+    HGDIOBJ previous = SelectObject(dc, font);
+    wchar_t resolved[LF_FACESIZE] = L"";
+    (void)GetTextFaceW(
+        dc, (int)(sizeof(resolved) / sizeof(resolved[0])), resolved);
+    SelectObject(dc, previous);
+    ReleaseDC(NULL, dc);
+
+    if (resolved[0] && lstrcmpiW(resolved, preferred) != 0) {
+        DeleteObject(font);
+        font = CreateFontW(
+            height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, fallback);
+    }
+    return font;
+}
+
 static bool create_fonts(LsmWindowsUiState *state)
 {
     if (!state) return false;
 
-    state->body_font = CreateFontW(
-        -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"MB Corpo S Title WEB");
-    state->body_bold_font = CreateFontW(
-        -17, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"MB Corpo S Title WEB");
-    state->title_font = CreateFontW(
-        -30, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"MB Corpo A Title Cond WEB");
-    state->heading_font = CreateFontW(
-        -21, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"MB Corpo S Title WEB");
-    state->metric_font = CreateFontW(
-        -34, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"MB Corpo A Title Cond WEB");
+    state->body_font = create_font_with_fallback(
+        -17, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
+    state->body_bold_font = create_font_with_fallback(
+        -17, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
+    state->title_font = create_font_with_fallback(
+        -30, FW_NORMAL, L"MB Corpo A Title Cond WEB", L"Segoe UI");
+    state->heading_font = create_font_with_fallback(
+        -21, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
+    state->metric_font = create_font_with_fallback(
+        -34, FW_NORMAL, L"MB Corpo A Title Cond WEB", L"Segoe UI");
 
     return state->body_font && state->body_bold_font &&
         state->title_font && state->heading_font &&
@@ -1132,6 +1359,49 @@ static void show_file_menu(LsmWindowsUiState *state)
     DestroyMenu(menu);
 }
 
+static void show_view_menu(LsmWindowsUiState *state)
+{
+    if (!state || !state->window) return;
+
+    HMENU menu = CreatePopupMenu();
+    HMENU theme = CreatePopupMenu();
+    if (!menu || !theme) {
+        if (theme) DestroyMenu(theme);
+        if (menu) DestroyMenu(menu);
+        return;
+    }
+
+    AppendMenuW(
+        theme,
+        MF_STRING |
+            (state->theme_mode == LSM_WINDOWS_THEME_SYSTEM
+                ? MF_CHECKED : MF_UNCHECKED),
+        LSM_WINDOWS_ID_THEME_SYSTEM, L"Follow system");
+    AppendMenuW(
+        theme,
+        MF_STRING |
+            (state->theme_mode == LSM_WINDOWS_THEME_DAY
+                ? MF_CHECKED : MF_UNCHECKED),
+        LSM_WINDOWS_ID_THEME_DAY, L"Day");
+    AppendMenuW(
+        theme,
+        MF_STRING |
+            (state->theme_mode == LSM_WINDOWS_THEME_NIGHT
+                ? MF_CHECKED : MF_UNCHECKED),
+        LSM_WINDOWS_ID_THEME_NIGHT, L"Night");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)theme, L"Theme");
+
+    POINT point = {
+        state->view_menu_rect.left,
+        state->view_menu_rect.bottom
+    };
+    ClientToScreen(state->window, &point);
+    TrackPopupMenu(
+        menu, TPM_LEFTALIGN | TPM_TOPALIGN,
+        point.x, point.y, 0, state->window, NULL);
+    DestroyMenu(menu);
+}
+
 static void show_help_menu(LsmWindowsUiState *state)
 {
     if (!state || !state->window) return;
@@ -1178,12 +1448,12 @@ static void destroy_state(LsmWindowsUiState *state)
     state->metric_font = NULL;
 }
 
-static void apply_dark_titlebar(HWND window)
+static void apply_titlebar_theme(LsmWindowsUiState *state)
 {
-    if (!window) return;
-    const BOOL enabled = TRUE;
+    if (!state || !state->window) return;
+    const BOOL enabled = theme_is_dark(state) ? TRUE : FALSE;
     (void)DwmSetWindowAttribute(
-        window, 20U,
+        state->window, 20U,
         &enabled, sizeof(enabled));
 }
 
@@ -1205,6 +1475,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
         case WM_CREATE:
             if (!state) return -1;
+            load_theme_preference(state);
             if (!create_fonts(state)) {
                 if (state->startup_smoke)
                     write_startup_smoke_status("create_fonts_failed\n");
@@ -1215,10 +1486,14 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                     write_startup_smoke_status("create_children_failed\n");
                 return -1;
             }
-            apply_dark_titlebar(window);
+            apply_process_list_theme(state);
+            apply_titlebar_theme(state);
             state->active_page = LSM_WINDOWS_PAGE_PERFORMANCE;
             state->active_performance_item =
                 LSM_WINDOWS_PERFORMANCE_CPU;
+            state->hovered_tab = -1;
+            state->hovered_performance_item = -1;
+            state->hovered_menu = -1;
             set_status(state, L"Performance - starting native backend");
             update_process_visibility(state);
             SetTimer(
@@ -1242,12 +1517,136 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             InvalidateRect(window, NULL, FALSE);
             return 0;
 
+        case WM_NOTIFY: {
+            if (!state || !state->process_list) break;
+            NMHDR *header = (NMHDR *)lparam;
+            if (!header || header->code != NM_CUSTOMDRAW) break;
+
+            if (header->hwndFrom == state->process_list) {
+                NMLVCUSTOMDRAW *custom = (NMLVCUSTOMDRAW *)lparam;
+                if (custom->nmcd.dwDrawStage == CDDS_PREPAINT)
+                    return CDRF_NOTIFYITEMDRAW;
+                if (custom->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                    const int row = (int)custom->nmcd.dwItemSpec;
+                    const UINT selected = ListView_GetItemState(
+                        state->process_list, row, LVIS_SELECTED);
+                    custom->clrText = selected
+                        ? state->palette.title : state->palette.text;
+                    custom->clrTextBk = selected
+                        ? state->palette.selection : state->palette.input;
+                    return CDRF_NEWFONT;
+                }
+            }
+
+            HWND list_header = ListView_GetHeader(state->process_list);
+            if (header->hwndFrom == list_header) {
+                NMCUSTOMDRAW *custom = (NMCUSTOMDRAW *)lparam;
+                if (custom->dwDrawStage == CDDS_PREPAINT)
+                    return CDRF_NOTIFYITEMDRAW;
+                if (custom->dwDrawStage == CDDS_ITEMPREPAINT) {
+                    wchar_t text_buffer[128] = L"";
+                    HDITEMW item;
+                    ZeroMemory(&item, sizeof(item));
+                    item.mask = HDI_TEXT;
+                    item.pszText = text_buffer;
+                    item.cchTextMax =
+                        (int)(sizeof(text_buffer) / sizeof(text_buffer[0]));
+                    (void)SendMessageW(
+                        list_header, HDM_GETITEMW,
+                        custom->dwItemSpec, (LPARAM)&item);
+
+                    fill_solid(
+                        custom->hdc, &custom->rc,
+                        state->palette.panel);
+                    RECT text_rect = custom->rc;
+                    text_rect.left += 9;
+                    text_rect.right -= 7;
+                    draw_text(
+                        custom->hdc, text_buffer, text_rect,
+                        state->body_bold_font, state->palette.summary,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE |
+                        DT_END_ELLIPSIS);
+                    RECT bottom = {
+                        custom->rc.left, custom->rc.bottom - 1,
+                        custom->rc.right, custom->rc.bottom
+                    };
+                    fill_solid(
+                        custom->hdc, &bottom,
+                        state->palette.border);
+                    return CDRF_SKIPDEFAULT;
+                }
+            }
+            break;
+        }
+
         case WM_GETMINMAXINFO: {
             MINMAXINFO *limits = (MINMAXINFO *)lparam;
             limits->ptMinTrackSize.x = 980;
             limits->ptMinTrackSize.y = 680;
             return 0;
         }
+
+        case WM_MOUSEMOVE: {
+            if (!state) break;
+            if (!state->tracking_mouse_leave) {
+                TRACKMOUSEEVENT tracking;
+                ZeroMemory(&tracking, sizeof(tracking));
+                tracking.cbSize = sizeof(tracking);
+                tracking.dwFlags = TME_LEAVE;
+                tracking.hwndTrack = window;
+                if (TrackMouseEvent(&tracking))
+                    state->tracking_mouse_leave = true;
+            }
+
+            POINT point = {
+                GET_X_LPARAM(lparam),
+                GET_Y_LPARAM(lparam)
+            };
+            int hovered_menu = -1;
+            if (PtInRect(&state->file_menu_rect, point)) hovered_menu = 0;
+            else if (PtInRect(&state->view_menu_rect, point)) hovered_menu = 1;
+            else if (PtInRect(&state->help_menu_rect, point)) hovered_menu = 2;
+
+            int hovered_tab = -1;
+            for (int index = 0; index < LSM_WINDOWS_PAGE_COUNT; index++) {
+                if (PtInRect(&state->page_tabs[index], point)) {
+                    hovered_tab = index;
+                    break;
+                }
+            }
+
+            int hovered_performance = -1;
+            if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE) {
+                for (int index = 0;
+                     index < LSM_WINDOWS_PERFORMANCE_ITEM_COUNT; index++) {
+                    if (PtInRect(
+                            &state->performance_items[index], point)) {
+                        hovered_performance = index;
+                        break;
+                    }
+                }
+            }
+
+            if (hovered_menu != state->hovered_menu ||
+                hovered_tab != state->hovered_tab ||
+                hovered_performance != state->hovered_performance_item) {
+                state->hovered_menu = hovered_menu;
+                state->hovered_tab = hovered_tab;
+                state->hovered_performance_item = hovered_performance;
+                InvalidateRect(window, NULL, FALSE);
+            }
+            return 0;
+        }
+
+        case WM_MOUSELEAVE:
+            if (state) {
+                state->tracking_mouse_leave = false;
+                state->hovered_menu = -1;
+                state->hovered_tab = -1;
+                state->hovered_performance_item = -1;
+                InvalidateRect(window, NULL, FALSE);
+            }
+            return 0;
 
         case WM_LBUTTONUP: {
             if (!state) break;
@@ -1257,6 +1656,10 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             };
             if (PtInRect(&state->file_menu_rect, point)) {
                 show_file_menu(state);
+                return 0;
+            }
+            if (PtInRect(&state->view_menu_rect, point)) {
+                show_view_menu(state);
                 return 0;
             }
             if (PtInRect(&state->help_menu_rect, point)) {
@@ -1295,6 +1698,19 @@ static LRESULT CALLBACK lsm_windows_window_proc(
         }
 
         case WM_COMMAND:
+            if (LOWORD(wparam) >= LSM_WINDOWS_ID_THEME_SYSTEM &&
+                LOWORD(wparam) <= LSM_WINDOWS_ID_THEME_NIGHT) {
+                state->theme_mode = (LsmWindowsThemeMode)(
+                    LOWORD(wparam) - LSM_WINDOWS_ID_THEME_SYSTEM);
+                resolve_theme(state);
+                save_theme_preference(state);
+                apply_process_list_theme(state);
+                apply_titlebar_theme(state);
+                RedrawWindow(
+                    window, NULL, NULL,
+                    RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+                return 0;
+            }
             if (LOWORD(wparam) == LSM_WINDOWS_ID_EXIT) {
                 DestroyWindow(window);
                 return 0;
@@ -1302,7 +1718,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             if (LOWORD(wparam) == LSM_WINDOWS_ID_ABOUT) {
                 MessageBoxW(
                     window,
-                    L"System Monitor 1.0.73\r\n\r\n"
+                    L"System Monitor 1.0.74\r\n\r\n"
                     L"Native Windows GUI preview using the Infiltratr "
                     L"Night palette and Linux product layout.\r\n"
                     L"CPU, memory and processes are live and read-only.",
@@ -1315,6 +1731,18 @@ static LRESULT CALLBACK lsm_windows_window_proc(
         case LSM_WINDOWS_MESSAGE_START_BACKEND:
             refresh_active_page(state);
             return 0;
+
+        case WM_SETTINGCHANGE:
+            if (state &&
+                state->theme_mode == LSM_WINDOWS_THEME_SYSTEM) {
+                resolve_theme(state);
+                apply_process_list_theme(state);
+                apply_titlebar_theme(state);
+                RedrawWindow(
+                    window, NULL, NULL,
+                    RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+            }
+            break;
 
         case WM_TIMER:
             if (wparam == LSM_WINDOWS_TIMER_ID) {
@@ -1397,6 +1825,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     }
     state->instance = instance;
     state->startup_smoke = startup_smoke;
+    state->theme_mode = LSM_WINDOWS_THEME_NIGHT;
+    state->palette = windows_night_palette;
+    state->hovered_tab = -1;
+    state->hovered_performance_item = -1;
+    state->hovered_menu = -1;
 
     HWND window = CreateWindowExW(
         0U, class_name, L"System Monitor",
