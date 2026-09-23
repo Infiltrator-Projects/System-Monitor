@@ -148,6 +148,7 @@ list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
 # operating-system providers merely because they coexist in the source tree.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LSM_PLATFORM_NAME "linux")
+    list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX "src/main_windows\\.c$")
 else()
     message(FATAL_ERROR
         "No native monitor/process/service backend is implemented for ${CMAKE_SYSTEM_NAME}")
