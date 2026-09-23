@@ -1632,6 +1632,8 @@ static void draw_performance_page(
                 state, dc, slot, (resource_type), (device_index), \
                 item, item_title, item_value, (history_ptr), \
                 performance_colour_ref((resource_type))); \
+            (void)IntersectRect( \
+                &state->performance_items[slot].rect, &item, &rail); \
             slot++; \
             top += LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE; \
         } \
