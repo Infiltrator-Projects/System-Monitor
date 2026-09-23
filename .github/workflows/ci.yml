@@ -162,12 +162,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          x86_64-w64-mingw32-gcc \
-            -std=c17 -D_WIN32_WINNT=0x0601 \
-            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
-            -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc -c src/monitor_backend_windows.c \
-            -o build-cmake/monitor_backend_windows.o
+          for source in monitor_backend_windows process_backend_windows; do
+            x86_64-w64-mingw32-gcc \
+              -std=c17 -D_WIN32_WINNT=0x0601 \
+              -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+              -Wstrict-prototypes -Wmissing-prototypes \
+              -Isrc -c "src/${source}.c" \
+              -o "build-cmake/${source}.o"
+          done
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check

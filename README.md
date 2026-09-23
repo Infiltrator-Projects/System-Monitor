@@ -13,7 +13,7 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provid
 **Platform:** Linux desktop; experimental Windows monitor-backend foundation (not yet a supported Windows application build)  
 **Licence:** GPL-3.0-or-later
 
-The first Windows backend slice implements the existing native monitor contract with aggregate CPU utilisation, logical processor count, uptime, process/thread/handle totals and physical/commit memory using Win32/PSAPI. It is intentionally limited: the supported desktop product remains Linux while the remaining Windows collectors, process/service/user/startup backends and presentation/build integration are developed.
+The first Windows backend slice implements the existing native monitor contract with aggregate CPU utilisation, logical processor count, uptime, system process/thread/handle totals and physical/commit memory using Win32/PSAPI, plus a read-only Tool Help/Win32 process inventory with PID/name/parent/thread data and permission-dependent CPU, working-set, I/O, priority, executable and handle details. It is intentionally limited: Windows user/account enrichment, process control, device collectors, service/user/startup backends and presentation/build integration are not yet implemented, and the supported desktop product remains Linux.
 
 ## Engineering ethos
 

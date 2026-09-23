@@ -77,4 +77,5 @@ system_sources.c
 pci_names.c
 pci_names_data.c
 process_backend_linux.c
+process_backend_windows.c
 process_gpu.c

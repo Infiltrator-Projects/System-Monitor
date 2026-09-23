@@ -6,7 +6,9 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 - Add the first deliberately limited Windows native monitor backend behind the existing `monitor_platform.h` seam.
 - Collect aggregate CPU utilisation, logical processor count, uptime, system process/thread/handle totals and physical/commit memory directly through Win32/PSAPI while leaving unsupported device telemetry unavailable.
-- Add a MinGW cross-compile gate for the Windows backend without claiming a complete or supported Windows application build; Linux remains the released desktop target.
+- Add a read-only Windows process backend using Tool Help plus native process queries for PID/name/parent/thread inventory and permission-dependent CPU, working-set, I/O, priority, executable and handle details; retain creation-time identity so PID reuse cannot contaminate rates.
+- Keep Windows user/account enrichment, command lines, GPU/cgroup fields and all process-control operations explicitly unsupported in this first slice rather than fabricating parity.
+- Add a MinGW cross-compile gate for both Windows backend translation units without claiming a complete or supported Windows application build; Linux remains the released desktop target.
 
 ## 1.0.69 - 2026-09-22
 
