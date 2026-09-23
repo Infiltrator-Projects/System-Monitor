@@ -23,6 +23,7 @@
 #include "history.h"
 #include "monitor.h"
 #include "performance.h"
+#include "presentation_contract.h"
 #include "preferences.h"
 #include "process_backend.h"
 #include "process_scanner.h"
@@ -53,11 +54,6 @@ static bool app_paths_initialise(LsmApp *app)
                       sizeof(app->paths.preferences_path),
                       app->paths.config_dir, "preferences.conf");
 }
-
-static const char *const page_labels[LSM_TAB_COUNT] = {
-    "Performance", "Processes", "App History", "Startup Apps",
-    "Users", "Details", "Services", "File Systems"
-};
 
 static void application_catalog_result_free(gpointer data)
 {
@@ -264,7 +260,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
         GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
         app->runtime.page_containers[page] = container;
         gtk_notebook_append_page(GTK_NOTEBOOK(app->shell.notebook), container,
-                                 gtk_label_new(page_labels[page]));
+                                 gtk_label_new(lsm_tab_label(page)));
     }
 
     /* The first frame needs only the shell and Performance page. Everything
