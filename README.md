@@ -8,14 +8,12 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.70 ([version file](support/VERSION))\
+**Current source version:** 1.0.71 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.24 gitlink at `src/infiltratr-common`  
-**Platform:** Linux desktop; experimental Windows monitor-backend foundation (not yet a supported Windows application build)  
+**Platform:** Linux desktop; experimental native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
 
-The first Windows backend slice implements the existing native monitor contract with aggregate CPU utilisation, logical processor count, uptime, system process/thread/handle totals and physical/commit memory using Win32/PSAPI, plus a read-only Tool Help/Win32 process inventory with PID/name/parent/thread data, token/SID-derived account identity and ownership, and permission-dependent CPU, working-set, I/O, priority, executable and handle details. It is intentionally limited: Windows command-line/GPU enrichment, process control, device collectors, service/user/startup backends and presentation/build integration are not yet implemented, and the supported desktop product remains Linux.
-
-Release 1.0.70 also publishes a **Windows backend probe executable**. It is a console test program, not the Windows GUI: it prints the native CPU/memory snapshot and a read-only process sample so the current Windows backend can be tested on Windows while the remaining port is still under construction.
+The Windows preview now has a native Win32 GUI shell. It opens as a normal System Monitor desktop window with the same eight top-level areas as the Linux product. Performance is populated from the existing Win32/PSAPI CPU and memory backend, and Processes uses the read-only Tool Help/Win32 process backend with SID-derived ownership. App History, Startup Apps, Users, Details, Services and File Systems are deliberately visible but explicitly unimplemented placeholders so the Windows product shape can be tested before their native backends exist. Windows process control, command-line/GPU enrichment and device collectors remain unavailable, and the Linux desktop remains the feature-complete product.
 
 ## Engineering ethos
 
@@ -27,7 +25,7 @@ C and C++ are equal, first-class implementation languages for the project. The c
 
 Use the most direct style that fits the problem. Plain C is often the clearest match for kernel ABIs, simple data transforms and explicit ownership. C++ features such as stronger types, RAII, templates and scoped lifetime are used when they materially improve the implementation. Object-oriented C++ is used when encapsulated state or genuine runtime polymorphism improves the model, not to impose class hierarchies on naturally procedural operating-system or hardware interfaces. The language preference remains C/C++ over other ecosystems; another language is introduced only when it offers a concrete technical advantage that C or C++ cannot reasonably provide.
 
-The installed product is one GUI executable, `system-monitor`. It does not install project-owned helper daemons, shell launchers or telemetry command wrappers. Bluetooth HCI capture uses a narrow project-owned Linux ABI declaration rather than BlueZ development headers, and package installation applies the executable's CAP_NET_RAW file capability directly through the Linux xattr ABI rather than requiring the external `setcap` program. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
+The Linux installed product is one GUI executable, `system-monitor`. The Windows preview is also a single native GUI executable and currently ships as a portable release asset. Neither path installs project-owned helper daemons, shell launchers or telemetry command wrappers. Bluetooth HCI capture uses a narrow project-owned Linux ABI declaration rather than BlueZ development headers, and package installation applies the executable's CAP_NET_RAW file capability directly through the Linux xattr ABI rather than requiring the external `setcap` program. Unsupported or inaccessible metrics are shown as unavailable rather than guessed.
 
 Dependency minimisation is an explicit engineering goal. System Monitor should own every mechanism that can reasonably be implemented from a stable Linux or C/C++ contract without making the result weaker, less secure or less maintainable. Build-only headers and command-line helpers are not accepted merely because they are conventional. The target is zero avoidable third-party dependencies: retain only platform/runtime boundaries that would otherwise require recreating a substantial operating-system or desktop subsystem. Dependency removal must preserve every documented feature and must be proven by the same verification gates as feature work.
 
@@ -57,13 +55,13 @@ Startup is first-paint oriented: only the shell and Performance page are constru
 ## Architecture
 
 ```text
-GTK 3 presentation
+GTK 3 presentation (Linux) / Win32 presentation (Windows preview)
         ↓
 plain-C snapshots and application models
         ↓
 platform contracts
         ↓
-Linux backends and collectors
+Linux backends and collectors / Windows native backends
         ↓
 procfs / PSI / cgroup v2 / sysfs / ioctls / D-Bus / optional in-process driver libraries
 
@@ -96,8 +94,9 @@ Each numbered release publishes:
 
 - `infiltrator-system-monitor_<version>_amd64.deb`
 - `infiltrator-system-monitor-<version>-native-installer.run`
+- `system-monitor-<version>-windows.exe`
 
-The `.deb` is the generic amd64 package. Its sole Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. The `.run` performs a native local build/test/install. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
+The Windows `.exe` is the current native GUI preview: Performance and Processes are live and read-only, while the remaining product pages are visible placeholders. The `.deb` is the generic amd64 package. Its sole Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. The `.run` performs a native local build/test/install. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
 
 ## Repository policy
 
