@@ -83,7 +83,7 @@ jobs:
             -o "$windows_app"
           pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
-          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|api-ms-win-|ntdll\.dll'; then
+          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
             echo "Windows GUI has an unexpected non-system runtime dependency." >&2
             exit 1
           fi
