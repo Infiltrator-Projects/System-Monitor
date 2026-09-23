@@ -23,12 +23,18 @@
 LsmDevicePage *performance_build_cpu_page(LsmApp *app)
 {
     LsmDevicePage *page = performance_new_page(
-        app, LSM_PAGE_CPU, 0, "cpu", "CPU", "");
+        app, LSM_PAGE_CPU, 0,
+        lsm_performance_stack_prefix(LSM_PAGE_CPU),
+        lsm_performance_page_title(LSM_PAGE_CPU), "");
     LsmCpuPageWidgets *widgets = &page->widgets.cpu;
 
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     page->title = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(page->title), "<span size='18000' weight='bold'>CPU</span>");
+    char *cpu_title_markup = g_markup_printf_escaped(
+        "<span size='18000' weight='bold'>%s</span>",
+        lsm_performance_page_title(LSM_PAGE_CPU));
+    gtk_label_set_markup(GTK_LABEL(page->title), cpu_title_markup);
+    g_free(cpu_title_markup);
     gtk_widget_set_halign(page->title, GTK_ALIGN_START);
     page->subtitle = gtk_label_new(app->monitor.cpu.model);
     gtk_widget_set_halign(page->subtitle, GTK_ALIGN_END);
@@ -40,8 +46,8 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
     gtk_box_pack_start(GTK_BOX(page->page), header, FALSE, FALSE, 0);
 
     GtkWidget *scale_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
-    GtkWidget *scale_name = gtk_label_new("% Utilisation");
-    GtkWidget *scale_max = gtk_label_new("100%");
+    GtkWidget *scale_name = gtk_label_new(lsm_cpu_graph_caption());
+    GtkWidget *scale_max = gtk_label_new(lsm_percent_scale_max_label());
     gtk_widget_set_halign(scale_name, GTK_ALIGN_START);
     gtk_widget_set_halign(scale_max, GTK_ALIGN_END);
     gtk_widget_set_hexpand(scale_max, TRUE);
@@ -101,16 +107,23 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
     GtkWidget *metrics = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(metrics), 42);
     gtk_grid_set_row_spacing(GTK_GRID(metrics), 5);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_UTILISATION), &widgets->utilisation), 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_SPEED), &widgets->speed), 1, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_PROCESSES), &widgets->processes), 0, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_THREADS), &widgets->threads), 1, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_HANDLES), &widgets->handles), 0, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_UPTIME), &widgets->uptime), 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_TEMPERATURE), &widgets->temperature), 0, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_PRESSURE), &widgets->pressure), 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_USER), &widgets->user_time), 0, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_KERNEL), &widgets->kernel_time), 1, 4, 1, 1);
+    GtkWidget **metric_values[LSM_CPU_METRIC_COUNT] = {
+        &widgets->utilisation, &widgets->speed,
+        &widgets->processes, &widgets->threads,
+        &widgets->handles, &widgets->uptime,
+        &widgets->temperature, &widgets->pressure,
+        &widgets->user_time, &widgets->kernel_time
+    };
+    for (size_t index = 0U; index < LSM_CPU_METRIC_COUNT; index++) {
+        const LsmCpuMetricField field = (LsmCpuMetricField)index;
+        const LsmPresentationGridPosition position =
+            lsm_cpu_metric_position(field);
+        gtk_grid_attach(
+            GTK_GRID(metrics),
+            performance_make_metric_block(
+                lsm_cpu_metric_label(field), metric_values[index]),
+            (int)position.column, (int)position.row, 1, 1);
+    }
 
     gtk_box_pack_start(GTK_BOX(details), metrics, FALSE, FALSE, 0);
 
@@ -134,10 +147,14 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
         gtk_widget_set_halign(name, GTK_ALIGN_START);
         gtk_widget_set_halign(value, GTK_ALIGN_START);
         *detail_values[i] = value;
-        const int group = (int)(i / 7U);
-        const int row = (int)(i % 7U);
-        gtk_grid_attach(GTK_GRID(info), name, group * 2, row, 1, 1);
-        gtk_grid_attach(GTK_GRID(info), value, group * 2 + 1, row, 1, 1);
+        const LsmPresentationGridPosition position =
+            lsm_cpu_detail_position((LsmCpuDetailField)i);
+        gtk_grid_attach(
+            GTK_GRID(info), name,
+            (int)position.column * 2, (int)position.row, 1, 1);
+        gtk_grid_attach(
+            GTK_GRID(info), value,
+            (int)position.column * 2 + 1, (int)position.row, 1, 1);
     }
     gtk_box_pack_start(GTK_BOX(details), info, FALSE, FALSE, 0);
     performance_style_card(details);
@@ -150,20 +167,25 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
 LsmDevicePage *performance_build_memory_page(LsmApp *app)
 {
     LsmDevicePage *page = performance_new_page(
-        app, LSM_PAGE_MEMORY, 0, "memory", "Memory", "");
+        app, LSM_PAGE_MEMORY, 0,
+        lsm_performance_stack_prefix(LSM_PAGE_MEMORY),
+        lsm_performance_page_title(LSM_PAGE_MEMORY), "");
     LsmMemoryPageWidgets *widgets = &page->widgets.memory;
 
     GtkWidget *header = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(header), 12);
     page->title = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(page->title),
-                         "<span size='18000' weight='bold'>Memory</span>");
+    char *memory_title_markup = g_markup_printf_escaped(
+        "<span size='18000' weight='bold'>%s</span>",
+        lsm_performance_page_title(LSM_PAGE_MEMORY));
+    gtk_label_set_markup(GTK_LABEL(page->title), memory_title_markup);
+    g_free(memory_title_markup);
     gtk_widget_set_halign(page->title, GTK_ALIGN_START);
     gtk_widget_set_hexpand(page->title, TRUE);
     page->subtitle = gtk_label_new("N/A");
     gtk_widget_set_halign(page->subtitle, GTK_ALIGN_END);
-    GtkWidget *usage_label = gtk_label_new("Memory usage");
-    GtkWidget *percent_label = gtk_label_new("100%");
+    GtkWidget *usage_label = gtk_label_new(lsm_memory_graph_caption());
+    GtkWidget *percent_label = gtk_label_new(lsm_percent_scale_max_label());
     gtk_widget_set_halign(usage_label, GTK_ALIGN_START);
     gtk_widget_set_halign(percent_label, GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(header), page->title, 0, 0, 1, 1);
@@ -177,11 +199,11 @@ LsmDevicePage *performance_build_memory_page(LsmApp *app)
     lsm_graph_set_colours(page->graph, performance_page_colour(LSM_PAGE_MEMORY), NULL);
     gtk_box_pack_start(GTK_BOX(page->page), page->graph->area, TRUE, TRUE, 0);
 
-    GtkWidget *composition_label = gtk_label_new("Memory composition");
+    GtkWidget *composition_label = gtk_label_new(lsm_memory_composition_caption());
     gtk_widget_set_halign(composition_label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(page->page), composition_label, FALSE, FALSE, 0);
     page->composition_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(page->composition_area, -1, 70);
+    gtk_widget_set_size_request(page->composition_area, -1, LSM_MEMORY_COMPOSITION_HEIGHT);
     gtk_widget_set_hexpand(page->composition_area, TRUE);
     g_signal_connect(page->composition_area, "draw",
                      G_CALLBACK(performance_draw_memory_composition), app);
@@ -191,32 +213,24 @@ LsmDevicePage *performance_build_memory_page(LsmApp *app)
     GtkWidget *usage_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(usage_grid), 4);
     gtk_grid_set_column_spacing(GTK_GRID(usage_grid), 38);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_IN_USE), &widgets->in_use), 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_AVAILABLE), &widgets->available), 1, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_COMMITTED), &widgets->committed), 0, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_CACHED), &widgets->cached), 1, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_BUFFERS), &widgets->buffers), 0, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_SWAP), &widgets->swap), 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE),
-                                      &widgets->kernel_reclaimable),
-                    0, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE),
-                                      &widgets->kernel_nonreclaimable),
-                    1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_PAGE_TABLES), &widgets->page_tables),
-                    0, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_PRESSURE), &widgets->pressure),
-                    1, 4, 1, 1);
+    GtkWidget **usage_values[LSM_MEMORY_METRIC_COUNT] = {
+        &widgets->in_use, &widgets->available,
+        &widgets->committed, &widgets->cached,
+        &widgets->buffers, &widgets->swap,
+        &widgets->kernel_reclaimable, &widgets->kernel_nonreclaimable,
+        &widgets->page_tables, &widgets->pressure
+    };
+    for (size_t index = 0U; index < LSM_MEMORY_METRIC_COUNT; index++) {
+        const LsmMemoryMetricField field =
+            (LsmMemoryMetricField)index;
+        const LsmPresentationGridPosition position =
+            lsm_memory_metric_position(field);
+        gtk_grid_attach(
+            GTK_GRID(usage_grid),
+            performance_make_metric_block(
+                lsm_memory_metric_label(field), usage_values[index]),
+            (int)position.column, (int)position.row, 1, 1);
+    }
 
     GtkWidget *hardware_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(hardware_grid), 4);
@@ -236,8 +250,14 @@ LsmDevicePage *performance_build_memory_page(LsmApp *app)
             gtk_label_set_line_wrap(GTK_LABEL(value), TRUE);
             gtk_label_set_selectable(GTK_LABEL(value), TRUE);
         }
-        gtk_grid_attach(GTK_GRID(hardware_grid), name, 0, (int)i, 1, 1);
-        gtk_grid_attach(GTK_GRID(hardware_grid), value, 1, (int)i, 1, 1);
+        const LsmPresentationGridPosition position =
+            lsm_memory_detail_position((LsmMemoryDetailField)i);
+        gtk_grid_attach(
+            GTK_GRID(hardware_grid), name,
+            (int)position.column * 2, (int)position.row, 1, 1);
+        gtk_grid_attach(
+            GTK_GRID(hardware_grid), value,
+            (int)position.column * 2 + 1, (int)position.row, 1, 1);
     }
     gtk_paned_pack1(GTK_PANED(details), usage_grid, FALSE, FALSE);
     gtk_paned_pack2(GTK_PANED(details), hardware_grid, TRUE, FALSE);
