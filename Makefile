@@ -41,7 +41,7 @@ BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
 LSM_PLATFORM ?= linux
 ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' support/sources.txt)
 PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c service_backend_$(LSM_PLATFORM).c user_backend_$(LSM_PLATFORM).c startup_backend_$(LSM_PLATFORM).c
-SOURCE_NAMES := $(filter-out monitor_backend_%.c process_backend_%.c service_backend_%.c user_backend_%.c startup_backend_%.c,$(ALL_SOURCE_NAMES)) \
+SOURCE_NAMES := $(filter-out main_windows.c monitor_backend_%.c process_backend_%.c service_backend_%.c user_backend_%.c startup_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
 SOURCES := $(addprefix src/,$(SOURCE_NAMES))
 C_SOURCES := $(filter %.c,$(SOURCES))
