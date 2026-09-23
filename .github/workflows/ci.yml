@@ -324,7 +324,7 @@ jobs:
             'src/infiltratr-common/src/graphics.c',
             'src/infiltratr-common/src/escape.c',
             'src/infiltratr-common/src/design.c',
-            '-lpsapi', '-ladvapi32', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
+            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
             '-o', 'system-monitor-windows.exe'
           )
           & $gcc @arguments
