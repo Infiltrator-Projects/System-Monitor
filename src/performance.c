@@ -97,17 +97,7 @@ static void make_large_value(GtkWidget *label)
 
 const char *performance_page_colour(LsmPageType type)
 {
-    switch (type) {
-        case LSM_PAGE_CPU: return LSM_COLOUR_CPU;
-        case LSM_PAGE_MEMORY: return LSM_COLOUR_MEMORY;
-        case LSM_PAGE_DISK: return LSM_COLOUR_DISK;
-        case LSM_PAGE_NETWORK: return LSM_COLOUR_NETWORK;
-        case LSM_PAGE_BLUETOOTH: return LSM_COLOUR_BLUETOOTH;
-        case LSM_PAGE_GPU: return LSM_COLOUR_GPU;
-        case LSM_PAGE_BATTERY: return LSM_COLOUR_BATTERY;
-        case LSM_PAGE_NPU: return LSM_COLOUR_NPU;
-    }
-    return LSM_COLOUR_CPU;
+    return lsm_performance_colour_hex(type);
 }
 
 bool performance_useful_hardware_name(const char *name)
