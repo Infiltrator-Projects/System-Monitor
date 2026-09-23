@@ -38,8 +38,8 @@
 #define LSM_WINDOWS_PAGE_COUNT 8
 #define LSM_WINDOWS_PERFORMANCE_ITEM_COUNT 2
 #define LSM_WINDOWS_MENU_HEIGHT 32
-#define LSM_WINDOWS_SUMMARY_HEIGHT 72
-#define LSM_WINDOWS_TAB_HEIGHT 42
+#define LSM_WINDOWS_SUMMARY_HEIGHT 56
+#define LSM_WINDOWS_TAB_HEIGHT 38
 #define LSM_WINDOWS_STATUS_HEIGHT 30
 #define LSM_WINDOWS_SCREEN_PADDING 20
 #define LSM_WINDOWS_CONTENT_PADDING 16
@@ -679,204 +679,627 @@ static void draw_performance_rail_item(
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+static void draw_metric_block(
+    LsmWindowsUiState *state, HDC dc, RECT rect,
+    const wchar_t *caption, const wchar_t *value)
+{
+    RECT caption_rect = {
+        rect.left, rect.top,
+        rect.right, rect.top + 18
+    };
+    RECT value_rect = {
+        rect.left, rect.top + 18,
+        rect.right, rect.bottom
+    };
+    draw_text(
+        dc, caption, caption_rect, state->body_font,
+        state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(
+        dc, value, value_rect, state->metric_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+static void draw_detail_pair(
+    LsmWindowsUiState *state, HDC dc, RECT rect,
+    const wchar_t *label, const wchar_t *value)
+{
+    const int split = rect.left + 116;
+    RECT label_rect = {
+        rect.left, rect.top,
+        split - 8, rect.bottom
+    };
+    RECT value_rect = {
+        split, rect.top,
+        rect.right, rect.bottom
+    };
+    draw_text(
+        dc, label, label_rect, state->body_font,
+        state->palette.detail,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(
+        dc, value, value_rect, state->body_font,
+        state->palette.text,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+static void draw_memory_composition(
+    LsmWindowsUiState *state, HDC dc, RECT rect)
+{
+    draw_round_panel(
+        dc, &rect, state->palette.surface,
+        state->palette.connection_border, 6);
+
+    if (!state->monitor_ready || state->monitor.memory.total_bytes == 0U)
+        return;
+
+    const double total = (double)state->monitor.memory.total_bytes;
+    double used_fraction =
+        (double)state->monitor.memory.used_bytes / total;
+    if (used_fraction < 0.0) used_fraction = 0.0;
+    if (used_fraction > 1.0) used_fraction = 1.0;
+
+    RECT used = rect;
+    used.left += 2;
+    used.top += 2;
+    used.bottom -= 2;
+    used.right = used.left +
+        (int)((double)(rect.right - rect.left - 4) * used_fraction);
+    if (used.right > used.left)
+        fill_solid(dc, &used, RGB(0x1C, 0x32, 0x48));
+
+    HPEN marker = CreatePen(PS_SOLID, 2, LSM_WINDOWS_MEMORY_COLOUR);
+    if (marker) {
+        HGDIOBJ previous = SelectObject(dc, marker);
+        const int x = used.right;
+        MoveToEx(dc, x, rect.top + 2, NULL);
+        LineTo(dc, x, rect.bottom - 2);
+        SelectObject(dc, previous);
+        DeleteObject(marker);
+    }
+}
+
+static void format_optional_percent(
+    wchar_t *buffer, size_t capacity, double value, bool available)
+{
+    if (!buffer || capacity == 0U) return;
+    if (!available) {
+        lstrcpynW(buffer, L"N/A", (int)capacity);
+        return;
+    }
+    (void)swprintf(buffer, capacity, L"%.1f%%", value);
+}
+
+static void format_optional_ghz(
+    wchar_t *buffer, size_t capacity, double value)
+{
+    if (!buffer || capacity == 0U) return;
+    if (value <= 0.0) {
+        lstrcpynW(buffer, L"N/A", (int)capacity);
+        return;
+    }
+    (void)swprintf(buffer, capacity, L"%.2f GHz", value);
+}
+
 static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
 {
     wchar_t model[256] = L"Unavailable";
     wchar_t utilisation[64] = L"N/A";
-    wchar_t details[256] = L"Telemetry unavailable";
-    wchar_t uptime[128] = L"";
+    wchar_t speed[64] = L"N/A";
+    wchar_t processes[64] = L"N/A";
+    wchar_t threads[64] = L"N/A";
+    wchar_t handles[64] = L"N/A";
+    wchar_t uptime[64] = L"N/A";
+    wchar_t temperature[64] = L"N/A";
+    wchar_t pressure[64] = L"N/A";
+    wchar_t user_time[64] = L"N/A";
+    wchar_t kernel_time[64] = L"N/A";
+    wchar_t physical_cores[64] = L"N/A";
+    wchar_t logical_cores[64] = L"N/A";
+    wchar_t base_speed[64] = L"N/A";
+    wchar_t maximum_speed[64] = L"N/A";
+    wchar_t virtualization[64] = L"N/A";
+    wchar_t cache_l1[64] = L"N/A";
+    wchar_t cache_l2[64] = L"N/A";
+    wchar_t cache_l3[64] = L"N/A";
+    wchar_t load_average[64] = L"N/A";
+    wchar_t sockets[64] = L"N/A";
+    wchar_t numa_nodes[64] = L"N/A";
+    wchar_t interrupts[64] = L"N/A";
+    wchar_t context_switches[64] = L"N/A";
+
     if (state->monitor_ready) {
-        text_to_wide(
-            state->monitor.cpu.model, model,
-            sizeof(model) / sizeof(model[0]));
+        const LsmCpuInfo *cpu = &state->monitor.cpu;
+        text_to_wide(cpu->model, model, sizeof(model) / sizeof(model[0]));
         if (!model[0]) lstrcpyW(model, L"Unavailable");
-        format_percentage(
-            utilisation,
-            sizeof(utilisation) / sizeof(utilisation[0]),
-            state->monitor.cpu.usage_percent);
+
         (void)swprintf(
-            details, sizeof(details) / sizeof(details[0]),
-            L"User %.1f%%   Kernel %.1f%%   Logical processors %u",
-            state->monitor.cpu.user_percent,
-            state->monitor.cpu.kernel_percent,
-            state->monitor.cpu.logical_cores);
-        const uint64_t seconds = state->monitor.cpu.uptime_seconds;
+            utilisation, sizeof(utilisation) / sizeof(utilisation[0]),
+            L"%.0f%%", cpu->usage_percent);
+        format_optional_ghz(
+            speed, sizeof(speed) / sizeof(speed[0]), cpu->frequency_ghz);
+        (void)swprintf(
+            processes, sizeof(processes) / sizeof(processes[0]),
+            L"%u", cpu->process_count);
+        (void)swprintf(
+            threads, sizeof(threads) / sizeof(threads[0]),
+            L"%u", cpu->thread_count);
+        (void)swprintf(
+            handles, sizeof(handles) / sizeof(handles[0]),
+            L"%llu", (unsigned long long)cpu->file_handle_count);
+
+        const uint64_t seconds = cpu->uptime_seconds;
         (void)swprintf(
             uptime, sizeof(uptime) / sizeof(uptime[0]),
-            L"Processes %u   Threads %u   Handles %llu   Uptime %llu d %02llu:%02llu",
-            state->monitor.cpu.process_count,
-            state->monitor.cpu.thread_count,
-            (unsigned long long)state->monitor.cpu.file_handle_count,
+            L"%llu:%02llu:%02llu:%02llu",
             (unsigned long long)(seconds / 86400ULL),
             (unsigned long long)((seconds % 86400ULL) / 3600ULL),
-            (unsigned long long)((seconds % 3600ULL) / 60ULL));
+            (unsigned long long)((seconds % 3600ULL) / 60ULL),
+            (unsigned long long)(seconds % 60ULL));
+
+        if (cpu->temperature_c > 0.0) {
+            (void)swprintf(
+                temperature,
+                sizeof(temperature) / sizeof(temperature[0]),
+                L"%.1f C", cpu->temperature_c);
+        }
+        format_optional_percent(
+            pressure, sizeof(pressure) / sizeof(pressure[0]),
+            state->monitor.cpu_pressure.some_avg10,
+            state->monitor.cpu_pressure.available);
+        (void)swprintf(
+            user_time, sizeof(user_time) / sizeof(user_time[0]),
+            L"%.1f%%", cpu->user_percent);
+        (void)swprintf(
+            kernel_time, sizeof(kernel_time) / sizeof(kernel_time[0]),
+            L"%.1f%%", cpu->kernel_percent);
+
+        if (cpu->physical_cores > 0U)
+            (void)swprintf(
+                physical_cores,
+                sizeof(physical_cores) / sizeof(physical_cores[0]),
+                L"%u", cpu->physical_cores);
+        if (cpu->logical_cores > 0U)
+            (void)swprintf(
+                logical_cores,
+                sizeof(logical_cores) / sizeof(logical_cores[0]),
+                L"%u", cpu->logical_cores);
+        format_optional_ghz(
+            base_speed, sizeof(base_speed) / sizeof(base_speed[0]),
+            cpu->base_frequency_ghz);
+        format_optional_ghz(
+            maximum_speed,
+            sizeof(maximum_speed) / sizeof(maximum_speed[0]),
+            cpu->max_frequency_ghz);
+
+        if (cpu->cache_l1[0])
+            text_to_wide(
+                cpu->cache_l1, cache_l1,
+                sizeof(cache_l1) / sizeof(cache_l1[0]));
+        if (cpu->cache_l2[0])
+            text_to_wide(
+                cpu->cache_l2, cache_l2,
+                sizeof(cache_l2) / sizeof(cache_l2[0]));
+        if (cpu->cache_l3[0])
+            text_to_wide(
+                cpu->cache_l3, cache_l3,
+                sizeof(cache_l3) / sizeof(cache_l3[0]));
+        if (cpu->socket_count > 0U)
+            (void)swprintf(
+                sockets, sizeof(sockets) / sizeof(sockets[0]),
+                L"%u", cpu->socket_count);
+        if (cpu->numa_node_count > 0U)
+            (void)swprintf(
+                numa_nodes, sizeof(numa_nodes) / sizeof(numa_nodes[0]),
+                L"%u", cpu->numa_node_count);
+        if (cpu->interrupts_per_sec > 0.0)
+            (void)swprintf(
+                interrupts, sizeof(interrupts) / sizeof(interrupts[0]),
+                L"%.0f", cpu->interrupts_per_sec);
+        if (cpu->context_switches_per_sec > 0.0)
+            (void)swprintf(
+                context_switches,
+                sizeof(context_switches) / sizeof(context_switches[0]),
+                L"%.0f", cpu->context_switches_per_sec);
     }
+
+    const int header_height = 54;
+    const int scale_height = 26;
+    const int details_height = 214;
+    const int gap = 7;
 
     RECT header = {
         content.left, content.top,
-        content.right, content.top + 96
+        content.right, content.top + header_height
     };
     draw_round_panel(
         dc, &header, state->palette.card,
         state->palette.border, LSM_WINDOWS_CARD_RADIUS);
 
-    RECT title = {
-        header.left + 18, header.top + 13,
-        header.right - 18, header.top + 48
+    RECT title_rect = {
+        header.left + 14, header.top + 6,
+        header.left + 180, header.bottom - 6
+    };
+    RECT subtitle_rect = {
+        title_rect.right + 12, header.top + 6,
+        header.right - 14, header.bottom - 6
     };
     draw_text(
-        dc, L"CPU", title, state->title_font,
-        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    RECT subtitle = {
-        header.left + 18, header.top + 50,
-        header.right - 18, header.bottom - 10
-    };
+        dc, L"CPU", title_rect, state->title_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
-        dc, model, subtitle, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE |
-        DT_END_ELLIPSIS);
+        dc, model, subtitle_rect, state->body_font,
+        state->palette.summary,
+        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    RECT scale = {
+        content.left, header.bottom + gap,
+        content.right, header.bottom + gap + scale_height
+    };
+    RECT scale_name = scale;
+    scale_name.right = scale.left + 180;
+    RECT scale_max = scale;
+    scale_max.left = scale.right - 80;
+    draw_text(
+        dc, L"% Utilisation", scale_name, state->body_font,
+        state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(
+        dc, L"100%", scale_max, state->body_font,
+        state->palette.summary,
+        DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     RECT graph = {
-        content.left, header.bottom + LSM_WINDOWS_CONTROL_SPACING,
-        content.right, content.bottom - 122
+        content.left,
+        scale.bottom + gap,
+        content.right,
+        content.bottom - details_height - gap
     };
+    if (graph.bottom < graph.top + 120)
+        graph.bottom = graph.top + 120;
     draw_history_graph(
         state, dc, graph, state->cpu_history,
         state->history_count, state->history_position,
         LSM_WINDOWS_CPU_COLOUR);
 
-    RECT graph_caption = {
-        graph.left + 18, graph.top + 12,
-        graph.right - 18, graph.top + 38
-    };
-    draw_text(
-        dc, L"Utilisation", graph_caption, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    RECT graph_value = {
-        graph.right - 180, graph.top + 8,
-        graph.right - 18, graph.top + 52
-    };
-    draw_text(
-        dc, utilisation, graph_value, state->metric_font,
-        state->palette.accent, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-
-    RECT details_card = {
-        content.left, graph.bottom + LSM_WINDOWS_CONTROL_SPACING,
-        content.right, content.bottom
+    RECT details = {
+        content.left,
+        graph.bottom + gap,
+        content.right,
+        content.bottom
     };
     draw_round_panel(
-        dc, &details_card, state->palette.card,
+        dc, &details, state->palette.card,
         state->palette.border, LSM_WINDOWS_CARD_RADIUS);
-    RECT first = {
-        details_card.left + 18, details_card.top + 16,
-        details_card.right - 18, details_card.top + 46
+
+    const int pad = 14;
+    const int metrics_width = 420;
+    const int separator_x = details.left + pad + metrics_width;
+    RECT separator = {
+        separator_x, details.top + 12,
+        separator_x + 1, details.bottom - 12
     };
-    RECT second = {
-        details_card.left + 18, details_card.top + 51,
-        details_card.right - 18, details_card.bottom - 12
+    fill_solid(dc, &separator, state->palette.border);
+
+    const wchar_t *metric_names[10] = {
+        L"Utilisation", L"Speed",
+        L"Processes", L"Threads",
+        L"Handles", L"Uptime",
+        L"Temperature", L"Pressure (10 s)",
+        L"User", L"Kernel"
     };
-    draw_text(
-        dc, details, first, state->body_bold_font,
-        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(
-        dc, uptime, second, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    const wchar_t *metric_values[10] = {
+        utilisation, speed,
+        processes, threads,
+        handles, uptime,
+        temperature, pressure,
+        user_time, kernel_time
+    };
+
+    const int metric_col_width = (metrics_width - 28) / 2;
+    const int metric_row_height = 36;
+    for (int index = 0; index < 10; index++) {
+        const int col = index % 2;
+        const int row = index / 2;
+        RECT block = {
+            details.left + pad + col * (metric_col_width + 28),
+            details.top + 12 + row * metric_row_height,
+            details.left + pad + col * (metric_col_width + 28) +
+                metric_col_width,
+            details.top + 12 + (row + 1) * metric_row_height
+        };
+        draw_metric_block(
+            state, dc, block,
+            metric_names[index], metric_values[index]);
+    }
+
+    const wchar_t *detail_names[13] = {
+        L"Cores:", L"Logical processors:", L"Base speed:",
+        L"Maximum speed:", L"Virtualisation:", L"L1 cache:",
+        L"L2 cache:", L"L3 cache:", L"Load average:", L"Sockets:",
+        L"NUMA nodes:", L"Interrupts/s:", L"Context switches/s:"
+    };
+    const wchar_t *detail_values[13] = {
+        physical_cores, logical_cores, base_speed,
+        maximum_speed, virtualization, cache_l1,
+        cache_l2, cache_l3, load_average, sockets,
+        numa_nodes, interrupts, context_switches
+    };
+
+    const int info_left = separator_x + 18;
+    const int info_width = details.right - pad - info_left;
+    const int info_col_width = (info_width - 18) / 2;
+    const int info_row_height = 25;
+    for (int index = 0; index < 13; index++) {
+        const int group = index / 7;
+        const int row = index % 7;
+        RECT pair = {
+            info_left + group * (info_col_width + 18),
+            details.top + 14 + row * info_row_height,
+            info_left + group * (info_col_width + 18) +
+                info_col_width,
+            details.top + 14 + (row + 1) * info_row_height
+        };
+        draw_detail_pair(
+            state, dc, pair,
+            detail_names[index], detail_values[index]);
+    }
 }
 
 static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 {
-    wchar_t usage[64] = L"N/A";
-    wchar_t subtitle[256] = L"Physical memory telemetry unavailable";
-    wchar_t row_one[256] = L"";
-    wchar_t row_two[256] = L"";
+    wchar_t total_text[64] = L"N/A";
+    wchar_t in_use[64] = L"N/A";
+    wchar_t available[64] = L"N/A";
+    wchar_t committed[96] = L"N/A";
+    wchar_t cached[64] = L"N/A";
+    wchar_t buffers[64] = L"N/A";
+    wchar_t swap[64] = L"N/A";
+    wchar_t reclaimable[64] = L"N/A";
+    wchar_t nonreclaimable[64] = L"N/A";
+    wchar_t page_tables[64] = L"N/A";
+    wchar_t pressure[64] = L"N/A";
+    wchar_t speed[64] = L"N/A";
+    wchar_t slots[64] = L"N/A";
+    wchar_t form_factor[96] = L"N/A";
+    wchar_t corrupted[64] = L"N/A";
+    wchar_t modules[128] = L"N/A";
+
     if (state->monitor_ready) {
-        format_percentage(
-            usage,
-            sizeof(usage) / sizeof(usage[0]),
-            state->monitor.memory.usage_percent);
+        const LsmMemoryInfo *memory = &state->monitor.memory;
+        if (memory->total_bytes > 0U)
+            (void)swprintf(
+                total_text, sizeof(total_text) / sizeof(total_text[0]),
+                L"%.1f GB", bytes_to_gb(memory->total_bytes));
         (void)swprintf(
-            subtitle, sizeof(subtitle) / sizeof(subtitle[0]),
-            L"%.2f GB in use of %.2f GB",
-            bytes_to_gb(state->monitor.memory.used_bytes),
-            bytes_to_gb(state->monitor.memory.total_bytes));
+            in_use, sizeof(in_use) / sizeof(in_use[0]),
+            L"%.1f GB", bytes_to_gb(memory->used_bytes));
         (void)swprintf(
-            row_one, sizeof(row_one) / sizeof(row_one[0]),
-            L"Available %.2f GB   Cached %.2f GB",
-            bytes_to_gb(state->monitor.memory.available_bytes),
-            bytes_to_gb(state->monitor.memory.cached_bytes));
-        (void)swprintf(
-            row_two, sizeof(row_two) / sizeof(row_two[0]),
-            L"Committed %.2f GB / %.2f GB",
-            bytes_to_gb(state->monitor.memory.committed_bytes),
-            bytes_to_gb(state->monitor.memory.commit_limit_bytes));
+            available, sizeof(available) / sizeof(available[0]),
+            L"%.1f GB", bytes_to_gb(memory->available_bytes));
+        if (memory->commit_limit_bytes > 0U) {
+            (void)swprintf(
+                committed, sizeof(committed) / sizeof(committed[0]),
+                L"%.1f / %.1f GB",
+                bytes_to_gb(memory->committed_bytes),
+                bytes_to_gb(memory->commit_limit_bytes));
+        }
+        if (memory->cached_bytes > 0U)
+            (void)swprintf(
+                cached, sizeof(cached) / sizeof(cached[0]),
+                L"%.1f GB", bytes_to_gb(memory->cached_bytes));
+        if (memory->buffers_bytes > 0U)
+            (void)swprintf(
+                buffers, sizeof(buffers) / sizeof(buffers[0]),
+                L"%.1f GB", bytes_to_gb(memory->buffers_bytes));
+        if (memory->swap_total_bytes > 0U)
+            (void)swprintf(
+                swap, sizeof(swap) / sizeof(swap[0]),
+                L"%.1f / %.1f GB",
+                bytes_to_gb(memory->swap_used_bytes),
+                bytes_to_gb(memory->swap_total_bytes));
+        if (memory->kernel_reclaimable_bytes > 0U)
+            (void)swprintf(
+                reclaimable, sizeof(reclaimable) / sizeof(reclaimable[0]),
+                L"%.1f GB",
+                bytes_to_gb(memory->kernel_reclaimable_bytes));
+        if (memory->kernel_nonreclaimable_bytes > 0U)
+            (void)swprintf(
+                nonreclaimable,
+                sizeof(nonreclaimable) / sizeof(nonreclaimable[0]),
+                L"%.1f GB",
+                bytes_to_gb(memory->kernel_nonreclaimable_bytes));
+        if (memory->page_tables_bytes > 0U)
+            (void)swprintf(
+                page_tables,
+                sizeof(page_tables) / sizeof(page_tables[0]),
+                L"%.1f GB", bytes_to_gb(memory->page_tables_bytes));
+        format_optional_percent(
+            pressure, sizeof(pressure) / sizeof(pressure[0]),
+            state->monitor.memory_pressure.some_avg10,
+            state->monitor.memory_pressure.available);
+        if (memory->speed_mhz > 0U)
+            (void)swprintf(
+                speed, sizeof(speed) / sizeof(speed[0]),
+                L"%u MHz", memory->speed_mhz);
+        if (memory->slots_total > 0U)
+            (void)swprintf(
+                slots, sizeof(slots) / sizeof(slots[0]),
+                L"%u of %u", memory->slots_used, memory->slots_total);
+        if (memory->form_factor[0])
+            text_to_wide(
+                memory->form_factor, form_factor,
+                sizeof(form_factor) / sizeof(form_factor[0]));
+        if (memory->hardware_corrupted_bytes > 0U)
+            (void)swprintf(
+                corrupted, sizeof(corrupted) / sizeof(corrupted[0]),
+                L"%.1f MB",
+                (double)memory->hardware_corrupted_bytes /
+                    (1024.0 * 1024.0));
+        if (memory->module_details_available)
+            (void)swprintf(
+                modules, sizeof(modules) / sizeof(modules[0]),
+                L"%zu populated module%s",
+                memory->module_count,
+                memory->module_count == 1U ? L"" : L"s");
     }
+
+    const int header_height = 72;
+    const int composition_label_height = 24;
+    const int composition_height = 70;
+    const int details_height = 196;
+    const int gap = 7;
 
     RECT header = {
         content.left, content.top,
-        content.right, content.top + 96
+        content.right, content.top + header_height
     };
     draw_round_panel(
         dc, &header, state->palette.card,
         state->palette.border, LSM_WINDOWS_CARD_RADIUS);
-    RECT title = {
-        header.left + 18, header.top + 13,
-        header.right - 18, header.top + 48
-    };
-    draw_text(
-        dc, L"Memory", title, state->title_font,
-        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    RECT sub = {
-        header.left + 18, header.top + 50,
-        header.right - 18, header.bottom - 10
-    };
-    draw_text(
-        dc, subtitle, sub, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    RECT graph = {
-        content.left, header.bottom + LSM_WINDOWS_CONTROL_SPACING,
-        content.right, content.bottom - 122
+    RECT title_rect = {
+        header.left + 14, header.top + 5,
+        header.left + 210, header.top + 37
     };
+    RECT total_rect = {
+        title_rect.right + 12, header.top + 5,
+        header.right - 14, header.top + 37
+    };
+    RECT usage_name = {
+        header.left + 14, header.top + 39,
+        header.left + 220, header.bottom - 5
+    };
+    RECT usage_max = {
+        header.right - 90, header.top + 39,
+        header.right - 14, header.bottom - 5
+    };
+    draw_text(
+        dc, L"Memory", title_rect, state->title_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(
+        dc, total_text, total_rect, state->body_font,
+        state->palette.summary,
+        DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(
+        dc, L"Memory usage", usage_name, state->body_font,
+        state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(
+        dc, L"100%", usage_max, state->body_font,
+        state->palette.summary,
+        DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+    const int reserved_below_graph =
+        composition_label_height + composition_height +
+        details_height + (gap * 4);
+    RECT graph = {
+        content.left,
+        header.bottom + gap,
+        content.right,
+        content.bottom - reserved_below_graph
+    };
+    if (graph.bottom < graph.top + 120)
+        graph.bottom = graph.top + 120;
     draw_history_graph(
         state, dc, graph, state->memory_history,
         state->history_count, state->history_position,
         LSM_WINDOWS_MEMORY_COLOUR);
-    RECT graph_caption = {
-        graph.left + 18, graph.top + 12,
-        graph.right - 18, graph.top + 38
-    };
-    draw_text(
-        dc, L"Memory usage", graph_caption, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    RECT graph_value = {
-        graph.right - 180, graph.top + 8,
-        graph.right - 18, graph.top + 52
-    };
-    draw_text(
-        dc, usage, graph_value, state->metric_font,
-        LSM_WINDOWS_MEMORY_COLOUR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
-    RECT details_card = {
-        content.left, graph.bottom + LSM_WINDOWS_CONTROL_SPACING,
-        content.right, content.bottom
+    RECT composition_label = {
+        content.left,
+        graph.bottom + gap,
+        content.right,
+        graph.bottom + gap + composition_label_height
+    };
+    draw_text(
+        dc, L"Memory composition", composition_label,
+        state->body_font, state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    RECT composition = {
+        content.left,
+        composition_label.bottom,
+        content.right,
+        composition_label.bottom + composition_height
+    };
+    draw_memory_composition(state, dc, composition);
+
+    RECT details = {
+        content.left,
+        composition.bottom + gap,
+        content.right,
+        content.bottom
     };
     draw_round_panel(
-        dc, &details_card, state->palette.card,
+        dc, &details, state->palette.card,
         state->palette.border, LSM_WINDOWS_CARD_RADIUS);
-    RECT first = {
-        details_card.left + 18, details_card.top + 16,
-        details_card.right - 18, details_card.top + 46
+
+    const wchar_t *usage_names[10] = {
+        L"In use", L"Available",
+        L"Committed", L"Cached",
+        L"Buffers", L"Swap",
+        L"Kernel reclaimable", L"Kernel non-reclaimable",
+        L"Page tables", L"Pressure (10 s)"
     };
-    RECT second = {
-        details_card.left + 18, details_card.top + 51,
-        details_card.right - 18, details_card.bottom - 12
+    const wchar_t *usage_values[10] = {
+        in_use, available,
+        committed, cached,
+        buffers, swap,
+        reclaimable, nonreclaimable,
+        page_tables, pressure
     };
-    draw_text(
-        dc, row_one, first, state->body_bold_font,
-        state->palette.heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(
-        dc, row_two, second, state->body_font,
-        state->palette.summary, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    const int pad = 14;
+    const int usage_width = 460;
+    const int separator_x = details.left + pad + usage_width;
+    RECT separator = {
+        separator_x, details.top + 12,
+        separator_x + 1, details.bottom - 12
+    };
+    fill_solid(dc, &separator, state->palette.border);
+
+    const int metric_col_width = (usage_width - 30) / 2;
+    const int metric_row_height = 34;
+    for (int index = 0; index < 10; index++) {
+        const int col = index % 2;
+        const int row = index / 2;
+        RECT block = {
+            details.left + pad + col * (metric_col_width + 30),
+            details.top + 10 + row * metric_row_height,
+            details.left + pad + col * (metric_col_width + 30) +
+                metric_col_width,
+            details.top + 10 + (row + 1) * metric_row_height
+        };
+        draw_metric_block(
+            state, dc, block,
+            usage_names[index], usage_values[index]);
+    }
+
+    const wchar_t *hardware_names[5] = {
+        L"Speed:", L"Slots used:", L"Form factor:",
+        L"Hardware corrupted:", L"Installed modules:"
+    };
+    const wchar_t *hardware_values[5] = {
+        speed, slots, form_factor, corrupted, modules
+    };
+
+    const int info_left = separator_x + 18;
+    const int info_width = details.right - pad - info_left;
+    for (int index = 0; index < 5; index++) {
+        RECT pair = {
+            info_left,
+            details.top + 16 + index * 29,
+            info_left + info_width,
+            details.top + 16 + (index + 1) * 29
+        };
+        draw_detail_pair(
+            state, dc, pair,
+            hardware_names[index], hardware_values[index]);
+    }
 }
 
 static void draw_performance_page(
@@ -1136,11 +1559,11 @@ static bool create_fonts(LsmWindowsUiState *state)
     state->body_bold_font = create_font_with_fallback(
         -17, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
     state->title_font = create_font_with_fallback(
-        -30, FW_NORMAL, L"MB Corpo A Title Cond WEB", L"Segoe UI");
+        -24, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
     state->heading_font = create_font_with_fallback(
-        -21, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
+        -19, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
     state->metric_font = create_font_with_fallback(
-        -34, FW_NORMAL, L"MB Corpo A Title Cond WEB", L"Segoe UI");
+        -21, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
 
     return state->body_font && state->body_bold_font &&
         state->title_font && state->heading_font &&
