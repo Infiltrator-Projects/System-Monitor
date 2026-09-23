@@ -396,7 +396,7 @@ static gboolean on_delete_event(GtkWidget *widget, GdkEvent *event, gpointer use
      * teardown finishes. Keep the widget alive for the single final-state save
      * in lsm_app_shutdown(), but remove it from the screen before quitting the
      * application main loop. */
-    gtk_widget_hide(widget);
+    gtk_widget_set_visible(widget, FALSE);
     g_application_quit(G_APPLICATION(app->application));
     return TRUE;
 }
