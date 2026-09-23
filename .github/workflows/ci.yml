@@ -188,7 +188,19 @@ jobs:
             wine_runner=/usr/lib/wine/wine64
           fi
           test -n "$wine_runner"
-          WINEDEBUG=-all xvfb-run -a "$wine_runner"             build-cmake/system-monitor-windows.exe --startup-smoke
+          rm -f windows-startup-smoke.txt
+          set +e
+          WINEDEBUG=-all timeout 60s xvfb-run -a "$wine_runner" \
+            build-cmake/system-monitor-windows.exe --startup-smoke
+          status=$?
+          set -e
+          if [[ -f windows-startup-smoke.txt ]]; then
+            printf 'Windows startup smoke status: '
+            cat windows-startup-smoke.txt
+          else
+            echo 'Windows startup smoke produced no status file.'
+          fi
+          exit "$status"
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check
