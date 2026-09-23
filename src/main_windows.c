@@ -862,16 +862,31 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
         return EXIT_FAILURE;
     }
 
-    LsmWindowsUiState state;
-    ZeroMemory(&state, sizeof(state));
-    state.instance = instance;
-    state.startup_smoke = startup_smoke;
+    /*
+     * LsmMonitor is intentionally a large retained snapshot. Keep the complete
+     * Windows application state off the default GUI-thread stack, matching the
+     * heap-owned Linux application lifetime and preventing stack exhaustion
+     * before WinMain can create the first window.
+     */
+    LsmWindowsUiState *state = calloc(1U, sizeof(*state));
+    if (!state) {
+        if (startup_smoke) {
+            write_startup_smoke_status("state_allocation_failed\n");
+        } else {
+            MessageBoxW(
+                NULL, L"Unable to allocate System Monitor application state.",
+                L"System Monitor", MB_OK | MB_ICONERROR);
+        }
+        return EXIT_FAILURE;
+    }
+    state->instance = instance;
+    state->startup_smoke = startup_smoke;
 
     HWND window = CreateWindowExW(
         0U, class_name, L"System Monitor",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1120, 720,
-        NULL, NULL, instance, &state);
+        NULL, NULL, instance, state);
     if (!window) {
         if (startup_smoke) {
             write_startup_smoke_status("create_window_failed\n");
@@ -880,6 +895,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
                 NULL, L"Unable to create the System Monitor window.",
                 L"System Monitor", MB_OK | MB_ICONERROR);
         }
+        destroy_state(state);
+        free(state);
         return EXIT_FAILURE;
     }
 
@@ -898,6 +915,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
         else
             write_startup_smoke_status("success\n");
         DestroyWindow(window);
+        free(state);
         return visible && sized ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
@@ -909,5 +927,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
         DispatchMessageW(&message);
     }
 
-    return (int)message.wParam;
+    const int status = (int)message.wParam;
+    free(state);
+    return status;
 }
