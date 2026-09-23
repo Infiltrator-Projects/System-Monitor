@@ -162,16 +162,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          version_header=build-cmake/windows-version.h
+          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc \
+            -Isrc -include "$version_header" \
             src/main_windows.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
             -lpsapi -ladvapi32 -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o build-cmake/system-monitor-windows.exe
+          strings build-cmake/system-monitor-windows.exe | grep -Fq "$version"
           pe_info=$(x86_64-w64-mingw32-objdump -p build-cmake/system-monitor-windows.exe)
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
           if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
@@ -282,16 +286,25 @@ jobs:
           if (-not $gcc) { throw 'No native MinGW GCC compiler is available on the Windows runner.' }
           Write-Host "Using Windows compiler: $gcc"
 
+          $version = (Get-Content support/VERSION -Raw).Trim()
+          $versionHeader = Join-Path $PWD 'windows-version.h'
+          Set-Content -LiteralPath $versionHeader -Value "#define LSM_VERSION `"$version`"" -Encoding ascii
           $arguments = @(
             '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
             '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
             '-Wstrict-prototypes', '-Wmissing-prototypes', '-Isrc',
+            '-include', $versionHeader,
             'src/main_windows.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
             '-lpsapi', '-ladvapi32', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
             '-o', 'system-monitor-windows.exe'
           )
           & $gcc @arguments
           if ($LASTEXITCODE -ne 0) { throw "Windows GUI compile failed with exit code $LASTEXITCODE." }
+          $embedded = [Text.Encoding]::ASCII.GetString(
+            [IO.File]::ReadAllBytes((Join-Path $PWD 'system-monitor-windows.exe')))
+          if (-not $embedded.Contains($version)) {
+            throw "Windows GUI does not contain source version $version."
+          }
 
           Remove-Item windows-startup-smoke.txt -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -ArgumentList '--startup-smoke' -PassThru
