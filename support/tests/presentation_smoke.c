@@ -4,7 +4,7 @@
  * @brief Deterministic checks for the shared cross-platform presentation model.
  *
  * The native GTK and Win32 renderers must consume the same product labels,
- * field placement and formatted CPU/memory values. These checks intentionally
+ * field placement and formatted CPU/memory/device values. These checks intentionally
  * avoid either toolkit so architectural drift is caught at the shared boundary.
  *
  * @author Shannon Smith
@@ -116,11 +116,79 @@ static void check_memory_projection(void)
         view.details[LSM_MEMORY_DETAIL_INSTALLED_MODULES], "N/A") == 0);
 }
 
+
+static void check_device_projection(void)
+{
+    LsmDiskInfo disk;
+    memset(&disk, 0, sizeof(disk));
+    (void)snprintf(disk.name, sizeof(disk.name), "Disk 0");
+    (void)snprintf(disk.model, sizeof(disk.model), "Test NVMe");
+    (void)snprintf(disk.media_type, sizeof(disk.media_type), "Fixed");
+    (void)snprintf(
+        disk.connection_type, sizeof(disk.connection_type), "NVMe");
+    disk.size_bytes = UINT64_C(512) * 1024U * 1024U * 1024U;
+    disk.read_bytes_per_sec = 2.5 * 1024.0 * 1024.0;
+    disk.write_bytes_per_sec = 1.25 * 1024.0 * 1024.0;
+    disk.active_percent = 37.0;
+    disk.average_response_ms = 1.5;
+    disk.queue_length = 0.25;
+    disk.system_disk = true;
+
+    LsmDevicePerformanceView view;
+    lsm_disk_performance_view(&disk, 0U, &view);
+    assert(strcmp(view.title, "Disk 0 — Test NVMe") == 0);
+    assert(strcmp(view.rail_value, "37%") == 0);
+    assert(strcmp(view.metric_labels[0], "Read speed") == 0);
+    assert(strcmp(view.metric_values[0], "2.5 MB/s") == 0);
+    assert(strcmp(view.metric_values[1], "1.2 MB/s") == 0);
+    assert(strcmp(view.metric_values[8], "Yes") == 0);
+
+    LsmNetInfo net;
+    memset(&net, 0, sizeof(net));
+    (void)snprintf(net.name, sizeof(net.name), "Ethernet");
+    (void)snprintf(net.product, sizeof(net.product), "Test Adapter");
+    (void)snprintf(net.ipv4, sizeof(net.ipv4), "192.0.2.10");
+    (void)snprintf(net.mac, sizeof(net.mac), "00:11:22:33:44:55");
+    (void)snprintf(
+        net.connection_state, sizeof(net.connection_state), "Connected");
+    net.rx_bytes_per_sec = 1000000.0;
+    net.tx_bytes_per_sec = 300000.0;
+    net.link_speed_mbps = 1000.0;
+    net.utilisation_available = true;
+    net.utilisation_percent = 1.04;
+
+    lsm_network_performance_view(&net, 0U, false, &view);
+    assert(strcmp(view.title, "Ethernet 0 — Test Adapter") == 0);
+    assert(strstr(view.rail_value, "S:") != NULL);
+    assert(strstr(view.rail_value, "R:") != NULL);
+    assert(strcmp(view.metric_values[2], "1.00 Gb/s") == 0);
+    assert(strcmp(view.metric_values[4], "192.0.2.10") == 0);
+
+    LsmGpuInfo gpu;
+    memset(&gpu, 0, sizeof(gpu));
+    (void)snprintf(gpu.name, sizeof(gpu.name), "Test GPU");
+    (void)snprintf(
+        gpu.metrics_source, sizeof(gpu.metrics_source),
+        "Windows display adapter identification");
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strcmp(view.title, "GPU 0 — Test GPU") == 0);
+    assert(strcmp(view.rail_value, "N/A") == 0);
+    assert(strcmp(view.metric_labels[0], "Product") == 0);
+    assert(strcmp(view.metric_values[0], "Test GPU") == 0);
+    assert(strcmp(view.metric_values[1], "N/A") == 0);
+
+    lsm_disk_performance_view(NULL, 0U, &view);
+    assert(strcmp(view.title, "Disk 0") == 0);
+    assert(strcmp(view.rail_value, "N/A") == 0);
+    assert(view.metric_count == 0U);
+}
+
 int main(void)
 {
     check_contract_identity();
     check_cpu_availability_semantics();
     check_memory_projection();
+    check_device_projection();
     puts("Shared presentation contract smoke passed.");
     return 0;
 }
