@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.77 - 2026-09-23
+
+- Fix the Windows About surface so its displayed version is supplied from `support/VERSION` at compile time instead of being hard-coded in `main_windows.c`.
+- Replace the stock bright Win32 MessageBox About panel with a native themed About window painted from the active System Monitor Day/Night palette.
+- Update Windows verification and release compilation to inject the authoritative project version into the Windows executable.
+
 ## 1.0.76 - 2026-09-23
 
 - Size Windows CPU and Memory detail-label columns from the actual native font metrics instead of a fixed 116-pixel split, preventing avoidable ellipsis in labels such as "Logical processors", "Maximum speed" and "Context switches/s".
