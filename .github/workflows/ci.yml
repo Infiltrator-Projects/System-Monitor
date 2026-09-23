@@ -158,7 +158,7 @@ jobs:
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake --target system-monitor --parallel 2
 
-      - name: Cross-compile experimental Windows monitor backend
+      - name: Cross-compile and link experimental Windows backends
         shell: bash
         run: |
           set -euo pipefail
@@ -170,6 +170,13 @@ jobs:
               -Isrc -c "src/${source}.c" \
               -o "build-cmake/${source}.o"
           done
+          printf 'int main(void) { return 0; }\n' > build-cmake/windows-backend-link.c
+          x86_64-w64-mingw32-gcc \
+            -std=c17 build-cmake/windows-backend-link.c \
+            build-cmake/monitor_backend_windows.o \
+            build-cmake/process_backend_windows.o \
+            -lpsapi -ladvapi32 \
+            -o build-cmake/windows-backend-link.exe
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check
