@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.78 - 2026-09-23
+
+- Fix the themed Windows About window clipping its second paragraph at the bottom of the content card.
+- Measure the wrapped About text with the active native font before creating the window, then derive the client and outer window height from that measurement.
+- Preserve the existing themed card/button composition while making the dialog resilient to DPI scaling and font substitution instead of relying on a fixed 285-pixel outer height.
+
 ## 1.0.77 - 2026-09-23
 
 - Fix the Windows About surface so its displayed version is supplied from `support/VERSION` at compile time instead of being hard-coded in `main_windows.c`.
