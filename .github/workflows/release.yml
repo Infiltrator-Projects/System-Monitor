@@ -79,7 +79,7 @@ jobs:
             src/main_windows.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
             -lpsapi -ladvapi32 -lcomctl32 -lgdi32 \
-            -static-libgcc -municode -mwindows \
+            -static-libgcc -mwindows \
             -o "$windows_app"
           pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
