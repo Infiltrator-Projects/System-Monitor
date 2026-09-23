@@ -6,8 +6,9 @@
  * Windows uses the same product hierarchy and Infiltratr design language as
  * the Linux application while keeping presentation native to Win32. Top-level
  * product pages live in the tab strip; Performance owns its own resource rail.
- * CPU, memory and process data are live, while unimplemented Windows backends
- * remain explicit placeholders.
+ * CPU, memory, storage, network, graphics identity and process data are live
+ * through native adapters. Unimplemented Windows backends remain explicit
+ * placeholders rather than redefining the shared product model.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2016-2026 Shannon Smith
@@ -343,8 +344,9 @@ static void draw_text(HDC dc, const wchar_t *text, RECT rect, HFONT font,
 static const wchar_t about_body_text[] =
     L"Native Windows presentation using the Infiltratr "
     L"Day/Night design contract and Linux product layout.\r\n\r\n"
-    L"CPU, memory and processes are live and read-only. "
-    L"Additional Windows collectors remain under active development.";
+    L"CPU, memory, disks, network adapters, graphics identity and processes "
+    L"are live and read-only. Additional Windows telemetry remains under "
+    L"active development.";
 
 static int measure_wrapped_text_height(
     HWND reference_window, HFONT font,
@@ -840,7 +842,7 @@ static void draw_mini_history(
         dc, &rect, state->palette.surface,
         state->palette.connection_border, 6);
 
-    if (state->history_count < 2U) return;
+    if (!history || state->history_count < 2U) return;
 
     HPEN pen = CreatePen(PS_SOLID, 2, line_colour);
     if (!pen) return;
@@ -1405,6 +1407,128 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     }
 }
 
+static bool build_device_performance_view(
+    const LsmWindowsUiState *state, LsmPageType type,
+    LsmDevicePerformanceView *view)
+{
+    if (!state || !view) return false;
+
+    switch (type) {
+        case LSM_PAGE_DISK:
+            lsm_disk_performance_view(
+                state->monitor_ready && state->monitor.disk_count > 0U
+                    ? &state->monitor.disks[0] : NULL,
+                0U, view);
+            return true;
+        case LSM_PAGE_NETWORK:
+            lsm_network_performance_view(
+                state->monitor_ready && state->monitor.net_count > 0U
+                    ? &state->monitor.nets[0] : NULL,
+                0U, false, view);
+            return true;
+        case LSM_PAGE_GPU:
+            lsm_gpu_performance_view(
+                state->monitor_ready && state->monitor.gpu_count > 0U
+                    ? &state->monitor.gpus[0] : NULL,
+                0U, view);
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void draw_device_performance_page(
+    LsmWindowsUiState *state, HDC dc, RECT content,
+    const LsmDevicePerformanceView *view, LsmPageType type)
+{
+    if (!state || !view) return;
+
+    wchar_t title[LSM_PERFORMANCE_VIEW_VALUE_LEN];
+    wchar_t subtitle[LSM_PERFORMANCE_VIEW_RAIL_LEN];
+    text_to_wide(
+        view->title, title, sizeof(title) / sizeof(title[0]));
+    text_to_wide(
+        view->subtitle, subtitle, sizeof(subtitle) / sizeof(subtitle[0]));
+
+    RECT header = {
+        content.left, content.top,
+        content.right, content.top + 64
+    };
+    draw_round_panel(
+        dc, &header, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+
+    RECT title_rect = {
+        header.left + 14, header.top + 6,
+        header.right - 14, header.top + 34
+    };
+    RECT subtitle_rect = {
+        header.left + 14, header.top + 34,
+        header.right - 14, header.bottom - 6
+    };
+    draw_text(
+        dc, title, title_rect, state->title_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(
+        dc, subtitle, subtitle_rect, state->body_font,
+        state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    RECT metrics = {
+        content.left, header.bottom + 10,
+        content.right, content.bottom
+    };
+    draw_round_panel(
+        dc, &metrics, state->palette.card,
+        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+
+    const int pad = 16;
+    const int gap = 18;
+    const int column_width =
+        (metrics.right - metrics.left - (pad * 2) - gap) / 2;
+    const int row_height = 54;
+
+    for (size_t index = 0U; index < view->metric_count; index++) {
+        wchar_t label[LSM_DEVICE_PERFORMANCE_LABEL_LEN];
+        wchar_t value[LSM_PERFORMANCE_VIEW_VALUE_LEN];
+        text_to_wide(
+            view->metric_labels[index], label,
+            sizeof(label) / sizeof(label[0]));
+        text_to_wide(
+            view->metric_values[index], value,
+            sizeof(value) / sizeof(value[0]));
+
+        const int column = (int)(index % 2U);
+        const int row = (int)(index / 2U);
+        RECT block = {
+            metrics.left + pad + column * (column_width + gap),
+            metrics.top + 14 + row * row_height,
+            metrics.left + pad + column * (column_width + gap) +
+                column_width,
+            metrics.top + 14 + (row + 1) * row_height
+        };
+        if (block.bottom > metrics.bottom - 8)
+            break;
+        draw_metric_block(state, dc, block, label, value);
+    }
+
+    if (view->metric_count == 0U) {
+        wchar_t resource[64];
+        text_to_wide(
+            lsm_performance_page_title(type), resource,
+            sizeof(resource) / sizeof(resource[0]));
+        RECT message = {
+            metrics.left + 18, metrics.top + 18,
+            metrics.right - 18, metrics.top + 72
+        };
+        draw_text(
+            dc, L"No native telemetry is currently available for this resource.",
+            message, state->body_font, state->palette.summary,
+            DT_LEFT | DT_TOP | DT_WORDBREAK);
+    }
+}
+
 static void draw_performance_page(
     LsmWindowsUiState *state, HDC dc, RECT content)
 {
@@ -1414,50 +1538,83 @@ static void draw_performance_page(
         content.bottom
     };
     fill_solid(dc, &rail, state->palette.panel);
+    memset(state->performance_items, 0, sizeof(state->performance_items));
 
     LsmCpuPerformanceView cpu_view;
     LsmMemoryPerformanceView memory_view;
+    LsmDevicePerformanceView disk_view;
+    LsmDevicePerformanceView network_view;
+    LsmDevicePerformanceView gpu_view;
     lsm_cpu_performance_view(
         state->monitor_ready ? &state->monitor : NULL, &cpu_view);
     lsm_memory_performance_view(
         state->monitor_ready ? &state->monitor : NULL, &memory_view);
+    (void)build_device_performance_view(
+        state, LSM_PAGE_DISK, &disk_view);
+    (void)build_device_performance_view(
+        state, LSM_PAGE_NETWORK, &network_view);
+    (void)build_device_performance_view(
+        state, LSM_PAGE_GPU, &gpu_view);
 
-    wchar_t cpu_value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
-    wchar_t memory_value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
-    text_to_wide(
-        state->monitor_ready ? cpu_view.rail_value : "Initialising...",
-        cpu_value, sizeof(cpu_value) / sizeof(cpu_value[0]));
-    text_to_wide(
-        state->monitor_ready ? memory_view.rail_value : "Initialising...",
-        memory_value, sizeof(memory_value) / sizeof(memory_value[0]));
+    const LsmPageType page_types[] = {
+        LSM_PAGE_CPU,
+        LSM_PAGE_MEMORY,
+        LSM_PAGE_DISK,
+        LSM_PAGE_NETWORK,
+        LSM_PAGE_GPU
+    };
+    const double *histories[] = {
+        state->cpu_history,
+        state->memory_history,
+        NULL,
+        NULL,
+        NULL
+    };
 
-    RECT cpu = {
-        rail.left + 4, rail.top + 8,
-        rail.left + 4 + LSM_SIDE_BUTTON_WIDTH,
-        rail.top + 8 + LSM_SIDE_BUTTON_HEIGHT
-    };
-    RECT memory = {
-        cpu.left,
-        cpu.bottom + 6,
-        cpu.right,
-        cpu.bottom + 6 + LSM_SIDE_BUTTON_HEIGHT
-    };
-    wchar_t cpu_title[32];
-    wchar_t memory_title[32];
-    text_to_wide(
-        lsm_performance_page_title(LSM_PAGE_CPU),
-        cpu_title, sizeof(cpu_title) / sizeof(cpu_title[0]));
-    text_to_wide(
-        lsm_performance_page_title(LSM_PAGE_MEMORY),
-        memory_title, sizeof(memory_title) / sizeof(memory_title[0]));
-    draw_performance_rail_item(
-        state, dc, LSM_PAGE_CPU,
-        cpu, cpu_title, cpu_value,
-        state->cpu_history, performance_colour_ref(LSM_PAGE_CPU));
-    draw_performance_rail_item(
-        state, dc, LSM_PAGE_MEMORY,
-        memory, memory_title, memory_value,
-        state->memory_history, performance_colour_ref(LSM_PAGE_MEMORY));
+    int top = rail.top + 8;
+    for (size_t slot = 0U;
+         slot < sizeof(page_types) / sizeof(page_types[0]); slot++) {
+        const LsmPageType type = page_types[slot];
+        const char *title_text = lsm_performance_page_title(type);
+        const char *value_text = "N/A";
+
+        if (type == LSM_PAGE_CPU) {
+            value_text =
+                state->monitor_ready ? cpu_view.rail_value : "Initialising...";
+        } else if (type == LSM_PAGE_MEMORY) {
+            value_text =
+                state->monitor_ready ? memory_view.rail_value : "Initialising...";
+        } else if (type == LSM_PAGE_DISK) {
+            title_text = disk_view.title;
+            value_text =
+                state->monitor_ready ? disk_view.rail_value : "Initialising...";
+        } else if (type == LSM_PAGE_NETWORK) {
+            title_text = network_view.title;
+            value_text =
+                state->monitor_ready ? network_view.rail_value : "Initialising...";
+        } else if (type == LSM_PAGE_GPU) {
+            title_text = gpu_view.title;
+            value_text =
+                state->monitor_ready ? gpu_view.rail_value : "Initialising...";
+        }
+
+        wchar_t title[LSM_PERFORMANCE_VIEW_VALUE_LEN];
+        wchar_t value[LSM_PERFORMANCE_VIEW_RAIL_LEN];
+        text_to_wide(
+            title_text, title, sizeof(title) / sizeof(title[0]));
+        text_to_wide(
+            value_text, value, sizeof(value) / sizeof(value[0]));
+
+        RECT item = {
+            rail.left + 4, top,
+            rail.left + 4 + LSM_SIDE_BUTTON_WIDTH,
+            top + LSM_SIDE_BUTTON_HEIGHT
+        };
+        draw_performance_rail_item(
+            state, dc, (int)type, item, title, value,
+            histories[slot], performance_colour_ref(type));
+        top = item.bottom + 6;
+    }
 
     RECT separator = {
         rail.right, rail.top,
@@ -1471,10 +1628,45 @@ static void draw_performance_page(
         content.right,
         content.bottom
     };
-    if (state->active_performance_item == LSM_PAGE_CPU)
-        draw_cpu_page(state, dc, page);
-    else
-        draw_memory_page(state, dc, page);
+
+    switch (state->active_performance_item) {
+        case LSM_PAGE_CPU:
+            draw_cpu_page(state, dc, page);
+            break;
+        case LSM_PAGE_MEMORY:
+            draw_memory_page(state, dc, page);
+            break;
+        case LSM_PAGE_DISK:
+            draw_device_performance_page(
+                state, dc, page, &disk_view, LSM_PAGE_DISK);
+            break;
+        case LSM_PAGE_NETWORK:
+            draw_device_performance_page(
+                state, dc, page, &network_view, LSM_PAGE_NETWORK);
+            break;
+        case LSM_PAGE_GPU:
+            draw_device_performance_page(
+                state, dc, page, &gpu_view, LSM_PAGE_GPU);
+            break;
+        default: {
+            LsmDevicePerformanceView unavailable;
+            memset(&unavailable, 0, sizeof(unavailable));
+            infiltratr_copy_string(
+                unavailable.title, sizeof(unavailable.title),
+                lsm_performance_page_title(
+                    state->active_performance_item));
+            infiltratr_copy_string(
+                unavailable.subtitle, sizeof(unavailable.subtitle),
+                "Native Windows collector not implemented yet");
+            infiltratr_copy_string(
+                unavailable.rail_value, sizeof(unavailable.rail_value),
+                "N/A");
+            draw_device_performance_page(
+                state, dc, page, &unavailable,
+                state->active_performance_item);
+            break;
+        }
+    }
 }
 
 static void draw_placeholder_page(
@@ -1826,6 +2018,20 @@ static void refresh_processes(LsmWindowsUiState *state)
     set_status(state, status);
 }
 
+static void set_performance_status(LsmWindowsUiState *state)
+{
+    if (!state) return;
+    wchar_t resource[64];
+    wchar_t status[128];
+    text_to_wide(
+        lsm_performance_page_title(state->active_performance_item),
+        resource, sizeof(resource) / sizeof(resource[0]));
+    (void)swprintf(
+        status, sizeof(status) / sizeof(status[0]),
+        L"Performance - %ls", resource);
+    set_status(state, status);
+}
+
 static void initialise_monitor_backend(LsmWindowsUiState *state)
 {
     if (!state || state->monitor_initialised) return;
@@ -1856,11 +2062,7 @@ static void refresh_active_page(LsmWindowsUiState *state)
             (void)lsm_monitor_platform_update(&state->monitor);
             append_history(state);
         }
-        set_status(
-            state,
-            state->active_performance_item == LSM_PAGE_CPU
-                ? L"Performance - CPU"
-                : L"Performance - Memory");
+        set_performance_status(state);
         InvalidateRect(state->window, NULL, FALSE);
     } else if (state->active_page == LSM_TAB_PROCESSES) {
         initialise_process_backend(state);
@@ -2244,11 +2446,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                             &state->performance_items[index], point)) {
                         state->active_performance_item =
                             (LsmPageType)index;
-                        set_status(
-                            state,
-                            index == LSM_PAGE_CPU
-                                ? L"Performance - CPU"
-                                : L"Performance - Memory");
+                        set_performance_status(state);
                         InvalidateRect(window, NULL, FALSE);
                         return 0;
                     }
