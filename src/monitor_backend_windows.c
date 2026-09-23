@@ -317,7 +317,7 @@ static bool query_disk_identity(HANDLE disk, LsmDiskInfo *info)
         product, sizeof(product));
 
     if (vendor[0] && product[0])
-        (void)snprintf(info->model, sizeof(info->model), "%s %s", vendor, product);
+        (void)snprintf(info->model, sizeof(info->model), "%.48s %.72s", vendor, product);
     else if (product[0])
         infiltratr_copy_string(info->model, sizeof(info->model), product);
     else if (vendor[0])
