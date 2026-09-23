@@ -15,6 +15,7 @@
  */
 #include "monitor_platform.h"
 #include "process_backend.h"
+#include "presentation_contract.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -39,7 +40,6 @@
 #define LSM_WINDOWS_TIMER_ID 1U
 #define LSM_WINDOWS_REFRESH_MS 1000U
 #define LSM_WINDOWS_HISTORY_CAPACITY 120U
-#define LSM_WINDOWS_PAGE_COUNT 8
 #define LSM_WINDOWS_PERFORMANCE_ITEM_COUNT 2
 #define LSM_WINDOWS_MENU_HEIGHT 32
 #define LSM_WINDOWS_SUMMARY_HEIGHT 56
@@ -51,8 +51,6 @@
 #define LSM_WINDOWS_CONTROL_SPACING 10
 #define LSM_WINDOWS_CARD_RADIUS 12
 #define LSM_WINDOWS_CONTROL_RADIUS 10
-#define LSM_WINDOWS_RAIL_WIDTH 220
-#define LSM_WINDOWS_RAIL_ITEM_HEIGHT 68
 #define LSM_WINDOWS_MESSAGE_START_BACKEND (WM_APP + 1)
 
 typedef enum {
@@ -127,25 +125,6 @@ static const LsmWindowsPalette windows_night_palette = {
     RGB(0x22, 0x27, 0x2D)
 };
 
-#define LSM_WINDOWS_CPU_COLOUR RGB(0x00, 0xAD, 0xEF)
-#define LSM_WINDOWS_MEMORY_COLOUR RGB(0x5C, 0x9E, 0xFA)
-
-typedef enum {
-    LSM_WINDOWS_PAGE_PERFORMANCE,
-    LSM_WINDOWS_PAGE_PROCESSES,
-    LSM_WINDOWS_PAGE_APP_HISTORY,
-    LSM_WINDOWS_PAGE_STARTUP,
-    LSM_WINDOWS_PAGE_USERS,
-    LSM_WINDOWS_PAGE_DETAILS,
-    LSM_WINDOWS_PAGE_SERVICES,
-    LSM_WINDOWS_PAGE_FILESYSTEMS
-} LsmWindowsPage;
-
-typedef enum {
-    LSM_WINDOWS_PERFORMANCE_CPU,
-    LSM_WINDOWS_PERFORMANCE_MEMORY
-} LsmWindowsPerformanceItem;
-
 typedef struct {
     HINSTANCE instance;
     HWND window;
@@ -164,15 +143,15 @@ typedef struct {
     LsmProcessBackend *process_backend;
     LsmProcessInfo *processes;
     size_t process_count;
-    LsmWindowsPage active_page;
-    LsmWindowsPerformanceItem active_performance_item;
+    LsmTabIndex active_page;
+    LsmPageType active_performance_item;
     LsmWindowsThemeMode theme_mode;
     LsmWindowsPalette palette;
     int hovered_tab;
     int hovered_performance_item;
     int hovered_menu;
     bool tracking_mouse_leave;
-    RECT page_tabs[LSM_WINDOWS_PAGE_COUNT];
+    RECT page_tabs[LSM_TAB_COUNT];
     RECT performance_items[LSM_WINDOWS_PERFORMANCE_ITEM_COUNT];
     RECT file_menu_rect;
     RECT view_menu_rect;
@@ -183,17 +162,6 @@ typedef struct {
     size_t history_count;
     size_t history_position;
 } LsmWindowsUiState;
-
-static const wchar_t *const page_names[LSM_WINDOWS_PAGE_COUNT] = {
-    L"Performance",
-    L"Processes",
-    L"App History",
-    L"Startup Apps",
-    L"Users",
-    L"Details",
-    L"Services",
-    L"File Systems"
-};
 
 enum {
     LSM_WINDOWS_ID_EXIT = 2000,
@@ -792,7 +760,7 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
 
     int x = LSM_WINDOWS_SCREEN_PADDING;
     select_font(dc, state->body_bold_font);
-    for (int index = 0; index < LSM_WINDOWS_PAGE_COUNT; index++) {
+    for (int index = 0; index < LSM_TAB_COUNT; index++) {
         SIZE text_size = {0, 0};
         (void)GetTextExtentPoint32W(
             dc, page_names[index],
@@ -829,7 +797,7 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
         x = tab.right;
         if (x >= width - LSM_WINDOWS_SCREEN_PADDING) {
             for (int hidden = index + 1;
-                 hidden < LSM_WINDOWS_PAGE_COUNT; hidden++)
+                 hidden < LSM_TAB_COUNT; hidden++)
                 SetRectEmpty(&state->page_tabs[hidden]);
             break;
         }
@@ -1601,7 +1569,7 @@ static void draw_performance_page(
 {
     RECT rail = {
         content.left, content.top,
-        content.left + LSM_WINDOWS_RAIL_WIDTH,
+        content.left + LSM_SIDEBAR_WIDTH,
         content.bottom
     };
     fill_solid(dc, &rail, state->palette.panel);
@@ -1631,20 +1599,20 @@ static void draw_performance_page(
 
     RECT cpu = {
         rail.left + 4, rail.top + 8,
-        rail.left + 216, rail.top + 8 + LSM_WINDOWS_RAIL_ITEM_HEIGHT
+        rail.left + 216, rail.top + 8 + LSM_SIDE_BUTTON_HEIGHT
     };
     RECT memory = {
         cpu.left,
         cpu.bottom + 6,
         cpu.right,
-        cpu.bottom + 6 + LSM_WINDOWS_RAIL_ITEM_HEIGHT
+        cpu.bottom + 6 + LSM_SIDE_BUTTON_HEIGHT
     };
     draw_performance_rail_item(
-        state, dc, LSM_WINDOWS_PERFORMANCE_CPU,
+        state, dc, LSM_PAGE_CPU,
         cpu, L"CPU", cpu_value,
         state->cpu_history, LSM_WINDOWS_CPU_COLOUR);
     draw_performance_rail_item(
-        state, dc, LSM_WINDOWS_PERFORMANCE_MEMORY,
+        state, dc, LSM_PAGE_MEMORY,
         memory, L"Memory", memory_value,
         state->memory_history, LSM_WINDOWS_MEMORY_COLOUR);
 
@@ -1660,7 +1628,7 @@ static void draw_performance_page(
         content.right,
         content.bottom
     };
-    if (state->active_performance_item == LSM_WINDOWS_PERFORMANCE_CPU)
+    if (state->active_performance_item == LSM_PAGE_CPU)
         draw_cpu_page(state, dc, page);
     else
         draw_memory_page(state, dc, page);
@@ -1763,9 +1731,9 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
     draw_page_tabs(state, dc, width);
 
     const RECT content = content_rect_for_client(width, height);
-    if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE)
+    if (state->active_page == LSM_TAB_PERFORMANCE)
         draw_performance_page(state, dc, content);
-    else if (state->active_page == LSM_WINDOWS_PAGE_PROCESSES)
+    else if (state->active_page == LSM_TAB_PROCESSES)
         draw_process_page_header(state, dc, content);
     else
         draw_placeholder_page(state, dc, content);
@@ -1913,7 +1881,7 @@ static void update_process_visibility(LsmWindowsUiState *state)
     if (!state || !state->process_list) return;
     ShowWindow(
         state->process_list,
-        state->active_page == LSM_WINDOWS_PAGE_PROCESSES
+        state->active_page == LSM_TAB_PROCESSES
             ? SW_SHOW : SW_HIDE);
 }
 
@@ -2035,7 +2003,7 @@ static void refresh_active_page(LsmWindowsUiState *state)
 {
     if (!state) return;
 
-    if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE) {
+    if (state->active_page == LSM_TAB_PERFORMANCE) {
         initialise_monitor_backend(state);
         if (state->monitor_ready) {
             (void)lsm_monitor_platform_update(&state->monitor);
@@ -2043,30 +2011,30 @@ static void refresh_active_page(LsmWindowsUiState *state)
         }
         set_status(
             state,
-            state->active_performance_item == LSM_WINDOWS_PERFORMANCE_CPU
+            state->active_performance_item == LSM_PAGE_CPU
                 ? L"Performance - CPU"
                 : L"Performance - Memory");
         InvalidateRect(state->window, NULL, FALSE);
-    } else if (state->active_page == LSM_WINDOWS_PAGE_PROCESSES) {
+    } else if (state->active_page == LSM_TAB_PROCESSES) {
         initialise_process_backend(state);
         refresh_processes(state);
     }
 }
 
-static void show_page(LsmWindowsUiState *state, LsmWindowsPage page)
+static void show_page(LsmWindowsUiState *state, LsmTabIndex page)
 {
-    if (!state || page < LSM_WINDOWS_PAGE_PERFORMANCE ||
-        page > LSM_WINDOWS_PAGE_FILESYSTEMS)
+    if (!state || page < LSM_TAB_PERFORMANCE ||
+        page > LSM_TAB_FILESYSTEMS)
         return;
 
     state->active_page = page;
     update_process_visibility(state);
     layout_process_list(state);
 
-    if (page == LSM_WINDOWS_PAGE_PERFORMANCE) {
+    if (page == LSM_TAB_PERFORMANCE) {
         set_status(state, L"Performance - CPU");
         refresh_active_page(state);
-    } else if (page == LSM_WINDOWS_PAGE_PROCESSES) {
+    } else if (page == LSM_TAB_PROCESSES) {
         set_status(state, L"Processes - starting native backend");
         refresh_active_page(state);
     } else {
@@ -2229,9 +2197,9 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             }
             apply_process_list_theme(state);
             apply_titlebar_theme(state);
-            state->active_page = LSM_WINDOWS_PAGE_PERFORMANCE;
+            state->active_page = LSM_TAB_PERFORMANCE;
             state->active_performance_item =
-                LSM_WINDOWS_PERFORMANCE_CPU;
+                LSM_PAGE_CPU;
             state->hovered_tab = -1;
             state->hovered_performance_item = -1;
             state->hovered_menu = -1;
@@ -2349,7 +2317,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             else if (PtInRect(&state->help_menu_rect, point)) hovered_menu = 2;
 
             int hovered_tab = -1;
-            for (int index = 0; index < LSM_WINDOWS_PAGE_COUNT; index++) {
+            for (int index = 0; index < LSM_TAB_COUNT; index++) {
                 if (PtInRect(&state->page_tabs[index], point)) {
                     hovered_tab = index;
                     break;
@@ -2357,7 +2325,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             }
 
             int hovered_performance = -1;
-            if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE) {
+            if (state->active_page == LSM_TAB_PERFORMANCE) {
                 for (int index = 0;
                      index < LSM_WINDOWS_PERFORMANCE_ITEM_COUNT; index++) {
                     if (PtInRect(
@@ -2409,15 +2377,15 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             }
 
             for (int index = 0;
-                 index < LSM_WINDOWS_PAGE_COUNT; index++) {
+                 index < LSM_TAB_COUNT; index++) {
                 if (PtInRect(&state->page_tabs[index], point)) {
-                    show_page(state, (LsmWindowsPage)index);
+                    show_page(state, (LsmTabIndex)index);
                     return 0;
                 }
             }
 
             if (state->active_page ==
-                LSM_WINDOWS_PAGE_PERFORMANCE) {
+                LSM_TAB_PERFORMANCE) {
                 for (int index = 0;
                      index < LSM_WINDOWS_PERFORMANCE_ITEM_COUNT;
                      index++) {
@@ -2427,7 +2395,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                             (LsmWindowsPerformanceItem)index;
                         set_status(
                             state,
-                            index == LSM_WINDOWS_PERFORMANCE_CPU
+                            index == LSM_PAGE_CPU
                                 ? L"Performance - CPU"
                                 : L"Performance - Memory");
                         InvalidateRect(window, NULL, FALSE);
