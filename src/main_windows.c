@@ -1194,12 +1194,22 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     scale_name.right = scale.left + 180;
     RECT scale_max = scale;
     scale_max.left = scale.right - 80;
+    wchar_t cpu_graph_caption[64];
+    wchar_t percent_scale_max[16];
+    text_to_wide(
+        lsm_cpu_graph_caption(),
+        cpu_graph_caption,
+        sizeof(cpu_graph_caption) / sizeof(cpu_graph_caption[0]));
+    text_to_wide(
+        lsm_percent_scale_max_label(),
+        percent_scale_max,
+        sizeof(percent_scale_max) / sizeof(percent_scale_max[0]));
     draw_text(
-        dc, L"% Utilisation", scale_name, state->body_font,
+        dc, cpu_graph_caption, scale_name, state->body_font,
         state->palette.summary,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
-        dc, L"100%", scale_max, state->body_font,
+        dc, percent_scale_max, scale_max, state->body_font,
         state->palette.summary,
         DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
@@ -1209,8 +1219,8 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right,
         content.bottom - details_height - gap
     };
-    if (graph.bottom < graph.top + 120)
-        graph.bottom = graph.top + 120;
+    if (graph.bottom < graph.top + LSM_PRIMARY_GRAPH_MIN_HEIGHT)
+        graph.bottom = graph.top + LSM_PRIMARY_GRAPH_MIN_HEIGHT;
     draw_history_graph(
         state, dc, graph, state->cpu_history,
         state->history_count, state->history_position,
@@ -1253,8 +1263,10 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     const int metric_col_width = (metrics_width - 28) / 2;
     const int metric_row_height = 36;
     for (int index = 0; index < LSM_CPU_METRIC_COUNT; index++) {
-        const int col = index % 2;
-        const int row = index / 2;
+        const LsmPresentationGridPosition position =
+            lsm_cpu_metric_position((LsmCpuMetricField)index);
+        const int col = (int)position.column;
+        const int row = (int)position.row;
         RECT block = {
             details.left + pad + col * (metric_col_width + 28),
             details.top + 12 + row * metric_row_height,
@@ -1287,7 +1299,9 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     const int info_row_height = 25;
     int detail_label_width[2] = {0, 0};
     for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
-        const int group = index / 7;
+        const LsmPresentationGridPosition position =
+            lsm_cpu_detail_position((LsmCpuDetailField)index);
+        const int group = (int)position.column;
         const int measured = measure_text_width(
             dc, state->body_font, detail_names[index]);
         if (measured > detail_label_width[group])
@@ -1299,8 +1313,10 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     }
 
     for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
-        const int group = index / 7;
-        const int row = index % 7;
+        const LsmPresentationGridPosition position =
+            lsm_cpu_detail_position((LsmCpuDetailField)index);
+        const int group = (int)position.column;
+        const int row = (int)position.row;
         RECT pair = {
             info_left + group * (info_col_width + 18),
             details.top + 14 + row * info_row_height,
@@ -1415,7 +1431,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 
     const int header_height = 72;
     const int composition_label_height = 24;
-    const int composition_height = 70;
+    const int composition_height = LSM_MEMORY_COMPOSITION_HEIGHT;
     const int details_height = 196;
     const int gap = 7;
 
@@ -1455,12 +1471,22 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         dc, total_text, total_rect, state->body_font,
         state->palette.summary,
         DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    wchar_t memory_graph_caption[64];
+    wchar_t percent_scale_max[16];
+    text_to_wide(
+        lsm_memory_graph_caption(),
+        memory_graph_caption,
+        sizeof(memory_graph_caption) / sizeof(memory_graph_caption[0]));
+    text_to_wide(
+        lsm_percent_scale_max_label(),
+        percent_scale_max,
+        sizeof(percent_scale_max) / sizeof(percent_scale_max[0]));
     draw_text(
-        dc, L"Memory usage", usage_name, state->body_font,
+        dc, memory_graph_caption, usage_name, state->body_font,
         state->palette.summary,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
-        dc, L"100%", usage_max, state->body_font,
+        dc, percent_scale_max, usage_max, state->body_font,
         state->palette.summary,
         DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
@@ -1473,8 +1499,8 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right,
         content.bottom - reserved_below_graph
     };
-    if (graph.bottom < graph.top + 120)
-        graph.bottom = graph.top + 120;
+    if (graph.bottom < graph.top + LSM_PRIMARY_GRAPH_MIN_HEIGHT)
+        graph.bottom = graph.top + LSM_PRIMARY_GRAPH_MIN_HEIGHT;
     draw_history_graph(
         state, dc, graph, state->memory_history,
         state->history_count, state->history_position,
@@ -1486,8 +1512,13 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         content.right,
         graph.bottom + gap + composition_label_height
     };
+    wchar_t composition_caption[64];
+    text_to_wide(
+        lsm_memory_composition_caption(),
+        composition_caption,
+        sizeof(composition_caption) / sizeof(composition_caption[0]));
     draw_text(
-        dc, L"Memory composition", composition_label,
+        dc, composition_caption, composition_label,
         state->body_font, state->palette.summary,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
@@ -1536,8 +1567,10 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     const int metric_col_width = (usage_width - 30) / 2;
     const int metric_row_height = 34;
     for (int index = 0; index < LSM_MEMORY_METRIC_COUNT; index++) {
-        const int col = index % 2;
-        const int row = index / 2;
+        const LsmPresentationGridPosition position =
+            lsm_memory_metric_position((LsmMemoryMetricField)index);
+        const int col = (int)position.column;
+        const int row = (int)position.row;
         RECT block = {
             details.left + pad + col * (metric_col_width + 30),
             details.top + 10 + row * metric_row_height,
@@ -1575,11 +1608,14 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         hardware_label_width = info_width - 72;
 
     for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
+        const LsmPresentationGridPosition position =
+            lsm_memory_detail_position((LsmMemoryDetailField)index);
+        const int row = (int)position.row;
         RECT pair = {
             info_left,
-            details.top + 16 + index * 29,
+            details.top + 16 + row * 29,
             info_left + info_width,
-            details.top + 16 + (index + 1) * 29
+            details.top + 16 + (row + 1) * 29
         };
         draw_detail_pair(
             state, dc, pair,
