@@ -29,6 +29,7 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <pdh.h>
+#include <pdhmsg.h>
 #include <psapi.h>
 #include <winioctl.h>
 
