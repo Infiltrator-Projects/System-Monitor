@@ -785,6 +785,23 @@ int main(void)
     if (lsm_performance_selection_active(NULL)) return 2;
     lsm_performance_selection_end(NULL);
 
+    if (!lsm_performance_selection_matches(
+            "disk-old-hash", "nvme0n1",
+            "disk-old-hash", "nvme0n1", true))
+        return 8;
+    if (!lsm_performance_selection_matches(
+            "disk-old-hash", "nvme0n1",
+            "disk-promoted-hash", "nvme0n1", true))
+        return 9;
+    if (lsm_performance_selection_matches(
+            "disk-old-hash", "nvme0n1",
+            "network-promoted-hash", "nvme0n1", false))
+        return 10;
+    if (lsm_performance_selection_matches(
+            "disk-old-hash", "nvme0n1",
+            "disk-other-hash", "sda", true))
+        return 11;
+
     for (size_t step = 0; step < TEST_SWITCH_COUNT; step++) {
         const size_t destination = (step + 1U) % TEST_BUTTON_COUNT;
         set_button_active(&fixture, destination, true);
