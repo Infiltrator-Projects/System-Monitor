@@ -96,13 +96,13 @@ jobs:
             src/main_windows.c src/presentation_contract.c src/performance_view.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
             "${common_portable[@]}" \
-            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lcomctl32 -lgdi32 -ldwmapi \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o "$windows_app"
           strings "$windows_app" | grep -Fq "$version"
           pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
-          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
+          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|PDH\.DLL|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
             echo "Windows GUI has an unexpected non-system runtime dependency." >&2
             exit 1
           fi
