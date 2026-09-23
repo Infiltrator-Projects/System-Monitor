@@ -2,6 +2,14 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.73 - 2026-09-23
+
+- Replace the raw white Win32 preview layout with the current System Monitor/Infiltratr presentation hierarchy: top-level product tabs across the top and a dedicated Performance resource rail on the left.
+- Apply Common 1.19.24's Night design contract to the native Windows shell, including the #050608 canvas, graphite panel/card/surface layers, #00ADEF accent, shared spacing/radius metrics and project typography fallbacks.
+- Add the Windows headline summary bar and live CPU/memory history graphs so Performance visually follows the Linux product grammar while retaining the existing native Windows data sources.
+- Keep Processes as a dark native read-only list and keep unimplemented Windows pages visible as explicit placeholders instead of presenting unrelated native-control layouts.
+- Use a dark Windows title-bar hint where supported without making startup depend on that optional non-client styling.
+
 ## 1.0.72 - 2026-09-23
 
 - Move the large retained Windows application state, including `LsmMonitor`, from the default GUI-thread stack to heap ownership; native Windows validation reproduced the previous startup failure as `STATUS_STACK_OVERFLOW` before first paint.
