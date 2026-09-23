@@ -10,6 +10,7 @@ This changelog records user-visible, compatibility, architecture and validation 
 - Resolve Windows process account identity and current-user ownership from access-token SIDs so process categorisation and application-history keys do not use a PID-based approximation.
 - Keep Windows command-line and GPU/cgroup enrichment plus all process-control operations explicitly unsupported in this first slice rather than fabricating parity.
 - Add a MinGW cross-compile gate for both Windows backend translation units and keep the existing i386 ELF portability gate scoped to Linux sources, without claiming a complete or supported Windows application build; Linux remains the released desktop target.
+- Publish a small Windows console backend-probe executable with 1.0.70 so the new CPU/memory and read-only process collectors can be exercised on real Windows systems before the full Windows GUI exists.
 
 ## 1.0.69 - 2026-09-22
 
