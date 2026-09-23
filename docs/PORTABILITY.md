@@ -18,6 +18,8 @@ Application-facing snapshots and contracts currently remain plain C because that
 
 Linux-specific paths, ioctls, signals, scheduler/affinity operations, D-Bus calls and driver ABI knowledge belong below platform seams. A future Windows, BSD, Solaris or other backend should implement the same application-facing contracts using that platform's native interfaces.
 
+The first Windows implementation now exists at `src/monitor_backend_windows.c`. Its deliberately narrow contract slice covers aggregate CPU utilisation, logical processor count, uptime, process/thread/handle totals and physical/commit memory through Win32/PSAPI. It does not yet make System Monitor a supported Windows application: disks, networks, pressure, accelerators, batteries, the process/service/user/startup backends and Windows presentation/build integration remain future native work. Unsupported fields stay zero/unavailable rather than being inferred from Linux semantics.
+
 GTK 3 is currently the Linux presentation toolkit; reusable accounting, parsing and model layers must not depend on GTK.
 
 Portability is judged at the contract boundary, not by forcing implementations toward a lowest common denominator. Linux implementation files should use Linux-native facilities when they provide the strongest semantics, even when that requires more platform-specific code; the requirement is that those facilities do not leak into a platform-neutral API. A weaker implementation must not be chosen merely because it is easier to share across platforms.

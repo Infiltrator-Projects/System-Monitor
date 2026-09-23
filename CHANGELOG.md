@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.70 - 2026-09-23
+
+- Add the first deliberately limited Windows native monitor backend behind the existing `monitor_platform.h` seam.
+- Collect aggregate CPU utilisation, logical processor count, uptime, system process/thread/handle totals and physical/commit memory directly through Win32/PSAPI while leaving unsupported device telemetry unavailable.
+- Add a MinGW cross-compile gate for the Windows backend without claiming a complete or supported Windows application build; Linux remains the released desktop target.
+
 ## 1.0.69 - 2026-09-22
 
 - Pin Make, CMake and the source gitlink to released Common 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`, keeping all build paths on the same exact shared revision.

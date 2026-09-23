@@ -49,6 +49,7 @@ users.c
 user_backend_linux.c
 monitor.c
 monitor_backend_linux.c
+monitor_backend_windows.c
 monitor_cpu_memory.c
 cpu_accounting.c
 memory_accounting.c
