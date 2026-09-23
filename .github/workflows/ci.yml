@@ -148,7 +148,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake doxygen gcc-multilib g++-multilib git libc6-dev-i386 \
-            gcc-mingw-w64-x86-64 libgtk-3-dev pkg-config wine64 xauth xvfb
+            gcc-mingw-w64-x86-64 libgtk-3-dev pkg-config
 
       - name: Verify CMake application build
         run: |
@@ -163,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           x86_64-w64-mingw32-gcc \
-            -std=c17 -O2 -g -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc \
@@ -178,38 +178,6 @@ jobs:
             echo "Windows GUI has an unexpected non-system runtime dependency." >&2
             exit 1
           fi
-
-      - name: Launch Windows GUI under Wine
-        shell: bash
-        run: |
-          set -euo pipefail
-          wine_runner=$(command -v wine64 || command -v wine || true)
-          if [[ -z "$wine_runner" && -x /usr/lib/wine/wine64 ]]; then
-            wine_runner=/usr/lib/wine/wine64
-          fi
-          test -n "$wine_runner"
-          rm -f windows-startup-smoke.txt windows-wine.log
-          set +e
-          WINEDEBUG=-all timeout 60s xvfb-run -a "$wine_runner" \
-            build-cmake/system-monitor-windows.exe --startup-smoke \
-            2>&1 | tee windows-wine.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [[ -f windows-startup-smoke.txt ]]; then
-            printf 'Windows startup smoke status: '
-            cat windows-startup-smoke.txt
-          else
-            echo 'Windows startup smoke produced no status file.'
-          fi
-          crash_address=$(sed -nE \
-            's/.*stack overflow at address ([0-9A-Fa-f]+).*/0x\1/p' \
-            windows-wine.log | tail -n 1)
-          if [[ -n "$crash_address" ]]; then
-            printf 'Windows crash address: %s\n' "$crash_address"
-            x86_64-w64-mingw32-addr2line -f -C \
-              -e build-cmake/system-monitor-windows.exe "$crash_address" || true
-          fi
-          exit "$status"
 
       - name: Run canonical verification suite
         run: REQUIRE_I386=1 make check
@@ -289,3 +257,50 @@ jobs:
           test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" =             "install ok installed"
           test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" =             "$version"
 
+  windows-startup:
+    name: Verify Windows GUI startup
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Build and launch native Windows GUI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidates = @(
+            'C:\msys64\ucrt64\bin\gcc.exe',
+            'C:\msys64\mingw64\bin\gcc.exe'
+          )
+          $pathGcc = Get-Command gcc.exe -ErrorAction SilentlyContinue
+          if ($pathGcc) { $candidates += $pathGcc.Source }
+          $gcc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $gcc) { throw 'No native MinGW GCC compiler is available on the Windows runner.' }
+          Write-Host "Using Windows compiler: $gcc"
+
+          $arguments = @(
+            '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
+            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
+            '-Wstrict-prototypes', '-Wmissing-prototypes', '-Isrc',
+            'src/main_windows.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            '-lpsapi', '-ladvapi32', '-lcomctl32', '-lgdi32', '-static-libgcc', '-mwindows',
+            '-o', 'system-monitor-windows.exe'
+          )
+          & $gcc @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Windows GUI compile failed with exit code $LASTEXITCODE." }
+
+          Remove-Item windows-startup-smoke.txt -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -ArgumentList '--startup-smoke' -PassThru
+          if (-not $process.WaitForExit(30000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw 'Windows GUI startup smoke timed out.'
+          }
+          if ($process.ExitCode -ne 0) { throw "Windows GUI startup smoke failed with exit code $($process.ExitCode)." }
+          if (-not (Test-Path windows-startup-smoke.txt)) { throw 'Windows GUI startup smoke did not produce its status file.' }
+          $status = (Get-Content windows-startup-smoke.txt -Raw).Trim()
+          Write-Host "Windows startup smoke status: $status"
+          if ($status -ne 'success') { throw "Windows GUI startup stage failed: $status" }
