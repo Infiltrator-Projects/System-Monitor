@@ -370,6 +370,34 @@ static void draw_text(HDC dc, const wchar_t *text, RECT rect, HFONT font,
     DrawTextW(dc, text, -1, &rect, flags | DT_NOPREFIX);
 }
 
+static const wchar_t about_body_text[] =
+    L"Native Windows presentation using the Infiltratr "
+    L"Day/Night design contract and Linux product layout.\r\n\r\n"
+    L"CPU, memory and processes are live and read-only. "
+    L"Additional Windows collectors remain under active development.";
+
+static int measure_wrapped_text_height(
+    HWND reference_window, HFONT font,
+    const wchar_t *text, int width)
+{
+    if (!reference_window || !font || !text || width <= 0)
+        return 0;
+
+    HDC dc = GetDC(reference_window);
+    if (!dc) return 0;
+
+    HGDIOBJ previous = SelectObject(dc, font);
+    RECT measure = {0, 0, width, 0};
+    const int result = DrawTextW(
+        dc, text, -1, &measure,
+        DT_LEFT | DT_TOP | DT_WORDBREAK | DT_CALCRECT);
+    SelectObject(dc, previous);
+    ReleaseDC(reference_window, dc);
+
+    if (result <= 0) return 0;
+    return measure.bottom - measure.top;
+}
+
 static RECT about_ok_rect(HWND window)
 {
     RECT client = {0, 0, 0, 0};
@@ -430,11 +458,7 @@ static void paint_about_window(
         card.right - 18, card.bottom - 18
     };
     draw_text(
-        dc,
-        L"Native Windows presentation using the Infiltratr "
-        L"Day/Night design contract and Linux product layout.\r\n\r\n"
-        L"CPU, memory and processes are live and read-only. "
-        L"Additional Windows collectors remain under active development.",
+        dc, about_body_text,
         body, state->body_font, state->palette.summary,
         DT_LEFT | DT_TOP | DT_WORDBREAK);
 
@@ -529,18 +553,39 @@ static void show_about_window(LsmWindowsUiState *state)
 
     RECT owner = {0, 0, 0, 0};
     (void)GetWindowRect(state->window, &owner);
-    const int width = 560;
-    const int height = 285;
+
+    const DWORD style =
+        WS_POPUP | WS_CAPTION | WS_SYSMENU;
+    const DWORD ex_style = WS_EX_DLGMODALFRAME;
+    const int client_width = 560;
+    const int body_width = client_width - 72;
+    int body_height = measure_wrapped_text_height(
+        state->window, state->body_font,
+        about_body_text, body_width);
+    if (body_height < 78) body_height = 78;
+
+    const int client_height = 174 + body_height;
+    RECT window_rect = {
+        0, 0, client_width, client_height
+    };
+    if (!AdjustWindowRectEx(
+            &window_rect, style, FALSE, ex_style))
+        return;
+
+    const int width =
+        window_rect.right - window_rect.left;
+    const int height =
+        window_rect.bottom - window_rect.top;
     const int x =
         owner.left + ((owner.right - owner.left) - width) / 2;
     const int y =
         owner.top + ((owner.bottom - owner.top) - height) / 2;
 
     HWND about = CreateWindowExW(
-        WS_EX_DLGMODALFRAME,
+        ex_style,
         about_class_name,
         L"About System Monitor",
-        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        style,
         x, y, width, height,
         state->window, NULL, state->instance, state);
     if (!about) return;
