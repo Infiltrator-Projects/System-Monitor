@@ -12,6 +12,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 - Fix the Windows normal-start crash introduced by physical-disk discovery: the collector no longer places multi-megabyte arrays of partition-rich `LsmDiskInfo` objects on the GUI thread's default stack; discovery staging now lives on the heap and is copied into the shared monitor snapshot only after identity reconciliation.
 - Remove unnecessary duplicate old-network and old-GPU stack snapshots by comparing newly discovered identities against the retained shared model before publication.
 - Strengthen native Windows CI so verification now exercises both the lightweight first-paint smoke path and the real normal startup/backend path for five seconds, preventing collector-start crashes from passing as successful GUI startup.
+- Extend the Windows GPU backend from identification-only to live native telemetry without vendor SDKs: correlate active display adapters to Windows adapter LUIDs, sample the built-in GPU Engine performance counters, collapse per-process rows back into physical engines, and publish render, compute, video, video-processing, copy, overall utilisation and active-engine state through the existing shared `LsmGpuInfo` model.
+- Add DXGI adapter-memory telemetry keyed by the same LUID, publishing dedicated VRAM used/total/percentage for discrete adapters while explicitly classifying unified/shared-memory adapters instead of presenting system RAM as dedicated VRAM.
+- Add conservative SetupAPI display-adapter metadata, publishing driver provider/description, driver version and physical location only when Windows supplies a sufficiently strong device-identity match.
+- Keep unsupported generic Windows GPU measurements such as temperature, power and fan state explicitly unavailable rather than synthesising values or adding vendor-specific runtime dependencies.
+- Extend the verified Windows system-library contract for PDH, DXGI and SetupAPI while keeping the Windows artifact free of third-party runtime dependencies.
+- Recover GitHub Actions verification from a superseded hosted-run concurrency stall by advancing the Verify concurrency epoch without weakening main-only, exact-tested-commit release gating.
 
 ## 1.0.81 - 2026-09-23
 
