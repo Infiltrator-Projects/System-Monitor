@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Application translation units; both C and C++ sources are valid here.
 main.c
+main_windows.c
 pgo_training.c
 app.c
 app_runtime.c
