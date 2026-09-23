@@ -28,6 +28,7 @@
 #include <windows.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
+#include <pdh.h>
 #include <psapi.h>
 #include <winioctl.h>
 
@@ -36,11 +37,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #define LSM_WINDOWS_TOPOLOGY_REFRESH_MS 30000ULL
 #define LSM_WINDOWS_VOLUME_BUFFER 4096U
 #define LSM_WINDOWS_STORAGE_DESCRIPTOR_BUFFER 2048U
 #define LSM_WINDOWS_EXTENTS_BUFFER 4096U
+#define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
 
 typedef struct {
     bool valid;
@@ -68,6 +71,11 @@ typedef struct {
     ULONGLONG last_topology_tick;
     bool topology_refresh_requested;
     bool winsock_started;
+    PDH_HQUERY gpu_query;
+    PDH_HCOUNTER gpu_engine_counter;
+    bool gpu_query_ready;
+    LUID gpu_luids[LSM_MAX_GPUS];
+    bool gpu_luid_valid[LSM_MAX_GPUS];
     LsmWindowsDiskBaseline disks[LSM_MAX_DISKS];
     LsmWindowsNetBaseline nets[LSM_MAX_NETS];
 } LsmWindowsMonitorBackendState;
@@ -845,6 +853,434 @@ static void enumerate_networks(
     free(addresses);
 }
 
+static bool display_luid_for_name(
+    const char *display_name, LUID *adapter_luid)
+{
+    if (!display_name || !display_name[0] || !adapter_luid)
+        return false;
+
+    wchar_t target[64];
+    const int converted = MultiByteToWideChar(
+        CP_ACP, 0U, display_name, -1,
+        target, (int)(sizeof(target) / sizeof(target[0])));
+    if (converted <= 0)
+        return false;
+
+    UINT32 path_count = 0U;
+    UINT32 mode_count = 0U;
+    if (GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS ||
+        path_count == 0U)
+        return false;
+
+    DISPLAYCONFIG_PATH_INFO *paths =
+        (DISPLAYCONFIG_PATH_INFO *)calloc(
+            path_count, sizeof(*paths));
+    DISPLAYCONFIG_MODE_INFO *modes =
+        mode_count > 0U
+            ? (DISPLAYCONFIG_MODE_INFO *)calloc(
+                mode_count, sizeof(*modes))
+            : NULL;
+    if (!paths || (mode_count > 0U && !modes)) {
+        free(paths);
+        free(modes);
+        return false;
+    }
+
+    bool found = false;
+    LONG status = QueryDisplayConfig(
+        QDC_ONLY_ACTIVE_PATHS,
+        &path_count, paths, &mode_count, modes, NULL);
+    if (status == ERROR_SUCCESS) {
+        for (UINT32 index = 0U; index < path_count; index++) {
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source;
+            memset(&source, 0, sizeof(source));
+            source.header.type =
+                DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId =
+                paths[index].sourceInfo.adapterId;
+            source.header.id = paths[index].sourceInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&source.header) !=
+                    ERROR_SUCCESS ||
+                _wcsicmp(source.viewGdiDeviceName, target) != 0)
+                continue;
+
+            *adapter_luid = paths[index].sourceInfo.adapterId;
+            found = true;
+            break;
+        }
+    }
+
+    free(paths);
+    free(modes);
+    return found;
+}
+
+static bool parse_hex_component(
+    const wchar_t *text, unsigned long *value,
+    const wchar_t **end_text)
+{
+    if (!text || !value) return false;
+    wchar_t *end = NULL;
+    const unsigned long parsed = wcstoul(text, &end, 0);
+    if (!end || end == text) return false;
+    *value = parsed;
+    if (end_text) *end_text = end;
+    return true;
+}
+
+static bool parse_gpu_engine_luid(
+    const wchar_t *instance, LUID *luid)
+{
+    if (!instance || !luid) return false;
+    const wchar_t *cursor = wcsstr(instance, L"luid_");
+    if (!cursor) return false;
+    cursor += 5;
+
+    unsigned long high = 0UL;
+    unsigned long low = 0UL;
+    const wchar_t *end = NULL;
+    if (!parse_hex_component(cursor, &high, &end) ||
+        !end || *end != L'_')
+        return false;
+    cursor = end + 1;
+    if (!parse_hex_component(cursor, &low, NULL))
+        return false;
+
+    luid->HighPart = (LONG)(DWORD)high;
+    luid->LowPart = (DWORD)low;
+    return true;
+}
+
+static bool parse_gpu_engine_index(
+    const wchar_t *instance, const wchar_t *token,
+    DWORD *value)
+{
+    if (!instance || !token || !value) return false;
+    const wchar_t *cursor = wcsstr(instance, token);
+    if (!cursor) return false;
+    cursor += wcslen(token);
+
+    unsigned long parsed = 0UL;
+    if (!parse_hex_component(cursor, &parsed, NULL))
+        return false;
+    *value = (DWORD)parsed;
+    return true;
+}
+
+static const wchar_t *gpu_engine_type(const wchar_t *instance)
+{
+    if (!instance) return NULL;
+    const wchar_t *type = wcsstr(instance, L"engtype_");
+    return type ? type + 8 : NULL;
+}
+
+static bool gpu_luid_equal(LUID left, LUID right)
+{
+    return left.LowPart == right.LowPart &&
+        left.HighPart == right.HighPart;
+}
+
+static int gpu_index_for_luid(
+    const LsmWindowsMonitorBackendState *state,
+    size_t gpu_count, LUID luid)
+{
+    if (!state) return -1;
+    const size_t limit =
+        gpu_count < LSM_MAX_GPUS ? gpu_count : LSM_MAX_GPUS;
+    for (size_t index = 0U; index < limit; index++) {
+        if (state->gpu_luid_valid[index] &&
+            gpu_luid_equal(state->gpu_luids[index], luid))
+            return (int)index;
+    }
+    return -1;
+}
+
+typedef enum {
+    LSM_WINDOWS_GPU_ENGINE_OTHER = 0,
+    LSM_WINDOWS_GPU_ENGINE_RENDER,
+    LSM_WINDOWS_GPU_ENGINE_COMPUTE,
+    LSM_WINDOWS_GPU_ENGINE_VIDEO,
+    LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE,
+    LSM_WINDOWS_GPU_ENGINE_COPY
+} LsmWindowsGpuEngineType;
+
+static LsmWindowsGpuEngineType classify_gpu_engine(
+    const wchar_t *type)
+{
+    if (!type) return LSM_WINDOWS_GPU_ENGINE_OTHER;
+    if (_wcsnicmp(type, L"3D", 2U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_RENDER;
+    if (_wcsnicmp(type, L"Compute", 7U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_COMPUTE;
+    if (_wcsnicmp(type, L"VideoDecode", 11U) == 0 ||
+        _wcsnicmp(type, L"VideoEncode", 11U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_VIDEO;
+    if (_wcsnicmp(type, L"VideoProcessing", 15U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE;
+    if (_wcsnicmp(type, L"Copy", 4U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_COPY;
+    return LSM_WINDOWS_GPU_ENGINE_OTHER;
+}
+
+typedef struct {
+    bool used;
+    size_t gpu_index;
+    DWORD physical_index;
+    DWORD engine_index;
+    LsmWindowsGpuEngineType type;
+    double utilisation;
+} LsmWindowsGpuEngineSample;
+
+static void reset_gpu_engine_metrics(LsmGpuInfo *gpu)
+{
+    if (!gpu) return;
+    gpu->utilization_percent = 0.0;
+    gpu->active_engine_percent = 0.0;
+    gpu->render_percent = 0.0;
+    gpu->compute_percent = 0.0;
+    gpu->video_percent = 0.0;
+    gpu->video_enhance_percent = 0.0;
+    gpu->copy_percent = 0.0;
+    gpu->utilization_available = false;
+    gpu->render_available = false;
+    gpu->compute_available = false;
+    gpu->video_available = false;
+    gpu->video_enhance_available = false;
+    gpu->copy_available = false;
+    gpu->engine_metrics_capable = false;
+    gpu->active_engine[0] = '\0';
+}
+
+static double clamp_percent(double value)
+{
+    if (value < 0.0) return 0.0;
+    return value > 100.0 ? 100.0 : value;
+}
+
+static void apply_gpu_engine_sample(
+    LsmGpuInfo *gpu, LsmWindowsGpuEngineType type,
+    double value)
+{
+    if (!gpu) return;
+    const double bounded = clamp_percent(value);
+    switch (type) {
+        case LSM_WINDOWS_GPU_ENGINE_RENDER:
+            if (!gpu->render_available ||
+                bounded > gpu->render_percent)
+                gpu->render_percent = bounded;
+            gpu->render_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_COMPUTE:
+            if (!gpu->compute_available ||
+                bounded > gpu->compute_percent)
+                gpu->compute_percent = bounded;
+            gpu->compute_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_VIDEO:
+            if (!gpu->video_available ||
+                bounded > gpu->video_percent)
+                gpu->video_percent = bounded;
+            gpu->video_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE:
+            if (!gpu->video_enhance_available ||
+                bounded > gpu->video_enhance_percent)
+                gpu->video_enhance_percent = bounded;
+            gpu->video_enhance_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_COPY:
+            if (!gpu->copy_available ||
+                bounded > gpu->copy_percent)
+                gpu->copy_percent = bounded;
+            gpu->copy_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_OTHER:
+        default:
+            break;
+    }
+
+    if (bounded > gpu->utilization_percent)
+        gpu->utilization_percent = bounded;
+}
+
+static void finalise_gpu_engine_metrics(LsmGpuInfo *gpu)
+{
+    if (!gpu) return;
+    gpu->engine_metrics_capable =
+        gpu->render_available || gpu->compute_available ||
+        gpu->video_available || gpu->video_enhance_available ||
+        gpu->copy_available;
+    gpu->utilization_available = gpu->engine_metrics_capable;
+    if (!gpu->engine_metrics_capable)
+        return;
+
+    double peak = 0.0;
+    const char *name = "Idle";
+#define CONSIDER_GPU_ENGINE(available, value, label) \
+    do { \
+        if ((available) && (value) > peak) { \
+            peak = (value); \
+            name = (label); \
+        } \
+    } while (0)
+    CONSIDER_GPU_ENGINE(gpu->render_available, gpu->render_percent, "3D");
+    CONSIDER_GPU_ENGINE(
+        gpu->compute_available, gpu->compute_percent, "Compute");
+    CONSIDER_GPU_ENGINE(gpu->video_available, gpu->video_percent, "Video");
+    CONSIDER_GPU_ENGINE(
+        gpu->video_enhance_available,
+        gpu->video_enhance_percent, "Video processing");
+    CONSIDER_GPU_ENGINE(gpu->copy_available, gpu->copy_percent, "Copy");
+#undef CONSIDER_GPU_ENGINE
+
+    gpu->active_engine_percent = peak;
+    infiltratr_copy_string(
+        gpu->active_engine, sizeof(gpu->active_engine), name);
+    gpu->supported_metrics = true;
+    infiltratr_copy_string(
+        gpu->metrics_source, sizeof(gpu->metrics_source),
+        "Windows GPU Engine performance counters");
+}
+
+static void initialise_gpu_query(
+    LsmWindowsMonitorBackendState *state)
+{
+    if (!state || state->gpu_query_ready) return;
+
+    PDH_HQUERY query = NULL;
+    if (PdhOpenQueryW(NULL, 0U, &query) != ERROR_SUCCESS)
+        return;
+
+    PDH_HCOUNTER counter = NULL;
+    const PDH_STATUS added = PdhAddEnglishCounterW(
+        query,
+        L"\\GPU Engine(*)\\Utilization Percentage",
+        0U, &counter);
+    if (added != ERROR_SUCCESS) {
+        PdhCloseQuery(query);
+        return;
+    }
+
+    if (PdhCollectQueryData(query) != ERROR_SUCCESS) {
+        PdhCloseQuery(query);
+        return;
+    }
+
+    state->gpu_query = query;
+    state->gpu_engine_counter = counter;
+    state->gpu_query_ready = true;
+}
+
+static void update_gpu_engine_metrics(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state || monitor->gpu_count == 0U)
+        return;
+
+    for (size_t index = 0U; index < monitor->gpu_count; index++)
+        reset_gpu_engine_metrics(&monitor->gpus[index]);
+
+    initialise_gpu_query(state);
+    if (!state->gpu_query_ready ||
+        PdhCollectQueryData(state->gpu_query) != ERROR_SUCCESS)
+        return;
+
+    DWORD buffer_size = 0U;
+    DWORD item_count = 0U;
+    PDH_STATUS status = PdhGetFormattedCounterArrayW(
+        state->gpu_engine_counter, PDH_FMT_DOUBLE,
+        &buffer_size, &item_count, NULL);
+    if (status != PDH_MORE_DATA || buffer_size == 0U)
+        return;
+
+    PPDH_FMT_COUNTERVALUE_ITEM_W items =
+        (PPDH_FMT_COUNTERVALUE_ITEM_W)malloc(buffer_size);
+    if (!items) return;
+
+    status = PdhGetFormattedCounterArrayW(
+        state->gpu_engine_counter, PDH_FMT_DOUBLE,
+        &buffer_size, &item_count, items);
+    if (status != ERROR_SUCCESS) {
+        free(items);
+        return;
+    }
+
+    LsmWindowsGpuEngineSample engines[
+        LSM_WINDOWS_GPU_ENGINE_LIMIT];
+    memset(engines, 0, sizeof(engines));
+    size_t engine_count = 0U;
+
+    for (DWORD item = 0U; item < item_count; item++) {
+        const PDH_FMT_COUNTERVALUE *formatted =
+            &items[item].FmtValue;
+        if (formatted->CStatus != PDH_CSTATUS_VALID_DATA &&
+            formatted->CStatus != PDH_CSTATUS_NEW_DATA)
+            continue;
+
+        const double value = formatted->doubleValue;
+        if (!(value >= 0.0) || value > 1000000.0)
+            continue;
+
+        LUID luid;
+        DWORD physical_index = 0U;
+        DWORD engine_index = 0U;
+        if (!parse_gpu_engine_luid(items[item].szName, &luid) ||
+            !parse_gpu_engine_index(
+                items[item].szName, L"phys_", &physical_index) ||
+            !parse_gpu_engine_index(
+                items[item].szName, L"eng_", &engine_index))
+            continue;
+
+        const int matched_gpu =
+            gpu_index_for_luid(state, monitor->gpu_count, luid);
+        if (matched_gpu < 0)
+            continue;
+
+        const LsmWindowsGpuEngineType type =
+            classify_gpu_engine(gpu_engine_type(items[item].szName));
+        if (type == LSM_WINDOWS_GPU_ENGINE_OTHER)
+            continue;
+
+        size_t engine = 0U;
+        for (; engine < engine_count; engine++) {
+            if (engines[engine].gpu_index == (size_t)matched_gpu &&
+                engines[engine].physical_index == physical_index &&
+                engines[engine].engine_index == engine_index &&
+                engines[engine].type == type)
+                break;
+        }
+        if (engine == engine_count) {
+            if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT)
+                continue;
+            engines[engine].used = true;
+            engines[engine].gpu_index = (size_t)matched_gpu;
+            engines[engine].physical_index = physical_index;
+            engines[engine].engine_index = engine_index;
+            engines[engine].type = type;
+            engines[engine].utilisation = 0.0;
+            engine_count++;
+        }
+        engines[engine].utilisation += value;
+    }
+
+    free(items);
+
+    for (size_t engine = 0U; engine < engine_count; engine++) {
+        if (!engines[engine].used ||
+            engines[engine].gpu_index >= monitor->gpu_count)
+            continue;
+        apply_gpu_engine_sample(
+            &monitor->gpus[engines[engine].gpu_index],
+            engines[engine].type,
+            engines[engine].utilisation);
+    }
+    for (size_t index = 0U; index < monitor->gpu_count; index++)
+        finalise_gpu_engine_metrics(&monitor->gpus[index]);
+}
+
 static bool gpu_identity_changed(
     const LsmGpuInfo *old_gpus, size_t old_count,
     const LsmGpuInfo *new_gpus, size_t new_count)
@@ -869,9 +1305,13 @@ static bool gpu_already_present(
     return false;
 }
 
-static void enumerate_gpus(LsmMonitor *monitor)
+static void enumerate_gpus(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
 {
-    if (!monitor) return;
+    if (!monitor || !state) return;
+
+    memset(state->gpu_luids, 0, sizeof(state->gpu_luids));
+    memset(state->gpu_luid_valid, 0, sizeof(state->gpu_luid_valid));
 
     LsmGpuInfo discovered[LSM_MAX_GPUS];
     memset(discovered, 0, sizeof(discovered));
@@ -895,7 +1335,8 @@ static void enumerate_gpus(LsmMonitor *monitor)
         if (gpu_already_present(discovered, count, identity))
             continue;
 
-        LsmGpuInfo *gpu = &discovered[count++];
+        const size_t gpu_index = count++;
+        LsmGpuInfo *gpu = &discovered[gpu_index];
         infiltratr_copy_string(gpu->name, sizeof(gpu->name), device.DeviceString);
         infiltratr_copy_string(
             gpu->display_identifier, sizeof(gpu->display_identifier),
@@ -908,6 +1349,12 @@ static void enumerate_gpus(LsmMonitor *monitor)
         gpu->supported_metrics = false;
         gpu->utilization_available = false;
         gpu->engine_metrics_capable = false;
+
+        LUID luid;
+        if (display_luid_for_name(device.DeviceName, &luid)) {
+            state->gpu_luids[gpu_index] = luid;
+            state->gpu_luid_valid[gpu_index] = true;
+        }
     }
 
     if (gpu_identity_changed(
@@ -936,7 +1383,7 @@ static void refresh_topology_and_devices(
     enumerate_disk_volumes(monitor);
     enumerate_networks(monitor, state, elapsed);
     if (due) {
-        enumerate_gpus(monitor);
+        enumerate_gpus(monitor, state);
         state->last_topology_tick = now;
         state->topology_refresh_requested = false;
     }
@@ -985,6 +1432,7 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     const bool cpu_ok = update_cpu_snapshot(monitor, state);
     const bool memory_ok = update_memory_snapshot(monitor);
     refresh_topology_and_devices(monitor, state, elapsed, false);
+    update_gpu_engine_metrics(monitor, state);
     return cpu_ok && memory_ok;
 }
 
@@ -1001,6 +1449,8 @@ void lsm_monitor_platform_destroy(LsmMonitor *monitor)
     if (!monitor) return;
     LsmWindowsMonitorBackendState *state =
         (LsmWindowsMonitorBackendState *)monitor->backend_state;
+    if (state && state->gpu_query)
+        PdhCloseQuery(state->gpu_query);
     if (state && state->winsock_started)
         WSACleanup();
     free(state);
