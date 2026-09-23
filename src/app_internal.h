@@ -20,6 +20,7 @@
 #include "filesystem_inventory.h"
 #include "monitor_types.h"
 #include "performance_selection.h"
+#include "presentation_contract.h"
 
 #include <infiltratr/design.h>
 
@@ -30,18 +31,6 @@ typedef struct LsmProcessRecorder LsmProcessRecorder;
 typedef struct LsmHistorySaveCoordinator LsmHistorySaveCoordinator;
 typedef struct LsmWifiMetadata LsmWifiMetadata;
 typedef struct LsmApplicationCatalog LsmApplicationCatalog;
-
-/** Type of monitoring device represented by a performance page. */
-typedef enum {
-    LSM_PAGE_CPU,
-    LSM_PAGE_MEMORY,
-    LSM_PAGE_DISK,
-    LSM_PAGE_NETWORK,
-    LSM_PAGE_BLUETOOTH,
-    LSM_PAGE_GPU,
-    LSM_PAGE_BATTERY,
-    LSM_PAGE_NPU
-} LsmPageType;
 
 /** Named CPU-page widgets; field identity replaces fragile numeric indexes. */
 typedef struct {
