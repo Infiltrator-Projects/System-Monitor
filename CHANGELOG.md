@@ -4,12 +4,16 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## 1.0.80 - 2026-09-23
 
-- Correct the cross-platform architecture so Linux and Windows consume one platform-neutral System Monitor presentation contract instead of maintaining independent copies of page identity, tab labels, Performance resource identity, colours, geometry and CPU/Memory field ordering.
+- Correct the cross-platform architecture so Linux and Windows consume one platform-neutral System Monitor presentation contract instead of maintaining independent copies of page identity, tab labels, Performance resource identity, colours, geometry, CPU/Memory field ordering and value-formatting policy.
 - Move top-level tab labels, Performance titles/stack identities, canonical rail/graph geometry, resource colours, CPU/Memory metric captions, detail captions and grid positions into `presentation_contract.[ch]`.
-- Convert the GTK CPU/Memory builders to consume the shared field-placement schema instead of hard-coded grid attachments.
-- Convert the Win32 renderer to consume the same `LsmTabIndex`, `LsmPageType`, labels, colours, geometry and field-placement schema.
-- Build the same shared presentation module into Linux, MinGW cross-builds, native Windows startup verification and Windows release artifacts.
-- Keep toolkit mechanics native: GTK remains the Linux renderer and Win32/GDI remains the Windows renderer; product semantics and layout specification no longer fork by operating system.
+- Add `performance_view.[ch]` as a toolkit-neutral CPU/Memory view model. Both GTK and Win32 now receive the same subtitle, rail summary, metric strings and detail strings from one `LsmMonitor` snapshot.
+- Make optional CPU telemetry availability explicit for virtualisation, temperature, load average, interrupt rate and context-switch rate so valid zero/false values are distinct from unsupported or uncollected data.
+- Convert the GTK CPU/Memory builders and presenter to consume the shared field-placement schema and shared view model instead of hard-coded grid attachments and private value formatting.
+- Convert the Win32 renderer to consume the same `LsmTabIndex`, `LsmPageType`, labels, colours, geometry, field-placement schema and formatted CPU/Memory view model.
+- Link the pinned Common 1.19.24 portable formatter sources into the native Windows preview/release build, so both platforms use the same generic formatting implementation rather than parallel unit-formatting code.
+- Add a toolkit-neutral presentation smoke test that locks shared labels, field positions and availability semantics, including sampled zero values versus `N/A`.
+- Build the shared presentation modules into Linux, MinGW cross-builds, native Windows startup verification and Windows release artifacts.
+- Keep toolkit mechanics native: GTK remains the Linux renderer and Win32/GDI remains the Windows renderer; collectors remain native OS adapters, while product semantics and presentation policy no longer fork by operating system.
 
 ## 1.0.79 - 2026-09-23
 
