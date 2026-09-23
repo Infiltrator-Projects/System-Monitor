@@ -71,16 +71,20 @@ jobs:
           make -j2 deb native-installer
           version=$(tr -d '[:space:]' < support/VERSION)
           windows_app="system-monitor-${version}-windows.exe"
+          version_header=build/windows-version.h
+          mkdir -p build
+          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc \
+            -Isrc -include "$version_header" \
             src/main_windows.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
             -lpsapi -ladvapi32 -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o "$windows_app"
+          strings "$windows_app" | grep -Fq "$version"
           pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
           if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
