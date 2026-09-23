@@ -21,6 +21,7 @@ graph.c
 sample_history.c
 performance_selection.c
 presentation_contract.c
+performance_view.c
 gpu_metrics.c
 performance.c
 performance_pages_core.c
