@@ -1194,7 +1194,7 @@ static void update_gpu_engine_metrics(
     PDH_STATUS status = PdhGetFormattedCounterArrayW(
         state->gpu_engine_counter, PDH_FMT_DOUBLE,
         &buffer_size, &item_count, NULL);
-    if (status != PDH_MORE_DATA || buffer_size == 0U)
+    if (status != (PDH_STATUS)PDH_MORE_DATA || buffer_size == 0U)
         return;
 
     PPDH_FMT_COUNTERVALUE_ITEM_W items =
