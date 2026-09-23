@@ -138,10 +138,10 @@ static void check_device_projection(void)
     lsm_disk_performance_view(&disk, 0U, &view);
     assert(strcmp(view.title, "Disk 0 — Test NVMe") == 0);
     assert(strcmp(view.rail_value, "37%") == 0);
-    assert(strcmp(view.metric_labels[0], "Read speed") == 0);
-    assert(strcmp(view.metric_values[0], "2.5 MB/s") == 0);
-    assert(strcmp(view.metric_values[1], "1.2 MB/s") == 0);
-    assert(strcmp(view.metric_values[8], "Yes") == 0);
+    assert(strcmp(view.metric_labels[LSM_DISK_VIEW_READ_SPEED], "Read speed") == 0);
+    assert(strcmp(view.metric_values[LSM_DISK_VIEW_READ_SPEED], "2.5 MB/s") == 0);
+    assert(strcmp(view.metric_values[LSM_DISK_VIEW_WRITE_SPEED], "1.2 MB/s") == 0);
+    assert(strcmp(view.metric_values[LSM_DISK_VIEW_SYSTEM_DISK], "Yes") == 0);
 
     LsmNetInfo net;
     memset(&net, 0, sizeof(net));
@@ -161,8 +161,8 @@ static void check_device_projection(void)
     assert(strcmp(view.title, "Ethernet 0 — Test Adapter") == 0);
     assert(strstr(view.rail_value, "S:") != NULL);
     assert(strstr(view.rail_value, "R:") != NULL);
-    assert(strcmp(view.metric_values[2], "1.00 Gb/s") == 0);
-    assert(strcmp(view.metric_values[4], "192.0.2.10") == 0);
+    assert(strcmp(view.metric_values[LSM_NETWORK_VIEW_LINK_SPEED], "1.00 Gb/s") == 0);
+    assert(strcmp(view.metric_values[LSM_NETWORK_VIEW_IPV4], "192.0.2.10") == 0);
 
     LsmGpuInfo gpu;
     memset(&gpu, 0, sizeof(gpu));
@@ -173,9 +173,24 @@ static void check_device_projection(void)
     lsm_gpu_performance_view(&gpu, 0U, &view);
     assert(strcmp(view.title, "GPU 0 — Test GPU") == 0);
     assert(strcmp(view.rail_value, "N/A") == 0);
-    assert(strcmp(view.metric_labels[0], "Product") == 0);
-    assert(strcmp(view.metric_values[0], "Test GPU") == 0);
-    assert(strcmp(view.metric_values[1], "N/A") == 0);
+    assert(strcmp(view.metric_labels[LSM_GPU_VIEW_PRODUCT], "Product") == 0);
+    assert(strcmp(view.metric_values[LSM_GPU_VIEW_PRODUCT], "Test GPU") == 0);
+    assert(strcmp(view.metric_values[LSM_GPU_VIEW_UTILISATION], "N/A") == 0);
+    assert(strcmp(
+        view.metric_values[LSM_GPU_VIEW_TELEMETRY],
+        "Windows display adapter identification") == 0);
+
+    gpu.metrics_source[0] = '\0';
+    gpu.supported_metrics = false;
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strcmp(
+        view.metric_values[LSM_GPU_VIEW_TELEMETRY],
+        "Basic identification only") == 0);
+    gpu.supported_metrics = true;
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strcmp(
+        view.metric_values[LSM_GPU_VIEW_TELEMETRY],
+        "Native driver telemetry") == 0);
 
     lsm_disk_performance_view(NULL, 0U, &view);
     assert(strcmp(view.title, "Disk 0") == 0);
