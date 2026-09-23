@@ -736,7 +736,7 @@ static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
     }
 
     const int item_width = (bar.right - bar.left) / 5;
-    for (int index = 0; index < 5; index++) {
+    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
         RECT caption = {
             bar.left + index * item_width,
             bar.top + 10,
@@ -1231,14 +1231,14 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     fill_solid(dc, &separator, state->palette.border);
 
-    const wchar_t *metric_names[10] = {
-        L"Utilisation", L"Speed",
-        L"Processes", L"Threads",
-        L"Handles", L"Uptime",
-        L"Temperature", L"Pressure (10 s)",
-        L"User", L"Kernel"
-    };
-    const wchar_t *metric_values[10] = {
+    wchar_t metric_names[LSM_CPU_METRIC_COUNT][64];
+    for (int index = 0; index < LSM_CPU_METRIC_COUNT; index++) {
+        text_to_wide(
+            lsm_cpu_metric_label((LsmCpuMetricField)index),
+            metric_names[index],
+            sizeof(metric_names[index]) / sizeof(metric_names[index][0]));
+    }
+    const wchar_t *metric_values[LSM_CPU_METRIC_COUNT] = {
         utilisation, speed,
         processes, threads,
         handles, uptime,
@@ -1248,7 +1248,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
 
     const int metric_col_width = (metrics_width - 28) / 2;
     const int metric_row_height = 36;
-    for (int index = 0; index < 10; index++) {
+    for (int index = 0; index < LSM_CPU_METRIC_COUNT; index++) {
         const int col = index % 2;
         const int row = index / 2;
         RECT block = {
@@ -1263,13 +1263,14 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
             metric_names[index], metric_values[index]);
     }
 
-    const wchar_t *detail_names[13] = {
-        L"Cores:", L"Logical processors:", L"Base speed:",
-        L"Maximum speed:", L"Virtualisation:", L"L1 cache:",
-        L"L2 cache:", L"L3 cache:", L"Load average:", L"Sockets:",
-        L"NUMA nodes:", L"Interrupts/s:", L"Context switches/s:"
-    };
-    const wchar_t *detail_values[13] = {
+    wchar_t detail_names[LSM_CPU_DETAIL_COUNT][64];
+    for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
+        text_to_wide(
+            lsm_cpu_detail_label((LsmCpuDetailField)index),
+            detail_names[index],
+            sizeof(detail_names[index]) / sizeof(detail_names[index][0]));
+    }
+    const wchar_t *detail_values[LSM_CPU_DETAIL_COUNT] = {
         physical_cores, logical_cores, base_speed,
         maximum_speed, virtualization, cache_l1,
         cache_l2, cache_l3, load_average, sockets,
@@ -1281,7 +1282,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     const int info_col_width = (info_width - 18) / 2;
     const int info_row_height = 25;
     int detail_label_width[2] = {0, 0};
-    for (int index = 0; index < 13; index++) {
+    for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
         const int group = index / 7;
         const int measured = measure_text_width(
             dc, state->body_font, detail_names[index]);
@@ -1293,7 +1294,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
             detail_label_width[group] = info_col_width - 58;
     }
 
-    for (int index = 0; index < 13; index++) {
+    for (int index = 0; index < LSM_CPU_DETAIL_COUNT; index++) {
         const int group = index / 7;
         const int row = index % 7;
         RECT pair = {
@@ -1500,14 +1501,14 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         dc, &details, state->palette.card,
         state->palette.border, LSM_WINDOWS_CARD_RADIUS);
 
-    const wchar_t *usage_names[10] = {
-        L"In use", L"Available",
-        L"Committed", L"Cached",
-        L"Buffers", L"Swap",
-        L"Kernel reclaimable", L"Kernel non-reclaimable",
-        L"Page tables", L"Pressure (10 s)"
-    };
-    const wchar_t *usage_values[10] = {
+    wchar_t usage_names[LSM_MEMORY_METRIC_COUNT][64];
+    for (int index = 0; index < LSM_MEMORY_METRIC_COUNT; index++) {
+        text_to_wide(
+            lsm_memory_metric_label((LsmMemoryMetricField)index),
+            usage_names[index],
+            sizeof(usage_names[index]) / sizeof(usage_names[index][0]));
+    }
+    const wchar_t *usage_values[LSM_MEMORY_METRIC_COUNT] = {
         in_use, available,
         committed, cached,
         buffers, swap,
@@ -1526,7 +1527,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
 
     const int metric_col_width = (usage_width - 30) / 2;
     const int metric_row_height = 34;
-    for (int index = 0; index < 10; index++) {
+    for (int index = 0; index < LSM_MEMORY_METRIC_COUNT; index++) {
         const int col = index % 2;
         const int row = index / 2;
         RECT block = {
@@ -1541,18 +1542,22 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
             usage_names[index], usage_values[index]);
     }
 
-    const wchar_t *hardware_names[5] = {
-        L"Speed:", L"Slots used:", L"Form factor:",
-        L"Hardware corrupted:", L"Installed modules:"
-    };
-    const wchar_t *hardware_values[5] = {
+    wchar_t hardware_names[LSM_MEMORY_DETAIL_COUNT][64];
+    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
+        text_to_wide(
+            lsm_memory_detail_label((LsmMemoryDetailField)index),
+            hardware_names[index],
+            sizeof(hardware_names[index]) /
+                sizeof(hardware_names[index][0]));
+    }
+    const wchar_t *hardware_values[LSM_MEMORY_DETAIL_COUNT] = {
         speed, slots, form_factor, corrupted, modules
     };
 
     const int info_left = separator_x + 18;
     const int info_width = details.right - pad - info_left;
     int hardware_label_width = 0;
-    for (int index = 0; index < 5; index++) {
+    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
         const int measured = measure_text_width(
             dc, state->body_font, hardware_names[index]);
         if (measured > hardware_label_width)
@@ -1561,7 +1566,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     if (hardware_label_width > info_width - 72)
         hardware_label_width = info_width - 72;
 
-    for (int index = 0; index < 5; index++) {
+    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
         RECT pair = {
             info_left,
             details.top + 16 + index * 29,
