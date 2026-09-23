@@ -40,7 +40,6 @@
 #define LSM_WINDOWS_TIMER_ID 1U
 #define LSM_WINDOWS_REFRESH_MS 1000U
 #define LSM_WINDOWS_HISTORY_CAPACITY 120U
-#define LSM_WINDOWS_PERFORMANCE_ITEM_COUNT 2
 #define LSM_WINDOWS_MENU_HEIGHT 32
 #define LSM_WINDOWS_SUMMARY_HEIGHT 56
 #define LSM_WINDOWS_TAB_HEIGHT 38
@@ -152,7 +151,7 @@ typedef struct {
     int hovered_menu;
     bool tracking_mouse_leave;
     RECT page_tabs[LSM_TAB_COUNT];
-    RECT performance_items[LSM_WINDOWS_PERFORMANCE_ITEM_COUNT];
+    RECT performance_items[LSM_PAGE_COUNT];
     RECT file_menu_rect;
     RECT view_menu_rect;
     RECT help_menu_rect;
@@ -287,6 +286,13 @@ static void text_to_wide(const char *source, wchar_t *destination,
             CP_ACP, 0U, source, -1, destination, (int)capacity);
     }
     if (converted <= 0) destination[0] = L'\0';
+}
+
+static COLORREF performance_colour_ref(LsmPageType type)
+{
+    const LsmPresentationColour colour =
+        lsm_performance_colour_rgb(type);
+    return RGB(colour.red, colour.green, colour.blue);
 }
 
 static double bytes_to_gb(uint64_t bytes)
@@ -986,7 +992,7 @@ static void draw_memory_composition(
     if (used.right > used.left)
         fill_solid(dc, &used, RGB(0x1C, 0x32, 0x48));
 
-    HPEN marker = CreatePen(PS_SOLID, 2, LSM_WINDOWS_MEMORY_COLOUR);
+    HPEN marker = CreatePen(PS_SOLID, 2, performance_colour_ref(LSM_PAGE_MEMORY));
     if (marker) {
         HGDIOBJ previous = SelectObject(dc, marker);
         const int x = used.right;
@@ -1199,7 +1205,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     draw_history_graph(
         state, dc, graph, state->cpu_history,
         state->history_count, state->history_position,
-        LSM_WINDOWS_CPU_COLOUR);
+        performance_colour_ref(LSM_PAGE_CPU));
 
     RECT details = {
         content.left,
@@ -1458,7 +1464,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     draw_history_graph(
         state, dc, graph, state->memory_history,
         state->history_count, state->history_position,
-        LSM_WINDOWS_MEMORY_COLOUR);
+        performance_colour_ref(LSM_PAGE_MEMORY));
 
     RECT composition_label = {
         content.left,
@@ -1610,11 +1616,11 @@ static void draw_performance_page(
     draw_performance_rail_item(
         state, dc, LSM_PAGE_CPU,
         cpu, L"CPU", cpu_value,
-        state->cpu_history, LSM_WINDOWS_CPU_COLOUR);
+        state->cpu_history, performance_colour_ref(LSM_PAGE_CPU));
     draw_performance_rail_item(
         state, dc, LSM_PAGE_MEMORY,
         memory, L"Memory", memory_value,
-        state->memory_history, LSM_WINDOWS_MEMORY_COLOUR);
+        state->memory_history, performance_colour_ref(LSM_PAGE_MEMORY));
 
     RECT separator = {
         rail.right, rail.top,
@@ -2327,7 +2333,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             int hovered_performance = -1;
             if (state->active_page == LSM_TAB_PERFORMANCE) {
                 for (int index = 0;
-                     index < LSM_WINDOWS_PERFORMANCE_ITEM_COUNT; index++) {
+                     index < LSM_PAGE_COUNT; index++) {
                     if (PtInRect(
                             &state->performance_items[index], point)) {
                         hovered_performance = index;
@@ -2387,7 +2393,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             if (state->active_page ==
                 LSM_TAB_PERFORMANCE) {
                 for (int index = 0;
-                     index < LSM_WINDOWS_PERFORMANCE_ITEM_COUNT;
+                     index < LSM_PAGE_COUNT;
                      index++) {
                     if (PtInRect(
                             &state->performance_items[index], point)) {
