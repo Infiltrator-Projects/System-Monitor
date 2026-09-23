@@ -2,6 +2,14 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.82 - 2026-09-23
+
+- Continue the cross-platform presentation consolidation after 1.0.81 by making the Linux GTK Disk, Network and GPU presenters consume the same toolkit-neutral device projection used by Win32 for overlapping user-facing values.
+- Add stable named indices for shared disk, network and GPU view metrics so native renderers and tests do not depend on unexplained numeric positions.
+- Keep Linux-only graph mechanics, pressure data, partition tables, cumulative network totals, wireless details and advanced GPU engine telemetry local to GTK while sharing only semantics that are genuinely common to both platforms.
+- Preserve the richer Linux GPU telemetry-source fallback in the shared model: native driver telemetry and basic-identification states remain meaningful instead of being weakened to `N/A` for reuse.
+- Extend deterministic presentation regression coverage to lock the named device-value contract and GPU telemetry fallbacks.
+
 ## 1.0.81 - 2026-09-23
 
 - Extend the native Windows monitor adapter behind the existing shared `monitor_platform.h` seam instead of creating Windows-only application models.
