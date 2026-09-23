@@ -161,3 +161,71 @@ const char *lsm_memory_detail_label(LsmMemoryDetailField field)
     return memory_detail_labels[
         checked_index((int)field, LSM_MEMORY_DETAIL_COUNT)];
 }
+
+LsmPresentationGridPosition
+lsm_cpu_metric_position(LsmCpuMetricField field)
+{
+    const size_t index =
+        checked_index((int)field, LSM_CPU_METRIC_COUNT);
+    const LsmPresentationGridPosition position = {
+        (uint8_t)(index % 2U),
+        (uint8_t)(index / 2U)
+    };
+    return position;
+}
+
+LsmPresentationGridPosition
+lsm_cpu_detail_position(LsmCpuDetailField field)
+{
+    const size_t index =
+        checked_index((int)field, LSM_CPU_DETAIL_COUNT);
+    const LsmPresentationGridPosition position = {
+        (uint8_t)(index / 7U),
+        (uint8_t)(index % 7U)
+    };
+    return position;
+}
+
+LsmPresentationGridPosition
+lsm_memory_metric_position(LsmMemoryMetricField field)
+{
+    const size_t index =
+        checked_index((int)field, LSM_MEMORY_METRIC_COUNT);
+    const LsmPresentationGridPosition position = {
+        (uint8_t)(index % 2U),
+        (uint8_t)(index / 2U)
+    };
+    return position;
+}
+
+LsmPresentationGridPosition
+lsm_memory_detail_position(LsmMemoryDetailField field)
+{
+    const size_t index =
+        checked_index((int)field, LSM_MEMORY_DETAIL_COUNT);
+    const LsmPresentationGridPosition position = {
+        0U,
+        (uint8_t)index
+    };
+    return position;
+}
+
+const char *lsm_cpu_graph_caption(void)
+{
+    return "% Utilisation";
+}
+
+const char *lsm_memory_graph_caption(void)
+{
+    return "Memory usage";
+}
+
+const char *lsm_memory_composition_caption(void)
+{
+    return "Memory composition";
+}
+
+const char *lsm_percent_scale_max_label(void)
+{
+    return "100%";
+}
