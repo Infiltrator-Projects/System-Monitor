@@ -63,6 +63,12 @@ typedef struct {
     uint8_t blue;
 } LsmPresentationColour;
 
+/** Toolkit-neutral row/column placement for a field in a canonical grid. */
+typedef struct {
+    uint8_t column;
+    uint8_t row;
+} LsmPresentationGridPosition;
+
 /** CPU headline metric order shared by all renderers. */
 typedef enum {
     LSM_CPU_METRIC_UTILISATION = 0,
@@ -147,5 +153,33 @@ const char *lsm_memory_metric_label(LsmMemoryMetricField field);
 
 /** Return one canonical memory detail caption. */
 const char *lsm_memory_detail_label(LsmMemoryDetailField field);
+
+/** Return the canonical two-column placement for one CPU headline metric. */
+LsmPresentationGridPosition
+lsm_cpu_metric_position(LsmCpuMetricField field);
+
+/** Return the canonical two-group placement for one CPU detail field. */
+LsmPresentationGridPosition
+lsm_cpu_detail_position(LsmCpuDetailField field);
+
+/** Return the canonical two-column placement for one memory headline metric. */
+LsmPresentationGridPosition
+lsm_memory_metric_position(LsmMemoryMetricField field);
+
+/** Return the canonical single-column placement for one memory detail field. */
+LsmPresentationGridPosition
+lsm_memory_detail_position(LsmMemoryDetailField field);
+
+/** Return the shared CPU primary-graph caption. */
+const char *lsm_cpu_graph_caption(void);
+
+/** Return the shared memory primary-graph caption. */
+const char *lsm_memory_graph_caption(void);
+
+/** Return the shared memory-composition caption. */
+const char *lsm_memory_composition_caption(void);
+
+/** Return the shared percentage-axis maximum label. */
+const char *lsm_percent_scale_max_label(void);
 
 #endif
