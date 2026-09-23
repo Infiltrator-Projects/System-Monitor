@@ -55,9 +55,13 @@ void performance_present_set_temperature_state(GtkWidget *widget,
 
     gtk_style_context_remove_class(style, "lsm-state-warning");
     gtk_style_context_remove_class(style, "lsm-state-fault");
-    gtk_style_context_remove_class(style, "lsm-status-chip");
     gtk_style_context_remove_class(style, "lsm-status-warning");
     gtk_style_context_remove_class(style, "lsm-status-fault");
+
+    /* Reserve the status-pill geometry in every temperature state. Warning
+     * and fault classes change only colour/background/border, so crossing a
+     * threshold cannot resize the metric row and steal height from its graph. */
+    gtk_style_context_add_class(style, "lsm-status-chip");
     if (!available || !isfinite(celsius)) return;
 
     if (celsius >= fault_threshold) {

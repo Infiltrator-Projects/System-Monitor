@@ -342,7 +342,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-state-fault { color: @lsm_fault; }"
         ".lsm-state-success { color: @lsm_success; }"
         ".lsm-status-chip {"
-        " padding: 5px 9px; border: 1px solid @lsm_status_border;"
+        " padding: 5px 9px; border: 1px solid transparent;"
         " border-radius: 999px;"
         "}"
         ".lsm-status-warning {"
@@ -388,11 +388,15 @@ void lsm_app_shell_apply_theme(LsmApp *app)
 
 static gboolean on_delete_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
-    (void)widget; (void)event;
+    (void)event;
     LsmApp *app = user_data;
-    lsm_app_shell_save_page_scroll(app, app->runtime.active_tab);
-    lsm_details_save_layout(app);
-    lsm_preferences_save(app);
+    if (!app) return FALSE;
+
+    /* The close request must feel immediate even while bounded backend
+     * teardown finishes. Keep the widget alive for the single final-state save
+     * in lsm_app_shutdown(), but remove it from the screen before quitting the
+     * application main loop. */
+    gtk_widget_hide(widget);
     g_application_quit(G_APPLICATION(app->application));
     return TRUE;
 }

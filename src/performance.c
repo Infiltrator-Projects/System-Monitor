@@ -594,8 +594,14 @@ static bool stack_name_still_present(const LsmApp *app, const char *name)
     if (!name || !*name || strcmp(name, "cpu") == 0 ||
         strcmp(name, "memory") == 0) return true;
     if (lsm_string_starts_with(name, "disk-")) {
-        for (size_t index = 0; index < app->monitor.disk_count; index++)
-            if (strcmp(app->monitor.disks[index].name, name + 5) == 0) return true;
+        for (size_t index = 0; index < app->monitor.disk_count; index++) {
+            char candidate[96];
+            const LsmDiskInfo *disk = &app->monitor.disks[index];
+            performance_stable_stack_name(
+                candidate, sizeof(candidate), "disk",
+                disk->instance_identity, disk->name);
+            if (strcmp(candidate, name) == 0) return true;
+        }
     } else if (lsm_string_starts_with(name, "network-")) {
         for (size_t index = 0; index < app->monitor.net_count; index++)
             if (strcmp(app->monitor.nets[index].name, name + 8) == 0) return true;

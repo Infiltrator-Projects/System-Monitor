@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.83 - 2026-09-23
+
+- Preserve the currently selected Linux Performance device when asynchronous topology discovery adds Bluetooth devices by validating Disk pages with the same stable identity key used to build them, rather than the retired literal `disk-<name>` form.
+- Keep CPU/GPU hot-temperature status pills geometrically stable across normal, warning and fault states by reserving their padding and border footprint continuously while leaving the normal border transparent; threshold crossings no longer resize the metric area or graph.
+- Hide the GTK main window immediately on a close request and perform preference/layout persistence once during final shutdown, removing the visible teardown stall and duplicate close-path state writes while retaining bounded backend cleanup.
+
 ## 1.0.82 - 2026-09-23
 
 - Continue the cross-platform presentation consolidation after 1.0.81 by making the Linux GTK Disk, Network and GPU presenters consume the same toolkit-neutral device projection used by Win32 for overlapping user-facing values.
