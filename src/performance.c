@@ -141,6 +141,27 @@ static LsmDevicePage *page_for_stack_name(const LsmApp *app,
     return NULL;
 }
 
+static LsmDevicePage *page_for_retained_selection(
+    const LsmApp *app,
+    LsmPageType saved_type,
+    const char *saved_stack_name,
+    const char *saved_identity)
+{
+    if (!app || !app->performance.device_pages) return NULL;
+    for (guint index = 0; index < app->performance.device_pages->len; index++) {
+        LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        if (lsm_performance_selection_matches(
+                saved_stack_name,
+                saved_identity,
+                page->stack_name,
+                page->selection_identity,
+                page->type == saved_type))
+            return page;
+    }
+    return NULL;
+}
+
 void performance_synchronise_side_selection(LsmApp *app)
 {
     if (!app || !app->performance.performance_stack) return;
@@ -239,6 +260,9 @@ LsmDevicePage *performance_new_page(LsmApp *app, LsmPageType type, size_t index,
     page->type = type;
     page->index = index;
     lsm_copy_string(page->stack_name, sizeof(page->stack_name), stack_name);
+    lsm_copy_string(
+        page->selection_identity, sizeof(page->selection_identity),
+        button_identifier && *button_identifier ? button_identifier : stack_name);
     page->page = performance_new_vertical_box(7);
     gtk_container_set_border_width(GTK_CONTAINER(page->page), 10);
     GtkWidget *button = make_side_button(page, app->performance.performance_stack,
@@ -589,56 +613,6 @@ void lsm_performance_build(LsmApp *app, GtkWidget *container)
                  ? app->runtime.selected_performance_page : "cpu");
 }
 
-static bool stack_name_still_present(const LsmApp *app, const char *name)
-{
-    if (!name || !*name || strcmp(name, "cpu") == 0 ||
-        strcmp(name, "memory") == 0) return true;
-    if (lsm_string_starts_with(name, "disk-")) {
-        for (size_t index = 0; index < app->monitor.disk_count; index++) {
-            char candidate[96];
-            const LsmDiskInfo *disk = &app->monitor.disks[index];
-            performance_stable_stack_name(
-                candidate, sizeof(candidate), "disk",
-                disk->instance_identity, disk->name);
-            if (strcmp(candidate, name) == 0) return true;
-        }
-    } else if (lsm_string_starts_with(name, "network-")) {
-        for (size_t index = 0; index < app->monitor.net_count; index++)
-            if (strcmp(app->monitor.nets[index].name, name + 8) == 0) return true;
-    } else if (lsm_string_starts_with(name, "bluetooth-")) {
-        for (size_t index = 0; index < app->monitor.bluetooth_device_count;
-             index++) {
-            char candidate[96];
-            const LsmBluetoothDeviceInfo *device =
-                &app->monitor.bluetooth_devices[index];
-            performance_stable_stack_name(
-                candidate, sizeof(candidate), "bluetooth",
-                device->address, device->alias);
-            if (strcmp(candidate, name) == 0) return true;
-        }
-    } else if (lsm_string_starts_with(name, "gpu-")) {
-        for (size_t index = 0; index < app->monitor.gpu_count; index++) {
-            char candidate[96];
-            const LsmGpuInfo *gpu = &app->monitor.gpus[index];
-            performance_stable_stack_name(candidate, sizeof(candidate), "gpu",
-                              gpu->platform_identity, gpu->display_identifier);
-            if (strcmp(candidate, name) == 0) return true;
-        }
-    } else if (lsm_string_starts_with(name, "battery-")) {
-        for (size_t index = 0; index < app->monitor.battery_count; index++)
-            if (strcmp(app->monitor.batteries[index].name, name + 8) == 0) return true;
-    } else if (lsm_string_starts_with(name, "npu-")) {
-        for (size_t index = 0; index < app->monitor.npu_count; index++) {
-            char candidate[96];
-            const LsmNpuInfo *npu = &app->monitor.npus[index];
-            performance_stable_stack_name(candidate, sizeof(candidate), "npu",
-                              npu->platform_identity, npu->display_identifier);
-            if (strcmp(candidate, name) == 0) return true;
-        }
-    }
-    return false;
-}
-
 typedef struct {
     gboolean present;
     LsmSampleHistory primary;
@@ -773,10 +747,23 @@ static void rebuild_for_topology_change(LsmApp *app)
               GTK_STACK(app->performance.performance_stack))
         : NULL;
     char *visible = current ? g_strdup(current) : g_strdup("cpu");
-    if (!stack_name_still_present(app, visible)) {
-        g_free(visible);
-        visible = g_strdup("cpu");
-    }
+
+    /*
+     * Keep the selected resource independently of its current stack name.
+     * Topology discovery can legitimately promote a device from a fallback
+     * presentation identity to a stronger platform identity while it remains
+     * the same user-visible device. In that case the stack hash changes even
+     * though navigation must not.
+     */
+    LsmDevicePage *previous =
+        page_for_stack_name(app, visible);
+    const LsmPageType saved_type =
+        previous ? previous->type : LSM_PAGE_CPU;
+    char saved_identity[LSM_IDENTITY_LEN] = "";
+    if (previous)
+        lsm_copy_string(
+            saved_identity, sizeof(saved_identity),
+            previous->selection_identity);
 
     const char *cpu_mode = app->performance.cpu_graph_stack
         ? gtk_stack_get_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack))
@@ -800,6 +787,17 @@ static void rebuild_for_topology_change(LsmApp *app)
 
     lsm_performance_destroy(app);
     build_performance_contents(app, visible);
+
+    LsmDevicePage *restored =
+        page_for_retained_selection(
+            app, saved_type, visible, saved_identity);
+    if (restored) {
+        gtk_stack_set_visible_child_name(
+            GTK_STACK(app->performance.performance_stack),
+            restored->stack_name);
+        performance_select_side_button(app, restored);
+    }
+
     restore_page_histories(app, histories);
     if (saved_cpu_mode) performance_set_cpu_graph_mode(app, saved_cpu_mode);
     for (unsigned core = 0U; core < core_count; core++) {
