@@ -88,9 +88,7 @@ static void populate_cpu_identity(LsmMonitor *monitor)
 
     SYSTEM_INFO system_info;
     GetNativeSystemInfo(&system_info);
-    monitor->cpu.logical_cores =
-        system_info.dwNumberOfProcessors > UINT_MAX
-            ? UINT_MAX : (unsigned)system_info.dwNumberOfProcessors;
+    monitor->cpu.logical_cores = (unsigned)system_info.dwNumberOfProcessors;
 
     monitor->cpu.model[0] = '\0';
     const DWORD length = GetEnvironmentVariableA(
