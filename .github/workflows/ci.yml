@@ -163,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           x86_64-w64-mingw32-gcc \
-            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -std=c17 -O2 -g -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc \
@@ -188,17 +188,26 @@ jobs:
             wine_runner=/usr/lib/wine/wine64
           fi
           test -n "$wine_runner"
-          rm -f windows-startup-smoke.txt
+          rm -f windows-startup-smoke.txt windows-wine.log
           set +e
           WINEDEBUG=-all timeout 60s xvfb-run -a "$wine_runner" \
-            build-cmake/system-monitor-windows.exe --startup-smoke
-          status=$?
+            build-cmake/system-monitor-windows.exe --startup-smoke \
+            2>&1 | tee windows-wine.log
+          status=${PIPESTATUS[0]}
           set -e
           if [[ -f windows-startup-smoke.txt ]]; then
             printf 'Windows startup smoke status: '
             cat windows-startup-smoke.txt
           else
             echo 'Windows startup smoke produced no status file.'
+          fi
+          crash_address=$(sed -nE \
+            's/.*stack overflow at address ([0-9A-Fa-f]+).*/0x\1/p' \
+            windows-wine.log | tail -n 1)
+          if [[ -n "$crash_address" ]]; then
+            printf 'Windows crash address: %s\n' "$crash_address"
+            x86_64-w64-mingw32-addr2line -f -C \
+              -e build-cmake/system-monitor-windows.exe "$crash_address" || true
           fi
           exit "$status"
 
