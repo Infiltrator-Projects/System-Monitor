@@ -2,6 +2,14 @@
 /**
  * @file presentation_contract.c
  * @brief Platform-neutral System Monitor presentation contract data.
+ *
+ * This module owns product-level presentation facts that must remain identical
+ * across native renderers. It deliberately contains no GTK, Win32 or operating-
+ * system types.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @license GPL-3.0-or-later
  */
 #include "presentation_contract.h"
 
