@@ -23,6 +23,7 @@
 #include <windows.h>
 #include <commctrl.h>
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
