@@ -1183,7 +1183,7 @@ static void apply_dark_titlebar(HWND window)
     if (!window) return;
     const BOOL enabled = TRUE;
     (void)DwmSetWindowAttribute(
-        window, (DWMWINDOWATTRIBUTE)20,
+        window, 20U,
         &enabled, sizeof(enabled));
 }
 
