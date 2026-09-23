@@ -1173,8 +1173,12 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
         title_rect.right + 12, header.top + 6,
         header.right - 14, header.bottom - 6
     };
+    wchar_t cpu_title[32];
+    text_to_wide(
+        lsm_performance_page_title(LSM_PAGE_CPU),
+        cpu_title, sizeof(cpu_title) / sizeof(cpu_title[0]));
     draw_text(
-        dc, L"CPU", title_rect, state->title_font,
+        dc, cpu_title, title_rect, state->title_font,
         state->palette.heading,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
@@ -1439,8 +1443,12 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
         header.right - 90, header.top + 39,
         header.right - 14, header.bottom - 5
     };
+    wchar_t memory_title[32];
+    text_to_wide(
+        lsm_performance_page_title(LSM_PAGE_MEMORY),
+        memory_title, sizeof(memory_title) / sizeof(memory_title[0]));
     draw_text(
-        dc, L"Memory", title_rect, state->title_font,
+        dc, memory_title, title_rect, state->title_font,
         state->palette.heading,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     draw_text(
@@ -1615,7 +1623,8 @@ static void draw_performance_page(
 
     RECT cpu = {
         rail.left + 4, rail.top + 8,
-        rail.left + 216, rail.top + 8 + LSM_SIDE_BUTTON_HEIGHT
+        rail.left + 4 + LSM_SIDE_BUTTON_WIDTH,
+        rail.top + 8 + LSM_SIDE_BUTTON_HEIGHT
     };
     RECT memory = {
         cpu.left,
@@ -1623,13 +1632,21 @@ static void draw_performance_page(
         cpu.right,
         cpu.bottom + 6 + LSM_SIDE_BUTTON_HEIGHT
     };
+    wchar_t cpu_title[32];
+    wchar_t memory_title[32];
+    text_to_wide(
+        lsm_performance_page_title(LSM_PAGE_CPU),
+        cpu_title, sizeof(cpu_title) / sizeof(cpu_title[0]));
+    text_to_wide(
+        lsm_performance_page_title(LSM_PAGE_MEMORY),
+        memory_title, sizeof(memory_title) / sizeof(memory_title[0]));
     draw_performance_rail_item(
         state, dc, LSM_PAGE_CPU,
-        cpu, L"CPU", cpu_value,
+        cpu, cpu_title, cpu_value,
         state->cpu_history, performance_colour_ref(LSM_PAGE_CPU));
     draw_performance_rail_item(
         state, dc, LSM_PAGE_MEMORY,
-        memory, L"Memory", memory_value,
+        memory, memory_title, memory_value,
         state->memory_history, performance_colour_ref(LSM_PAGE_MEMORY));
 
     RECT separator = {
@@ -1657,8 +1674,12 @@ static void draw_placeholder_page(
         content.left, content.top,
         content.right, content.top + 54
     };
+    wchar_t page_title[64];
+    text_to_wide(
+        lsm_tab_label(state->active_page),
+        page_title, sizeof(page_title) / sizeof(page_title[0]));
     draw_text(
-        dc, page_names[state->active_page], title,
+        dc, page_title, title,
         state->title_font, state->palette.heading,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
@@ -2054,11 +2075,15 @@ static void show_page(LsmWindowsUiState *state, LsmTabIndex page)
         set_status(state, L"Processes - starting native backend");
         refresh_active_page(state);
     } else {
+        wchar_t page_title[64];
         wchar_t message[160];
+        text_to_wide(
+            lsm_tab_label(page),
+            page_title, sizeof(page_title) / sizeof(page_title[0]));
         (void)swprintf(
             message, sizeof(message) / sizeof(message[0]),
             L"%ls - Windows backend not implemented yet",
-            page_names[page]);
+            page_title);
         set_status(state, message);
     }
 
