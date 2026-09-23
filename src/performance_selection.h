@@ -46,4 +46,26 @@ void lsm_performance_selection_end(LsmPerformanceSelection *selection);
 bool lsm_performance_selection_active(
     const LsmPerformanceSelection *selection);
 
+/**
+ * Match a retained Performance selection against a rebuilt candidate page.
+ *
+ * Exact stack identity wins. When topology discovery promotes or regenerates
+ * that presentation identity, a candidate of the same resource type may still
+ * match through its semantic device identity.
+ *
+ * @param [in] saved_stack_name Previously visible GtkStack child name.
+ * @param [in] saved_identity Stable semantic identity retained by the page.
+ * @param [in] candidate_stack_name Candidate GtkStack child name.
+ * @param [in] candidate_identity Candidate semantic device identity.
+ * @param [in] same_type Whether saved and candidate pages represent the same
+ *            Performance resource type.
+ * @return true when the candidate represents the retained selection.
+ */
+bool lsm_performance_selection_matches(
+    const char *saved_stack_name,
+    const char *saved_identity,
+    const char *candidate_stack_name,
+    const char *candidate_identity,
+    bool same_type);
+
 #endif
