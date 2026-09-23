@@ -70,16 +70,17 @@ jobs:
           set -euo pipefail
           make -j2 deb native-installer
           version=$(tr -d '[:space:]' < support/VERSION)
-          windows_probe="system-monitor-${version}-windows-backend-probe.exe"
+          windows_app="system-monitor-${version}-windows.exe"
           x86_64-w64-mingw32-gcc \
-            -std=c17 -O2 -D_WIN32_WINNT=0x0601 \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc \
-            support/tools/windows_backend_probe.c \
+            src/main_windows.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
-            -lpsapi -ladvapi32 \
-            -o "$windows_probe"
+            -lpsapi -ladvapi32 -lcomctl32 -lgdi32 \
+            -municode -mwindows \
+            -o "$windows_app"
 
       - name: Verify Debian compatibility contract
         shell: bash
@@ -151,10 +152,10 @@ jobs:
           tag="v${version}"
           deb="infiltrator-system-monitor_${version}_amd64.deb"
           installer="infiltrator-system-monitor-${version}-native-installer.run"
-          windows_probe="system-monitor-${version}-windows-backend-probe.exe"
+          windows_app="system-monitor-${version}-windows.exe"
           test -f "$deb"
           test -x "$installer"
-          test -f "$windows_probe"
+          test -f "$windows_app"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           ./"$installer" --help >/dev/null
 
@@ -171,7 +172,7 @@ jobs:
             git push origin "$tag"
           fi
 
-          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_probe" | sort)
+          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_app" | sort)
           if gh release view "$tag" >/dev/null 2>&1; then
             published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
             if [[ "$published_assets" != "$expected_assets" ]]; then
@@ -190,8 +191,8 @@ jobs:
               printf 'Published native installer differs from the verified rebuild.\n' >&2
               exit 1
             }
-            cmp -s "$windows_probe" "$tmp/$windows_probe" || {
-              printf 'Published Windows backend probe differs from the verified rebuild.\n' >&2
+            cmp -s "$windows_app" "$tmp/$windows_app" || {
+              printf 'Published Windows GUI differs from the verified rebuild.\n' >&2
               exit 1
             }
             printf 'Resuming exact existing immutable release %s.\n' "$tag"
@@ -200,7 +201,7 @@ jobs:
             if [[ -z "$notes" ]]; then
               notes="Verified System Monitor ${version} release."
             fi
-            gh release create "$tag" "$deb" "$installer" "$windows_probe" \
+            gh release create "$tag" "$deb" "$installer" "$windows_app" \
               --verify-tag \
               --target "$head_commit" \
               --title "System Monitor $version" \
