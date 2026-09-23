@@ -74,13 +74,28 @@ jobs:
           version_header=build/windows-version.h
           mkdir -p build
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          common_portable=( \
+            src/infiltratr-common/src/core.c \
+            src/infiltratr-common/src/arithmetic.c \
+            src/infiltratr-common/src/config.c \
+            src/infiltratr-common/src/i18n.c \
+            src/infiltratr-common/src/token.c \
+            src/infiltratr-common/src/timing.c \
+            src/infiltratr-common/src/temporal.c \
+            src/infiltratr-common/src/format.c \
+            src/infiltratr-common/src/quantity.c \
+            src/infiltratr-common/src/graphics.c \
+            src/infiltratr-common/src/escape.c \
+            src/infiltratr-common/src/design.c \
+          )
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc -include "$version_header" \
-            src/main_windows.c src/presentation_contract.c \
+            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
+            src/main_windows.c src/presentation_contract.c src/performance_view.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
+            "${common_portable[@]}" \
             -lpsapi -ladvapi32 -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o "$windows_app"
