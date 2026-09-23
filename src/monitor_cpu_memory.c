@@ -188,8 +188,11 @@ static void read_cpu_static(LsmMonitor *monitor)
                     physical_pairs[physical_id][core_id] = true;
                     physical_count++;
                 }
-            } else if (strcmp(line, "flags") == 0 || strcmp(line, "Features") == 0) {
-                if (strstr(value, " vmx") || strstr(value, " svm") || strstr(value, "virt"))
+            } else if (strcmp(line, "flags") == 0 ||
+                       strcmp(line, "Features") == 0) {
+                monitor->cpu.virtualization_available = true;
+                if (strstr(value, " vmx") || strstr(value, " svm") ||
+                    strstr(value, "virt"))
                     monitor->cpu.virtualization = true;
             }
         }
@@ -244,10 +247,13 @@ static unsigned read_numa_node_count(void)
 static void update_load_average(LsmCpuInfo *cpu)
 {
     double values[3] = {0.0, 0.0, 0.0};
-    if (!cpu || getloadavg(values, 3) != 3) return;
+    if (!cpu) return;
+    cpu->load_average_available = false;
+    if (getloadavg(values, 3) != 3) return;
     cpu->load_average_1 = values[0];
     cpu->load_average_5 = values[1];
     cpu->load_average_15 = values[2];
+    cpu->load_average_available = true;
 }
 
 typedef struct {
@@ -465,6 +471,8 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
     if (monitor->cpu.max_frequency_ghz <= 0.0)
         monitor->cpu.max_frequency_ghz = read_cpu_frequency_ghz(monitor, true);
     monitor->cpu.temperature_c = read_temperature_c(monitor);
+    monitor->cpu.temperature_available =
+        isfinite(monitor->cpu.temperature_c);
     const double now = lsm_monotonic_seconds();
     const bool refresh_memory_details = lsm_refresh_interval_due(
         now, state->last_memory_detail_monotonic, 10.0);
