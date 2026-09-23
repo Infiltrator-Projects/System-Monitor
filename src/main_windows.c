@@ -105,8 +105,8 @@ enum {
 
 static LRESULT CALLBACK lsm_windows_window_proc(
     HWND window, UINT message, WPARAM wparam, LPARAM lparam);
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
-                    PWSTR command_line, int show_command);
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
+                   LPSTR command_line, int show_command);
 
 static LsmWindowsUiState *window_state(HWND window)
 {
@@ -815,12 +815,12 @@ static LRESULT CALLBACK lsm_windows_window_proc(
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
-                    PWSTR command_line, int show_command)
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
+                   LPSTR command_line, int show_command)
 {
     (void)previous_instance;
     const bool startup_smoke =
-        command_line && wcscmp(command_line, L"--startup-smoke") == 0;
+        command_line && lstrcmpA(command_line, "--startup-smoke") == 0;
     if (startup_smoke)
         write_startup_smoke_status("entry\n");
 
