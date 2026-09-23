@@ -630,6 +630,7 @@ void performance_present_device_page(LsmApp *app, LsmDevicePage *page)
         case LSM_PAGE_MEMORY:
         case LSM_PAGE_DISK:
         case LSM_PAGE_NETWORK:
+        case LSM_PAGE_COUNT:
             break;
     }
 }
