@@ -298,6 +298,11 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         support/tests/core_smoke.c
         src/project_info.c)
 
+    add_executable(lsm-presentation-smoke
+        support/tests/presentation_smoke.c
+        src/presentation_contract.c
+        src/performance_view.c)
+
     add_executable(lsm-backend-smoke support/tests/backend_smoke.c
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
@@ -390,6 +395,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
 
     set(LSM_DEVELOPER_SMOKE_TARGETS
         lsm-core-suite-smoke
+        lsm-presentation-smoke
         lsm-backend-smoke
         lsm-monitor-platform-smoke
         lsm-peripheral-suite-smoke
@@ -446,6 +452,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     target_link_options(lsm-ui-suite-smoke PRIVATE -Wl,--gc-sections)
 
     target_link_libraries(lsm-core-suite-smoke PRIVATE m)
+    target_link_libraries(lsm-presentation-smoke PRIVATE m)
     target_link_libraries(lsm-backend-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
     target_link_libraries(lsm-peripheral-suite-smoke PRIVATE
