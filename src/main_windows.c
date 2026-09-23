@@ -845,6 +845,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
 
     ShowWindow(window, show_command == SW_HIDE ? SW_SHOWNORMAL : show_command);
     UpdateWindow(window);
+
+    if (command_line && wcscmp(command_line, L"--startup-smoke") == 0) {
+        const bool visible = IsWindowVisible(window) != FALSE;
+        RECT client;
+        const bool sized = GetClientRect(window, &client) != FALSE &&
+            client.right > client.left && client.bottom > client.top;
+        DestroyWindow(window);
+        return visible && sized ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
     PostMessageW(window, LSM_WINDOWS_MESSAGE_START_BACKEND, 0U, 0);
 
     MSG message;
