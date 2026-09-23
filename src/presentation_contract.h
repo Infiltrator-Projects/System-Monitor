@@ -205,8 +205,7 @@ const char *lsm_memory_detail_label(LsmMemoryDetailField field);
  * @param field CPU headline metric identity.
  * @return Toolkit-neutral column and row coordinates.
  */
-LsmPresentationGridPosition
-lsm_cpu_metric_position(LsmCpuMetricField field);
+LsmPresentationGridPosition lsm_cpu_metric_position(LsmCpuMetricField field);
 
 /**
  * Return the canonical two-group placement for one CPU detail field.
@@ -214,8 +213,7 @@ lsm_cpu_metric_position(LsmCpuMetricField field);
  * @param field CPU detail-field identity.
  * @return Toolkit-neutral group-column and row coordinates.
  */
-LsmPresentationGridPosition
-lsm_cpu_detail_position(LsmCpuDetailField field);
+LsmPresentationGridPosition lsm_cpu_detail_position(LsmCpuDetailField field);
 
 /**
  * Return the canonical two-column placement for one memory headline metric.
@@ -223,8 +221,7 @@ lsm_cpu_detail_position(LsmCpuDetailField field);
  * @param field Memory headline metric identity.
  * @return Toolkit-neutral column and row coordinates.
  */
-LsmPresentationGridPosition
-lsm_memory_metric_position(LsmMemoryMetricField field);
+LsmPresentationGridPosition lsm_memory_metric_position(LsmMemoryMetricField field);
 
 /**
  * Return the canonical single-column placement for one memory detail field.
@@ -232,8 +229,7 @@ lsm_memory_metric_position(LsmMemoryMetricField field);
  * @param field Memory hardware-detail identity.
  * @return Toolkit-neutral column and row coordinates.
  */
-LsmPresentationGridPosition
-lsm_memory_detail_position(LsmMemoryDetailField field);
+LsmPresentationGridPosition lsm_memory_detail_position(LsmMemoryDetailField field);
 
 /**
  * Return the shared CPU primary-graph caption.
