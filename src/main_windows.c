@@ -75,7 +75,9 @@ typedef struct {
     HFONT title_font;
     HFONT section_font;
     LsmMonitor monitor;
+    bool monitor_initialised;
     bool monitor_ready;
+    bool process_backend_attempted;
     LsmProcessBackend *process_backend;
     LsmProcessInfo *processes;
     size_t process_count;
@@ -96,7 +98,8 @@ static const wchar_t *const page_names[LSM_WINDOWS_PAGE_COUNT] = {
 enum {
     LSM_WINDOWS_ID_NAV_BASE = 1000,
     LSM_WINDOWS_ID_EXIT = 2000,
-    LSM_WINDOWS_ID_ABOUT = 2001
+    LSM_WINDOWS_ID_ABOUT = 2001,
+    LSM_WINDOWS_MESSAGE_START_BACKEND = WM_APP + 1
 };
 
 static LRESULT CALLBACK lsm_windows_window_proc(
@@ -629,19 +632,28 @@ static bool create_children(LsmWindowsUiState *state)
     return state->performance_widget_count == 11U;
 }
 
-static void initialise_backends(LsmWindowsUiState *state)
+static void initialise_monitor_backend(LsmWindowsUiState *state)
 {
-    if (!state) return;
+    if (!state || state->monitor_initialised) return;
 
+    state->monitor_initialised = true;
     state->monitor_ready = lsm_monitor_platform_init(&state->monitor);
-    state->process_backend = lsm_process_backend_create();
+    if (!state->monitor_ready)
+        set_status(
+            state,
+            L"Windows preview - GUI ready - Performance backend unavailable");
+}
 
-    if (state->process_backend) {
-        LsmProcessInfo *initial = NULL;
-        (void)lsm_process_scan(
-            state->process_backend, &initial, LSM_PROCESS_SCAN_NONE);
-        lsm_process_list_free(initial);
-    }
+static void initialise_process_backend(LsmWindowsUiState *state)
+{
+    if (!state || state->process_backend_attempted) return;
+
+    state->process_backend_attempted = true;
+    state->process_backend = lsm_process_backend_create();
+    if (!state->process_backend)
+        set_status(
+            state,
+            L"Windows preview - GUI ready - Processes backend unavailable");
 }
 
 static void destroy_state(LsmWindowsUiState *state)
@@ -656,10 +668,10 @@ static void destroy_state(LsmWindowsUiState *state)
     lsm_process_backend_destroy(state->process_backend);
     state->process_backend = NULL;
 
-    if (state->monitor_ready) {
+    if (state->monitor_ready)
         lsm_monitor_platform_destroy(&state->monitor);
-        state->monitor_ready = false;
-    }
+    state->monitor_ready = false;
+    state->monitor_initialised = false;
 
     if (state->body_font) DeleteObject(state->body_font);
     if (state->title_font) DeleteObject(state->title_font);
@@ -673,13 +685,15 @@ static void refresh_active_page(LsmWindowsUiState *state)
 {
     if (!state) return;
 
-    if (state->monitor_ready)
-        (void)lsm_monitor_platform_update(&state->monitor);
-
-    if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE)
+    if (state->active_page == LSM_WINDOWS_PAGE_PERFORMANCE) {
+        initialise_monitor_backend(state);
+        if (state->monitor_ready)
+            (void)lsm_monitor_platform_update(&state->monitor);
         update_performance(state);
-    else if (state->active_page == LSM_WINDOWS_PAGE_PROCESSES)
+    } else if (state->active_page == LSM_WINDOWS_PAGE_PROCESSES) {
+        initialise_process_backend(state);
         refresh_processes(state);
+    }
 }
 
 static LRESULT CALLBACK lsm_windows_window_proc(
@@ -702,9 +716,11 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             if (!state || !create_fonts(state) || !create_children(state))
                 return -1;
             SetMenu(window, create_application_menu());
-            initialise_backends(state);
             state->active_page = LSM_WINDOWS_PAGE_PERFORMANCE;
             show_page(state, state->active_page);
+            set_status(
+                state,
+                L"Windows preview - GUI ready - starting Performance backend");
             SetTimer(
                 window, LSM_WINDOWS_TIMER_ID,
                 LSM_WINDOWS_REFRESH_MS, NULL);
@@ -739,7 +755,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             if (identifier == LSM_WINDOWS_ID_ABOUT) {
                 MessageBoxW(
                     window,
-                    L"System Monitor 1.0.71\r\n\r\n"
+                    L"System Monitor 1.0.72\r\n\r\n"
                     L"Initial native Windows GUI preview.\r\n"
                     L"Performance and Processes are live and read-only.\r\n"
                     L"Remaining pages are visible placeholders.",
@@ -749,6 +765,10 @@ static LRESULT CALLBACK lsm_windows_window_proc(
             }
             break;
         }
+
+        case LSM_WINDOWS_MESSAGE_START_BACKEND:
+            refresh_active_page(state);
+            return 0;
 
         case WM_TIMER:
             if (wparam == LSM_WINDOWS_TIMER_ID) {
@@ -823,8 +843,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         return EXIT_FAILURE;
     }
 
-    ShowWindow(window, show_command);
+    ShowWindow(window, show_command == SW_HIDE ? SW_SHOWNORMAL : show_command);
     UpdateWindow(window);
+    PostMessageW(window, LSM_WINDOWS_MESSAGE_START_BACKEND, 0U, 0);
 
     MSG message;
     while (GetMessageW(&message, NULL, 0U, 0U) > 0) {
