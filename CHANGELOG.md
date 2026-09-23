@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.72 - 2026-09-23
+
+- Make first paint independent of Windows backend startup: create and show the Win32 shell before initialising Performance telemetry, and defer the process backend until the Processes page is selected.
+- Keep the GUI open when a Windows backend is unavailable instead of allowing backend initialisation or process scanning to block the initial window.
+- Link the Windows GUI with the MinGW runtime statically and make CI/release validation prove that the published PE is a Windows GUI-subsystem executable with only approved Windows system DLL imports.
+
 ## 1.0.71 - 2026-09-23
 
 - Add the first native Win32 System Monitor GUI so Windows testing starts with the visible product shell rather than a console-only backend probe.
