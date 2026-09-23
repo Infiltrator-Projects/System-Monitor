@@ -101,28 +101,22 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
     GtkWidget *metrics = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(metrics), 42);
     gtk_grid_set_row_spacing(GTK_GRID(metrics), 5);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Utilisation", &widgets->utilisation), 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Speed", &widgets->speed), 1, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Processes", &widgets->processes), 0, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Threads", &widgets->threads), 1, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Handles", &widgets->handles), 0, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Uptime", &widgets->uptime), 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Temperature", &widgets->temperature), 0, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Pressure (10 s)", &widgets->pressure), 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("User", &widgets->user_time), 0, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block("Kernel", &widgets->kernel_time), 1, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_UTILISATION), &widgets->utilisation), 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_SPEED), &widgets->speed), 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_PROCESSES), &widgets->processes), 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_THREADS), &widgets->threads), 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_HANDLES), &widgets->handles), 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_UPTIME), &widgets->uptime), 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_TEMPERATURE), &widgets->temperature), 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_PRESSURE), &widgets->pressure), 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_USER), &widgets->user_time), 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), performance_make_metric_block(lsm_cpu_metric_label(LSM_CPU_METRIC_KERNEL), &widgets->kernel_time), 1, 4, 1, 1);
 
     gtk_box_pack_start(GTK_BOX(details), metrics, FALSE, FALSE, 0);
 
     GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
     gtk_box_pack_start(GTK_BOX(details), separator, FALSE, FALSE, 0);
 
-    static const char *detail_names[] = {
-        "Cores:", "Logical processors:", "Base speed:", "Maximum speed:",
-        "Virtualisation:", "L1 cache:", "L2 cache:", "L3 cache:",
-        "Load average:", "Sockets:", "NUMA nodes:", "Interrupts/s:",
-        "Context switches/s:"
-    };
     GtkWidget **detail_values[] = {
         &widgets->cores, &widgets->logical_processors,
         &widgets->base_speed, &widgets->maximum_speed,
@@ -134,8 +128,8 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
     GtkWidget *info = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(info), 18);
     gtk_grid_set_row_spacing(GTK_GRID(info), 2);
-    for (size_t i = 0; i < G_N_ELEMENTS(detail_names); i++) {
-        GtkWidget *name = gtk_label_new(detail_names[i]);
+    for (size_t i = 0; i < LSM_CPU_DETAIL_COUNT; i++) {
+        GtkWidget *name = gtk_label_new(lsm_cpu_detail_label((LsmCpuDetailField)i));
         GtkWidget *value = gtk_label_new("N/A");
         gtk_widget_set_halign(name, GTK_ALIGN_START);
         gtk_widget_set_halign(value, GTK_ALIGN_START);
@@ -198,46 +192,42 @@ LsmDevicePage *performance_build_memory_page(LsmApp *app)
     gtk_grid_set_row_spacing(GTK_GRID(usage_grid), 4);
     gtk_grid_set_column_spacing(GTK_GRID(usage_grid), 38);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("In use", &widgets->in_use), 0, 0, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_IN_USE), &widgets->in_use), 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Available", &widgets->available), 1, 0, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_AVAILABLE), &widgets->available), 1, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Committed", &widgets->committed), 0, 1, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_COMMITTED), &widgets->committed), 0, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Cached", &widgets->cached), 1, 1, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_CACHED), &widgets->cached), 1, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Buffers", &widgets->buffers), 0, 2, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_BUFFERS), &widgets->buffers), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Swap", &widgets->swap), 1, 2, 1, 1);
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_SWAP), &widgets->swap), 1, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Kernel reclaimable",
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE),
                                       &widgets->kernel_reclaimable),
                     0, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Kernel non-reclaimable",
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE),
                                       &widgets->kernel_nonreclaimable),
                     1, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Page tables", &widgets->page_tables),
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_PAGE_TABLES), &widgets->page_tables),
                     0, 4, 1, 1);
     gtk_grid_attach(GTK_GRID(usage_grid),
-                    performance_make_metric_block("Pressure (10 s)", &widgets->pressure),
+                    performance_make_metric_block(lsm_memory_metric_label(LSM_MEMORY_METRIC_PRESSURE), &widgets->pressure),
                     1, 4, 1, 1);
 
     GtkWidget *hardware_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(hardware_grid), 4);
     gtk_grid_set_column_spacing(GTK_GRID(hardware_grid), 18);
-    static const char *hardware_names[] = {
-        "Speed:", "Slots used:", "Form factor:", "Hardware corrupted:",
-        "Installed modules:"
-    };
     GtkWidget **hardware_values[] = {
         &widgets->speed, &widgets->slots_used,
         &widgets->form_factor, &widgets->hardware_corrupted,
         &widgets->modules
     };
-    for (size_t i = 0; i < G_N_ELEMENTS(hardware_names); i++) {
-        GtkWidget *name = gtk_label_new(hardware_names[i]);
+    for (size_t i = 0; i < LSM_MEMORY_DETAIL_COUNT; i++) {
+        GtkWidget *name = gtk_label_new(lsm_memory_detail_label((LsmMemoryDetailField)i));
         GtkWidget *value = gtk_label_new("N/A");
         gtk_widget_set_halign(name, GTK_ALIGN_START);
         gtk_widget_set_halign(value, GTK_ALIGN_START);
