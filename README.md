@@ -8,7 +8,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.83 ([version file](support/VERSION))\
+**Current source version:** 1.0.84 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.24 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
