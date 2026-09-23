@@ -189,8 +189,11 @@ bool lsm_cpu_direct_read_static(LsmCpuInfo *cpu)
     (void)direct_brand(cpu->model, sizeof(cpu->model));
 
     unsigned eax = 0U, ebx = 0U, ecx = 0U, edx = 0U;
-    if (__get_cpuid(1U, &eax, &ebx, &ecx, &edx) != 0)
-        cpu->virtualization = (ecx & (1U << 5U)) != 0U;
+    if (__get_cpuid(1U, &eax, &ebx, &ecx, &edx) != 0) {
+        cpu->virtualization =
+            (ecx & (1U << 5U)) != 0U;
+        cpu->virtualization_available = true;
+    }
     if (__get_cpuid_max(0x80000000U, NULL) >= 0x80000001U) {
         __cpuid(0x80000001U, eax, ebx, ecx, edx);
         cpu->virtualization = cpu->virtualization || ((ecx & (1U << 2U)) != 0U);
