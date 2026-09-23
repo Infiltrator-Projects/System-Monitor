@@ -249,6 +249,7 @@ typedef struct LsmDevicePage {
     LsmPageType type;
     size_t index;
     char stack_name[96];
+    char selection_identity[LSM_IDENTITY_LEN];
     GtkWidget *button;
     GtkWidget *button_title;
     GtkWidget *button_identifier;
