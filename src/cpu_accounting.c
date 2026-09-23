@@ -156,12 +156,14 @@ void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
 
     cpu->interrupt_count = sample->interrupts;
     cpu->context_switch_count = sample->context_switches;
+    cpu->interrupts_per_sec_available = false;
+    cpu->context_switches_per_sec_available = false;
     if (!initial && state->scheduler_events_initialized &&
         isfinite(elapsed_seconds) && elapsed_seconds > 0.0) {
-        (void)lsm_u64_counter_rate(
+        cpu->interrupts_per_sec_available = lsm_u64_counter_rate(
             sample->interrupts, state->previous_interrupt_count, 1.0L,
             elapsed_seconds, &cpu->interrupts_per_sec);
-        (void)lsm_u64_counter_rate(
+        cpu->context_switches_per_sec_available = lsm_u64_counter_rate(
             sample->context_switches, state->previous_context_switch_count,
             1.0L, elapsed_seconds, &cpu->context_switches_per_sec);
     }
