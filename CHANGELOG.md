@@ -2,6 +2,12 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.79 - 2026-09-23
+
+- Correct release verification after 1.0.78 by treating central Infiltrator-Repository APT discovery as asynchronous instead of failing a valid GitHub release while the scheduled central publisher has not yet run.
+- Keep an immediate catalogue check for already-published packages, but record deferred discovery as a notice rather than a false release failure.
+- Preserve the existing immutable-release, exact-source-version and central-publisher ownership boundaries.
+
 ## 1.0.78 - 2026-09-23
 
 - Fix the themed Windows About window clipping its second paragraph at the bottom of the content card.
