@@ -1390,7 +1390,7 @@ static bool query_registry_string(
     size_t destination_size)
 {
     if (!key || !name || !destination || destination_size == 0U ||
-        destination_size > (size_t)DWORD_MAX)
+        destination_size > (size_t)MAXDWORD)
         return false;
 
     destination[0] = '\0';
