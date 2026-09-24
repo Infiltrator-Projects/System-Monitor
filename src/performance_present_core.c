@@ -16,7 +16,6 @@
 #include "temporal_presentation.h"
 
 #include "common.h"
-#include "duration_format.h"
 #include "metric_format.h"
 #include "ui_helpers.h"
 
