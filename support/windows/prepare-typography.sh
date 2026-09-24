@@ -39,7 +39,15 @@ for value in "$source_commit" "$url_template" "$archive_sha"              "$ui_r
     test -n "$value"
 done
 
-archive_url="${url_template//\${INFILTRATR_MB_CORPO_SOURCE_COMMIT}/$source_commit}"
+archive_url="$(awk -v template="$url_template" -v value="$source_commit" '
+    BEGIN {
+        token = "${INFILTRATR_MB_CORPO_SOURCE_COMMIT}"
+        position = index(template, token)
+        if (position == 0) exit 1
+        print substr(template, 1, position - 1) value \
+              substr(template, position + length(token))
+    }
+')"
 archive="$out/mb-corpo-fonts.tar.xz"
 curl -fsSL --retry 5 "$archive_url" -o "$archive"
 printf '%s  %s\n' "$archive_sha" "$archive" | sha256sum -c -
