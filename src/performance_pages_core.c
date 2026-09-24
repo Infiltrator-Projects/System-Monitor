@@ -4,7 +4,7 @@
  * @brief CPU, memory, disk and network Performance-page construction.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "performance_internal.h"
@@ -281,8 +281,8 @@ LsmDevicePage *performance_build_disk_page(LsmApp *app, size_t index)
         app, LSM_PAGE_DISK, index, stack, friendly, disk->name);
     LsmDiskPageWidgets *widgets = &page->widgets.disk;
 
-    /* Original SysMonTask disk header: raw kernel device name on the left and
-       physical capacity on the right. */
+    /* Keep the stable disk identity visible beside physical capacity so
+       topology changes never make similarly named devices ambiguous. */
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     page->title = gtk_label_new(NULL);
     char *markup = g_markup_printf_escaped(

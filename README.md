@@ -2,7 +2,7 @@
 
 # System Monitor
 
-**Project copyright:** © 2016-2026 Shannon Smith
+**Project copyright:** © 2000-2026 Shannon Smith
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -108,6 +108,6 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 ## Licence
 
-Copyright © 2016-2026 Shannon Smith.
+Copyright © 2000-2026 Shannon Smith.
 
-Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. Retained third-party notices for SysMonTask project ancestry and bundled PCI-name data are preserved in `support/legal/THIRD_PARTY_NOTICES`. Preferred proprietary typeface family names are presentation hints only; the font binaries are not redistributed by System Monitor.
+Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. The embedded PCI identity table is independently maintained as factual hardware metadata rather than copied from a third-party PCI names database. Preferred proprietary typeface family names are presentation hints only; the font binaries are not redistributed by System Monitor.

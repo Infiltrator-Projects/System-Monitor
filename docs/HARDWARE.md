@@ -93,3 +93,9 @@ Network rates and negotiated link speeds use decimal 1000-based scaling. Driver-
 New support should establish a stable identity, a native interface with known semantics, explicit availability, safe retained state and deterministic tests. Evidence for units and field meaning should be traceable to an ABI, interface specification or reproducible fixture.
 
 Keep expensive discovery away from high-frequency sampling, reset cumulative baselines after discontinuity, and do not add shell-command providers or vendor guesses merely to fill a field.
+
+## PCI identity provenance
+
+System Monitor does not bundle or regenerate a third-party PCI names database. The embedded registry contains independently assembled factual vendor assignments and only device-name mappings that have been separately corroborated from primary manufacturer or public certification evidence. The table's selection, normalization and arrangement are maintained by this project.
+
+A missing friendly device name is not treated as an error. Native firmware/sysfs identity is preferred when available; otherwise the UI preserves the exact numeric vendor:device identity. This prevents an unverified marketing name from being presented as hardware fact and keeps runtime identity lookup independent of lspci, pciutils and external database files.

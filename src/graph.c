@@ -3,11 +3,11 @@
  * @file graph.c
  * @brief Cairo rendering for performance and sidebar history graphs.
  *
- * The renderer follows the compact visual structure of the original
- * SysMonTask graphs while remaining a native C implementation.
+ * The renderer owns System Monitor's native Cairo graph presentation,
+ * including retained history, scaling, labels and threshold styling.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "graph.h"
