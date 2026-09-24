@@ -179,6 +179,10 @@ jobs:
             src/infiltratr-common/src/escape.c \
             src/infiltratr-common/src/design.c \
           )
+          support/windows/prepare-typography.sh
+          x86_64-w64-mingw32-windres -Isrc \
+            support/windows/system-monitor-fonts.rc -O coff \
+            -o build-cmake/windows-fonts.o
           x86_64-w64-mingw32-gcc \
             -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
@@ -186,8 +190,8 @@ jobs:
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
             src/main_windows.c src/presentation_contract.c src/performance_view.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
-            "${common_portable[@]}" \
-            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
+            build-cmake/windows-fonts.o "${common_portable[@]}" \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o build-cmake/system-monitor-windows.exe
           strings build-cmake/system-monitor-windows.exe | grep -Fq "$version"
@@ -304,6 +308,13 @@ jobs:
           $version = (Get-Content support/VERSION -Raw).Trim()
           $versionHeader = Join-Path $PWD 'windows-version.h'
           Set-Content -LiteralPath $versionHeader -Value "#define LSM_VERSION `"$version`"" -Encoding ascii
+          & (Join-Path $PWD 'support/windows/prepare-typography.ps1')
+          if ($LASTEXITCODE -ne 0) { throw "Windows typography preparation failed." }
+          $windres = Join-Path (Split-Path -Parent $gcc) 'windres.exe'
+          if (-not (Test-Path $windres)) { throw "No matching MinGW windres is available." }
+          & $windres '-Isrc' 'support/windows/system-monitor-fonts.rc' '-O' 'coff' '-o' 'build/windows-fonts.o'
+          if ($LASTEXITCODE -ne 0) { throw "Windows font resource compilation failed." }
+
           $arguments = @(
             '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
             '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
@@ -312,6 +323,7 @@ jobs:
             '-include', $versionHeader,
             'src/main_windows.c', 'src/presentation_contract.c', 'src/performance_view.c',
             'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'build/windows-fonts.o',
             'src/infiltratr-common/src/core.c',
             'src/infiltratr-common/src/arithmetic.c',
             'src/infiltratr-common/src/config.c',
@@ -324,7 +336,7 @@ jobs:
             'src/infiltratr-common/src/graphics.c',
             'src/infiltratr-common/src/escape.c',
             'src/infiltratr-common/src/design.c',
-            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
+            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-lpowrprof', '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
             '-o', 'system-monitor-windows.exe'
           )
           & $gcc @arguments
