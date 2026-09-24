@@ -17,14 +17,32 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-/** Format a canonical Unix-microsecond instant for human display. */
+/**
+ * Format a canonical Unix-microsecond instant for human display.
+ * @param unix_microseconds Canonical Unix instant in microseconds.
+ * @param include_date Prepend the native local-calendar date when true.
+ * @param include_zone Append the native numeric UTC offset when true.
+ * @param native_show_seconds Fallback precision when no authority is active.
+ * @param buffer Destination text buffer.
+ * @param capacity Destination capacity including the terminating NUL.
+ * @return true when the complete presentation was produced.
+ */
 bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                                             bool include_date,
                                             bool include_zone,
                                             bool native_show_seconds,
                                             char *buffer,
                                             size_t capacity);
-/** Format a whole-second Unix instant for human display. */
+/**
+ * Format a whole-second Unix instant for human display.
+ * @param unix_seconds Canonical Unix instant in whole seconds.
+ * @param include_date Prepend the native local-calendar date when true.
+ * @param include_zone Append the native numeric UTC offset when true.
+ * @param native_show_seconds Fallback precision when no authority is active.
+ * @param buffer Destination text buffer.
+ * @param capacity Destination capacity including the terminating NUL.
+ * @return true when the complete presentation was produced.
+ */
 bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        bool include_date,
                                        bool include_zone,
