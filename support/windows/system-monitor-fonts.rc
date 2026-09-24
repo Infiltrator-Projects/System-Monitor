@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "windows_resources.h"
+
+LSM_WINDOWS_FONT_UI_REGULAR RCDATA "build/windows-fonts/ui_regular.ttf"
+LSM_WINDOWS_FONT_UI_BOLD RCDATA "build/windows-fonts/ui_bold.ttf"
+LSM_WINDOWS_FONT_BRAND_REGULAR RCDATA "build/windows-fonts/brand_regular.ttf"
