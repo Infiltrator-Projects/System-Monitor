@@ -4,7 +4,7 @@
  * @brief Internal global-window, menu and navigation coordination API.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef INFILTRATOR_SYSTEM_MONITOR_APP_SHELL_H
