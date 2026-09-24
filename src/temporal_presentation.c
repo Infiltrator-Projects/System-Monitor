@@ -37,9 +37,16 @@ static pthread_mutex_t policy_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 static int64_t monotonic_nanoseconds(void)
 {
     struct timespec now;
+    int64_t seconds_ns;
+    int64_t result;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return -1;
-    if (now.tv_sec > INT64_MAX / LSM_NANOSECONDS_PER_SECOND) return INT64_MAX;
-    return (int64_t)now.tv_sec * LSM_NANOSECONDS_PER_SECOND + now.tv_nsec;
+    if (!infiltratr_i64_multiply_checked(
+            (int64_t)now.tv_sec, LSM_NANOSECONDS_PER_SECOND, &seconds_ns) ||
+        !infiltratr_i64_add_checked(
+            seconds_ns, (int64_t)now.tv_nsec, &result)) {
+        return INT64_MAX;
+    }
+    return result;
 }
 static void refresh_policy_locked(int64_t now_ns)
 {
