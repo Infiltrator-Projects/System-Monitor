@@ -11,7 +11,7 @@ The repository currently uses:
 - .github/workflows/ci.yml
 - .github/workflows/release.yml
 
-`support/tests` contains accounting, hardware, Bluetooth, GPU, battery, filesystem, history, portability and Common-integration regression coverage. The estate is intentionally bounded to 18 physical `*_smoke.c` sources/executables: seven coherent subsystem suites plus eleven specialised integration/lifecycle fixtures. Related regression cases live inside their owning subsystem source rather than as separate one-case translation units. Make is the canonical executed suite. CMake retains target registration and local CTest support, while CI builds only the application through CMake so the same smoke programs are not executed twice.
+`support/tests` contains accounting, hardware, Bluetooth, GPU, battery, filesystem, history, portability and Common-integration regression coverage. The estate is intentionally bounded to 19 physical `*_smoke.c` sources/executables: seven coherent subsystem suites plus twelve specialised integration/lifecycle fixtures. Related regression cases live inside their owning subsystem source rather than as separate one-case translation units. Make is the canonical executed suite. CMake retains target registration and local CTest support, while CI builds only the application through CMake so the same smoke programs are not executed twice.
 
 Automated checks should cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the project.
 
