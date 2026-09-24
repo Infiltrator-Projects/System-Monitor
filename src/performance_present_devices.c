@@ -15,7 +15,7 @@
 #include "performance_view.h"
 
 #include "common.h"
-#include "duration_format.h"
+#include "temporal_presentation.h"
 #include "metric_format.h"
 #include "ui_helpers.h"
 
@@ -513,8 +513,8 @@ static void update_battery_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(page->scale_label, "%s",
                           exact_capacity ? "100%" :
                           coarse_capacity ? "Coarse level" : "N/A");
-    lsm_duration_format_remaining(battery->seconds_remaining, text,
-                                  sizeof(text));
+    (void)lsm_temporal_format_remaining_seconds(
+        battery->seconds_remaining, text, sizeof(text));
     lsm_ui_set_label_text(widgets->remaining, "%s", text);
     lsm_ui_set_label_text(widgets->power, "%s",
         lsm_metric_format_watts(isfinite(battery->power_watts),

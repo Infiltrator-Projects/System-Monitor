@@ -296,8 +296,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     # subsystem suites plus specialised integration/lifecycle fixtures.
     add_executable(lsm-core-suite-smoke
         support/tests/core_smoke.c
-        src/project_info.c
-        src/temporal_presentation.c)
+        src/project_info.c)
 
     add_executable(lsm-presentation-smoke
         support/tests/presentation_smoke.c
@@ -460,7 +459,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         -ffunction-sections -fdata-sections)
     target_link_options(lsm-ui-suite-smoke PRIVATE -Wl,--gc-sections)
 
-    target_link_libraries(lsm-core-suite-smoke PRIVATE Threads::Threads m)
+    target_link_libraries(lsm-core-suite-smoke PRIVATE m)
     target_link_libraries(lsm-presentation-smoke PRIVATE m)
     target_link_libraries(lsm-backend-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})

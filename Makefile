@@ -300,8 +300,8 @@ build-check: check-deps strict-check portability-check \
 
 core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/core_smoke.c src/project_info.c src/temporal_presentation.c \
-		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm -o $(BUILD_DIR)/core-suite-smoke
+		support/tests/core_smoke.c src/project_info.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/core-suite-smoke
 	./$(BUILD_DIR)/core-suite-smoke
 
 presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
