@@ -375,7 +375,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,
-        (unsigned int)metrics->control_radius);
+        (unsigned int)metrics->small_radius);
 
     gtk_css_provider_load_from_data(
         app->shell.theme_provider, css->str, (gssize)css->len, NULL);
