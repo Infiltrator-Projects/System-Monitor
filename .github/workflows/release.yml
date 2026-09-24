@@ -74,7 +74,12 @@ jobs:
           version_header=build/windows-version.h
           mkdir -p build
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
-          bash support/windows/prepare-typography.sh
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            support/tools/prepare_windows_typography.cpp \
+            -o build/prepare-windows-typography
+          build/prepare-windows-typography \
+            src/infiltratr-common/cmake/InfiltratrTypographyAssets.cmake \
+            build/windows-fonts
           x86_64-w64-mingw32-windres -Isrc \
             support/windows/system-monitor-fonts.rc -O coff \
             -o build/windows-fonts.o
