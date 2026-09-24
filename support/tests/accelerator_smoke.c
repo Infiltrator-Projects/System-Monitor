@@ -3,7 +3,7 @@
  * @file accelerator_smoke.c
  * @brief Consolidated accelerator regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -19,7 +19,7 @@ int smoke_case_npu_telemetry(void);
  * @file hardware_topology_smoke.c
  * @brief Verify stable-ID topology reconciliation preserves live baselines.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "hardware_topology.h"
@@ -95,7 +95,7 @@ int main(void)
  * @brief Regression test for native Intel PMU discovery and metric mapping.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -289,7 +289,7 @@ int main(void)
  * @brief Regression test for Intel IVPU and generic accelerator telemetry.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
