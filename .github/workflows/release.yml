@@ -74,7 +74,7 @@ jobs:
           version_header=build/windows-version.h
           mkdir -p build
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
-          support/windows/prepare-typography.sh
+          bash support/windows/prepare-typography.sh
           x86_64-w64-mingw32-windres -Isrc \
             support/windows/system-monitor-fonts.rc -O coff \
             -o build/windows-fonts.o
