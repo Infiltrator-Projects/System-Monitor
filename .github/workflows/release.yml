@@ -74,6 +74,10 @@ jobs:
           version_header=build/windows-version.h
           mkdir -p build
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          support/windows/prepare-typography.sh
+          x86_64-w64-mingw32-windres -Isrc \
+            support/windows/system-monitor-fonts.rc -O coff \
+            -o build/windows-fonts.o
           common_portable=( \
             src/infiltratr-common/src/core.c \
             src/infiltratr-common/src/arithmetic.c \
@@ -95,8 +99,8 @@ jobs:
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
             src/main_windows.c src/presentation_contract.c src/performance_view.c \
             src/monitor_backend_windows.c src/process_backend_windows.c \
-            "${common_portable[@]}" \
-            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
+            build/windows-fonts.o "${common_portable[@]}" \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o "$windows_app"
           strings "$windows_app" | grep -Fq "$version"
