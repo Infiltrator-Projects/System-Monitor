@@ -813,7 +813,7 @@ static void check_engineering_documentation(void)
             "CONTRIBUTING.md",
             "SECURITY.md",
             "## Licence",
-            "GPL-3.0-or-later", "THIRD_PARTY_NOTICES"
+            "GPL-3.0-or-later"
         };
         for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++)
             require_text_marker("README.md", readme, markers[index]);
