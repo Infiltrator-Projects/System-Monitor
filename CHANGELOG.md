@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.92 - 2026-09-24
+
+- Pin System Monitor to released Infiltratr Common 1.19.26 and use its single exhaustive clock-mode duration formatter instead of a decimal-only local special case.
+- Apply System Settings temporal presentation to every user-facing duration that has a meaningful conversion: CPU uptime, process age, process CPU time, App History CPU/active time, battery time remaining and diagnostic-snapshot uptime.
+- Use the real elapsed representation for French decimal time, Internet beats, Unix seconds, binary H:M:S, hexadecimal ticks, Julian/MJD day fractions, sidereal time, Chinese double-hours/hundred-kè and Indian ghaṭī/vighaṭī.
+- Anchor apparent-solar uptime/process-age/remaining intervals to the real civil interval endpoint; retain equal 60/60 units for mean-solar, Italian, Babylonian and Nuremberg clocks because those systems change the origin rather than the elapsed unit.
+- Deliberately keep Roman temporal and Edo Japanese seasonal durations in conventional elapsed H:M:S because their unequal daylight/night periods are clock labels, not one fixed duration unit.
+- Keep all collectors, CPU accounting, sampling cadence, persisted values and monotonic calculations in canonical SI/Unix time; only human-facing formatting changes.
+
 ## 1.0.91 - 2026-09-24
 
 - Make CPU uptime follow French decimal time when System Settings selects the decimal clock, while preserving the underlying canonical SI-second uptime counter.

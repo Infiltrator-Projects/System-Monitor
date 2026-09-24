@@ -75,7 +75,7 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     LsmCpuPageWidgets *widgets = &page->widgets.cpu;
     LsmCpuPerformanceView view;
     lsm_cpu_performance_view(&app->monitor, &view);
-    (void)lsm_temporal_format_duration_seconds(
+    (void)lsm_temporal_format_elapsed_seconds(
         cpu->uptime_seconds,
         view.metrics[LSM_CPU_METRIC_UPTIME],
         sizeof(view.metrics[LSM_CPU_METRIC_UPTIME]));

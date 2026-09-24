@@ -223,7 +223,8 @@ static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *render
         gtk_tree_model_get(model, iter, field, &seconds, -1);
         const uint64_t rounded = seconds > 0.0 ?
             (uint64_t)llround(seconds) : 0U;
-        infiltratr_format_duration_clock(rounded, text, sizeof(text));
+        (void)lsm_temporal_format_duration_seconds(
+            rounded, text, sizeof(text));
     } else if (field == HIST_COL_READ_BYTES || field == HIST_COL_WRITE_BYTES ||
                field == HIST_COL_PEAK_RSS) {
         guint64 bytes = 0;

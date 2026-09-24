@@ -485,14 +485,14 @@ static gboolean inspector_update(gpointer user_data)
             started, sizeof(started))) {
         snprintf(started, sizeof(started), "N/A");
     }
-    infiltratr_format_duration_clock(process.elapsed_seconds, elapsed,
-                              sizeof(elapsed));
+    (void)lsm_temporal_format_elapsed_seconds(
+        process.elapsed_seconds, elapsed, sizeof(elapsed));
     snprintf(threads, sizeof(threads), "%u", process.threads);
     snprintf(handles, sizeof(handles), "%u", process.handle_count);
     lsm_copy_string(priority, sizeof(priority),
                     lsm_process_priority_name(process.priority));
-    infiltratr_format_duration_clock(process.cpu_time_seconds, cpu_time,
-                              sizeof(cpu_time));
+    (void)lsm_temporal_format_duration_seconds(
+        process.cpu_time_seconds, cpu_time, sizeof(cpu_time));
     if (process.gpu_available)
         snprintf(gpu, sizeof(gpu), "%.1f%%", process.gpu_percent);
     else

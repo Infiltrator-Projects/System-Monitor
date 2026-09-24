@@ -7,9 +7,9 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.19.25")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.25")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "e985e88c2fbbedfe7239ee716908dc686444287a")
+set(INFILTRATR_COMMON_TAG "v1.19.26")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.26")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "a5ffcff1fea5e270f0d0d1f97eff002c4bf66446")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LSM_GIT_EXECUTABLE git REQUIRED)
@@ -296,7 +296,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     # subsystem suites plus specialised integration/lifecycle fixtures.
     add_executable(lsm-core-suite-smoke
         support/tests/core_smoke.c
-        src/project_info.c)
+        src/project_info.c
+        src/temporal_presentation.c)
 
     add_executable(lsm-presentation-smoke
         support/tests/presentation_smoke.c
@@ -459,7 +460,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         -ffunction-sections -fdata-sections)
     target_link_options(lsm-ui-suite-smoke PRIVATE -Wl,--gc-sections)
 
-    target_link_libraries(lsm-core-suite-smoke PRIVATE m)
+    target_link_libraries(lsm-core-suite-smoke PRIVATE Threads::Threads m)
     target_link_libraries(lsm-presentation-smoke PRIVATE m)
     target_link_libraries(lsm-backend-smoke PRIVATE
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})

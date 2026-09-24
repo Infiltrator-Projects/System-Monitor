@@ -17,9 +17,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.19.25
-INFILTRATR_COMMON_COMMIT := e985e88c2fbbedfe7239ee716908dc686444287a
-INFILTRATR_COMMON_VERSION := 1.19.25
+INFILTRATR_COMMON_TAG := v1.19.26
+INFILTRATR_COMMON_COMMIT := a5ffcff1fea5e270f0d0d1f97eff002c4bf66446
+INFILTRATR_COMMON_VERSION := 1.19.26
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -300,8 +300,8 @@ build-check: check-deps strict-check portability-check \
 
 core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/core_smoke.c src/project_info.c \
-		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/core-suite-smoke
+		support/tests/core_smoke.c src/project_info.c src/temporal_presentation.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm -o $(BUILD_DIR)/core-suite-smoke
 	./$(BUILD_DIR)/core-suite-smoke
 
 presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)

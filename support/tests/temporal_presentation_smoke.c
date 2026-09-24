@@ -61,12 +61,82 @@ int main(void)
      * is decimal second 99; at 87 SI seconds the duration crosses into
      * decimal minute 01 and resets the seconds field to 00.
      */
-    CHECK(lsm_temporal_format_duration_seconds(
+    CHECK(lsm_temporal_format_elapsed_seconds(
         UINT64_C(86), text, sizeof(text)));
     CHECK(strcmp(text, "0:00:99") == 0);
-    CHECK(lsm_temporal_format_duration_seconds(
+    CHECK(lsm_temporal_format_elapsed_seconds(
         UINT64_C(87), text, sizeof(text)));
     CHECK(strcmp(text, "0:01:00") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "internet");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_elapsed_seconds(
+        UINT64_C(87), text, sizeof(text)));
+    CHECK(strcmp(text, "@001.00") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "unix");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(61), text, sizeof(text)));
+    CHECK(strcmp(text, "61 s") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "binary");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(61), text, sizeof(text)));
+    CHECK(strcmp(text, "00000:000001:000001") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "hexadecimal");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(43200), text, sizeof(text)));
+    CHECK(strcmp(text, "8000") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "julian");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(43200), text, sizeof(text)));
+    CHECK(strcmp(text, "JD +0.50000 d") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "sidereal");
+    policy.location_configured = true;
+    policy.latitude = -36.39;
+    policy.longitude = 145.36;
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(43200), text, sizeof(text)));
+    CHECK(strcmp(text, "12:01:58 LST") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "chinese-time");
+    policy.location_configured = false;
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(7200), text, sizeof(text)));
+    CHECK(strcmp(text, "時辰 01/12") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "chinese-ke");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(864), text, sizeof(text)));
+    CHECK(strcmp(text, "刻 01/100") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "indian-ghati");
+    policy.location_configured = true;
+    policy.latitude = -36.39;
+    policy.longitude = 145.36;
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(1440), text, sizeof(text)));
+    CHECK(strcmp(text, "GH 01:00") == 0);
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "roman-temporal");
     policy.location_configured = true;
     policy.latitude = 0.0;
@@ -77,12 +147,32 @@ int main(void)
         INT64_C(43200), false, false, true, text, sizeof(text)));
     CHECK(strstr(text, "Hora") != NULL || strstr(text, "Vigilia") != NULL);
     CHECK(lsm_temporal_format_duration_seconds(
-        UINT64_C(87), text, sizeof(text)));
-    CHECK(strcmp(text, "00:01:27") == 0);
+        UINT64_C(3661), text, sizeof(text)));
+    CHECK(strcmp(text, "01:01:01") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "japanese-temporal");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(3661), text, sizeof(text)));
+    CHECK(strcmp(text, "01:01:01") == 0);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "solar");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(lsm_temporal_format_elapsed_seconds(
+        UINT64_C(3600), text, sizeof(text)));
+    CHECK(strstr(text, "SOL") != NULL);
     CHECK(unlink(provider) == 0);
     lsm_temporal_presentation_reset_cache_for_test();
     CHECK(lsm_temporal_format_epoch_seconds(
         INT64_C(43200), true, false, true, text, sizeof(text)));
     CHECK(text[0] != '\0' && strcmp(text, "N/A") != 0);
+    CHECK(lsm_temporal_format_duration_seconds(
+        UINT64_C(87), text, sizeof(text)));
+    CHECK(strcmp(text, "00:01:27") == 0);
+    CHECK(lsm_temporal_format_remaining_seconds(
+        UINT64_C(3661), text, sizeof(text)));
+    CHECK(strcmp(text, "1h 01m") == 0);
     return 0;
 }

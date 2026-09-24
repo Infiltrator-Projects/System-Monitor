@@ -14,7 +14,7 @@
 #ifndef INFILTRATOR_SYSTEM_MONITOR_DURATION_FORMAT_H
 #define INFILTRATOR_SYSTEM_MONITOR_DURATION_FORMAT_H
 
-#include <infiltratr/format.h>
+#include "temporal_presentation.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,8 +22,8 @@
 static inline void lsm_duration_format_remaining(uint64_t seconds,
                                                  char *buffer, size_t size)
 {
-    (void)infiltratr_format_duration_compact(
-        seconds != 0U, seconds, buffer, size);
+    (void)lsm_temporal_format_remaining_seconds(
+        seconds, buffer, size);
 }
 
 #endif

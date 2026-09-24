@@ -381,6 +381,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     char memory_used[64], memory_total[64];
     char cpu_speed[32], memory_speed[32], slots[32];
     char cpu_pressure[64], memory_pressure[64], io_pressure[64];
+    char uptime[128] = "N/A";
     lsm_format_bytes(monitor->memory.used_bytes, memory_used,
                      sizeof(memory_used));
     lsm_format_bytes(monitor->memory.total_bytes, memory_total,
@@ -403,6 +404,8 @@ static bool write_snapshot(FILE *file, const void *user_data)
                              memory_pressure, sizeof(memory_pressure));
     format_pressure_snapshot(&monitor->io_pressure,
                              io_pressure, sizeof(io_pressure));
+    (void)lsm_temporal_format_elapsed_seconds(
+        monitor->cpu.uptime_seconds, uptime, sizeof(uptime));
     fprintf(file,
         "System Monitor diagnostic snapshot\n"
         "Version: %s\nGenerated: %s\nHost: %s\nOperating system: %s\n"
@@ -411,7 +414,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
         "  Speed: %s | cores: %u | logical: %u | sockets: %u | NUMA: %u\n"
         "  Load average: %.2f %.2f %.2f | interrupts/s: %.0f | context switches/s: %.0f\n"
         "  CPU pressure (10 s): %s\n"
-        "  Processes: %u | threads: %u | handles: %llu | uptime: %llu s\n\n"
+        "  Processes: %u | threads: %u | handles: %llu | uptime: %s\n\n"
         "Memory\n  %s of %s used (%.1f%%) | speed: %s | slots: %s\n"
         "  Memory pressure (10 s): %s\n"
         "  I/O pressure (10 s): %s\n",
@@ -426,7 +429,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
         monitor->cpu.context_switches_per_sec, cpu_pressure,
         monitor->cpu.process_count, monitor->cpu.thread_count,
         (unsigned long long)monitor->cpu.file_handle_count,
-        (unsigned long long)monitor->cpu.uptime_seconds,
+        uptime,
         memory_used, memory_total, monitor->memory.usage_percent,
         memory_speed, slots, memory_pressure, io_pressure);
     write_memory_accounting(file, &monitor->memory);

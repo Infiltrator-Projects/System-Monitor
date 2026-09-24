@@ -226,7 +226,12 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_DURATION: {
             guint64 seconds = 0;
             gtk_tree_model_get(model, iter, column, &seconds, -1);
-            infiltratr_format_duration_clock(seconds, text, sizeof(text));
+            if (column == PROC_COL_ELAPSED)
+                (void)lsm_temporal_format_elapsed_seconds(
+                    seconds, text, sizeof(text));
+            else
+                (void)lsm_temporal_format_duration_seconds(
+                    seconds, text, sizeof(text));
             break;
         }
     }

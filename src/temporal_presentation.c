@@ -220,57 +220,121 @@ bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
         microseconds, include_date, include_zone,
         native_show_seconds, buffer, capacity);
 }
-bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
-                                          char *buffer,
-                                          size_t capacity)
+static bool realtime_microseconds(int64_t *microseconds)
+{
+    struct timespec now;
+    int64_t seconds_us;
+    int64_t subsecond_us;
+
+    if (microseconds == NULL ||
+        clock_gettime(CLOCK_REALTIME, &now) != 0 ||
+        !infiltratr_i64_multiply_checked(
+            (int64_t)now.tv_sec, LSM_MICROSECONDS_PER_SECOND, &seconds_us)) {
+        return false;
+    }
+    subsecond_us = (int64_t)(now.tv_nsec / 1000L);
+    return infiltratr_i64_add_checked(seconds_us, subsecond_us, microseconds);
+}
+
+typedef enum LsmDurationAnchor {
+    LSM_DURATION_UNANCHORED = 0,
+    LSM_DURATION_ENDS_NOW,
+    LSM_DURATION_STARTS_NOW
+} LsmDurationAnchor;
+
+static bool format_duration_seconds(uint64_t elapsed_seconds,
+                                    LsmDurationAnchor anchor,
+                                    bool compact_native_fallback,
+                                    char *buffer,
+                                    size_t capacity)
 {
     InfiltratrTemporalPolicyV3 policy;
-    const uint64_t days = elapsed_seconds / UINT64_C(86400);
-    const uint64_t day_seconds = elapsed_seconds % UINT64_C(86400);
-    int64_t microseconds;
-    char clock_text[64];
-    int written;
+    uint64_t elapsed_microseconds;
+    int64_t end_unix_microseconds = INT64_MIN;
+    int64_t now_microseconds;
+    bool authority;
 
     if (buffer == NULL || capacity == 0U) return false;
+    authority = effective_policy(&policy);
 
-    /*
-     * Decimal time is a uniform re-partitioning of the same civil day, so it
-     * has a meaningful elapsed-duration representation. Historical/solar clock
-     * modes describe a civil instant, not an amount of elapsed time; those
-     * therefore retain the conventional duration formatter.
-     */
-    if (!effective_policy(&policy) || strcmp(policy.clock_mode, "decimal") != 0) {
-        infiltratr_format_duration_clock(elapsed_seconds, buffer, capacity);
+    if (!authority) {
+        if (compact_native_fallback) {
+            infiltratr_format_duration_compact(
+                elapsed_seconds != 0U, elapsed_seconds, buffer, capacity);
+        } else {
+            infiltratr_format_duration_clock(
+                elapsed_seconds, buffer, capacity);
+        }
         return buffer[0] != '\0';
     }
 
-    if (!infiltratr_i64_multiply_checked(
-            (int64_t)day_seconds,
-            LSM_MICROSECONDS_PER_SECOND,
-            &microseconds) ||
-        !infiltratr_temporal_format_clock_mode(
-            "decimal", microseconds, 0, true, false, false,
-            0.0, 0.0, clock_text, sizeof(clock_text), NULL)) {
+    if (!infiltratr_u64_multiply_checked(
+            elapsed_seconds, (uint64_t)LSM_MICROSECONDS_PER_SECOND,
+            &elapsed_microseconds)) {
         infiltratr_copy_string(buffer, capacity, "N/A");
         return false;
     }
 
-    if (days == 0U) {
-        if (strlen(clock_text) + 1U > capacity) {
-            infiltratr_copy_string(buffer, capacity, "N/A");
-            return false;
+    if (anchor != LSM_DURATION_UNANCHORED &&
+        realtime_microseconds(&now_microseconds)) {
+        if (anchor == LSM_DURATION_ENDS_NOW) {
+            end_unix_microseconds = now_microseconds;
+        } else if (elapsed_microseconds <= (uint64_t)INT64_MAX &&
+                   infiltratr_i64_add_checked(
+                       now_microseconds, (int64_t)elapsed_microseconds,
+                       &end_unix_microseconds)) {
+            /* Future estimate ends at the projected civil instant. */
         }
-        infiltratr_copy_string(buffer, capacity, clock_text);
-        return true;
     }
 
-    written = snprintf(buffer, capacity, "%llud %s",
-                       (unsigned long long)days, clock_text);
-    if (written < 0 || (size_t)written >= capacity) {
+    if (!infiltratr_temporal_format_duration_mode(
+            policy.clock_mode,
+            elapsed_microseconds,
+            end_unix_microseconds,
+            policy.show_seconds,
+            false,
+            policy.location_configured,
+            policy.latitude,
+            policy.longitude,
+            buffer,
+            capacity,
+            NULL)) {
         infiltratr_copy_string(buffer, capacity, "N/A");
         return false;
     }
     return true;
+}
+
+bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
+                                          char *buffer,
+                                          size_t capacity)
+{
+    return format_duration_seconds(
+        elapsed_seconds, LSM_DURATION_UNANCHORED, false,
+        buffer, capacity);
+}
+
+bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
+                                         char *buffer,
+                                         size_t capacity)
+{
+    return format_duration_seconds(
+        elapsed_seconds, LSM_DURATION_ENDS_NOW, false,
+        buffer, capacity);
+}
+
+bool lsm_temporal_format_remaining_seconds(uint64_t elapsed_seconds,
+                                           char *buffer,
+                                           size_t capacity)
+{
+    if (buffer == NULL || capacity == 0U) return false;
+    if (elapsed_seconds == 0U) {
+        infiltratr_copy_string(buffer, capacity, "N/A");
+        return true;
+    }
+    return format_duration_seconds(
+        elapsed_seconds, LSM_DURATION_STARTS_NOW, true,
+        buffer, capacity);
 }
 #ifdef LSM_TEMPORAL_PRESENTATION_TEST_API
 void lsm_temporal_presentation_reset_cache_for_test(void)

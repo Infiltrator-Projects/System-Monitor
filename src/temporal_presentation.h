@@ -4,10 +4,10 @@
  * @brief Human-facing civil-time presentation under system temporal policy.
  *
  * Canonical timestamps and measured elapsed seconds remain unchanged. These
- * helpers affect presentation only: civil timestamps follow temporal-v3 policy,
- * and elapsed durations use French decimal day units when the active system
- * clock mode is decimal. Other duration modes remain conventional because
- * astronomical and historical civil clocks do not define elapsed intervals.
+ * helpers affect presentation only: civil timestamps and human-facing elapsed
+ * values follow temporal-v3 policy wherever the selected clock defines a real
+ * interval representation. Internal sampling, accounting and persistence stay
+ * in canonical SI/Unix units.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -51,20 +51,30 @@ bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        char *buffer,
                                        size_t capacity);
 /**
- * Format an elapsed duration under the active system temporal policy.
+ * Format an abstract/accumulated duration under the active system policy.
  *
- * Decimal mode uses one decimal day = 10 hours = 1000 minutes = 100000
- * seconds, so the seconds field runs 00 through 99 before the minute advances.
- * Other modes retain the conventional duration representation.
- *
- * @param elapsed_seconds Canonical elapsed SI seconds.
- * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
- * @return true when the complete presentation was produced.
+ * Use this for quantities such as accumulated CPU or active time that are not
+ * one contiguous civil interval. The stored/measured value remains SI seconds.
  */
 bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
                                           char *buffer,
                                           size_t capacity);
+
+/**
+ * Format a contiguous elapsed interval ending now, such as system uptime or a
+ * process age. Date-dependent modes receive the real civil endpoint.
+ */
+bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
+                                         char *buffer,
+                                         size_t capacity);
+
+/**
+ * Format a future duration estimate beginning now. Without System Settings,
+ * the historical compact remaining-time presentation is preserved.
+ */
+bool lsm_temporal_format_remaining_seconds(uint64_t elapsed_seconds,
+                                           char *buffer,
+                                           size_t capacity);
 #ifdef LSM_TEMPORAL_PRESENTATION_TEST_API
 /** Clear the short-lived policy cache for deterministic regression tests. */
 void lsm_temporal_presentation_reset_cache_for_test(void);
