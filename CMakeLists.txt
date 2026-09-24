@@ -375,14 +375,21 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
     add_executable(lsm-application-catalog-smoke
         support/tests/application_catalog_smoke.c src/application_catalog.c)
     add_executable(lsm-system-snapshot-smoke
-        support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c)
+        support/tests/system_snapshot_smoke.c src/system_snapshot.c
+        src/temporal_presentation.c src/project_info.c)
     add_executable(lsm-process-export-smoke
         support/tests/process_export_smoke.c src/process_export.c src/process_model.c
         src/ui_helpers.c)
     add_executable(lsm-history-retention-smoke
-        support/tests/history_retention_smoke.c src/history.c src/ui_helpers.c)
+        support/tests/history_retention_smoke.c src/history.c
+        src/temporal_presentation.c src/ui_helpers.c)
     target_compile_definitions(lsm-history-retention-smoke PRIVATE
         LSM_HISTORY_TEST_API)
+    add_executable(lsm-temporal-presentation-smoke
+        support/tests/temporal_presentation_smoke.c
+        src/temporal_presentation.c)
+    target_compile_definitions(lsm-temporal-presentation-smoke PRIVATE
+        LSM_TEMPORAL_PRESENTATION_TEST_API)
     add_executable(lsm-async-workers-smoke
         support/tests/async_workers_smoke.c src/process_scanner.c
         src/process_recorder.c ${LSM_PROCESS_CORE_SOURCES}
@@ -411,6 +418,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         lsm-system-snapshot-smoke
         lsm-process-export-smoke
         lsm-history-retention-smoke
+        lsm-temporal-presentation-smoke
         lsm-async-workers-smoke
         lsm-process-scan-benchmark
         lsm-runtime-stability-smoke)
@@ -466,9 +474,13 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         PkgConfig::GTK3 Threads::Threads m ${CMAKE_DL_LIBS})
     target_link_libraries(lsm-nvml-smoke PRIVATE m ${CMAKE_DL_LIBS})
     target_link_libraries(lsm-application-catalog-smoke PRIVATE PkgConfig::GTK3)
-    target_link_libraries(lsm-system-snapshot-smoke PRIVATE PkgConfig::GTK3 m)
+    target_link_libraries(lsm-system-snapshot-smoke PRIVATE
+        PkgConfig::GTK3 Threads::Threads m)
     target_link_libraries(lsm-process-export-smoke PRIVATE PkgConfig::GTK3 m)
-    target_link_libraries(lsm-history-retention-smoke PRIVATE PkgConfig::GTK3 m)
+    target_link_libraries(lsm-history-retention-smoke PRIVATE
+        PkgConfig::GTK3 Threads::Threads m)
+    target_link_libraries(lsm-temporal-presentation-smoke PRIVATE
+        Threads::Threads m)
     target_link_libraries(lsm-async-workers-smoke PRIVATE Threads::Threads m)
     target_link_libraries(lsm-process-scan-benchmark PRIVATE m)
     target_link_libraries(lsm-runtime-stability-smoke PRIVATE

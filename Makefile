@@ -510,9 +510,9 @@ backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 history-retention-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 $(STRICT_WARNINGS) \
-		support/tests/history_retention_smoke.c src/history.c  \
+		support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \
 		  src/ui_helpers.c \
-		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
 	./$(BUILD_DIR)/history-retention-smoke
 
@@ -711,9 +711,9 @@ application-catalog-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 system-snapshot-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/project_info.c \
+		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/temporal_presentation.c src/project_info.c \
 		   \
-		$(INFILTRATR_COMMON_ARCHIVE) -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
 		-o $(BUILD_DIR)/system-snapshot-smoke
 	./$(BUILD_DIR)/system-snapshot-smoke
 
