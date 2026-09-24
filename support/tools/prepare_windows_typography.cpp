@@ -50,7 +50,7 @@ static std::string shell_quote(const std::string &value)
 {
     std::string result = "'";
     for (const char ch : value) {
-        if (ch == ''')
+        if (ch == '\\'')
             result += "'\\''";
         else
             result += ch;
