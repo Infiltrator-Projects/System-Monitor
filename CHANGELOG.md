@@ -2,6 +2,14 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.85 - 2026-09-24
+
+- Make App History open substantially more efficiently by avoiding the duplicate first-navigation refresh that rebuilt the same model immediately after construction.
+- Populate the bounded App History model without re-sorting the whole list after every inserted row, then restore the requested sort once after the bulk refresh.
+- Track the latest durably written history generation so shutdown does not wait for a periodic save and then write the identical generation a second time.
+- Teach synchronous shutdown persistence to treat an already-written matching generation as durable success, preserving the dirty-state contract without duplicate I/O.
+- Extend the strict GTK compatibility shim with the standard unsorted tree-model sentinel required by the bulk-refresh path.
+
 ## 1.0.84 - 2026-09-23
 
 - Preserve the currently selected Performance device when delayed topology discovery changes a device's presentation stack identity while the semantic device is unchanged.
