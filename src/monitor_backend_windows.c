@@ -98,29 +98,14 @@ static uint64_t large_integer_u64(LARGE_INTEGER value)
 
 static uint64_t pages_to_bytes(SIZE_T pages, SIZE_T page_size)
 {
-    if (page_size != 0U &&
-        (uint64_t)pages > UINT64_MAX / (uint64_t)page_size)
-        return UINT64_MAX;
-    return (uint64_t)pages * (uint64_t)page_size;
+    return infiltratr_u64_multiply_saturating(
+        (uint64_t)pages, (uint64_t)page_size);
 }
 
 static unsigned size_to_unsigned(SIZE_T value)
 {
     return (uint64_t)value > (uint64_t)UINT_MAX
         ? UINT_MAX : (unsigned)value;
-}
-
-static double percent_u64(uint64_t part, uint64_t total)
-{
-    if (total == 0U) return 0.0;
-    const double value = ((double)part * 100.0) / (double)total;
-    return value > 100.0 ? 100.0 : value;
-}
-
-static double rate_u64(uint64_t current, uint64_t previous, double elapsed)
-{
-    if (elapsed <= 0.0 || current < previous) return 0.0;
-    return (double)(current - previous) / elapsed;
 }
 
 static void wide_to_utf8(const wchar_t *source, char *destination,
@@ -192,10 +177,10 @@ static bool update_cpu_snapshot(LsmMonitor *monitor,
             kernel_delta >= idle_delta ? kernel_delta - idle_delta : 0U;
         const uint64_t busy_delta = user_delta + busy_kernel_delta;
 
-        monitor->cpu.usage_percent = percent_u64(busy_delta, total_delta);
-        monitor->cpu.user_percent = percent_u64(user_delta, total_delta);
+        monitor->cpu.usage_percent = infiltratr_percent_u64(busy_delta, total_delta);
+        monitor->cpu.user_percent = infiltratr_percent_u64(user_delta, total_delta);
         monitor->cpu.kernel_percent =
-            percent_u64(busy_kernel_delta, total_delta);
+            infiltratr_percent_u64(busy_kernel_delta, total_delta);
     } else {
         monitor->cpu.usage_percent = 0.0;
         monitor->cpu.user_percent = 0.0;
@@ -250,7 +235,7 @@ static bool update_memory_snapshot(LsmMonitor *monitor)
         monitor->memory.total_bytes >= monitor->memory.available_bytes
             ? monitor->memory.total_bytes - monitor->memory.available_bytes
             : 0U;
-    monitor->memory.usage_percent = percent_u64(
+    monitor->memory.usage_percent = infiltratr_percent_u64(
         monitor->memory.used_bytes, monitor->memory.total_bytes);
     return true;
 }
@@ -571,7 +556,7 @@ static void append_volume_to_disk(
     partition->used_bytes = used_bytes;
     partition->usage_known = usage_known;
     partition->used_percent = usage_known && total_bytes > 0U
-        ? (unsigned)percent_u64(used_bytes, total_bytes) : 0U;
+        ? (unsigned)infiltratr_percent_u64(used_bytes, total_bytes) : 0U;
     if (mount_point && volume_is_system_volume(mount_point))
         disk->system_disk = true;
 }
@@ -1338,7 +1323,7 @@ static void update_gpu_dxgi_memory(
                             (uint64_t)memory.CurrentUsage;
                         if (!gpu->shared_system_memory &&
                             gpu->memory_total_bytes > 0U) {
-                            gpu->memory_percent = percent_u64(
+                            gpu->memory_percent = infiltratr_percent_u64(
                                 gpu->memory_used_bytes,
                                 gpu->memory_total_bytes);
                         } else {

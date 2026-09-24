@@ -19,6 +19,7 @@
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
+#include "common.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -58,29 +59,6 @@ struct LsmProcessBackend {
     PSID current_user_sid;
 };
 
-static bool reserve_array(void **items, size_t *capacity,
-                          size_t element_size, size_t required)
-{
-    if (!items || !capacity || element_size == 0U) return false;
-    if (required <= *capacity) return true;
-
-    size_t new_capacity = *capacity ? *capacity : 256U;
-    while (new_capacity < required) {
-        if (new_capacity > SIZE_MAX / 2U) {
-            new_capacity = required;
-            break;
-        }
-        new_capacity *= 2U;
-    }
-    if (new_capacity > SIZE_MAX / element_size) return false;
-
-    void *grown = realloc(*items, new_capacity * element_size);
-    if (!grown) return false;
-    *items = grown;
-    *capacity = new_capacity;
-    return true;
-}
-
 static uint64_t filetime_value(FILETIME value)
 {
     return ((uint64_t)value.dwHighDateTime << 32U) |
@@ -110,8 +88,7 @@ static uint64_t process_cpu_time_100ns(HANDLE process,
 
     const uint64_t kernel_value = filetime_value(kernel);
     const uint64_t user_value = filetime_value(user);
-    return UINT64_MAX - kernel_value < user_value
-        ? UINT64_MAX : kernel_value + user_value;
+    return lsm_u64_add_saturating(kernel_value, user_value);
 }
 
 static uint64_t system_cpu_time_100ns(void)
@@ -123,21 +100,13 @@ static uint64_t system_cpu_time_100ns(void)
         return 0U;
     const uint64_t kernel_value = filetime_value(kernel);
     const uint64_t user_value = filetime_value(user);
-    return UINT64_MAX - kernel_value < user_value
-        ? UINT64_MAX : kernel_value + user_value;
-}
-
-static double percent_u64(uint64_t part, uint64_t total)
-{
-    if (total == 0U) return 0.0;
-    const double value = ((double)part * 100.0) / (double)total;
-    return value > 100.0 ? 100.0 : value;
+    return lsm_u64_add_saturating(kernel_value, user_value);
 }
 
 double lsm_process_cpu_total_percent(uint64_t process_delta,
                                      uint64_t system_delta)
 {
-    return percent_u64(process_delta, system_delta);
+    return lsm_percent_u64(process_delta, system_delta);
 }
 
 static LsmProcessPriority priority_from_class(DWORD priority_class)
@@ -166,20 +135,6 @@ static bool native_pid(LsmProcessId id, DWORD *pid)
     }
     *pid = (DWORD)id;
     return true;
-}
-
-static void copy_text(char *destination, size_t capacity,
-                      const char *source)
-{
-    if (!destination || capacity == 0U) return;
-    destination[0] = '\0';
-    if (!source) return;
-
-    const size_t length = strlen(source);
-    const size_t copied = length < capacity - 1U ? length : capacity - 1U;
-    if (copied > 0U)
-        memcpy(destination, source, copied);
-    destination[copied] = '\0';
 }
 
 static PSID copy_process_user_sid(HANDLE process)
@@ -262,7 +217,7 @@ static void populate_process_account(LsmProcessBackend *backend,
     SID_NAME_USE use = SidTypeUnknown;
     if (LookupAccountSidA(NULL, sid, account, &account_length,
                           domain, &domain_length, &use))
-        copy_text(info->user, sizeof(info->user), account);
+        lsm_copy_string(info->user, sizeof(info->user), account);
 
     free(sid);
 }
@@ -289,10 +244,11 @@ static LsmWindowsProcessSample *find_or_create_sample(
             return &backend->samples[index];
     }
 
-    if (!reserve_array((void **)&backend->samples,
-                       &backend->sample_capacity,
-                       sizeof(*backend->samples),
-                       backend->sample_count + 1U))
+    if (!lsm_array_reserve((void **)&backend->samples,
+                           &backend->sample_capacity,
+                           sizeof(*backend->samples),
+                           backend->sample_count + 1U,
+                           256U))
         return NULL;
 
     LsmWindowsProcessSample *sample =

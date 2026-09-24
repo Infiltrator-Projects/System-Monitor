@@ -825,25 +825,33 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
     app->history.history_last_sample = now_mono;
     const int64_t now_epoch = (int64_t)time(NULL);
 
-    GHashTable *live_apps = g_hash_table_new_full(
-        g_str_hash, g_str_equal, g_free, NULL);
+    /*
+     * One per-snapshot table serves two purposes: its keys are the complete
+     * live-application set used by retention, and its values accumulate RSS.
+     * Keeping those concerns in one table avoids rebuilding two additional
+     * sets and allocating duplicate application keys on every process sample.
+     */
+    GHashTable *rss_totals = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, g_free);
     for (size_t i = 0U; i < count; i++) {
         char app_key[LSM_PATH_LEN + 64U];
         char identity[LSM_PATH_LEN];
         history_identity(&processes[i], app_key, sizeof(app_key),
                          identity, sizeof(identity));
-        g_hash_table_add(live_apps, g_strdup(app_key));
+        uint64_t *rss = g_hash_table_lookup(rss_totals, app_key);
+        if (!rss) {
+            rss = g_new0(uint64_t, 1);
+            g_hash_table_insert(rss_totals, g_strdup(app_key), rss);
+        }
+        *rss = lsm_u64_add_saturating(*rss, processes[i].rss_bytes);
     }
-
-    GHashTable *seen_apps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-    GHashTable *rss_totals = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
     for (size_t i = 0; i < count; i++) {
         const LsmProcessInfo *process = &processes[i];
         char app_key[LSM_PATH_LEN + 64], identity[LSM_PATH_LEN];
         history_identity(process, app_key, sizeof(app_key), identity, sizeof(identity));
         LsmHistoryEntry *entry = history_entry_get(
-            app, process, app_key, identity, live_apps);
+            app, process, app_key, identity, rss_totals);
 
         char sample_key[96];
         snprintf(sample_key, sizeof(sample_key), "%llu:%llu",
@@ -876,17 +884,6 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
         if (cpu_delta || read_delta || write_delta || process->cpu_percent > 0.05)
             entry->last_seen = now_epoch;
 
-        if (!g_hash_table_contains(seen_apps, app_key)) {
-            entry->active_seconds += elapsed;
-            g_hash_table_add(seen_apps, g_strdup(app_key));
-        }
-
-        uint64_t *rss = g_hash_table_lookup(rss_totals, app_key);
-        if (!rss) {
-            rss = g_new0(uint64_t, 1);
-            g_hash_table_insert(rss_totals, g_strdup(app_key), rss);
-        }
-        *rss = lsm_u64_add_saturating(*rss, process->rss_bytes);
     }
 
     GHashTableIter iterator;
@@ -894,15 +891,15 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
     g_hash_table_iter_init(&iterator, rss_totals);
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
         LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
-        uint64_t rss = *(uint64_t *)value;
-        if (entry && rss > entry->peak_rss_bytes) entry->peak_rss_bytes = rss;
+        const uint64_t rss = *(uint64_t *)value;
+        if (!entry) continue;
+        entry->active_seconds += elapsed;
+        if (rss > entry->peak_rss_bytes) entry->peak_rss_bytes = rss;
     }
 
     g_hash_table_foreach_remove(app->history.app_history_samples, remove_stale_sample,
                                 GUINT_TO_POINTER(app->history.history_generation));
-    (void)history_trim_to_limit(app, live_apps);
-    g_hash_table_destroy(live_apps);
-    g_hash_table_destroy(seen_apps);
+    (void)history_trim_to_limit(app, rss_totals);
     g_hash_table_destroy(rss_totals);
     if (count > 0U) history_mark_dirty(app);
 
