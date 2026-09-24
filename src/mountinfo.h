@@ -8,7 +8,7 @@
  * used to associate aliases, UUID mounts and bind mounts with sysfs devices.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef INFILTRATOR_SYSTEM_MONITOR_MOUNTINFO_H
