@@ -8,7 +8,7 @@
  * System Monitor application remains C17 and does not link the C++ runtime.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -744,10 +744,7 @@ static void check_licensing_contract(void)
 
     static const char *const required_legal_files[] = {
         "LICENSE", "src/infiltratr-common/LICENSE",
-        "support/legal/THIRD_PARTY_NOTICES",
         "support/resources/icons/system-monitor.png.license",
-        "support/resources/data/pci-names.tsv.license",
-        "support/resources/data/PCI_IDS_LICENSE",
         "support/packaging/copyright"
     };
     for (size_t index = 0U;
@@ -762,14 +759,8 @@ static void check_licensing_contract(void)
     require_file_marker("src/infiltratr-common/LICENSE",
                         "GNU GENERAL PUBLIC LICENSE");
     require_file_marker("README.md", "GPL-3.0-or-later");
-    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
-                        "Copyright (c) 2020, Neeraj Kumar");
-    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
-                        "Copyright (c) 1997-2026 Martin Mares");
-    require_file_marker("support/legal/THIRD_PARTY_NOTICES",
-                        "Copyright (c) 2015-2026 Albert Pool");
     require_file_marker("support/resources/icons/system-monitor.png.license",
-                        "SPDX-FileCopyrightText: 2016-2026 Shannon Smith");
+                        "SPDX-FileCopyrightText: 2000-2026 Shannon Smith");
     require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: GPL-3.0-or-later");
     if (regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))

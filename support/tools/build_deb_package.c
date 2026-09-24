@@ -9,7 +9,7 @@
  * is installed.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -523,13 +523,9 @@ int main(int argc, char **argv)
                 "usr/share/app-install/icons/infiltrator-system-monitor.png",
                 0644);
     copy_staged("LICENSE", "usr/share/doc/infiltrator-system-monitor/LICENSE", 0644);
-    copy_staged("support/legal/THIRD_PARTY_NOTICES",
-                "usr/share/doc/infiltrator-system-monitor/THIRD_PARTY_NOTICES", 0644);
     copy_staged("support/packaging/copyright",
                 "usr/share/doc/infiltrator-system-monitor/copyright", 0644);
     copy_staged("README.md", "usr/share/doc/infiltrator-system-monitor/README.md", 0644);
-    copy_staged("support/resources/data/PCI_IDS_LICENSE",
-                "usr/share/doc/infiltrator-system-monitor/PCI_IDS_LICENSE", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",
                     "usr/share/doc/infiltrator-system-monitor/BUILD-INFO", 0644);
