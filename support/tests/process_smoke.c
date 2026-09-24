@@ -3,7 +3,7 @@
  * @file process_smoke.c
  * @brief Consolidated process regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -23,7 +23,7 @@ int smoke_case_efficiency(void);
  * @brief Verify the platform-neutral process model without native backend code.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_model.h"
@@ -65,7 +65,7 @@ int main(void)
  * @brief Grouped-process arithmetic and state regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_grouping.h"
@@ -144,7 +144,7 @@ int main(void)
  * @brief Synthetic DRM client deduplication and utilisation regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -319,7 +319,7 @@ int main(void)
  * @brief Deterministic fixture test for detailed process-inspection parsers.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -511,7 +511,7 @@ int main(void)
  * @file process_management_smoke.c
  * @brief Process detail, accounting and affinity smoke test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
@@ -748,7 +748,7 @@ int main(void)
  * @file efficiency_smoke.c
  * @brief Process Efficiency mode scheduler-control smoke test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
