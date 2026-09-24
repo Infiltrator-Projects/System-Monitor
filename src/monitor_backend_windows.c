@@ -51,6 +51,21 @@
 #define LSM_WINDOWS_EXTENTS_BUFFER 4096U
 #define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
 
+/*
+ * CallNtPowerInformation(ProcessorInformation) returns one six-ULONG record
+ * per logical processor. Some MinGW header sets expose the function and
+ * information level but omit Microsoft's PROCESSOR_POWER_INFORMATION typedef,
+ * so keep the documented wire layout local to the Windows adapter.
+ */
+typedef struct {
+    ULONG number;
+    ULONG max_mhz;
+    ULONG current_mhz;
+    ULONG mhz_limit;
+    ULONG max_idle_state;
+    ULONG current_idle_state;
+} LsmWindowsProcessorPowerInformation;
+
 typedef struct {
     bool valid;
     uint64_t read_bytes;
@@ -291,7 +306,7 @@ static void update_cpu_power(LsmCpuInfo *cpu)
 
     const unsigned processor_count =
         cpu->logical_cores > LSM_MAX_CPUS ? LSM_MAX_CPUS : cpu->logical_cores;
-    PROCESSOR_POWER_INFORMATION power[LSM_MAX_CPUS];
+    LsmWindowsProcessorPowerInformation power[LSM_MAX_CPUS];
     memset(power, 0, sizeof(power));
 
     const ULONG bytes =
@@ -305,13 +320,13 @@ static void update_cpu_power(LsmCpuInfo *cpu)
     unsigned current_count = 0U;
     ULONG maximum_mhz = 0U;
     for (unsigned index = 0U; index < processor_count; index++) {
-        if (power[index].CurrentMhz > 0U) {
+        if (power[index].current_mhz > 0U) {
             current_total_mhz = infiltratr_u64_add_saturating(
-                current_total_mhz, (uint64_t)power[index].CurrentMhz);
+                current_total_mhz, (uint64_t)power[index].current_mhz);
             current_count++;
         }
-        if (power[index].MaxMhz > maximum_mhz)
-            maximum_mhz = power[index].MaxMhz;
+        if (power[index].max_mhz > maximum_mhz)
+            maximum_mhz = power[index].max_mhz;
     }
 
     if (current_count > 0U) {
