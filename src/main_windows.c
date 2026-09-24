@@ -20,6 +20,7 @@
 #include "performance_view.h"
 
 #include <infiltratr/core.h>
+#include <infiltratr/design.h>
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -61,6 +62,7 @@
     (LSM_SIDE_BUTTON_HEIGHT + LSM_WINDOWS_PERFORMANCE_ITEM_GAP)
 #define LSM_WINDOWS_MAX_PERFORMANCE_ITEMS \
     (2U + LSM_MAX_DISKS + LSM_MAX_NETS + LSM_MAX_GPUS)
+#include "windows_resources.h"
 
 typedef enum {
     LSM_WINDOWS_THEME_SYSTEM,
@@ -150,6 +152,8 @@ typedef struct {
     HFONT title_font;
     HFONT heading_font;
     HFONT metric_font;
+    HANDLE font_resources[LSM_WINDOWS_FONT_RESOURCE_COUNT];
+    size_t font_resource_count;
     LsmMonitor monitor;
     bool startup_smoke;
     bool monitor_initialised;
@@ -1888,23 +1892,82 @@ static void initialise_process_list(LsmWindowsUiState *state)
     }
 }
 
-static HFONT create_font_with_fallback(
-    int height, int weight,
-    const wchar_t *preferred, const wchar_t *fallback)
+static bool install_font_resource(
+    LsmWindowsUiState *state, int resource_id)
 {
+    if (!state || !state->instance ||
+        state->font_resource_count >= LSM_WINDOWS_FONT_RESOURCE_COUNT)
+        return false;
+
+    HRSRC resource = FindResourceW(
+        state->instance, MAKEINTRESOURCEW(resource_id), RT_RCDATA);
+    if (!resource) return false;
+
+    const DWORD size = SizeofResource(state->instance, resource);
+    HGLOBAL loaded = LoadResource(state->instance, resource);
+    if (!loaded || size == 0U) return false;
+
+    void *data = LockResource(loaded);
+    if (!data) return false;
+
+    DWORD fonts_added = 0U;
+    HANDLE handle = AddFontMemResourceEx(
+        data, size, NULL, &fonts_added);
+    if (!handle || fonts_added == 0U) {
+        if (handle) (void)RemoveFontMemResourceEx(handle);
+        return false;
+    }
+
+    state->font_resources[state->font_resource_count++] = handle;
+    return true;
+}
+
+static void remove_font_resources(LsmWindowsUiState *state)
+{
+    if (!state) return;
+    while (state->font_resource_count > 0U) {
+        const size_t index = --state->font_resource_count;
+        HANDLE handle = state->font_resources[index];
+        if (handle) (void)RemoveFontMemResourceEx(handle);
+        state->font_resources[index] = NULL;
+    }
+}
+
+static bool install_embedded_typography(LsmWindowsUiState *state)
+{
+    if (!state) return false;
+
+    const int resources[] = {
+        LSM_WINDOWS_FONT_UI_REGULAR,
+        LSM_WINDOWS_FONT_UI_BOLD,
+        LSM_WINDOWS_FONT_BRAND_REGULAR
+    };
+    for (size_t index = 0U;
+         index < sizeof(resources) / sizeof(resources[0]); index++) {
+        if (!install_font_resource(state, resources[index])) {
+            remove_font_resources(state);
+            return false;
+        }
+    }
+    return true;
+}
+
+static HFONT create_font_exact(
+    int height, int weight, const wchar_t *family)
+{
+    if (!family || !family[0]) return NULL;
+
     HFONT font = CreateFontW(
         height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, preferred);
-    if (!font) {
-        return CreateFontW(
-            height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, fallback);
-    }
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, family);
+    if (!font) return NULL;
 
     HDC dc = GetDC(NULL);
-    if (!dc) return font;
+    if (!dc) {
+        DeleteObject(font);
+        return NULL;
+    }
 
     HGDIOBJ previous = SelectObject(dc, font);
     wchar_t resolved[LF_FACESIZE] = L"";
@@ -1913,12 +1976,9 @@ static HFONT create_font_with_fallback(
     SelectObject(dc, previous);
     ReleaseDC(NULL, dc);
 
-    if (resolved[0] && lstrcmpiW(resolved, preferred) != 0) {
+    if (!resolved[0] || lstrcmpiW(resolved, family) != 0) {
         DeleteObject(font);
-        font = CreateFontW(
-            height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, fallback);
+        return NULL;
     }
     return font;
 }
@@ -1927,18 +1987,44 @@ static bool create_fonts(LsmWindowsUiState *state)
 {
     if (!state) return false;
 
-    state->body_font = create_font_with_fallback(
-        -17, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
-    state->body_bold_font = create_font_with_fallback(
-        -17, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
-    state->rail_value_font = create_font_with_fallback(
-        -15, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
-    state->title_font = create_font_with_fallback(
-        -24, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
-    state->heading_font = create_font_with_fallback(
-        -19, FW_BOLD, L"MB Corpo S Title WEB", L"Segoe UI");
-    state->metric_font = create_font_with_fallback(
-        -21, FW_NORMAL, L"MB Corpo S Title WEB", L"Segoe UI");
+    const InfiltratrTypography *typography = infiltratr_typography();
+    if (!typography ||
+        typography->abi_version != INFILTRATR_TYPOGRAPHY_ABI)
+        return false;
+
+    wchar_t ui_family[LF_FACESIZE];
+    wchar_t brand_family[LF_FACESIZE];
+    text_to_wide(
+        typography->ui_family, ui_family,
+        sizeof(ui_family) / sizeof(ui_family[0]));
+    text_to_wide(
+        typography->brand_family, brand_family,
+        sizeof(brand_family) / sizeof(brand_family[0]));
+    if (!ui_family[0] || !brand_family[0])
+        return false;
+
+    const int regular_weight =
+        typography->ui_regular_weight <= (uint32_t)INT_MAX
+            ? (int)typography->ui_regular_weight : FW_NORMAL;
+    const int bold_weight =
+        typography->ui_bold_weight <= (uint32_t)INT_MAX
+            ? (int)typography->ui_bold_weight : FW_BOLD;
+    const int brand_weight =
+        typography->brand_weight <= (uint32_t)INT_MAX
+            ? (int)typography->brand_weight : FW_NORMAL;
+
+    state->body_font =
+        create_font_exact(-17, regular_weight, ui_family);
+    state->body_bold_font =
+        create_font_exact(-17, bold_weight, ui_family);
+    state->rail_value_font =
+        create_font_exact(-15, regular_weight, ui_family);
+    state->title_font =
+        create_font_exact(-24, brand_weight, brand_family);
+    state->heading_font =
+        create_font_exact(-19, bold_weight, ui_family);
+    state->metric_font =
+        create_font_exact(-21, regular_weight, ui_family);
 
     return state->body_font && state->body_bold_font &&
         state->rail_value_font && state->title_font &&
@@ -2316,6 +2402,7 @@ static void destroy_state(LsmWindowsUiState *state)
     state->title_font = NULL;
     state->heading_font = NULL;
     state->metric_font = NULL;
+    remove_font_resources(state);
 }
 
 static void apply_titlebar_theme(LsmWindowsUiState *state)
@@ -2346,6 +2433,11 @@ static LRESULT CALLBACK lsm_windows_window_proc(
         case WM_CREATE:
             if (!state) return -1;
             load_theme_preference(state);
+            if (!install_embedded_typography(state)) {
+                if (state->startup_smoke)
+                    write_startup_smoke_status("install_fonts_failed\n");
+                return -1;
+            }
             if (!create_fonts(state)) {
                 if (state->startup_smoke)
                     write_startup_smoke_status("create_fonts_failed\n");
