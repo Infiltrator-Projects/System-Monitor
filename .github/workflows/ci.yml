@@ -10,10 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  # v6 starts a clean concurrency epoch after GitHub again left a superseded
-  # hosted Verify run stuck in-progress and blocked the current tested head.
-  # Future pushes still cancel older Verify runs within this v6 group.
-  group: verify-v6-${{ github.repository }}-${{ github.ref_name }}
+  # v7 starts a clean concurrency epoch after a superseded self-hosted Verify
+  # remained in-progress while cancellation was pending and blocked the current
+  # release head. Future pushes still cancel older runs within this v7 group.
+  group: verify-v7-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
