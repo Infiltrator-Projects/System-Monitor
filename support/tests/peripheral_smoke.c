@@ -3,7 +3,7 @@
  * @file peripheral_smoke.c
  * @brief Consolidated peripheral regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -23,7 +23,7 @@ int smoke_case_wifi_metadata(void);
  * @brief Synthetic BlueZ Battery1 ObjectManager regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "bluetooth_battery.h"
@@ -146,7 +146,7 @@ int main(void)
  * @brief Per-device HCI monitor frame and rate-accounting regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "bluetooth_traffic.h"
@@ -265,7 +265,7 @@ int main(void)
  * @brief Verify dependency-free CAP_NET_RAW file-capability encoding.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "linux_capability.h"
@@ -317,7 +317,7 @@ int main(void)
  * @brief Logitech HID++ battery parser and sysfs mapping regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "logitech_hidpp.h"
@@ -476,7 +476,7 @@ int main(void)
  * @file wifi_metadata_smoke.c
  * @brief Verify that Wi-Fi enrichment never blocks the caller.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "wifi_metadata.h"
