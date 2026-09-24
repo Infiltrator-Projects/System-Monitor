@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.93 - 2026-09-25
+
+- Align the native Linux titlebar with the suite-wide 44 px publisher chrome height.
+- Preserve collectors, page structure, platform backends, dependencies and Common APIs unchanged.
+
 ## 1.0.92 - 2026-09-24
 
 - Pin System Monitor to released Infiltratr Common 1.19.26 and use its single exhaustive clock-mode duration formatter instead of a decimal-only local special case.

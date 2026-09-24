@@ -165,7 +165,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " background-color: @lsm_background; color: @lsm_text;"
         "}"
         "headerbar, .titlebar {"
-        " background-image: none; background-color: @lsm_titlebar;"
+        " min-height: 44px; background-image: none; background-color: @lsm_titlebar;"
         " color: @lsm_title; border-bottom: 1px solid @lsm_border;"
         "}"
         "#lsm-summary-bar {"
