@@ -1818,6 +1818,7 @@ static void refresh_topology_and_devices(
     enumerate_disk_volumes(monitor);
     enumerate_networks(monitor, state, elapsed);
     if (due) {
+        populate_cpu_topology(monitor);
         enumerate_gpus(monitor, state);
         state->last_topology_tick = now;
         state->topology_refresh_requested = false;
