@@ -3,7 +3,7 @@
  * @file metrics_smoke.c
  * @brief Consolidated metrics regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -27,7 +27,7 @@ int smoke_case_performance_navigation(void);
  * @brief Deterministic scheduler accounting and malformed-input regression.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "cpu_accounting.h"
@@ -122,7 +122,7 @@ int main(void)
  * @brief Disk rate, latency and reset regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "disk_accounting.h"
@@ -203,7 +203,7 @@ int main(void)
  * @brief Exact binary memory-accounting and refresh-semantics regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "memory_accounting.h"
@@ -289,7 +289,7 @@ int main(void)
  * @brief Linux Pressure Stall Information parser regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -385,7 +385,7 @@ int main(void)
  * @brief Direct CPUID processor-discovery regression test.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "cpu_direct.h"
@@ -425,7 +425,7 @@ int main(void)
  * @file quality_policy_smoke.c
  * @brief Regression checks for cadence, deferred presentation and formatting.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "metric_format.h"
@@ -537,7 +537,7 @@ int main(void)
  * @file sample_history_smoke.c
  * @brief Regression tests for graph history direction, gaps and wraparound.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "sample_history.h"
@@ -610,7 +610,7 @@ int main(void)
  * @brief Validate backend-neutral GPU graph capability selection.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "gpu_metrics.h"
@@ -718,7 +718,7 @@ int main(void)
  * selected-state updates cannot recurse indefinitely.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "performance_selection.h"
