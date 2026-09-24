@@ -106,21 +106,39 @@ static bool parse_numeric_utc_offset(const struct tm *local, int32_t *offset)
     *offset = (int32_t)(sign * (hours * 3600 + minutes * 60));
     return true;
 }
+/*
+ * %x is intentional here: native fallback means the operating system's locale
+ * owns date presentation, including locales whose traditional short form uses
+ * a two-digit year.  Keep that narrowly-scoped choice from weakening the
+ * project's other format diagnostics.
+ */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-y2k"
+#endif
 static bool native_format(const struct tm *local, bool include_date,
                           bool include_zone, bool show_seconds,
                           char *buffer, size_t capacity)
 {
-    const char *format;
     if (buffer == NULL || capacity == 0U || local == NULL) return false;
     if (include_date) {
-        if (include_zone) format = show_seconds ? "%x %X %z" : "%x %H:%M %z";
-        else format = show_seconds ? "%x %X" : "%x %H:%M";
-    } else if (include_zone) {
-        format = show_seconds ? "%X %z" : "%H:%M %z";
-    } else {
-        format = show_seconds ? "%X" : "%H:%M";
+        if (include_zone) {
+            return strftime(buffer, capacity,
+                            show_seconds ? "%x %X %z" : "%x %H:%M %z",
+                            local) != 0U;
+        }
+        return strftime(buffer, capacity,
+                        show_seconds ? "%x %X" : "%x %H:%M",
+                        local) != 0U;
     }
-    return strftime(buffer, capacity, format, local) != 0U;
+    if (include_zone) {
+        return strftime(buffer, capacity,
+                        show_seconds ? "%X %z" : "%H:%M %z",
+                        local) != 0U;
+    }
+    return strftime(buffer, capacity,
+                    show_seconds ? "%X" : "%H:%M",
+                    local) != 0U;
 }
 static bool combine_presentation(const struct tm *local, const char *clock_text,
                                  bool include_date, bool include_zone,
@@ -141,6 +159,9 @@ static bool combine_presentation(const struct tm *local, const char *clock_text,
     else written = snprintf(buffer, capacity, "%s", clock_text);
     return written >= 0 && (size_t)written < capacity;
 }
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                                             bool include_date,
                                             bool include_zone,
