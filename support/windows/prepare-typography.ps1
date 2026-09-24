@@ -10,14 +10,14 @@ $meta = Join-Path $root "src/infiltratr-common/cmake/InfiltratrTypographyAssets.
 $out = Join-Path $root $OutputDirectory
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-$lines = Get-Content -LiteralPath $meta
+$metadata = Get-Content -LiteralPath $meta -Raw
 function Get-CMakeValue([string]$Key) {
-    for ($i = 0; $i -lt $lines.Count - 1; $i++) {
-        if ($lines[$i] -match ("^set\(" + [regex]::Escape($Key) + "$")) {
-            return ($lines[$i + 1] -replace '^[\s"]+|["\)\s]+$', '')
-        }
+    $pattern = '(?ms)set\(' + [regex]::Escape($Key) + '\s*"([^"]+)"\s*\)'
+    $match = [regex]::Match($metadata, $pattern)
+    if (-not $match.Success) {
+        throw "Missing Common typography metadata: $Key"
     }
-    throw "Missing Common typography metadata: $Key"
+    return $match.Groups[1].Value
 }
 
 $sourceCommit = Get-CMakeValue "INFILTRATR_MB_CORPO_SOURCE_COMMIT"
