@@ -2,6 +2,11 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.88 - 2026-09-24
+
+- Align the Performance side-navigation corner radius with the shared compact suite radius already used by the publisher shell.
+- Keep the change presentation-only: no collector, backend, dependency or Common API changes.
+
 ## 1.0.87 - 2026-09-24
 
 - Make the native Windows build consume Common 1.19.24's canonical typography contract instead of hard-coded family names and weights.
