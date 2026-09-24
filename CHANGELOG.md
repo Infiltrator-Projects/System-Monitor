@@ -2,6 +2,15 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+
+## 1.0.89 - 2026-09-24
+
+- Pin the application to released Infiltratr Common 1.19.25 and its complete explicit clock-mode formatter.
+- Make human-facing session-login, application-history, process-start and diagnostic-snapshot timestamps follow the validated temporal-v3 authority published by Infiltrator System Settings.
+- Preserve the native operating-system locale as the fallback when System Settings is absent or has not published a valid policy, while keeping canonical timestamps, process accounting, CPU sampling, refresh cadence, timeouts and elapsed durations unchanged.
+- Support decimal, Roman temporal and every other explicit shared clock mode without copying clock algorithms into System Monitor; location-dependent modes require the configured policy location rather than fabricating one.
+- Add application-level regression coverage for decimal and Roman presentation plus provider-withdrawal fallback.
+
 ## 1.0.88 - 2026-09-24
 
 - Align the Performance side-navigation corner radius with the shared compact suite radius already used by the publisher shell.

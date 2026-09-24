@@ -16,6 +16,7 @@
 #include "users.h"
 #include "app_internal.h"
 #include "common.h"
+#include "temporal_presentation.h"
 #include "ui_helpers.h"
 #include "user_backend.h"
 
@@ -127,10 +128,11 @@ static void format_login_time(uint64_t usec, char *buffer, size_t size)
         lsm_copy_string(buffer, size, "N/A");
         return;
     }
-    time_t timestamp = (time_t)(usec / 1000000ULL);
-    struct tm local;
-    localtime_r(&timestamp, &local);
-    strftime(buffer, size, "%d/%m/%Y %H:%M", &local);
+    if (usec > (uint64_t)INT64_MAX ||
+        !lsm_temporal_format_epoch_microseconds(
+            (int64_t)usec, true, false, false, buffer, size)) {
+        lsm_copy_string(buffer, size, "N/A");
+    }
 }
 
 static void session_location(const LsmUserSession *session, char *buffer, size_t size)

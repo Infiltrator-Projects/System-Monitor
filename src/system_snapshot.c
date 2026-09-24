@@ -16,6 +16,7 @@
 #include "common.h"
 #include "metric_format.h"
 #include "project_info.h"
+#include "temporal_presentation.h"
 
 #include <errno.h>
 #include <math.h>
@@ -362,12 +363,12 @@ static void format_pressure_snapshot(const LsmPressureInfo *pressure,
 static bool write_snapshot(FILE *file, const void *user_data)
 {
     const LsmApp *app = user_data;
-    time_t now = time(NULL);
-    struct tm local;
-    char generated[64] = "N/A";
-    if (localtime_r(&now, &local))
-        (void)strftime(generated, sizeof(generated),
-                       "%d/%m/%Y %H:%M:%S %z", &local);
+    const time_t now = time(NULL);
+    char generated[256] = "N/A";
+    if (now != (time_t)-1)
+        (void)lsm_temporal_format_epoch_seconds(
+            (int64_t)now, true, true, true,
+            generated, sizeof(generated));
     struct utsname kernel;
     memset(&kernel, 0, sizeof(kernel));
     (void)uname(&kernel);

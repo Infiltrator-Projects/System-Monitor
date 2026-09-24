@@ -17,9 +17,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.19.24
-INFILTRATR_COMMON_COMMIT := 748e089ae175329471d4cf375522c44081371bd5
-INFILTRATR_COMMON_VERSION := 1.19.24
+INFILTRATR_COMMON_TAG := v1.19.25
+INFILTRATR_COMMON_COMMIT := e985e88c2fbbedfe7239ee716908dc686444287a
+INFILTRATR_COMMON_VERSION := 1.19.25
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -279,7 +279,7 @@ build-check: check-deps strict-check portability-check \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
-	system-snapshot-smoke process-export-smoke history-retention-smoke \
+	system-snapshot-smoke process-export-smoke history-retention-smoke temporal-presentation-smoke \
 	async-workers-smoke runtime-stability-smoke \
 	native-command-audit analyzer-check coverage-check
 	@echo "All application source, backend and feature checks passed."
@@ -354,7 +354,7 @@ COMMON_LINK_TARGETS := \
 	process-suite-smoke ui-suite-smoke accelerator-suite-smoke \
 	backend-smoke monitor-platform-smoke battery-smoke nvml-smoke \
 	application-catalog-smoke system-snapshot-smoke process-export-smoke \
-	history-retention-smoke async-workers-smoke runtime-stability-smoke \
+	history-retention-smoke temporal-presentation-smoke async-workers-smoke runtime-stability-smoke \
 	process-scan-benchmark
 
 $(COMMON_LINK_TARGETS): $(INFILTRATR_COMMON_ARCHIVE)
@@ -515,6 +515,13 @@ history-retention-smoke: | $(BUILD_DIR)
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
 	./$(BUILD_DIR)/history-retention-smoke
+
+temporal-presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -DLSM_TEMPORAL_PRESENTATION_TEST_API -std=c17 $(STRICT_WARNINGS) \
+		support/tests/temporal_presentation_smoke.c src/temporal_presentation.c \
+		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
+		-o $(BUILD_DIR)/temporal-presentation-smoke
+	./$(BUILD_DIR)/temporal-presentation-smoke
 
 async-workers-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \

@@ -17,6 +17,7 @@
 #include "monitor.h"
 #include "app_internal.h"
 #include "common.h"
+#include "temporal_presentation.h"
 #include "history.h"
 #include "process_backend.h"
 #include "process_inspector.h"
@@ -216,12 +217,10 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_TIME: {
             gint64 epoch = 0;
             gtk_tree_model_get(model, iter, column, &epoch, -1);
-            if (epoch > 0) {
-                time_t timestamp = (time_t)epoch;
-                struct tm local;
-                localtime_r(&timestamp, &local);
-                strftime(text, sizeof(text), "%d/%m/%Y %H:%M:%S", &local);
-            } else snprintf(text, sizeof(text), "N/A");
+            if (epoch <= 0 ||
+                !lsm_temporal_format_epoch_seconds(
+                    epoch, true, false, true, text, sizeof(text)))
+                snprintf(text, sizeof(text), "N/A");
             break;
         }
         case CELL_DURATION: {

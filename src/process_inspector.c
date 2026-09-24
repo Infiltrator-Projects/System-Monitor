@@ -18,6 +18,7 @@
 #include "app_internal.h"
 
 #include "common.h"
+#include "temporal_presentation.h"
 #include "graph.h"
 #include "process_backend.h"
 #include "process_inspection.h"
@@ -478,12 +479,10 @@ static gboolean inspector_update(gpointer user_data)
              (unsigned long long)process.pid);
     snprintf(ppid, sizeof(ppid), "%llu",
              (unsigned long long)process.ppid);
-    if (process.start_time_epoch > 0) {
-        const time_t value = (time_t)process.start_time_epoch;
-        struct tm local;
-        localtime_r(&value, &local);
-        strftime(started, sizeof(started), "%d/%m/%Y %H:%M:%S", &local);
-    } else {
+    if (process.start_time_epoch <= 0 ||
+        !lsm_temporal_format_epoch_seconds(
+            process.start_time_epoch, true, false, true,
+            started, sizeof(started))) {
         snprintf(started, sizeof(started), "N/A");
     }
     infiltratr_format_duration_clock(process.elapsed_seconds, elapsed,

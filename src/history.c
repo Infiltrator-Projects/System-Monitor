@@ -23,6 +23,7 @@
 #include "app_internal.h"
 #include "atomic_file.h"
 #include "common.h"
+#include "temporal_presentation.h"
 #include "numeric_io.h"
 #include "ui_helpers.h"
 
@@ -231,12 +232,9 @@ static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *render
     } else if (field == HIST_COL_LAST_ACTIVE) {
         gint64 epoch = 0;
         gtk_tree_model_get(model, iter, field, &epoch, -1);
-        if (epoch > 0) {
-            time_t stamp = (time_t)epoch;
-            struct tm local;
-            localtime_r(&stamp, &local);
-            strftime(text, sizeof(text), "%d/%m/%Y %H:%M:%S", &local);
-        } else {
+        if (epoch <= 0 ||
+            !lsm_temporal_format_epoch_seconds(
+                epoch, true, false, true, text, sizeof(text))) {
             snprintf(text, sizeof(text), "N/A");
         }
     }
