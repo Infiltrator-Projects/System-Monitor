@@ -179,7 +179,7 @@ jobs:
             src/infiltratr-common/src/escape.c \
             src/infiltratr-common/src/design.c \
           )
-          support/windows/prepare-typography.sh
+          bash support/windows/prepare-typography.sh
           x86_64-w64-mingw32-windres -Isrc \
             support/windows/system-monitor-fonts.rc -O coff \
             -o build-cmake/windows-fonts.o
