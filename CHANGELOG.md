@@ -7,7 +7,7 @@ This changelog records user-visible, compatibility, architecture and validation 
 - Reduce periodic App History allocation churn by consolidating per-snapshot live-set, RSS and active-time accounting.
 - Replace remaining generic Windows arithmetic, counter-rate, bounded-copy and dynamic-array helpers with the pinned Common 1.19.24 contracts where Common is equal or stronger.
 - Remove historical SysMonTask wording and notice requirements after re-checking the current native C/GTK/Win32 implementation against the external Python/Glade project and finding no retained source or asset dependency requiring that notice.
-- Replace the imported third-party PCI names corpus with an independently maintained factual registry; unknown devices retain exact numeric PCI identity instead of guessed names.
+- Replace the imported PCI database corpus with a project-defined flat aggregation of factual vendor/direct-device mappings, excluding subsystem/class/comment/version structure; generate deduplicated numeric lookup tables and binary-search them at runtime instead of scanning embedded text.
 - Standardise project-owned copyright declarations on Copyright (c) 2000-2026 Shannon Smith while preserving real third-party ownership boundaries.
 
 ## 1.0.85 - 2026-09-24

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file pci_names.c
- * @brief In-process lookup against System Monitor's PCI identity registry.
+ * @brief In-process lookup against System Monitor's normalized PCI registry.
  *
- * Normal operation searches a compact project-maintained factual table compiled
- * into the executable, so identity resolution has no runtime pciutils, lspci,
- * lshw or third-party PCI names database dependency. Developers may set
- * LSM_PCI_DB_PATH to test an alternate TSV table before the embedded fallback.
+ * Normal operation performs binary search over project-generated numeric
+ * tables, so identity resolution has no runtime pciutils, lspci, lshw or
+ * external names-database dependency. Developers may set LSM_PCI_DB_PATH to
+ * exercise an alternate flat registry before the embedded fallback.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -19,11 +19,12 @@
 #include "common.h"
 #include "pci_names_data.h"
 
-#include <ctype.h>
+#include <infiltratr/core.h>
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #define LSM_PCI_NAME_LEN 256
 #define LSM_PCI_CACHE_SIZE 64
@@ -39,12 +40,11 @@ typedef struct {
 static LsmPciCacheEntry cache[LSM_PCI_CACHE_SIZE];
 static size_t cache_count;
 
-static bool normalise_id(const char *input, char output[5])
+static bool normalise_id(const char *input, char output[5], uint16_t *numeric)
 {
-    if (!input) return false;
+    if (!input || !numeric) return false;
     while (lsm_ascii_is_space((unsigned char)*input)) input++;
     if (input[0] == '0' && (input[1] == 'x' || input[1] == 'X')) input += 2;
-
     for (size_t index = 0U; index < 4U; index++) {
         if (!lsm_ascii_is_xdigit((unsigned char)input[index])) return false;
         output[index] = (char)lsm_ascii_to_upper((unsigned char)input[index]);
@@ -53,6 +53,11 @@ static bool normalise_id(const char *input, char output[5])
     while (lsm_ascii_is_space((unsigned char)*input)) input++;
     if (*input != '\0') return false;
     output[4] = '\0';
+
+    uint64_t parsed = 0U;
+    if (!infiltratr_parse_u64(output, 16U, &parsed) || parsed > UINT16_MAX)
+        return false;
+    *numeric = (uint16_t)parsed;
     return true;
 }
 
@@ -74,13 +79,12 @@ static LsmPciCacheEntry *new_cache_entry(const char vendor_id[5],
     if (cache_count < LSM_PCI_CACHE_SIZE) {
         index = cache_count++;
     } else {
-        /* Hardware identities are effectively static for a desktop session.
-         * If more than 64 unique devices are queried, reuse the oldest slot. */
+        /* Hardware identities are static for a normal desktop session.
+         * Reuse the oldest small-cache slot after unusually broad probing. */
         memmove(&cache[0], &cache[1],
                 sizeof(cache[0]) * (LSM_PCI_CACHE_SIZE - 1U));
         index = LSM_PCI_CACHE_SIZE - 1U;
     }
-
     memset(&cache[index], 0, sizeof(cache[index]));
     lsm_copy_string(cache[index].vendor_id, sizeof(cache[index].vendor_id),
                     vendor_id);
@@ -89,11 +93,18 @@ static LsmPciCacheEntry *new_cache_entry(const char vendor_id[5],
     return &cache[index];
 }
 
+/* Flat developer override grammar:
+ * V<TAB>VVVV<TAB>vendor-name
+ * D<TAB>VVVV:DDDD<TAB>vendor-name<TAB>device-name */
 static void search_database_file(FILE *database,
                                  const char vendor_id[5],
                                  const char device_id[5],
                                  LsmPciCacheEntry *entry)
 {
+    char expected_key[10];
+    (void)snprintf(expected_key, sizeof(expected_key), "%s:%s",
+                   vendor_id, device_id);
+
     char line[1024];
     while (fgets(line, sizeof(line), database)) {
         lsm_trim_line_end(line);
@@ -101,79 +112,29 @@ static void search_database_file(FILE *database,
 
         char *save = NULL;
         char *kind = strtok_r(line, "\t", &save);
-        char *row_vendor = strtok_r(NULL, "\t", &save);
-        if (!kind || !row_vendor || !lsm_ascii_equal_ci(row_vendor, vendor_id))
-            continue;
+        char *key = strtok_r(NULL, "\t", &save);
+        if (!kind || !key) continue;
 
-        if (strcmp(kind, "V") == 0) {
-            char *name = save;
-            if (name && *name && !entry->vendor[0])
-                lsm_copy_string(entry->vendor, sizeof(entry->vendor), name);
-        } else if (strcmp(kind, "D") == 0) {
-            char *row_device = strtok_r(NULL, "\t", &save);
-            char *name = save;
-            if (row_device && name && *name &&
-                lsm_ascii_equal_ci(row_device, device_id) && !entry->product[0])
-                lsm_copy_string(entry->product, sizeof(entry->product), name);
+        if (strcmp(kind, "V") == 0 &&
+            lsm_ascii_equal_ci(key, vendor_id)) {
+            char *vendor = save;
+            if (vendor && *vendor && !entry->vendor[0])
+                lsm_copy_string(entry->vendor, sizeof(entry->vendor), vendor);
+        } else if (strcmp(kind, "D") == 0 &&
+                   lsm_ascii_equal_ci(key, expected_key)) {
+            char *vendor = strtok_r(NULL, "\t", &save);
+            char *product = save;
+            if (vendor && *vendor && !entry->vendor[0])
+                lsm_copy_string(entry->vendor, sizeof(entry->vendor), vendor);
+            if (product && *product && !entry->product[0])
+                lsm_copy_string(entry->product, sizeof(entry->product), product);
         }
-
         if (entry->vendor[0] && entry->product[0]) break;
     }
 }
 
-static void copy_embedded_name(char *destination, size_t destination_size,
-                               const char *start, const char *end)
-{
-    if (!destination || destination_size == 0U || !start || !end || end <= start)
-        return;
-    while (end > start && (end[-1] == '\r' || end[-1] == '\n')) end--;
-    size_t length = (size_t)(end - start);
-    if (length >= destination_size) length = destination_size - 1U;
-    memcpy(destination, start, length);
-    destination[length] = '\0';
-}
-
-static void search_embedded_chunk(const char *data, size_t data_size,
-                                  const char vendor_id[5],
-                                  const char device_id[5],
-                                  LsmPciCacheEntry *entry)
-{
-    const char *cursor = data;
-    const char *const end = data + data_size;
-    while (cursor < end) {
-        const char *line_end = memchr(cursor, '\n', (size_t)(end - cursor));
-        if (!line_end) line_end = end;
-        const size_t length = (size_t)(line_end - cursor);
-
-        if (length >= 7U && cursor[0] == 'V' && cursor[1] == '\t' &&
-            memcmp(cursor + 2, vendor_id, 4U) == 0 && cursor[6] == '\t' &&
-            !entry->vendor[0]) {
-            copy_embedded_name(entry->vendor, sizeof(entry->vendor),
-                               cursor + 7, line_end);
-        } else if (length >= 12U && cursor[0] == 'D' && cursor[1] == '\t' &&
-                   memcmp(cursor + 2, vendor_id, 4U) == 0 && cursor[6] == '\t' &&
-                   memcmp(cursor + 7, device_id, 4U) == 0 && cursor[11] == '\t' &&
-                   !entry->product[0]) {
-            copy_embedded_name(entry->product, sizeof(entry->product),
-                               cursor + 12, line_end);
-        }
-        cursor = line_end < end ? line_end + 1 : end;
-    }
-}
-
-static void search_embedded_database(const char vendor_id[5],
-                                     const char device_id[5],
-                                     LsmPciCacheEntry *entry)
-{
-    for (size_t index = 0U; index < lsm_pci_names_chunk_count; index++) {
-        search_embedded_chunk(lsm_pci_names_chunks[index],
-                              lsm_pci_names_chunk_sizes[index],
-                              vendor_id, device_id, entry);
-        if (entry->vendor[0] && entry->product[0]) break;
-    }
-}
-
-static void populate_entry(LsmPciCacheEntry *entry)
+static void populate_entry(LsmPciCacheEntry *entry,
+                           uint16_t vendor_id, uint16_t device_id)
 {
     const char *override = getenv("LSM_PCI_DB_PATH");
     if (override && *override) {
@@ -184,8 +145,17 @@ static void populate_entry(LsmPciCacheEntry *entry)
             fclose(database);
         }
     }
-    if (!entry->vendor[0] || !entry->product[0])
-        search_embedded_database(entry->vendor_id, entry->device_id, entry);
+
+    if (!entry->vendor[0]) {
+        const char *vendor = lsm_pci_data_vendor_name(vendor_id);
+        if (vendor)
+            lsm_copy_string(entry->vendor, sizeof(entry->vendor), vendor);
+    }
+    if (!entry->product[0]) {
+        const char *product = lsm_pci_data_device_name(vendor_id, device_id);
+        if (product)
+            lsm_copy_string(entry->product, sizeof(entry->product), product);
+    }
     entry->found = entry->vendor[0] != '\0' || entry->product[0] != '\0';
 }
 
@@ -201,14 +171,16 @@ bool lsm_pci_names_lookup(const char *vendor_id,
 
     char normal_vendor[5];
     char normal_device[5];
-    if (!normalise_id(vendor_id, normal_vendor) ||
-        !normalise_id(device_id, normal_device))
+    uint16_t numeric_vendor = 0U;
+    uint16_t numeric_device = 0U;
+    if (!normalise_id(vendor_id, normal_vendor, &numeric_vendor) ||
+        !normalise_id(device_id, normal_device, &numeric_device))
         return false;
 
     LsmPciCacheEntry *entry = find_cached(normal_vendor, normal_device);
     if (!entry) {
         entry = new_cache_entry(normal_vendor, normal_device);
-        populate_entry(entry);
+        populate_entry(entry, numeric_vendor, numeric_device);
     }
 
     lsm_copy_string(vendor, vendor_size, entry->vendor);

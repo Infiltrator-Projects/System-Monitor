@@ -315,6 +315,33 @@ int main(void)
         return 2;
     }
     printf("%s — %s\n", vendor, product);
+
+    struct {
+        const char *vendor_id;
+        const char *device_id;
+        const char *vendor_name;
+        const char *device_name;
+    } additional[] = {
+        { "8086", "56a0", "Intel Corporation", "DG2 [Arc A770]" },
+        { "1002", "744c", "Advanced Micro Devices, Inc. [AMD/ATI]",
+          "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]" },
+        { "10de", "2684", "NVIDIA Corporation", "AD102 [GeForce RTX 4090]" }
+    };
+    for (size_t index = 0U;
+         index < sizeof(additional) / sizeof(additional[0]); index++) {
+        vendor[0] = '\0';
+        product[0] = '\0';
+        if (!lsm_pci_names_lookup(additional[index].vendor_id,
+                                  additional[index].device_id,
+                                  vendor, sizeof(vendor),
+                                  product, sizeof(product)) ||
+            strcmp(vendor, additional[index].vendor_name) != 0 ||
+            strcmp(product, additional[index].device_name) != 0) {
+            fprintf(stderr, "Unexpected PCI identity: %s / %s\n",
+                    vendor, product);
+            return 3;
+        }
+    }
     return 0;
 }
 

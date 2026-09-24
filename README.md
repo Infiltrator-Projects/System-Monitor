@@ -110,4 +110,4 @@ Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Security repo
 
 Copyright © 2000-2026 Shannon Smith.
 
-Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. The embedded PCI identity table is independently maintained as factual hardware metadata rather than copied from a third-party PCI names database. Preferred proprietary typeface family names are presentation hints only; the font binaries are not redistributed by System Monitor.
+Shannon Smith-owned source, documentation and application artwork are licensed under GPL-3.0-or-later. The embedded PCI identity registry contains normalized factual vendor/device mappings in a project-defined flat schema and generated numeric lookup tables; no external PCI database file, hierarchy, comments or formatting are distributed. Preferred proprietary typeface family names are presentation hints only; the font binaries are not redistributed by System Monitor.

@@ -96,6 +96,6 @@ Keep expensive discovery away from high-frequency sampling, reset cumulative bas
 
 ## PCI identity provenance
 
-System Monitor does not bundle or regenerate a third-party PCI names database. The embedded registry contains independently assembled factual vendor assignments and only device-name mappings that have been separately corroborated from primary manufacturer or public certification evidence. The table's selection, normalization and arrangement are maintained by this project.
+System Monitor does not distribute an external PCI database file or reproduce its hierarchy. The project registry retains only factual top-level vendor assignments and direct vendor:device mappings, normalizes them into a flat System Monitor schema, drops subsystem/class/comment/version records, and generates sorted numeric lookup tables with a deduplicated name pool.
 
-A missing friendly device name is not treated as an error. Native firmware/sysfs identity is preferred when available; otherwise the UI preserves the exact numeric vendor:device identity. This prevents an unverified marketing name from being presented as hardware fact and keeps runtime identity lookup independent of lspci, pciutils and external database files.
+Normal runtime lookup is a binary search over those generated tables; it does not parse a pci.ids-style document and does not require lspci, pciutils or another runtime database. A missing friendly name remains non-fatal: native firmware/sysfs identity is preferred when available and exact numeric vendor:device identity remains available as the fallback.
