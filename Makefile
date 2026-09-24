@@ -135,6 +135,13 @@ CPPFLAGS += -Isrc -I$(INFILTRATR_COMMON_DIR)/include \
 	-DLSM_VERSION=\"$(VERSION)\" -DLSM_BUILD_PROFILE=\"$(BUILD_PROFILE)\" \
 	-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $(TIME64_FLAG) \
 	-include src/glibc_compat.h
+
+# Documentation diagnostics belong to the source that owns the declaration.
+# Keep Common visible to Clang while treating its pinned public headers as
+# external for System Monitor's documentation-only gate; Common validates its
+# own headers in its own repository.
+DOC_CPPFLAGS = $(filter-out -I$(INFILTRATR_COMMON_DIR)/include,$(CPPFLAGS)) \
+	-isystem $(INFILTRATR_COMMON_DIR)/include
 CFLAGS ?= -O2 -g
 override CFLAGS += -std=c17 $(BASE_WARNINGS) -ffunction-sections -fdata-sections \
 	$(PORTABLE_OPT_FLAGS) $(PORTABLE_HARDENING_CFLAGS) $(LTO_FLAGS) \
@@ -401,11 +408,11 @@ clang-doc-check: | $(BUILD_DIR)
 			doc_flags="$$doc_flags -Wdocumentation-pedantic"; \
 		rm -f $$tmp; \
 		if [ -n "$(strip $(C_SOURCES))" ]; then \
-			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
+			$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
 				-Wpedantic -Werror $$doc_flags -fsyntax-only $(C_SOURCES); \
 		fi; \
 		if [ -n "$(strip $(CXX_SOURCES))" ]; then \
-			$(CLANG) $(CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
+			$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
 				-Wpedantic -Werror $$doc_flags -fsyntax-only $(CXX_SOURCES); \
 		fi; \
 		echo "Clang documentation syntax pass completed."; \
