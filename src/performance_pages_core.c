@@ -433,8 +433,8 @@ LsmDevicePage *performance_build_network_page(LsmApp *app, size_t index)
     lsm_copy_string(page->hardware_vendor, sizeof(page->hardware_vendor),
                     net->vendor[0] ? net->vendor : "N/A");
 
-    /* Original SysMonTask header: interface and Throughput on the left,
-       adapter product and the current graph scale on the right. */
+    /* Keep interface/throughput identity on the left and product/scale
+       information on the right so changing values never disturb the header. */
     GtkWidget *header = gtk_grid_new();
     gtk_widget_set_hexpand(header, TRUE);
     page->title = gtk_label_new(NULL);
