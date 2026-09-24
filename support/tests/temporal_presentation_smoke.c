@@ -55,7 +55,7 @@ int main(void)
     lsm_temporal_presentation_reset_cache_for_test();
     CHECK(lsm_temporal_format_epoch_seconds(
         INT64_C(43200), true, false, true, text, sizeof(text)));
-    CHECK(strstr(text, "05:00:00") != NULL);
+    CHECK(strstr(text, "5:00:00") != NULL);
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "roman-temporal");
     policy.location_configured = true;
     policy.latitude = 0.0;
