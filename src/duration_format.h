@@ -19,6 +19,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/**
+ * Present an estimated remaining duration using the active temporal policy.
+ *
+ * @param seconds Canonical estimated SI seconds remaining; zero means unavailable.
+ * @param buffer Destination text buffer.
+ * @param size Destination capacity including the terminating NUL.
+ */
 static inline void lsm_duration_format_remaining(uint64_t seconds,
                                                  char *buffer, size_t size)
 {

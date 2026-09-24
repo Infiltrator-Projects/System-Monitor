@@ -55,6 +55,11 @@ bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
  *
  * Use this for quantities such as accumulated CPU or active time that are not
  * one contiguous civil interval. The stored/measured value remains SI seconds.
+ *
+ * @param elapsed_seconds Canonical accumulated SI seconds.
+ * @param buffer Destination text buffer.
+ * @param capacity Destination capacity including the terminating NUL.
+ * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
                                           char *buffer,
@@ -63,6 +68,11 @@ bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
 /**
  * Format a contiguous elapsed interval ending now, such as system uptime or a
  * process age. Date-dependent modes receive the real civil endpoint.
+ *
+ * @param elapsed_seconds Canonical elapsed SI seconds ending at the current instant.
+ * @param buffer Destination text buffer.
+ * @param capacity Destination capacity including the terminating NUL.
+ * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
                                          char *buffer,
@@ -71,6 +81,11 @@ bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
 /**
  * Format a future duration estimate beginning now. Without System Settings,
  * the historical compact remaining-time presentation is preserved.
+ *
+ * @param elapsed_seconds Canonical estimated SI seconds remaining.
+ * @param buffer Destination text buffer.
+ * @param capacity Destination capacity including the terminating NUL.
+ * @return true when the complete presentation was produced or zero maps to N/A.
  */
 bool lsm_temporal_format_remaining_seconds(uint64_t elapsed_seconds,
                                            char *buffer,
