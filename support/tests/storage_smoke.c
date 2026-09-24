@@ -3,7 +3,7 @@
  * @file storage_smoke.c
  * @brief Consolidated storage regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -24,7 +24,7 @@ int smoke_case_system_sources(void);
  * @file mountinfo_smoke.c
  * @brief Native mountinfo parser regression tests.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "mountinfo.h"
@@ -104,7 +104,7 @@ int main(void)
  * @file storage_metadata_smoke.c
  * @brief Cached block metadata parsing and classification regression test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -213,7 +213,7 @@ int main(void)
  * @brief Regression test for mount classification and capacity snapshots.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -291,7 +291,7 @@ int main(void)
  * @file bundled_pci_smoke.c
  * @brief Bundled PCI name resolver regression test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "pci_names.h"
@@ -329,7 +329,7 @@ int main(void)
  * @file smbios_memory_smoke.c
  * @brief Synthetic SMBIOS Type-17 parser regression test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
