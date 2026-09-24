@@ -27,6 +27,7 @@
 #define COBJMACROS
 #include <winsock2.h>
 #include <windows.h>
+#include <powrprof.h>
 #include <dxgi1_4.h>
 #include <devguid.h>
 #include <ws2tcpip.h>
@@ -138,20 +139,212 @@ static bool read_cpu_times(uint64_t *idle, uint64_t *kernel, uint64_t *user)
     return true;
 }
 
+static void format_cpu_cache(uint64_t bytes, unsigned instances,
+                             char *destination, size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (bytes == 0U || instances == 0U) return;
+
+    if (bytes % (1024ULL * 1024ULL) == 0U) {
+        (void)snprintf(
+            destination, destination_size, "%llu MB (%u %s)",
+            (unsigned long long)(bytes / (1024ULL * 1024ULL)),
+            instances, instances == 1U ? "instance" : "instances");
+    } else if (bytes % 1024ULL == 0U) {
+        (void)snprintf(
+            destination, destination_size, "%llu KB (%u %s)",
+            (unsigned long long)(bytes / 1024ULL),
+            instances, instances == 1U ? "instance" : "instances");
+    } else {
+        (void)snprintf(
+            destination, destination_size, "%llu B (%u %s)",
+            (unsigned long long)bytes,
+            instances, instances == 1U ? "instance" : "instances");
+    }
+}
+
+static void populate_cpu_topology(LsmCpuInfo *cpu)
+{
+    if (!cpu) return;
+
+    DWORD active = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    if (active != 0U && active != 0xffffffffU) {
+        cpu->logical_cores =
+            active > (DWORD)LSM_MAX_CPUS ? LSM_MAX_CPUS : (unsigned)active;
+    } else {
+        SYSTEM_INFO system_info;
+        GetNativeSystemInfo(&system_info);
+        cpu->logical_cores =
+            (unsigned)system_info.dwNumberOfProcessors;
+    }
+
+    DWORD length = 0U;
+    (void)GetLogicalProcessorInformationEx(RelationAll, NULL, &length);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || length == 0U)
+        return;
+
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *buffer =
+        (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)malloc(length);
+    if (!buffer) return;
+    if (!GetLogicalProcessorInformationEx(RelationAll, buffer, &length)) {
+        free(buffer);
+        return;
+    }
+
+    unsigned physical_cores = 0U;
+    unsigned sockets = 0U;
+    unsigned numa_nodes = 0U;
+    uint64_t cache_bytes[4] = {0U, 0U, 0U, 0U};
+    unsigned cache_instances[4] = {0U, 0U, 0U, 0U};
+
+    BYTE *cursor = (BYTE *)(void *)buffer;
+    BYTE *const end = cursor + length;
+    while (cursor + sizeof(DWORD) * 2U <= end) {
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *entry =
+            (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)(void *)cursor;
+        if (entry->Size == 0U || cursor + entry->Size > end)
+            break;
+
+        switch (entry->Relationship) {
+            case RelationProcessorCore:
+                physical_cores++;
+                break;
+            case RelationProcessorPackage:
+                sockets++;
+                break;
+            case RelationNumaNode:
+                numa_nodes++;
+                break;
+            case RelationCache: {
+                const CACHE_RELATIONSHIP *cache = &entry->Cache;
+                const unsigned level = (unsigned)cache->Level;
+                if (level >= 1U && level <= 3U &&
+                    cache->Type != CacheInstruction &&
+                    cache->CacheSize > 0U) {
+                    cache_bytes[level] = infiltratr_u64_add_saturating(
+                        cache_bytes[level], (uint64_t)cache->CacheSize);
+                    cache_instances[level]++;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        cursor += entry->Size;
+    }
+    free(buffer);
+
+    if (physical_cores > 0U)
+        cpu->physical_cores = physical_cores;
+    if (sockets > 0U)
+        cpu->socket_count = sockets;
+    if (numa_nodes > 0U)
+        cpu->numa_node_count = numa_nodes;
+
+    format_cpu_cache(
+        cache_bytes[1], cache_instances[1],
+        cpu->cache_l1, sizeof(cpu->cache_l1));
+    format_cpu_cache(
+        cache_bytes[2], cache_instances[2],
+        cpu->cache_l2, sizeof(cpu->cache_l2));
+    format_cpu_cache(
+        cache_bytes[3], cache_instances[3],
+        cpu->cache_l3, sizeof(cpu->cache_l3));
+}
+
+static void populate_cpu_registry_identity(LsmCpuInfo *cpu)
+{
+    if (!cpu) return;
+
+    HKEY key = NULL;
+    if (RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+            0U, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return;
+
+    wchar_t name[256];
+    memset(name, 0, sizeof(name));
+    DWORD name_size = (DWORD)sizeof(name);
+    if (RegGetValueW(
+            key, NULL, L"ProcessorNameString", RRF_RT_REG_SZ,
+            NULL, name, &name_size) == ERROR_SUCCESS &&
+        name[0]) {
+        wide_to_utf8(name, cpu->model, sizeof(cpu->model));
+    }
+
+    DWORD mhz = 0U;
+    DWORD mhz_size = (DWORD)sizeof(mhz);
+    if (RegGetValueW(
+            key, NULL, L"~MHz", RRF_RT_REG_DWORD,
+            NULL, &mhz, &mhz_size) == ERROR_SUCCESS &&
+        mhz > 0U) {
+        cpu->base_frequency_ghz = (double)mhz / 1000.0;
+    }
+    RegCloseKey(key);
+}
+
+static void update_cpu_power(LsmCpuInfo *cpu)
+{
+    if (!cpu || cpu->logical_cores == 0U) return;
+
+    const unsigned processor_count =
+        cpu->logical_cores > LSM_MAX_CPUS ? LSM_MAX_CPUS : cpu->logical_cores;
+    PROCESSOR_POWER_INFORMATION power[LSM_MAX_CPUS];
+    memset(power, 0, sizeof(power));
+
+    const ULONG bytes =
+        (ULONG)(processor_count * sizeof(power[0]));
+    if (CallNtPowerInformation(
+            ProcessorInformation, NULL, 0U,
+            power, bytes) != 0)
+        return;
+
+    uint64_t current_total_mhz = 0U;
+    unsigned current_count = 0U;
+    ULONG maximum_mhz = 0U;
+    for (unsigned index = 0U; index < processor_count; index++) {
+        if (power[index].CurrentMhz > 0U) {
+            current_total_mhz = infiltratr_u64_add_saturating(
+                current_total_mhz, (uint64_t)power[index].CurrentMhz);
+            current_count++;
+        }
+        if (power[index].MaxMhz > maximum_mhz)
+            maximum_mhz = power[index].MaxMhz;
+    }
+
+    if (current_count > 0U) {
+        cpu->frequency_ghz =
+            ((double)current_total_mhz / (double)current_count) / 1000.0;
+    }
+    if (maximum_mhz > 0U)
+        cpu->max_frequency_ghz = (double)maximum_mhz / 1000.0;
+}
+
 static void populate_cpu_identity(LsmMonitor *monitor)
 {
     if (!monitor) return;
 
-    SYSTEM_INFO system_info;
-    GetNativeSystemInfo(&system_info);
-    monitor->cpu.logical_cores = (unsigned)system_info.dwNumberOfProcessors;
+    populate_cpu_topology(&monitor->cpu);
+    populate_cpu_registry_identity(&monitor->cpu);
 
-    monitor->cpu.model[0] = '\0';
-    const DWORD length = GetEnvironmentVariableA(
-        "PROCESSOR_IDENTIFIER", monitor->cpu.model,
-        (DWORD)sizeof(monitor->cpu.model));
-    if (length == 0U || length >= (DWORD)sizeof(monitor->cpu.model))
-        monitor->cpu.model[0] = '\0';
+    if (!monitor->cpu.model[0]) {
+        const DWORD length = GetEnvironmentVariableA(
+            "PROCESSOR_IDENTIFIER", monitor->cpu.model,
+            (DWORD)sizeof(monitor->cpu.model));
+        if (length == 0U ||
+            length >= (DWORD)sizeof(monitor->cpu.model))
+            monitor->cpu.model[0] = '\0';
+    }
+
+#ifdef PF_VIRT_FIRMWARE_ENABLED
+    monitor->cpu.virtualization_available = true;
+    monitor->cpu.virtualization =
+        IsProcessorFeaturePresent(PF_VIRT_FIRMWARE_ENABLED) != FALSE;
+#endif
+
+    update_cpu_power(&monitor->cpu);
 }
 
 static bool update_cpu_snapshot(LsmMonitor *monitor,
@@ -194,6 +387,7 @@ static bool update_cpu_snapshot(LsmMonitor *monitor,
     state->user_time = user;
     state->cpu_baseline_valid = true;
     monitor->cpu.uptime_seconds = (uint64_t)(GetTickCount64() / 1000ULL);
+    update_cpu_power(&monitor->cpu);
     return true;
 }
 
