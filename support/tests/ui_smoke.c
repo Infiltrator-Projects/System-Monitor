@@ -3,7 +3,7 @@
  * @file ui_smoke.c
  * @brief Consolidated UI and preferences regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -41,7 +41,7 @@ int smoke_case_task_manager_layout(void);
  * @file dbus_models_smoke.c
  * @brief Synthetic systemd and logind D-Bus model tests.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -176,7 +176,7 @@ int main(void)
  * @brief Preference round-trip and invalid-value fallback regression.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -314,7 +314,7 @@ int main(void)
  * @file startup_smoke.c
  * @brief XDG startup parsing and reversible override test.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "../src/startup_backend_linux.c"
@@ -395,7 +395,7 @@ int main(void)
  * @file ui_update_smoke.c
  * @brief Verify unchanged labels are suppressed before entering GTK.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "ui_helpers.h"
@@ -421,7 +421,7 @@ int main(void)
  * @brief Lock the canonical Performance-first tab order.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "app_config.h"
