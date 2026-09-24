@@ -3,7 +3,7 @@
  * @file core_smoke.c
  * @brief Consolidated core regression smoke suite.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
@@ -26,7 +26,7 @@ int smoke_case_project_info(void);
  * @brief Durable replacement, permissions and failure-cleanup regression.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L
@@ -131,7 +131,7 @@ int main(void)
  * @brief Elapsed and estimated duration presentation regression.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "duration_format.h"
@@ -180,7 +180,7 @@ int main(void)
  * @file common_smoke.c
  * @brief Regression tests for shared native utility functions.
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "common.h"
@@ -359,7 +359,7 @@ int main(void)
  * @brief Validate canonical application and shared-library build identity.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "project_info.h"
