@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.91 - 2026-09-24
+
+- Make CPU uptime follow French decimal time when System Settings selects the decimal clock, while preserving the underlying canonical SI-second uptime counter.
+- Render decimal elapsed time with 100 seconds per minute and 100 minutes per hour; keep whole 24-hour days explicit.
+- Keep conventional elapsed-duration formatting for ordinary and astronomical/historical clock modes, whose civil-time semantics do not define elapsed intervals.
+- Add a regression at the exact decimal rollover: 86 SI seconds renders as 0:00:99 and 87 SI seconds as 0:01:00.
+
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
 

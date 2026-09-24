@@ -13,6 +13,7 @@
 #include "performance_present_internal.h"
 #include "performance_internal.h"
 #include "performance_view.h"
+#include "temporal_presentation.h"
 
 #include "common.h"
 #include "duration_format.h"
@@ -74,6 +75,10 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     LsmCpuPageWidgets *widgets = &page->widgets.cpu;
     LsmCpuPerformanceView view;
     lsm_cpu_performance_view(&app->monitor, &view);
+    (void)lsm_temporal_format_duration_seconds(
+        cpu->uptime_seconds,
+        view.metrics[LSM_CPU_METRIC_UPTIME],
+        sizeof(view.metrics[LSM_CPU_METRIC_UPTIME]));
 
     lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
     lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
