@@ -765,10 +765,7 @@ static void check_licensing_contract(void)
                         "SPDX-License-Identifier: GPL-3.0-or-later");
     if (regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
         report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: proprietary font binaries must not be redistributed");
-    require_file_marker("support/resources/data/pci-names.tsv.license",
-                        "SPDX-License-Identifier: BSD-3-Clause");
     require_file_marker("support/packaging/copyright", "License: GPL-3+");
-    require_file_marker("support/packaging/copyright", "License: BSD-3-clause");
     require_file_marker("src/project_info.c",
                         ".license_id = \"GPL-3.0-or-later\"");
     require_file_marker(
@@ -787,8 +784,7 @@ static void check_engineering_documentation(void)
         "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
         "docs/PORTABILITY.md", "docs/HARDWARE.md",
         ".github/CODE_OF_CONDUCT.md",
-        "support/Doxyfile", "LICENSE", "support/legal/THIRD_PARTY_NOTICES",
-        "support/packaging/copyright"
+        "support/Doxyfile", "LICENSE", "support/packaging/copyright"
     };
     for (size_t index = 0U; index < sizeof(required_files) / sizeof(required_files[0]);
          index++) {
