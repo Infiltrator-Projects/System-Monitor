@@ -86,6 +86,7 @@ struct LsmHistorySaveCoordinator {
     pthread_mutex_t write_mutex;
     atomic_uint references;
     atomic_uint latest_scheduled_generation;
+    atomic_uint latest_written_generation;
 };
 
 typedef struct {
@@ -312,6 +313,7 @@ static LsmHistorySaveCoordinator *history_coordinator_create(void)
     }
     atomic_init(&coordinator->references, 1U);
     atomic_init(&coordinator->latest_scheduled_generation, 0U);
+    atomic_init(&coordinator->latest_written_generation, 0U);
     return coordinator;
 }
 
@@ -422,7 +424,15 @@ static int history_write_request(LsmHistorySaveRequest *request,
         const unsigned latest = atomic_load_explicit(
             &request->coordinator->latest_scheduled_generation,
             memory_order_acquire);
-        if (request->generation < latest) {
+        const unsigned latest_written = atomic_load_explicit(
+            &request->coordinator->latest_written_generation,
+            memory_order_acquire);
+        /* A shutdown flush may race an already-running periodic save for the
+         * same immutable generation. Whichever reaches the publication mutex
+         * first performs the durable write; the other observes that generation
+         * as already persisted instead of fsyncing the identical file again. */
+        if (request->generation < latest ||
+            request->generation <= latest_written) {
             (void)pthread_mutex_unlock(&request->coordinator->write_mutex);
             g_string_free(output, TRUE);
             return 0;
@@ -431,6 +441,10 @@ static int history_write_request(LsmHistorySaveRequest *request,
 
     failure = lsm_atomic_file_write_bytes(
         request->path, LSM_ATOMIC_FILE_PRIVATE, output->str, output->len);
+    if (failure == 0 && request->coordinator)
+        atomic_store_explicit(
+            &request->coordinator->latest_written_generation,
+            request->generation, memory_order_release);
     if (written && failure == 0) *written = TRUE;
     if (request->coordinator)
         (void)pthread_mutex_unlock(&request->coordinator->write_mutex);
@@ -616,8 +630,15 @@ static int history_save_checked_sync(LsmApp *app)
             request->generation, memory_order_release);
     gboolean written = FALSE;
     const int failure = history_write_request(request, &written);
+    const gboolean persisted =
+        failure == 0 &&
+        (written ||
+         (request->coordinator &&
+          atomic_load_explicit(
+              &request->coordinator->latest_written_generation,
+              memory_order_acquire) >= request->generation));
     history_save_request_free(request);
-    if (failure == 0 && written) {
+    if (persisted) {
         app->history.history_dirty = FALSE;
         app->history.history_save_error_reported = FALSE;
     }
@@ -892,6 +913,18 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
 void lsm_history_refresh(LsmApp *app)
 {
     if (!app || !app->history.history_store || !app->history.app_history) return;
+
+    GtkTreeSortable *sortable = GTK_TREE_SORTABLE(app->history.history_store);
+    gint sort_column = GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID;
+    GtkSortType sort_order = GTK_SORT_ASCENDING;
+    const gboolean had_sort =
+        gtk_tree_sortable_get_sort_column_id(
+            sortable, &sort_column, &sort_order);
+    if (had_sort)
+        gtk_tree_sortable_set_sort_column_id(
+            sortable, GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,
+            GTK_SORT_ASCENDING);
+
     gtk_list_store_clear(app->history.history_store);
     const char *search = app->history.history_search
         ? gtk_entry_get_text(GTK_ENTRY(app->history.history_search)) : "";
@@ -921,6 +954,13 @@ void lsm_history_refresh(LsmApp *app)
             -1);
         shown++;
     }
+
+    /* Sorting once after the bulk load avoids re-sorting the whole model for
+     * every inserted row, which is especially visible at the 4096-entry
+     * retention ceiling. */
+    if (had_sort)
+        gtk_tree_sortable_set_sort_column_id(
+            sortable, sort_column, sort_order);
     lsm_ui_set_label_text(app->history.history_count_label, "%u applications", shown);
 }
 
