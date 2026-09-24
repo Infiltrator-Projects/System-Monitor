@@ -4,6 +4,7 @@
 # Device rows are admitted only after independent corroboration from primary/public
 # hardware evidence. This table is not derived from any third-party PCI names database.
 V	025E	SK hynix-Solidigm
+V	1002	Advanced Micro Devices, Inc.
 V	1013	Cirrus Logic, Inc.
 V	1022	Advanced Micro Devices, Inc.
 V	1028	Dell Computer Corporation
@@ -13,7 +14,7 @@ V	104C	Texas Instruments
 V	105A	Promise Technology, Inc.
 V	106B	Apple Computer
 V	10CF	Fujitsu Limited
-V	10DE	NVidia Corporation
+V	10DE	NVIDIA Corporation
 V	10EC	Realtek Semiconductor Corporation
 V	1102	Creative Technology Ltd
 V	1131	NXP Semiconductors
@@ -51,6 +52,71 @@ V	1E52	Tenstorrent Inc
 V	1FE9	MemryX Inc.
 V	20B7	Western Digital Technologies, Inc.
 V	8086	Intel Corporation
-D	8086	7D45	Meteor Lake-P [Intel Graphics]
-D	8086	7D55	Meteor Lake-P [Intel Arc Graphics]
-D	8086	7E40	Meteor Lake PCH CNVi WiFi
+D	10DE	1E02	NVIDIA TITAN RTX
+D	10DE	1E04	NVIDIA GeForce RTX 2080 Ti
+D	10DE	1E07	NVIDIA GeForce RTX 2080 Ti
+D	10DE	1E81	NVIDIA GeForce RTX 2080 SUPER
+D	10DE	1E82	NVIDIA GeForce RTX 2080
+D	10DE	1E84	NVIDIA GeForce RTX 2070 SUPER
+D	10DE	1E89	NVIDIA GeForce RTX 2060
+D	10DE	1F11	NVIDIA GeForce RTX 2060
+D	10DE	1F12	NVIDIA GeForce RTX 2060
+D	10DE	1F14	NVIDIA GeForce RTX 2070
+D	10DE	21C4	NVIDIA GeForce GTX 1660 SUPER
+D	10DE	24C7	NVIDIA GeForce RTX 3060
+D	10DE	24C9	NVIDIA GeForce RTX 3060 Ti
+D	10DE	2503	NVIDIA GeForce RTX 3060
+D	10DE	2504	NVIDIA GeForce RTX 3060
+D	10DE	2507	NVIDIA GeForce RTX 3050
+D	10DE	2544	NVIDIA GeForce RTX 3060
+D	10DE	2582	NVIDIA GeForce RTX 3050
+D	10DE	2684	NVIDIA GeForce RTX 4090
+D	10DE	2685	NVIDIA GeForce RTX 4090 D
+D	10DE	2689	NVIDIA GeForce RTX 4070 Ti SUPER
+D	10DE	2702	NVIDIA GeForce RTX 4080 SUPER
+D	10DE	2704	NVIDIA GeForce RTX 4080
+D	10DE	2705	NVIDIA GeForce RTX 4070 Ti SUPER
+D	10DE	2709	NVIDIA GeForce RTX 4070
+D	10DE	2782	NVIDIA GeForce RTX 4070 Ti
+D	10DE	2783	NVIDIA GeForce RTX 4070 SUPER
+D	10DE	2786	NVIDIA GeForce RTX 4070
+D	10DE	2788	NVIDIA GeForce RTX 4060 Ti
+D	10DE	2803	NVIDIA GeForce RTX 4060 Ti
+D	10DE	2805	NVIDIA GeForce RTX 4060 Ti
+D	10DE	2808	NVIDIA GeForce RTX 4060
+D	10DE	2882	NVIDIA GeForce RTX 4060
+D	10DE	2B85	NVIDIA GeForce RTX 5090
+D	10DE	2B87	NVIDIA GeForce RTX 5090 D
+D	10DE	2B8C	NVIDIA GeForce RTX 5090 D v2
+D	10DE	2C02	NVIDIA GeForce RTX 5080
+D	10DE	2C05	NVIDIA GeForce RTX 5070 Ti
+D	10DE	2D04	NVIDIA GeForce RTX 5060 Ti
+D	10DE	2D05	NVIDIA GeForce RTX 5060
+D	10DE	2D83	NVIDIA GeForce RTX 5050
+D	10DE	2F04	NVIDIA GeForce RTX 5070
+D	8086	56A0	Intel Arc A770 Graphics
+D	8086	56A1	Intel Arc A750 Graphics
+D	8086	56A2	Intel Arc A580 Graphics
+D	8086	7D40	Intel Core Ultra Processor Graphics
+D	8086	7D45	Intel Core Ultra Processor Graphics
+D	8086	7D55	Intel Core Ultra Processor Graphics
+D	8086	7E40	CNVi Wi-Fi
+D	8086	7E45	Integrated Sensor Hub
+D	8086	7E48	Touch Host Controller #0
+D	8086	7E49	Touch Host Controller #0
+D	8086	7E4A	Touch Host Controller #1
+D	8086	7E4B	Touch Host Controller #1
+D	8086	7E70	Intel CSME HECI #1
+D	8086	7E71	Intel CSME HECI #2
+D	8086	7E72	Intel CSME IDE Redirection
+D	8086	7E73	Intel CSME Keyboard and Text Redirection
+D	8086	7E78	I2C Controller #0
+D	8086	7E79	I2C Controller #1
+D	8086	7E7A	I2C Controller #2
+D	8086	7E7B	I2C Controller #3
+D	8086	7E7C	I3C Controller
+D	8086	7E7D	Standalone xHCI Controller
+D	8086	7E7E	Standalone USB Device Controller
+D	8086	7E7F	Shared SRAM
+D	8086	E20B	Intel Arc B580 Graphics
+D	8086	E20C	Intel Arc B570 Graphics
