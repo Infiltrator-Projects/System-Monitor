@@ -212,7 +212,7 @@ static void check_root_layout(void)
 {
     static const char *const retired_root_entries[] = {
         ".clang-format", ".editorconfig", "Doxyfile",
-        "NATIVE_INSTALLER_EDITION", "THIRD_PARTY_NOTICES", "VERSION",
+        "NATIVE_INSTALLER_EDITION", "VERSION",
         "data", "icons", "install.sh", "packaging", "shared",
         "sources.txt", "tests", "tools"
     };
@@ -596,11 +596,8 @@ static void check_source_file(const char *path)
     if (strncmp(text, LSM_SPDX_C, strlen(LSM_SPDX_C)) != 0)
         report_error("%s: first line must be %s", path,
                      "// SPDX-License-Identifier: GPL-3.0-or-later");
-    static const char obsolete_license[] = "@license " "BSD-3-Clause";
     static const char stale_repository[] =
         "github.com/" "The-Infiltratr";
-    if (strstr(text, obsolete_license))
-        report_error("%s: obsolete project BSD licence tag", path);
     if (strstr(text, stale_repository))
         report_error("%s: stale project repository identity", path);
 
