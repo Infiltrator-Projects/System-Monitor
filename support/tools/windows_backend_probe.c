@@ -50,7 +50,25 @@ int main(void)
 
     printf("CPU\n");
     printf("  Model: %s\n", monitor.cpu.model[0] ? monitor.cpu.model : "Unavailable");
-    printf("  Logical processors: %u\n", monitor.cpu.logical_cores);
+    printf("  Cores: %u physical, %u logical; %u socket(s), %u NUMA node(s)\n",
+           monitor.cpu.physical_cores, monitor.cpu.logical_cores,
+           monitor.cpu.socket_count, monitor.cpu.numa_node_count);
+    printf("  Frequency: current %.2f GHz, base %.2f GHz, max %.2f GHz\n",
+           monitor.cpu.frequency_ghz, monitor.cpu.base_frequency_ghz,
+           monitor.cpu.max_frequency_ghz);
+    printf("  Cache: L1 %s; L2 %s; L3 %s\n",
+           monitor.cpu.cache_l1[0] ? monitor.cpu.cache_l1 : "N/A",
+           monitor.cpu.cache_l2[0] ? monitor.cpu.cache_l2 : "N/A",
+           monitor.cpu.cache_l3[0] ? monitor.cpu.cache_l3 : "N/A");
+    if (monitor.cpu.logical_cores == 0U ||
+        monitor.cpu.physical_cores == 0U ||
+        monitor.cpu.physical_cores > monitor.cpu.logical_cores ||
+        monitor.cpu.socket_count == 0U ||
+        monitor.cpu.numa_node_count == 0U) {
+        fprintf(stderr, "Native Windows CPU topology is incomplete.\n");
+        lsm_monitor_platform_destroy(&monitor);
+        return EXIT_FAILURE;
+    }
     printf("  Usage: %.1f%% (user %.1f%%, kernel %.1f%%)\n",
            monitor.cpu.usage_percent,
            monitor.cpu.user_percent,
