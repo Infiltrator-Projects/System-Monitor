@@ -265,7 +265,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "notebook > header > tabs > tab {"
         " background-color: transparent; color: @lsm_summary;"
         " border: 0; border-bottom: 2px solid transparent;"
-        " padding: 5px 10px;"
+        " padding: 6px 10px;"
         "}"
         "notebook > header > tabs > tab label { color: @lsm_summary; }"
         "notebook > header > tabs > tab:hover {"

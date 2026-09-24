@@ -3,6 +3,11 @@
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
 
+## 1.0.90 - 2026-09-24
+
+- Give notebook tabs one extra pixel of vertical breathing room to match the suite compact-spacing rhythm.
+- Keep collectors, page structure, platform backends, dependencies and Common APIs unchanged.
+
 ## 1.0.89 - 2026-09-24
 
 - Pin the application to released Infiltratr Common 1.19.25 and its complete explicit clock-mode formatter.
