@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file pci_names.c
- * @brief In-process lookup against the embedded PCI identity index.
+ * @brief In-process lookup against System Monitor's PCI identity registry.
  *
- * Normal operation searches a compact table compiled into the executable, so
- * adapter identity resolution has no runtime data-file, pciutils, lspci or
- * lshw dependency.  Developers may set LSM_PCI_DB_PATH to test an alternate
- * TSV table before the embedded fallback is consulted.
+ * Normal operation searches a compact project-maintained factual table compiled
+ * into the executable, so identity resolution has no runtime pciutils, lspci,
+ * lshw or third-party PCI names database dependency. Developers may set
+ * LSM_PCI_DB_PATH to test an alternate TSV table before the embedded fallback.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #define _POSIX_C_SOURCE 200809L

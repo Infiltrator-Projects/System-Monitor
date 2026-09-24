@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file pci_names.h
- * @brief In-process PCI vendor and device-name lookup.
+ * @brief In-process PCI vendor and curated device identity lookup.
  *
  * System Monitor uses this module directly from its normal backend.
  * No helper executable, lspci, pciutils or lshw process is involved.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #ifndef INFILTRATOR_SYSTEM_MONITOR_PCI_NAMES_H
@@ -17,7 +17,7 @@
 #include <stddef.h>
 
 /**
- * Resolve numeric PCI identifiers through the compiled-in names database.
+ * Resolve numeric PCI identifiers through the project-maintained registry.
  *
  * @param [in] vendor_id Four-digit hexadecimal vendor identifier.
  * @param [in] device_id Four-digit hexadecimal device identifier.
