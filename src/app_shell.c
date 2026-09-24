@@ -436,10 +436,14 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
     lsm_app_shell_save_page_scroll(app, app->runtime.active_tab);
     app->runtime.active_tab = (gint)page_number;
     app->runtime.last_tab = (gint)page_number;
+    const gboolean page_was_built = app->runtime.page_built[page_number];
     lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
     switch ((LsmTabIndex)page_number) {
         case LSM_TAB_APP_HISTORY:
-            lsm_history_refresh(app);
+            /* lsm_history_build() performs the initial population itself.
+             * Refresh only on later visits so first navigation does not build
+             * all retained rows twice back-to-back on the GTK thread. */
+            if (page_was_built) lsm_history_refresh(app);
             break;
         case LSM_TAB_FILESYSTEMS:
             lsm_filesystems_refresh(app);
