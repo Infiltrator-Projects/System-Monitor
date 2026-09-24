@@ -33,67 +33,75 @@ int main(void)
 {
     printf("System Monitor experimental Windows backend probe\n\n");
 
-    LsmMonitor monitor;
-    if (!lsm_monitor_platform_init(&monitor)) {
+    LsmMonitor *monitor = (LsmMonitor *)calloc(1U, sizeof(*monitor));
+    if (!monitor) {
+        fprintf(stderr, "Unable to allocate Windows monitor snapshot.\n");
+        return EXIT_FAILURE;
+    }
+    if (!lsm_monitor_platform_init(monitor)) {
         fprintf(stderr, "Monitor backend initialisation failed (Windows error %lu).\n",
                 (unsigned long)GetLastError());
+        free(monitor);
         return EXIT_FAILURE;
     }
 
     Sleep(1000U);
-    if (!lsm_monitor_platform_update(&monitor)) {
+    if (!lsm_monitor_platform_update(monitor)) {
         fprintf(stderr, "Monitor backend update failed (Windows error %lu).\n",
                 (unsigned long)GetLastError());
-        lsm_monitor_platform_destroy(&monitor);
+        lsm_monitor_platform_destroy(monitor);
+        free(monitor);
         return EXIT_FAILURE;
     }
 
     printf("CPU\n");
-    printf("  Model: %s\n", monitor.cpu.model[0] ? monitor.cpu.model : "Unavailable");
+    printf("  Model: %s\n", monitor->cpu.model[0] ? monitor->cpu.model : "Unavailable");
     printf("  Cores: %u physical, %u logical; %u socket(s), %u NUMA node(s)\n",
-           monitor.cpu.physical_cores, monitor.cpu.logical_cores,
-           monitor.cpu.socket_count, monitor.cpu.numa_node_count);
+           monitor->cpu.physical_cores, monitor->cpu.logical_cores,
+           monitor->cpu.socket_count, monitor->cpu.numa_node_count);
     printf("  Frequency: current %.2f GHz, base %.2f GHz, max %.2f GHz\n",
-           monitor.cpu.frequency_ghz, monitor.cpu.base_frequency_ghz,
-           monitor.cpu.max_frequency_ghz);
+           monitor->cpu.frequency_ghz, monitor->cpu.base_frequency_ghz,
+           monitor->cpu.max_frequency_ghz);
     printf("  Cache: L1 %s; L2 %s; L3 %s\n",
-           monitor.cpu.cache_l1[0] ? monitor.cpu.cache_l1 : "N/A",
-           monitor.cpu.cache_l2[0] ? monitor.cpu.cache_l2 : "N/A",
-           monitor.cpu.cache_l3[0] ? monitor.cpu.cache_l3 : "N/A");
-    if (monitor.cpu.logical_cores == 0U ||
-        monitor.cpu.physical_cores == 0U ||
-        monitor.cpu.physical_cores > monitor.cpu.logical_cores ||
-        monitor.cpu.socket_count == 0U ||
-        monitor.cpu.numa_node_count == 0U) {
+           monitor->cpu.cache_l1[0] ? monitor->cpu.cache_l1 : "N/A",
+           monitor->cpu.cache_l2[0] ? monitor->cpu.cache_l2 : "N/A",
+           monitor->cpu.cache_l3[0] ? monitor->cpu.cache_l3 : "N/A");
+    if (monitor->cpu.logical_cores == 0U ||
+        monitor->cpu.physical_cores == 0U ||
+        monitor->cpu.physical_cores > monitor->cpu.logical_cores ||
+        monitor->cpu.socket_count == 0U ||
+        monitor->cpu.numa_node_count == 0U) {
         fprintf(stderr, "Native Windows CPU topology is incomplete.\n");
-        lsm_monitor_platform_destroy(&monitor);
+        lsm_monitor_platform_destroy(monitor);
+        free(monitor);
         return EXIT_FAILURE;
     }
     printf("  Usage: %.1f%% (user %.1f%%, kernel %.1f%%)\n",
-           monitor.cpu.usage_percent,
-           monitor.cpu.user_percent,
-           monitor.cpu.kernel_percent);
+           monitor->cpu.usage_percent,
+           monitor->cpu.user_percent,
+           monitor->cpu.kernel_percent);
     printf("  Uptime: %llu seconds\n",
-           (unsigned long long)monitor.cpu.uptime_seconds);
+           (unsigned long long)monitor->cpu.uptime_seconds);
     printf("  Processes: %u  Threads: %u  Handles: %llu\n\n",
-           monitor.cpu.process_count,
-           monitor.cpu.thread_count,
-           (unsigned long long)monitor.cpu.file_handle_count);
+           monitor->cpu.process_count,
+           monitor->cpu.thread_count,
+           (unsigned long long)monitor->cpu.file_handle_count);
 
     printf("Memory\n");
     printf("  Physical: %.2f GB total, %.2f GB used, %.2f GB available\n",
-           bytes_to_gb(monitor.memory.total_bytes),
-           bytes_to_gb(monitor.memory.used_bytes),
-           bytes_to_gb(monitor.memory.available_bytes));
-    printf("  Usage: %.1f%%\n", monitor.memory.usage_percent);
+           bytes_to_gb(monitor->memory.total_bytes),
+           bytes_to_gb(monitor->memory.used_bytes),
+           bytes_to_gb(monitor->memory.available_bytes));
+    printf("  Usage: %.1f%%\n", monitor->memory.usage_percent);
     printf("  Commit: %.2f GB / %.2f GB\n\n",
-           bytes_to_gb(monitor.memory.committed_bytes),
-           bytes_to_gb(monitor.memory.commit_limit_bytes));
+           bytes_to_gb(monitor->memory.committed_bytes),
+           bytes_to_gb(monitor->memory.commit_limit_bytes));
 
     LsmProcessBackend *process_backend = lsm_process_backend_create();
     if (!process_backend) {
         fprintf(stderr, "Process backend initialisation failed.\n");
-        lsm_monitor_platform_destroy(&monitor);
+        lsm_monitor_platform_destroy(monitor);
+        free(monitor);
         return EXIT_FAILURE;
     }
 
@@ -113,7 +121,8 @@ int main(void)
         lsm_process_error_message(error, sizeof(error));
         fprintf(stderr, "Process scan failed: %s\n", error);
         lsm_process_backend_destroy(process_backend);
-        lsm_monitor_platform_destroy(&monitor);
+        lsm_monitor_platform_destroy(monitor);
+        free(monitor);
         return EXIT_FAILURE;
     }
 
@@ -142,6 +151,7 @@ int main(void)
 
     lsm_process_list_free(processes);
     lsm_process_backend_destroy(process_backend);
-    lsm_monitor_platform_destroy(&monitor);
+    lsm_monitor_platform_destroy(monitor);
+    free(monitor);
     return EXIT_SUCCESS;
 }
