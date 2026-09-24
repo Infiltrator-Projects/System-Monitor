@@ -17,45 +17,30 @@
 #include <infiltratr/arithmetic.h>
 #include <infiltratr/core.h>
 #include <infiltratr/format.h>
+#include <infiltratr/posix.h>
 #include <infiltratr/temporal.h>
 #include <infiltratr/temporal_posix.h>
-#include <ctype.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#define LSM_TEMPORAL_CACHE_NS INT64_C(500000000)
+#define LSM_TEMPORAL_CACHE_NS UINT64_C(500000000)
 #define LSM_MICROSECONDS_PER_SECOND INT64_C(1000000)
-#define LSM_NANOSECONDS_PER_SECOND INT64_C(1000000000)
 typedef struct LsmTemporalPolicyCache {
     InfiltratrTemporalPolicyV3 policy;
-    int64_t refreshed_ns;
+    uint64_t refreshed_ns;
     bool authority;
     bool initialized;
 } LsmTemporalPolicyCache;
 static LsmTemporalPolicyCache policy_cache;
 static pthread_mutex_t policy_cache_lock = PTHREAD_MUTEX_INITIALIZER;
-static int64_t monotonic_nanoseconds(void)
-{
-    struct timespec now;
-    int64_t seconds_ns;
-    int64_t result;
-    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return -1;
-    if (!infiltratr_i64_multiply_checked(
-            (int64_t)now.tv_sec, LSM_NANOSECONDS_PER_SECOND, &seconds_ns) ||
-        !infiltratr_i64_add_checked(
-            seconds_ns, (int64_t)now.tv_nsec, &result)) {
-        return INT64_MAX;
-    }
-    return result;
-}
-static void refresh_policy_locked(int64_t now_ns)
+static void refresh_policy_locked(uint64_t now_ns, bool have_now)
 {
     InfiltratrTemporalPolicyV3 next;
     bool found = false;
     bool authority = false;
-    if (policy_cache.initialized && now_ns >= 0 &&
-        policy_cache.refreshed_ns >= 0 && now_ns >= policy_cache.refreshed_ns &&
+    if (policy_cache.initialized && have_now &&
+        now_ns >= policy_cache.refreshed_ns &&
         now_ns - policy_cache.refreshed_ns < LSM_TEMPORAL_CACHE_NS) return;
     if (!infiltratr_temporal_policy_v3_default(&next)) return;
     if (infiltratr_temporal_posix_provider_available() &&
@@ -63,21 +48,22 @@ static void refresh_policy_locked(int64_t now_ns)
         found) authority = true;
     policy_cache.policy = next;
     policy_cache.authority = authority;
-    policy_cache.refreshed_ns = now_ns;
+    policy_cache.refreshed_ns = have_now ? now_ns : 0U;
     policy_cache.initialized = true;
 }
 static bool effective_policy(InfiltratrTemporalPolicyV3 *policy)
 {
-    const int64_t now_ns = monotonic_nanoseconds();
+    uint64_t now_ns = 0U;
+    const bool have_now = infiltratr_monotonic_nanoseconds(&now_ns);
     bool authority;
     if (policy == NULL) return false;
     pthread_mutex_lock(&policy_cache_lock);
-    refresh_policy_locked(now_ns);
+    refresh_policy_locked(now_ns, have_now);
     if (!policy_cache.initialized) {
         (void)infiltratr_temporal_policy_v3_default(&policy_cache.policy);
         policy_cache.authority = false;
         policy_cache.initialized = true;
-        policy_cache.refreshed_ns = now_ns;
+        policy_cache.refreshed_ns = have_now ? now_ns : 0U;
     }
     *policy = policy_cache.policy;
     authority = policy_cache.authority;
@@ -102,13 +88,13 @@ static bool parse_numeric_utc_offset(const struct tm *local, int32_t *offset)
     else if (*cursor == '-') sign = -1;
     else return false;
     cursor++;
-    if (!isdigit((unsigned char)cursor[0]) ||
-        !isdigit((unsigned char)cursor[1])) return false;
+    if (!infiltratr_ascii_is_digit((unsigned char)cursor[0]) ||
+        !infiltratr_ascii_is_digit((unsigned char)cursor[1])) return false;
     hours = (cursor[0] - '0') * 10 + cursor[1] - '0';
     cursor += 2;
     if (*cursor == ':') cursor++;
-    if (!isdigit((unsigned char)cursor[0]) ||
-        !isdigit((unsigned char)cursor[1]) || cursor[2] != '\0') return false;
+    if (!infiltratr_ascii_is_digit((unsigned char)cursor[0]) ||
+        !infiltratr_ascii_is_digit((unsigned char)cursor[1]) || cursor[2] != '\0') return false;
     minutes = (cursor[0] - '0') * 10 + cursor[1] - '0';
     if (hours > 23 || minutes > 59) return false;
     *offset = (int32_t)(sign * (hours * 3600 + minutes * 60));

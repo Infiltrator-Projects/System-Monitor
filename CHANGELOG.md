@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.94 - 2026-09-25
+
+- Pin Make, CMake and the source gitlink to released Infiltratr Common 1.19.27 at `3ef3710df6563df305b6d8e2dc9d1a41c61843ba`.
+- Replace System Monitor's private monotonic-nanosecond clock conversion with Common's overflow-checked `infiltratr_monotonic_nanoseconds()` while preserving the temporal-policy cache's reload-on-clock-failure behaviour.
+- Replace the final locale-sensitive digit classification in numeric UTC-offset parsing with Common's deterministic ASCII classifier.
+- Route CPU user/kernel one-decimal percentage presentation through Common's generic scalar formatter instead of retaining a private finite/N/A/precision formatter.
+- Refresh maintained Common-version documentation to the exact 1.19.27 dependency; historical changelog entries remain unchanged.
+
 ## 1.0.93 - 2026-09-25
 
 - Align the native Linux titlebar with the suite-wide 44 px publisher chrome height.

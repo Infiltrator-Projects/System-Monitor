@@ -65,16 +65,17 @@ static void format_u64(bool available, uint64_t value,
     (void)snprintf(buffer, size, "%llu", (unsigned long long)value);
 }
 
-static void format_one_decimal_percent(bool available, double value,
-                                       char *buffer, size_t size)
-{
-    if (!buffer || size == 0U) return;
-    if (!available || !isfinite(value)) {
-        infiltratr_copy_string(buffer, size, "N/A");
-        return;
-    }
-    (void)snprintf(buffer, size, "%.1f%%", value);
-}
+static const InfiltratrScalarFormatOptions one_decimal_percent = {
+    .struct_size = sizeof(InfiltratrScalarFormatOptions),
+    .abi_version = INFILTRATR_SCALAR_FORMAT_OPTIONS_ABI,
+    .decimal_places = 1U,
+    .clamp = false,
+    .minimum = 0.0L,
+    .maximum = 0.0L,
+    .prefix = "",
+    .suffix = "%",
+    .unavailable_text = "N/A"
+};
 
 static void append_text(char *buffer, size_t size, size_t *used,
                         const char *format, ...)
@@ -155,12 +156,12 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         &monitor->cpu_pressure,
         view->metrics[LSM_CPU_METRIC_PRESSURE],
         sizeof(view->metrics[LSM_CPU_METRIC_PRESSURE]));
-    format_one_decimal_percent(
-        true, cpu->user_percent,
+    (void)infiltratr_format_scalar(
+        true, cpu->user_percent, &one_decimal_percent,
         view->metrics[LSM_CPU_METRIC_USER],
         sizeof(view->metrics[LSM_CPU_METRIC_USER]));
-    format_one_decimal_percent(
-        true, cpu->kernel_percent,
+    (void)infiltratr_format_scalar(
+        true, cpu->kernel_percent, &one_decimal_percent,
         view->metrics[LSM_CPU_METRIC_KERNEL],
         sizeof(view->metrics[LSM_CPU_METRIC_KERNEL]));
 
