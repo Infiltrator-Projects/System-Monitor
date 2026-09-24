@@ -1,29 +1,55 @@
 # System Monitor independently maintained PCI identity registry
 # Format: V<TAB>vendor-id<TAB>vendor name or D<TAB>vendor-id<TAB>device-id<TAB>device name
-# Vendor assignments are transcribed from public PCI-SIG member assignments.
-# Device rows are included only when independently corroborated by primary/public
-# hardware evidence. This is not derived from the Linux PCI ID Repository.
+# Vendor rows record authoritative public PCI vendor assignments as factual identifiers.
+# Device rows are admitted only after independent corroboration from primary/public
+# hardware evidence. This table is not derived from any third-party PCI names database.
+V	025E	SK hynix-Solidigm
+V	1013	Cirrus Logic, Inc.
 V	1022	Advanced Micro Devices, Inc.
 V	1028	Dell Computer Corporation
+V	102B	Matrox Graphics Inc.
 V	1043	Asustek Computer Inc.
+V	104C	Texas Instruments
+V	105A	Promise Technology, Inc.
 V	106B	Apple Computer
+V	10CF	Fujitsu Limited
 V	10DE	NVidia Corporation
 V	10EC	Realtek Semiconductor Corporation
+V	1102	Creative Technology Ltd
 V	1131	NXP Semiconductors
+V	1137	Cisco Systems, Inc.
 V	1166	Broadcom Limited
 V	1172	Altera
+V	1180	Ricoh Company, Ltd.
 V	11D4	Analog Devices International
+V	11F8	Microchip Technology
+V	125B	ASIX Electronics Corp.
+V	1283	ITE Tech. Inc.
 V	1344	Micron Technology, Inc.
 V	13B5	ARM Ltd.
 V	1414	Microsoft
+V	1425	Chelsio Communications
 V	144D	Samsung Electronics Co., Ltd.
+V	1458	Giga-Byte Technology Co., Ltd.
+V	1462	Micro-Star International Co., Ltd.
 V	14C3	MediaTek Incorporation
+V	15B7	Sandisk Technologies, Inc.
+V	15D9	Super Micro Computer Inc.
 V	17AA	Lenovo
 V	17CB	Qualcomm Incorporated
+V	17CD	Cadence Design Systems
+V	17D3	Areca Technology Corporation
 V	1987	Phison Electronics Corporation
 V	1A03	ASPEED Technology Inc.
+V	1AE0	Google, Inc.
+V	1BAA	QNAP Systems, Inc.
+V	1D0F	Amazon.com Services LLC
+V	1D87	Rockchip Electronics Co., Ltd.
 V	1DCA	Marvell Semiconductor, Inc.
 V	1E0F	Kioxia Corporation
+V	1E52	Tenstorrent Inc
+V	1FE9	MemryX Inc.
+V	20B7	Western Digital Technologies, Inc.
 V	8086	Intel Corporation
 D	8086	7D45	Meteor Lake-P [Intel Graphics]
 D	8086	7D55	Meteor Lake-P [Intel Arc Graphics]
