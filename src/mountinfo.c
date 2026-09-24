@@ -8,7 +8,7 @@
  * identity, escaped path handling and support for optional propagation fields.
  *
  * @author Shannon Smith
- * @copyright Copyright (c) 2016-2026 Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "mountinfo.h"
