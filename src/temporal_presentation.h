@@ -17,12 +17,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+/** Format a canonical Unix-microsecond instant for human display. */
 bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                                             bool include_date,
                                             bool include_zone,
                                             bool native_show_seconds,
                                             char *buffer,
                                             size_t capacity);
+/** Format a whole-second Unix instant for human display. */
 bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        bool include_date,
                                        bool include_zone,
@@ -30,6 +32,7 @@ bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        char *buffer,
                                        size_t capacity);
 #ifdef LSM_TEMPORAL_PRESENTATION_TEST_API
+/** Clear the short-lived policy cache for deterministic regression tests. */
 void lsm_temporal_presentation_reset_cache_for_test(void);
 #endif
 #endif

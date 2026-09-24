@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file temporal_presentation_smoke.c
+ * @brief Regression coverage for System Settings-aware civil-time formatting.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
 #define _POSIX_C_SOURCE 200809L
 #include "temporal_presentation.h"
 #include <infiltratr/core.h>
