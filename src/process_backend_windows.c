@@ -19,7 +19,9 @@
  * @license GPL-3.0-or-later
  */
 #include "process_backend.h"
-#include "common.h"
+
+#include <infiltratr/arithmetic.h>
+#include <infiltratr/core.h>
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -88,7 +90,7 @@ static uint64_t process_cpu_time_100ns(HANDLE process,
 
     const uint64_t kernel_value = filetime_value(kernel);
     const uint64_t user_value = filetime_value(user);
-    return lsm_u64_add_saturating(kernel_value, user_value);
+    return infiltratr_u64_add_saturating(kernel_value, user_value);
 }
 
 static uint64_t system_cpu_time_100ns(void)
@@ -100,13 +102,13 @@ static uint64_t system_cpu_time_100ns(void)
         return 0U;
     const uint64_t kernel_value = filetime_value(kernel);
     const uint64_t user_value = filetime_value(user);
-    return lsm_u64_add_saturating(kernel_value, user_value);
+    return infiltratr_u64_add_saturating(kernel_value, user_value);
 }
 
 double lsm_process_cpu_total_percent(uint64_t process_delta,
                                      uint64_t system_delta)
 {
-    return lsm_percent_u64(process_delta, system_delta);
+    return infiltratr_percent_u64(process_delta, system_delta);
 }
 
 static LsmProcessPriority priority_from_class(DWORD priority_class)
@@ -217,7 +219,7 @@ static void populate_process_account(LsmProcessBackend *backend,
     SID_NAME_USE use = SidTypeUnknown;
     if (LookupAccountSidA(NULL, sid, account, &account_length,
                           domain, &domain_length, &use))
-        lsm_copy_string(info->user, sizeof(info->user), account);
+        infiltratr_copy_string(info->user, sizeof(info->user), account);
 
     free(sid);
 }
@@ -244,7 +246,7 @@ static LsmWindowsProcessSample *find_or_create_sample(
             return &backend->samples[index];
     }
 
-    if (!lsm_array_reserve((void **)&backend->samples,
+    if (!infiltratr_array_reserve((void **)&backend->samples,
                            &backend->sample_capacity,
                            sizeof(*backend->samples),
                            backend->sample_count + 1U,
@@ -317,7 +319,7 @@ static void populate_process_metrics(LsmProcessBackend *backend,
     info->start_time_epoch = start_epoch;
     info->cpu_time_seconds = cpu_time / 10000000ULL;
     info->cpu_time_nanoseconds =
-        cpu_time > UINT64_MAX / 100ULL ? UINT64_MAX : cpu_time * 100ULL;
+        infiltratr_u64_multiply_saturating(cpu_time, 100ULL);
 
     FILETIME now_filetime;
     GetSystemTimeAsFileTime(&now_filetime);
@@ -336,7 +338,7 @@ static void populate_process_metrics(LsmProcessBackend *backend,
             process, (PROCESS_MEMORY_COUNTERS *)&memory,
             (DWORD)sizeof(memory))) {
         info->rss_bytes = (uint64_t)memory.WorkingSetSize;
-        info->memory_percent = percent_u64(
+        info->memory_percent = infiltratr_percent_u64(
             info->rss_bytes, backend->total_memory_bytes);
         info->page_faults = (uint64_t)memory.PageFaultCount;
     }
@@ -369,14 +371,12 @@ static void populate_process_metrics(LsmProcessBackend *backend,
             const double elapsed =
                 (double)(now_ms - sample->sampled_at_ms) / 1000.0;
             if (elapsed > 0.0) {
-                if (info->read_bytes >= sample->read_bytes)
-                    info->read_bytes_per_sec =
-                        (double)(info->read_bytes - sample->read_bytes) /
-                        elapsed;
-                if (info->write_bytes >= sample->write_bytes)
-                    info->write_bytes_per_sec =
-                        (double)(info->write_bytes - sample->write_bytes) /
-                        elapsed;
+                (void)infiltratr_u64_counter_rate(
+                    info->read_bytes, sample->read_bytes, 1.0L, elapsed,
+                    &info->read_bytes_per_sec);
+                (void)infiltratr_u64_counter_rate(
+                    info->write_bytes, sample->write_bytes, 1.0L, elapsed,
+                    &info->write_bytes_per_sec);
             }
         }
     }
@@ -429,9 +429,9 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     *out_processes = NULL;
 
     const uint64_t system_cpu = system_cpu_time_100ns();
-    const uint64_t system_delta =
-        system_cpu >= backend->previous_system_cpu_100ns
-            ? system_cpu - backend->previous_system_cpu_100ns : 0U;
+    uint64_t system_delta = 0U;
+    (void)infiltratr_u64_counter_delta(
+        system_cpu, backend->previous_system_cpu_100ns, &system_delta);
     const uint64_t now_ms = (uint64_t)GetTickCount64();
 
     backend->generation++;
@@ -454,8 +454,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     entry.dwSize = (DWORD)sizeof(entry);
     BOOL have_entry = Process32FirstW(snapshot, &entry);
     while (have_entry) {
-        if (!reserve_array((void **)&processes, &capacity,
-                           sizeof(*processes), count + 1U)) {
+        if (!infiltratr_array_reserve((void **)&processes, &capacity,
+                                      sizeof(*processes), count + 1U, 256U)) {
             free(processes);
             CloseHandle(snapshot);
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -469,7 +469,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         info->threads = (unsigned)entry.cntThreads;
         info->priority = LSM_PROCESS_PRIORITY_NORMAL;
         wide_to_utf8(entry.szExeFile, info->name, sizeof(info->name));
-        (void)snprintf(info->state, sizeof(info->state), "%s", "Unknown");
+        infiltratr_copy_string(info->state, sizeof(info->state), "Unknown");
 
         HANDLE process = open_process_for_query(entry.th32ProcessID);
         if (process) {

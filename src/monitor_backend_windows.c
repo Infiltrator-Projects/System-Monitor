@@ -172,10 +172,12 @@ static bool update_cpu_snapshot(LsmMonitor *monitor,
         const uint64_t idle_delta = idle - state->idle_time;
         const uint64_t kernel_delta = kernel - state->kernel_time;
         const uint64_t user_delta = user - state->user_time;
-        const uint64_t total_delta = kernel_delta + user_delta;
+        const uint64_t total_delta =
+            infiltratr_u64_add_saturating(kernel_delta, user_delta);
         const uint64_t busy_kernel_delta =
             kernel_delta >= idle_delta ? kernel_delta - idle_delta : 0U;
-        const uint64_t busy_delta = user_delta + busy_kernel_delta;
+        const uint64_t busy_delta =
+            infiltratr_u64_add_saturating(user_delta, busy_kernel_delta);
 
         monitor->cpu.usage_percent = infiltratr_percent_u64(busy_delta, total_delta);
         monitor->cpu.user_percent = infiltratr_percent_u64(user_delta, total_delta);
@@ -382,10 +384,12 @@ static void update_disk_performance(
     disk->in_progress_operations = performance->QueueDepth;
 
     if (baseline->valid && elapsed > 0.0) {
-        disk->read_bytes_per_sec =
-            rate_u64(read_bytes, baseline->read_bytes, elapsed);
-        disk->write_bytes_per_sec =
-            rate_u64(write_bytes, baseline->write_bytes, elapsed);
+        (void)infiltratr_u64_counter_rate(
+            read_bytes, baseline->read_bytes, 1.0L, elapsed,
+            &disk->read_bytes_per_sec);
+        (void)infiltratr_u64_counter_rate(
+            write_bytes, baseline->write_bytes, 1.0L, elapsed,
+            &disk->write_bytes_per_sec);
 
         if (read_time >= baseline->read_time_100ns &&
             write_time >= baseline->write_time_100ns) {
@@ -807,10 +811,12 @@ static void enumerate_networks(
         LsmWindowsNetBaseline *baseline = net_baseline(state, key);
         if (baseline) {
             if (baseline->valid && elapsed > 0.0) {
-                net->rx_bytes_per_sec =
-                    rate_u64(row.InOctets, baseline->rx_bytes, elapsed);
-                net->tx_bytes_per_sec =
-                    rate_u64(row.OutOctets, baseline->tx_bytes, elapsed);
+                (void)infiltratr_u64_counter_rate(
+                    row.InOctets, baseline->rx_bytes, 1.0L, elapsed,
+                    &net->rx_bytes_per_sec);
+                (void)infiltratr_u64_counter_rate(
+                    row.OutOctets, baseline->tx_bytes, 1.0L, elapsed,
+                    &net->tx_bytes_per_sec);
             }
             baseline->key = key;
             baseline->rx_bytes = row.InOctets;
