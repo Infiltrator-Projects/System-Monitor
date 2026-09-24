@@ -2,6 +2,14 @@
 
 This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
 
+## 1.0.87 - 2026-09-24
+
+- Make the native Windows build consume Common 1.19.24's canonical typography contract instead of hard-coded family names and weights.
+- Embed the three Common-verified MB Corpo faces in the portable Windows executable as process-private resources, validate their Common-owned hashes at build time, and reject silent GDI font substitution.
+- Populate Windows physical/logical core counts, socket count, NUMA-node count and L1/L2/L3 cache totals through the native logical-processor topology API.
+- Populate Windows CPU current/max frequency from the processor-power interface, retain registry-reported base frequency when available, prefer the registry processor name over the generic environment identifier, and expose firmware virtualisation state when Windows reports it.
+- Keep the Windows renderer on the shared CPU Performance view so newly available topology values require no Windows-specific presentation policy.
+
 ## 1.0.86 - 2026-09-24
 
 - Reduce periodic App History allocation churn by consolidating per-snapshot live-set, RSS and active-time accounting.
