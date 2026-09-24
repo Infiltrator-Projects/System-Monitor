@@ -13,10 +13,12 @@ cmake_value() {
     local key="$1"
     awk -v key="$key" '
         $0 ~ "set\\(" key {
-            if (getline line) {
-                gsub(/^[[:space:]]*"/, "", line)
-                gsub(/"[[:space:]]*\).*/, "", line)
-                print line
+            line = $0
+            if (line !~ /"[^"]+"/) {
+                if (!getline line) exit 1
+            }
+            if (match(line, /"[^"]+"/)) {
+                print substr(line, RSTART + 1, RLENGTH - 2)
                 exit
             }
         }
