@@ -273,7 +273,7 @@ static void overview_set_latest_values(LsmApp *app,
     if (sample->disk_available) {
         char read_rate[64];
         char write_rate[64];
-        char detail[192];
+        char detail[512];
         lsm_metric_format_network(
             sample->disk_read_bytes_per_sec, false, true,
             read_rate, sizeof(read_rate));
@@ -294,7 +294,7 @@ static void overview_set_latest_values(LsmApp *app,
 
     if (sample->network_available) {
         char rate[64];
-        char detail[192];
+        char detail[512];
         lsm_metric_format_network(
             sample->network_bytes_per_sec, app->runtime.network_use_bits,
             true, rate, sizeof(rate));
@@ -375,7 +375,7 @@ static void overview_refresh_processes(LsmApp *app)
 
         const LsmProcessInfo *process =
             &app->process.process_snapshot[indices[row]];
-        char text[256];
+        char text[512];
         snprintf(
             text, sizeof(text),
             "%zu. %s (PID %llu) — %.1f%% CPU, %.1f%% memory",
