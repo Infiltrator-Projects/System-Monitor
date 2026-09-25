@@ -103,6 +103,9 @@ static const char *overview_icon_name(LsmOverviewMetric metric)
     return "applications-system-symbolic";
 }
 
+static double overview_sample_value(const LsmOverviewSample *sample,
+                                    LsmOverviewMetric metric);
+
 static gboolean overview_gauge_draw(GtkWidget *widget, cairo_t *cr,
                                       gpointer user_data)
 {
