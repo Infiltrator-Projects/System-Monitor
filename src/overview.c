@@ -55,13 +55,13 @@ typedef struct {
 } LsmOverviewPlacement;
 
 static const LsmOverviewPlacement overview_layout[LSM_OVERVIEW_METRIC_COUNT] = {
-    { LSM_OVERVIEW_CPU,             0, 0, 6 },
-    { LSM_OVERVIEW_MEMORY,          6, 0, 6 },
-    { LSM_OVERVIEW_DISK,            0, 1, 4 },
-    { LSM_OVERVIEW_NETWORK,         4, 1, 4 },
-    { LSM_OVERVIEW_GPU,             8, 1, 4 },
-    { LSM_OVERVIEW_TEMPERATURE,     0, 2, 3 },
-    { LSM_OVERVIEW_CPU_PRESSURE,    3, 2, 3 },
+    { LSM_OVERVIEW_CPU,             0, 0, 7 },
+    { LSM_OVERVIEW_MEMORY,          7, 0, 5 },
+    { LSM_OVERVIEW_DISK,            0, 1, 5 },
+    { LSM_OVERVIEW_NETWORK,         5, 1, 4 },
+    { LSM_OVERVIEW_GPU,             9, 1, 3 },
+    { LSM_OVERVIEW_TEMPERATURE,     0, 2, 4 },
+    { LSM_OVERVIEW_CPU_PRESSURE,    4, 2, 2 },
     { LSM_OVERVIEW_MEMORY_PRESSURE, 6, 2, 3 },
     { LSM_OVERVIEW_IO_PRESSURE,     9, 2, 3 }
 };
@@ -117,42 +117,52 @@ static const char *overview_icon_name(LsmOverviewMetric metric)
 static double overview_sample_value(const LsmOverviewSample *sample,
                                     LsmOverviewMetric metric);
 
-static gint overview_card_height(LsmOverviewMetric metric)
+static gint overview_icon_size(LsmOverviewMetric metric)
 {
     switch (metric) {
         case LSM_OVERVIEW_CPU:
+            return 48;
         case LSM_OVERVIEW_MEMORY:
-            return 232;
+            return 42;
         case LSM_OVERVIEW_DISK:
+            return 36;
         case LSM_OVERVIEW_NETWORK:
+            return 34;
         case LSM_OVERVIEW_GPU:
-            return 184;
+            return 32;
         case LSM_OVERVIEW_TEMPERATURE:
+            return 28;
         case LSM_OVERVIEW_CPU_PRESSURE:
         case LSM_OVERVIEW_MEMORY_PRESSURE:
         case LSM_OVERVIEW_IO_PRESSURE:
-            return 126;
+            return 24;
         case LSM_OVERVIEW_METRIC_COUNT:
             break;
     }
-    return 160;
+    return 28;
 }
 
 static gint overview_graph_height(LsmOverviewMetric metric)
 {
     switch (metric) {
         case LSM_OVERVIEW_CPU:
+            return 96;
         case LSM_OVERVIEW_MEMORY:
-            return 118;
+            return 88;
         case LSM_OVERVIEW_DISK:
+            return 72;
         case LSM_OVERVIEW_NETWORK:
+            return 66;
         case LSM_OVERVIEW_GPU:
-            return 82;
+            return 60;
         case LSM_OVERVIEW_TEMPERATURE:
+            return 50;
         case LSM_OVERVIEW_CPU_PRESSURE:
+            return 44;
         case LSM_OVERVIEW_MEMORY_PRESSURE:
+            return 48;
         case LSM_OVERVIEW_IO_PRESSURE:
-            return 54;
+            return 46;
         case LSM_OVERVIEW_METRIC_COUNT:
             break;
     }
@@ -161,7 +171,16 @@ static gint overview_graph_height(LsmOverviewMetric metric)
 
 static gint overview_gauge_size(LsmOverviewMetric metric)
 {
-    return metric == LSM_OVERVIEW_GPU ? 82 : 108;
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+            return 96;
+        case LSM_OVERVIEW_MEMORY:
+            return 88;
+        case LSM_OVERVIEW_GPU:
+            return 72;
+        default:
+            return 0;
+    }
 }
 
 static void overview_gauge_colours(LsmOverviewMetric metric,
@@ -225,31 +244,40 @@ static gboolean overview_gauge_draw(GtkWidget *widget, cairo_t *cr,
     if (isfinite(value)) {
         const double fraction = fmax(0.0, fmin(1.0, value / 100.0));
         const double start = -G_PI / 2.0;
-        const double end = start + fraction * 2.0 * G_PI;
-        cairo_pattern_t *gradient = cairo_pattern_create_linear(
-            cx - radius, cy + radius, cx + radius, cy - radius);
-        if (gradient) {
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 0.0, colours[0].red, colours[0].green,
-                colours[0].blue, 1.0);
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 0.52, colours[1].red, colours[1].green,
-                colours[1].blue, 1.0);
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 1.0, colours[2].red, colours[2].green,
-                colours[2].blue, 1.0);
+        const double sweep = fraction * 2.0 * G_PI;
+        const int segments = 48;
 
-            cairo_set_line_width(cr, 16.0);
-            cairo_set_source_rgba(
-                cr, colours[1].red, colours[1].green, colours[1].blue, 0.13);
-            cairo_arc(cr, cx, cy, radius, start, end);
-            cairo_stroke(cr);
+        cairo_set_line_width(cr, 16.0);
+        cairo_set_source_rgba(
+            cr, colours[1].red, colours[1].green, colours[1].blue, 0.12);
+        cairo_arc(cr, cx, cy, radius, start, start + sweep);
+        cairo_stroke(cr);
 
-            cairo_set_line_width(cr, 8.0);
-            cairo_set_source(cr, gradient);
-            cairo_arc(cr, cx, cy, radius, start, end);
+        cairo_set_line_width(cr, 8.0);
+        for (int segment = 0; segment < segments; segment++) {
+            const double t0 = (double)segment / (double)segments;
+            const double t1 = (double)(segment + 1) / (double)segments;
+            if (t0 >= fraction)
+                break;
+            const double visible_t1 = fmin(t1, fraction);
+            const double colour_t = (t0 + visible_t1) * 0.5;
+            const int colour_index = colour_t < 0.5 ? 0 : 1;
+            const double local_t = colour_t < 0.5
+                ? colour_t * 2.0 : (colour_t - 0.5) * 2.0;
+            const GdkRGBA *from = &colours[colour_index];
+            const GdkRGBA *to = &colours[colour_index + 1];
+            const double red = from->red + (to->red - from->red) * local_t;
+            const double green =
+                from->green + (to->green - from->green) * local_t;
+            const double blue =
+                from->blue + (to->blue - from->blue) * local_t;
+
+            cairo_set_source_rgba(cr, red, green, blue, 1.0);
+            cairo_arc(
+                cr, cx, cy, radius,
+                start + t0 * 2.0 * G_PI,
+                start + visible_t1 * 2.0 * G_PI + 0.012);
             cairo_stroke(cr);
-            cairo_pattern_destroy(gradient);
         }
     }
 
@@ -335,7 +363,6 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     GtkWidget *button = gtk_button_new();
     gtk_widget_set_hexpand(button, TRUE);
     gtk_widget_set_vexpand(button, TRUE);
-    gtk_widget_set_size_request(button, -1, overview_card_height(metric));
     gtk_widget_set_name(button, "lsm-overview-card");
     gtk_widget_set_tooltip_text(button, "Open detailed performance view");
     gtk_style_context_add_class(
@@ -349,13 +376,6 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_container_set_border_width(GTK_CONTAINER(box), 10);
 
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    GtkWidget *icon =
-        gtk_image_new_from_icon_name(
-            overview_icon_name(metric), GTK_ICON_SIZE_BUTTON);
-    gtk_image_set_pixel_size(GTK_IMAGE(icon), 30);
-    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(icon), "lsm-overview-icon");
     GtkWidget *title = gtk_label_new(overview_titles[metric]);
     gtk_widget_set_halign(title, GTK_ALIGN_START);
     gtk_widget_set_hexpand(title, TRUE);
@@ -371,7 +391,6 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-overview-value");
 
-    gtk_box_pack_start(GTK_BOX(header), icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header), title, TRUE, TRUE, 0);
     gtk_box_pack_end(GTK_BOX(header), value, FALSE, FALSE, 0);
 
@@ -390,13 +409,9 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     LsmGraph *graph = lsm_graph_new(
         FALSE, percentage, maximum, 220, overview_graph_height(metric));
     if (graph) {
-        lsm_graph_set_compact(
-            graph,
-            metric == LSM_OVERVIEW_TEMPERATURE ||
-            metric == LSM_OVERVIEW_CPU_PRESSURE ||
-            metric == LSM_OVERVIEW_MEMORY_PRESSURE ||
-            metric == LSM_OVERVIEW_IO_PRESSURE);
         lsm_graph_set_colours(graph, overview_colour(metric), NULL);
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(graph->area), "lsm-overview-graph");
         if (metric == LSM_OVERVIEW_NETWORK)
             lsm_graph_set_dynamic_scale(graph, 1000000.0, 1000000.0);
     }
@@ -407,8 +422,29 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     GtkWidget *gauge = overview_make_gauge(app, metric);
     if (gauge)
         gtk_box_pack_start(GTK_BOX(visual), gauge, FALSE, FALSE, 0);
-    if (graph)
-        gtk_box_pack_start(GTK_BOX(visual), graph->area, TRUE, TRUE, 0);
+    if (graph) {
+        GtkWidget *overlay = gtk_overlay_new();
+        gtk_widget_set_hexpand(overlay, TRUE);
+        gtk_widget_set_vexpand(overlay, TRUE);
+        gtk_container_add(GTK_CONTAINER(overlay), graph->area);
+
+        GtkWidget *graph_icon =
+            gtk_image_new_from_icon_name(
+                overview_icon_name(metric), GTK_ICON_SIZE_BUTTON);
+        gtk_image_set_pixel_size(
+            GTK_IMAGE(graph_icon), overview_icon_size(metric));
+        gtk_widget_set_halign(graph_icon, GTK_ALIGN_START);
+        gtk_widget_set_valign(graph_icon, GTK_ALIGN_START);
+        gtk_widget_set_margin_start(graph_icon, 10);
+        gtk_widget_set_margin_top(graph_icon, 8);
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(graph_icon), "lsm-overview-icon");
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(graph_icon),
+            "lsm-overview-graph-icon");
+        gtk_overlay_add_overlay(GTK_OVERLAY(overlay), graph_icon);
+        gtk_box_pack_start(GTK_BOX(visual), overlay, TRUE, TRUE, 0);
+    }
     gtk_box_pack_start(GTK_BOX(box), visual, TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
@@ -679,16 +715,16 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     if (!app->overview.history)
         app->overview.history = lsm_overview_history_create();
 
-    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(
-        GTK_SCROLLED_WINDOW(scroller),
-        GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    app->runtime.page_scrollers[LSM_TAB_OVERVIEW] = scroller;
+    /* Overview is a dashboard, not a document.  It must consume the available
+     * viewport as one composition rather than growing a scrollable canvas. */
+    app->runtime.page_scrollers[LSM_TAB_OVERVIEW] = NULL;
 
-    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_container_set_border_width(GTK_CONTAINER(root), 12);
-    gtk_container_add(GTK_CONTAINER(scroller), root);
-    gtk_box_pack_start(GTK_BOX(container), scroller, TRUE, TRUE, 0);
+    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_name(root, "lsm-overview-root");
+    gtk_widget_set_hexpand(root, TRUE);
+    gtk_widget_set_vexpand(root, TRUE);
+    gtk_container_set_border_width(GTK_CONTAINER(root), 10);
+    gtk_box_pack_start(GTK_BOX(container), root, TRUE, TRUE, 0);
 
     GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_set_name(hero, "lsm-overview-hero");
@@ -729,8 +765,8 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     gtk_box_pack_start(GTK_BOX(root), hero, FALSE, FALSE, 0);
 
     GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_widget_set_hexpand(grid, TRUE);
     gtk_widget_set_vexpand(grid, TRUE);
     for (size_t slot = 0U; slot < LSM_OVERVIEW_METRIC_COUNT; slot++) {
