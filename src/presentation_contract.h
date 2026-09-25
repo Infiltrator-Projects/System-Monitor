@@ -162,6 +162,18 @@ const char *lsm_summary_label(LsmSummaryField field);
 const char *lsm_performance_page_title(LsmPageType type);
 
 /**
+ * Return the primary-navigation group for a Performance page.
+ *
+ * CPU, Memory, Disk and Battery map to themselves. Bluetooth is presented
+ * under Network and NPU under GPU so those detail pages remain reachable
+ * without restoring the old all-resources duplicate rail.
+ *
+ * @param type Concrete Performance page identity.
+ * @return Primary resource represented by the page.
+ */
+LsmPageType lsm_performance_navigation_group(LsmPageType type);
+
+/**
  * Return the canonical stack-name prefix for one Performance resource.
  *
  * @param type Performance resource identity.

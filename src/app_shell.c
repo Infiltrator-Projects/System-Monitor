@@ -261,7 +261,7 @@ static LsmPageType navigation_visible_performance_type(const LsmApp *app)
         const LsmDevicePage *page =
             g_ptr_array_index(app->performance.device_pages, index);
         if (page && strcmp(page->stack_name, visible) == 0)
-            return page->type;
+            return lsm_performance_navigation_group(page->type);
     }
     return LSM_PAGE_COUNT;
 }

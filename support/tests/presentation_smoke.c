@@ -28,6 +28,12 @@ static void check_contract_identity(void)
     assert(strcmp(lsm_performance_page_title(LSM_PAGE_MEMORY), "Memory") == 0);
     assert(strcmp(lsm_summary_label(LSM_SUMMARY_NETWORK), "Network") == 0);
     assert(strcmp(lsm_performance_colour_hex(LSM_PAGE_CPU), "#00adef") == 0);
+    assert(lsm_performance_navigation_group(LSM_PAGE_CPU) == LSM_PAGE_CPU);
+    assert(lsm_performance_navigation_group(LSM_PAGE_MEMORY) == LSM_PAGE_MEMORY);
+    assert(lsm_performance_navigation_group(LSM_PAGE_DISK) == LSM_PAGE_DISK);
+    assert(lsm_performance_navigation_group(LSM_PAGE_BATTERY) == LSM_PAGE_BATTERY);
+    assert(lsm_performance_navigation_group(LSM_PAGE_BLUETOOTH) == LSM_PAGE_NETWORK);
+    assert(lsm_performance_navigation_group(LSM_PAGE_NPU) == LSM_PAGE_GPU);
 
     const LsmPresentationGridPosition user =
         lsm_cpu_metric_position(LSM_CPU_METRIC_USER);

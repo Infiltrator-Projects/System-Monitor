@@ -119,6 +119,37 @@ void performance_numbered_device_name(char *buffer, size_t size,
         snprintf(buffer, size, "%s %zu", kind, index);
 }
 
+static void performance_filter_sidepane(LsmApp *app,
+                                        const LsmDevicePage *selected)
+{
+    if (!app || !selected || !app->performance.device_pages) return;
+
+    const LsmPageType group =
+        lsm_performance_navigation_group(selected->type);
+    guint visible_count = 0U;
+
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        const gboolean visible =
+            page &&
+            lsm_performance_navigation_group(page->type) == group;
+        if (page && page->button)
+            gtk_widget_set_visible(page->button, visible);
+        if (visible)
+            visible_count++;
+    }
+
+    /*
+     * The primary rail already names singleton resources such as CPU and
+     * Memory. Keep the secondary rail only when it has a real job: choosing
+     * between multiple devices in the selected category.
+     */
+    if (app->performance.side_scroller)
+        gtk_widget_set_visible(
+            app->performance.side_scroller, visible_count > 1U);
+}
+
 void performance_select_side_button(LsmApp *app, LsmDevicePage *selected)
 {
     if (!app || !app->performance.device_pages || !selected) return;
@@ -130,6 +161,7 @@ void performance_select_side_button(LsmApp *app, LsmDevicePage *selected)
     }
     lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
                     selected->stack_name);
+    performance_filter_sidepane(app, selected);
     lsm_performance_selection_end(&app->performance.performance_selection);
     lsm_app_shell_sync_navigation(app);
 }
@@ -213,6 +245,20 @@ void lsm_performance_show_resource(LsmApp *app, LsmPageType type,
         rebuild_for_topology_change(app);
 
     LsmDevicePage *page = page_for_type_index(app, type, index);
+    if (!page) {
+        const LsmPageType group = lsm_performance_navigation_group(type);
+        for (guint candidate_index = 0U;
+             candidate_index < app->performance.device_pages->len;
+             candidate_index++) {
+            LsmDevicePage *candidate =
+                g_ptr_array_index(app->performance.device_pages, candidate_index);
+            if (candidate &&
+                lsm_performance_navigation_group(candidate->type) == group) {
+                page = candidate;
+                break;
+            }
+        }
+    }
     if (!page) return;
 
     gtk_stack_set_visible_child_name(
@@ -250,6 +296,7 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
                                    const char *value)
 {
     GtkWidget *button = gtk_toggle_button_new();
+    gtk_widget_set_no_show_all(button, TRUE);
     gtk_widget_set_size_request(button, LSM_SIDE_BUTTON_WIDTH,
                                 LSM_SIDE_BUTTON_HEIGHT);
     gtk_widget_set_name(button, "lsm-side-button");
@@ -537,9 +584,11 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
 
     GtkWidget *side_scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_name(side_scroller, "lsm-performance-sidebar");
+    gtk_widget_set_no_show_all(side_scroller, TRUE);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_widget_set_size_request(side_scroller, LSM_SIDEBAR_WIDTH, -1);
+    app->performance.side_scroller = side_scroller;
     app->performance.sidepane = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_container_set_border_width(GTK_CONTAINER(app->performance.sidepane), 3);
     gtk_container_add(GTK_CONTAINER(side_scroller), app->performance.sidepane);
@@ -677,6 +726,7 @@ void lsm_performance_destroy(LsmApp *app)
     app->performance.cpu_core_graphs = NULL;
     app->performance.cpu_core_labels = NULL;
     app->performance.performance_stack = NULL;
+    app->performance.side_scroller = NULL;
     app->performance.sidepane = NULL;
     app->performance.cpu_graph_stack = NULL;
     app->performance.cpu_core_grid = NULL;

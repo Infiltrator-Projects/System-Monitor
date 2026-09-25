@@ -365,6 +365,7 @@ typedef struct {
     GtkWidget *performance_container;
     GtkWidget *performance_root;
     GtkWidget *performance_stack;
+    GtkWidget *side_scroller;
     GtkWidget *sidepane;
     GPtrArray *device_pages;
     LsmPerformanceSelection performance_selection;

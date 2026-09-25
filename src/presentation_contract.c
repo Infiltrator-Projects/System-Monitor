@@ -147,6 +147,26 @@ const char *lsm_performance_page_title(LsmPageType type)
     return page_titles[checked_index((int)type, LSM_PAGE_COUNT)];
 }
 
+LsmPageType lsm_performance_navigation_group(LsmPageType type)
+{
+    switch (type) {
+        case LSM_PAGE_BLUETOOTH:
+            return LSM_PAGE_NETWORK;
+        case LSM_PAGE_NPU:
+            return LSM_PAGE_GPU;
+        case LSM_PAGE_CPU:
+        case LSM_PAGE_MEMORY:
+        case LSM_PAGE_DISK:
+        case LSM_PAGE_NETWORK:
+        case LSM_PAGE_GPU:
+        case LSM_PAGE_BATTERY:
+            return type;
+        case LSM_PAGE_COUNT:
+            break;
+    }
+    return LSM_PAGE_CPU;
+}
+
 const char *lsm_performance_stack_prefix(LsmPageType type)
 {
     return stack_prefixes[checked_index((int)type, LSM_PAGE_COUNT)];
