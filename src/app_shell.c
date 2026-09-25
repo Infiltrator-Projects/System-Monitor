@@ -22,6 +22,7 @@
 #include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
+#include "overview.h"
 #include "performance.h"
 #include "preferences.h"
 #include "process_export.h"
@@ -465,6 +466,10 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             (void)lsm_app_refresh_processes_if_due(app, FALSE);
             lsm_details_present_snapshot(app);
             break;
+        case LSM_TAB_OVERVIEW:
+            (void)lsm_app_refresh_processes_if_due(app, FALSE);
+            lsm_overview_refresh(app);
+            break;
         case LSM_TAB_PERFORMANCE:
         case LSM_TAB_COUNT:
             break;
@@ -540,6 +545,7 @@ static GtkWidget *search_for_current_tab(const LsmApp *app)
         case LSM_TAB_SERVICES: return app->services.services_search;
         case LSM_TAB_PERFORMANCE:
         case LSM_TAB_USERS:
+        case LSM_TAB_OVERVIEW:
         case LSM_TAB_COUNT:
             return NULL;
     }

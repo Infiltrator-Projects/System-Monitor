@@ -438,8 +438,9 @@ int main(void)
     if (LSM_TAB_DETAILS != 5) return 6;
     if (LSM_TAB_SERVICES != 6) return 7;
     if (LSM_TAB_FILESYSTEMS != 7) return 8;
-    if (LSM_TAB_COUNT != 8) return 9;
-    puts("Canonical Performance-first tab order passed.");
+    if (LSM_TAB_OVERVIEW != 8) return 9;
+    if (LSM_TAB_COUNT != 9) return 10;
+    puts("Canonical Performance-first tab order with appended Overview passed.");
     return 0;
 }
 

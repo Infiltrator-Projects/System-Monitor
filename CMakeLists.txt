@@ -330,6 +330,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/cpu_direct.c
         src/refresh_policy.c
         src/sample_history.c
+        src/overview_history.c
         src/gpu_metrics.c
         src/performance_selection.c)
 

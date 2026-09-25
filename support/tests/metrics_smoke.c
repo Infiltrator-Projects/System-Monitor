@@ -16,6 +16,7 @@ int smoke_case_pressure(void);
 int smoke_case_cpu_direct(void);
 int smoke_case_quality_policy(void);
 int smoke_case_sample_history(void);
+int smoke_case_overview_history(void);
 int smoke_case_gpu_metrics(void);
 int smoke_case_performance_navigation(void);
 
@@ -631,6 +632,124 @@ int main(void)
 
 #undef main
 
+
+/* ---- overview_history ---- */
+#define main smoke_case_overview_history
+/**
+ * @file overview_history_smoke.c
+ * @brief Completed-snapshot, gap, hotplug and wraparound regression model.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "overview_history.h"
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    LsmOverviewHistory *history = lsm_overview_history_create();
+    assert(history);
+
+    LsmMonitor monitor;
+    memset(&monitor, 0, sizeof(monitor));
+    monitor.sample_generation = 1U;
+    monitor.sample_monotonic_seconds = 10.0;
+    monitor.cpu.usage_percent = 25.0;
+    monitor.memory.total_bytes = 1024U;
+    monitor.memory.usage_percent = 50.0;
+    monitor.disk_count = 2U;
+    strcpy(monitor.disks[0].name, "sda");
+    strcpy(monitor.disks[0].instance_identity, "disk-a");
+    monitor.disks[0].active_percent = 12.0;
+    strcpy(monitor.disks[1].name, "nvme0n1");
+    strcpy(monitor.disks[1].instance_identity, "disk-b");
+    monitor.disks[1].active_percent = 80.0;
+    monitor.net_count = 1U;
+    strcpy(monitor.nets[0].name, "eth0");
+    strcpy(monitor.nets[0].mac, "00:11:22:33:44:55");
+    monitor.nets[0].rx_bytes_per_sec = 1000.0;
+    monitor.nets[0].tx_bytes_per_sec = 2000.0;
+    monitor.gpu_count = 1U;
+    strcpy(monitor.gpus[0].name, "GPU A");
+    strcpy(monitor.gpus[0].platform_identity, "gpu-a");
+    monitor.gpus[0].utilization_available = true;
+    monitor.gpus[0].utilization_percent = 60.0;
+    monitor.cpu_pressure.available = true;
+    monitor.cpu_pressure.some_avg10 = 3.0;
+
+    assert(lsm_overview_history_record(history, &monitor));
+    assert(!lsm_overview_history_record(history, &monitor));
+    assert(lsm_overview_history_count(history) == 1U);
+
+    LsmOverviewSample sample;
+    assert(lsm_overview_history_latest(history, &sample));
+    assert(sample.disk_available && sample.disk_index == 1U);
+    assert(strcmp(sample.disk_identity, "disk-b") == 0);
+    assert(sample.network_available && sample.network_bytes_per_sec == 3000.0);
+    assert(sample.gpu_available && sample.gpu_percent == 60.0);
+    assert(sample.cpu_pressure_available && sample.cpu_pressure_percent == 3.0);
+    assert(!sample.memory_pressure_available);
+
+    monitor.sample_generation = 3U;
+    monitor.sample_monotonic_seconds = 12.0;
+    monitor.cpu.usage_percent = 30.0;
+    assert(lsm_overview_history_record(history, &monitor));
+    assert(lsm_overview_history_count(history) == 3U);
+    assert(lsm_overview_history_get(history, 1U, &sample));
+    assert(sample.gap);
+    assert(lsm_overview_history_get(history, 2U, &sample));
+    assert(!sample.gap && sample.generation == 3U);
+
+    LsmDiskInfo moved = monitor.disks[1];
+    monitor.disks[1] = monitor.disks[0];
+    monitor.disks[0] = moved;
+    assert(lsm_overview_resolve_disk(&monitor, &sample) == 0U);
+
+    monitor.sample_generation = 4U;
+    monitor.sample_monotonic_seconds = 13.0;
+    monitor.gpus[0].utilization_available = false;
+    monitor.cpu_pressure.available = false;
+    assert(lsm_overview_history_record(history, &monitor));
+    assert(lsm_overview_history_latest(history, &sample));
+    assert(!sample.gpu_available);
+    assert(!sample.cpu_pressure_available);
+
+    for (uint64_t generation = 5U;
+         generation < 5U + LSM_OVERVIEW_HISTORY_CAPACITY + 8U;
+         generation++) {
+        monitor.sample_generation = generation;
+        monitor.sample_monotonic_seconds += 1.0;
+        assert(lsm_overview_history_record(history, &monitor));
+    }
+    assert(lsm_overview_history_count(history) ==
+           LSM_OVERVIEW_HISTORY_CAPACITY);
+
+    LsmProcessInfo processes[4];
+    memset(processes, 0, sizeof(processes));
+    processes[0].pid = 20U; processes[0].cpu_percent = 5.0;
+    processes[1].pid = 30U; processes[1].cpu_percent = 90.0;
+    processes[2].pid = 10U; processes[2].cpu_percent = 90.0;
+    processes[3].pid = 40U; processes[3].cpu_percent = 20.0;
+    size_t indices[LSM_OVERVIEW_TOP_PROCESS_COUNT];
+    assert(lsm_overview_top_cpu_processes(processes, 4U, indices) == 3U);
+    assert(indices[0] == 2U);
+    assert(indices[1] == 1U);
+    assert(indices[2] == 3U);
+
+    lsm_overview_history_destroy(history);
+    puts("Overview completed-history, gaps, hotplug and wraparound passed.");
+    return 0;
+}
+
+#undef main
+
 /* ---- gpu_metrics ---- */
 #define main smoke_case_gpu_metrics
 /**
@@ -866,6 +985,7 @@ int main(void)
         {"cpu_direct", smoke_case_cpu_direct},
         {"quality_policy", smoke_case_quality_policy},
         {"sample_history", smoke_case_sample_history},
+        {"overview_history", smoke_case_overview_history},
         {"gpu_metrics", smoke_case_gpu_metrics},
         {"performance_navigation", smoke_case_performance_navigation},
     };

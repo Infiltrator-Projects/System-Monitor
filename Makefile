@@ -323,7 +323,7 @@ metrics-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/metrics_smoke.c src/cpu_accounting.c src/disk_accounting.c \
 		src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c \
-		src/sample_history.c src/gpu_metrics.c src/performance_selection.c \
+		src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/metrics-suite-smoke
 	./$(BUILD_DIR)/metrics-suite-smoke
 

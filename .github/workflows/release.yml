@@ -103,7 +103,7 @@ jobs:
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
             src/main_windows.c src/presentation_contract.c src/performance_view.c \
-            src/monitor_backend_windows.c src/process_backend_windows.c \
+            src/overview_history.c src/monitor_backend_windows.c src/process_backend_windows.c \
             build/windows-fonts.o "${common_portable[@]}" \
             -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \

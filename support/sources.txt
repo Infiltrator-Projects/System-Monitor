@@ -20,6 +20,8 @@ refresh_policy.c
 wifi_metadata.c
 graph.c
 sample_history.c
+overview_history.c
+overview.c
 performance_selection.c
 presentation_contract.c
 performance_view.c

@@ -1826,6 +1826,9 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
 
     state->previous_sample_tick = GetTickCount64();
     refresh_topology_and_devices(monitor, state, 0.0, true);
+    monitor->sample_generation = 1U;
+    monitor->sample_monotonic_seconds =
+        (double)state->previous_sample_tick / 1000.0;
     return true;
 }
 
@@ -1847,7 +1850,14 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     refresh_topology_and_devices(monitor, state, elapsed, false);
     update_gpu_engine_metrics(monitor, state);
     update_gpu_dxgi_memory(monitor, state);
-    return cpu_ok && memory_ok;
+    if (cpu_ok && memory_ok) {
+        monitor->sample_generation++;
+        if (monitor->sample_generation == 0U)
+            monitor->sample_generation = 1U;
+        monitor->sample_monotonic_seconds = (double)now / 1000.0;
+        return true;
+    }
+    return false;
 }
 
 void lsm_monitor_platform_request_topology_refresh(LsmMonitor *monitor)

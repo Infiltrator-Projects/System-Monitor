@@ -370,6 +370,8 @@ typedef struct {
     size_t battery_count;
     LsmNpuInfo npus[LSM_MAX_NPUS];
     size_t npu_count;
+    uint64_t sample_generation;       /**< Non-zero generation of the newest completed native sample. */
+    double sample_monotonic_seconds;  /**< Monotonic completion time for sample_generation. */
     void *backend_state; /**< Opaque platform collector state; presentation must not inspect it. */
 } LsmMonitor;
 

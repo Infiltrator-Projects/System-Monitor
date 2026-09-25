@@ -15,6 +15,7 @@
  * @license GPL-3.0-or-later
  */
 #include "monitor_platform.h"
+#include "overview_history.h"
 #include "process_backend.h"
 #include "presentation_contract.h"
 #include "performance_view.h"
@@ -112,9 +113,11 @@ typedef struct {
     LsmWindowsPalette palette;
     int hovered_tab;
     int hovered_performance_item;
+    int hovered_overview_item;
     int hovered_menu;
     bool tracking_mouse_leave;
     RECT page_tabs[LSM_TAB_COUNT];
+    RECT overview_cards[LSM_OVERVIEW_METRIC_COUNT];
     LsmWindowsPerformanceItem
         performance_items[LSM_WINDOWS_MAX_PERFORMANCE_ITEMS];
     size_t performance_item_count;
@@ -123,6 +126,7 @@ typedef struct {
     RECT view_menu_rect;
     RECT help_menu_rect;
     wchar_t status_text[256];
+    LsmOverviewHistory *overview_history;
     double cpu_history[LSM_WINDOWS_HISTORY_CAPACITY];
     double memory_history[LSM_WINDOWS_HISTORY_CAPACITY];
     size_t history_count;
@@ -141,6 +145,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
     HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 static LRESULT CALLBACK lsm_windows_about_proc(
     HWND window, UINT message, WPARAM wparam, LPARAM lparam);
+static void show_page(LsmWindowsUiState *state, LsmTabIndex page);
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
                    LPSTR command_line, int show_command);
 
@@ -631,6 +636,19 @@ static void append_history(LsmWindowsUiState *state)
         (state->history_position + 1U) % LSM_WINDOWS_HISTORY_CAPACITY;
     if (state->history_count < LSM_WINDOWS_HISTORY_CAPACITY)
         state->history_count++;
+}
+
+static bool record_completed_monitor_sample(LsmWindowsUiState *state)
+{
+    if (!state || !state->monitor_ready) return false;
+    if (!state->overview_history)
+        state->overview_history = lsm_overview_history_create();
+    if (!state->overview_history ||
+        !lsm_overview_history_record(
+            state->overview_history, &state->monitor))
+        return false;
+    append_history(state);
+    return true;
 }
 
 static double history_value(const double *history, size_t count,
@@ -1751,6 +1769,328 @@ static void draw_performance_page(
     }
 }
 
+
+static double windows_overview_metric_value(
+    const LsmOverviewSample *sample, LsmOverviewMetric metric,
+    bool *available)
+{
+    if (available) *available = false;
+    if (!sample || sample->gap) return 0.0;
+#define OVERVIEW_VALUE(flag, value) \
+    do { \
+        if (available) *available = (flag); \
+        return (flag) ? (value) : 0.0; \
+    } while (0)
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+            OVERVIEW_VALUE(sample->cpu_available, sample->cpu_percent);
+        case LSM_OVERVIEW_MEMORY:
+            OVERVIEW_VALUE(sample->memory_available, sample->memory_percent);
+        case LSM_OVERVIEW_DISK:
+            OVERVIEW_VALUE(sample->disk_available, sample->disk_percent);
+        case LSM_OVERVIEW_NETWORK:
+            OVERVIEW_VALUE(
+                sample->network_available, sample->network_bytes_per_sec);
+        case LSM_OVERVIEW_GPU:
+            OVERVIEW_VALUE(sample->gpu_available, sample->gpu_percent);
+        case LSM_OVERVIEW_TEMPERATURE:
+            OVERVIEW_VALUE(
+                sample->temperature_available, sample->temperature_c);
+        case LSM_OVERVIEW_CPU_PRESSURE:
+            OVERVIEW_VALUE(
+                sample->cpu_pressure_available,
+                sample->cpu_pressure_percent);
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            OVERVIEW_VALUE(
+                sample->memory_pressure_available,
+                sample->memory_pressure_percent);
+        case LSM_OVERVIEW_IO_PRESSURE:
+            OVERVIEW_VALUE(
+                sample->io_pressure_available,
+                sample->io_pressure_percent);
+        case LSM_OVERVIEW_METRIC_COUNT:
+            break;
+    }
+#undef OVERVIEW_VALUE
+    return 0.0;
+}
+
+static COLORREF windows_overview_colour(LsmOverviewMetric metric)
+{
+    LsmPageType type = LSM_PAGE_CPU;
+    switch (metric) {
+        case LSM_OVERVIEW_MEMORY:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            type = LSM_PAGE_MEMORY;
+            break;
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_IO_PRESSURE:
+            type = LSM_PAGE_DISK;
+            break;
+        case LSM_OVERVIEW_NETWORK:
+            type = LSM_PAGE_NETWORK;
+            break;
+        case LSM_OVERVIEW_GPU:
+            type = LSM_PAGE_GPU;
+            break;
+        case LSM_OVERVIEW_TEMPERATURE:
+            type = LSM_PAGE_BATTERY;
+            break;
+        case LSM_OVERVIEW_CPU:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+        case LSM_OVERVIEW_METRIC_COUNT:
+            type = LSM_PAGE_CPU;
+            break;
+    }
+    const LsmPresentationColour colour =
+        lsm_performance_colour_rgb(type);
+    return RGB(colour.red, colour.green, colour.blue);
+}
+
+static const wchar_t *windows_overview_title(LsmOverviewMetric metric)
+{
+    static const wchar_t *const titles[LSM_OVERVIEW_METRIC_COUNT] = {
+        L"CPU", L"Memory", L"Disk activity", L"Network traffic", L"GPU",
+        L"Temperature", L"CPU pressure", L"Memory pressure", L"I/O pressure"
+    };
+    return metric < LSM_OVERVIEW_METRIC_COUNT
+        ? titles[metric] : L"Overview";
+}
+
+static void windows_overview_value_text(
+    const LsmOverviewSample *sample, LsmOverviewMetric metric,
+    wchar_t *buffer, size_t capacity)
+{
+    if (!buffer || capacity == 0U) return;
+    buffer[0] = L'\0';
+    bool available = false;
+    const double value =
+        windows_overview_metric_value(sample, metric, &available);
+    char utf8[96];
+
+    if (metric == LSM_OVERVIEW_NETWORK) {
+        infiltratr_format_network(
+            value, false, true, utf8, sizeof(utf8));
+        if (!available)
+            infiltratr_copy_string(utf8, sizeof(utf8), "N/A");
+    } else if (metric == LSM_OVERVIEW_TEMPERATURE) {
+        infiltratr_format_celsius(
+            available, value, utf8, sizeof(utf8));
+    } else {
+        infiltratr_format_percent(
+            available, value, utf8, sizeof(utf8));
+    }
+    text_to_wide(utf8, buffer, capacity);
+}
+
+static void draw_overview_sparkline(
+    LsmWindowsUiState *state, HDC dc, RECT rect,
+    LsmOverviewMetric metric)
+{
+    if (!state || !state->overview_history) return;
+    const size_t count =
+        lsm_overview_history_count(state->overview_history);
+    if (count < 2U) return;
+
+    double maximum =
+        metric == LSM_OVERVIEW_NETWORK ? 0.0 :
+        (metric == LSM_OVERVIEW_TEMPERATURE ? 120.0 : 100.0);
+    if (metric == LSM_OVERVIEW_NETWORK) {
+        for (size_t index = 0U; index < count; index++) {
+            LsmOverviewSample sample;
+            bool available = false;
+            if (!lsm_overview_history_get(
+                    state->overview_history, index, &sample))
+                continue;
+            const double value =
+                windows_overview_metric_value(
+                    &sample, metric, &available);
+            if (available && value > maximum)
+                maximum = value;
+        }
+        if (maximum <= 0.0) maximum = 1.0;
+    }
+
+    HPEN pen = CreatePen(
+        PS_SOLID, 2, windows_overview_colour(metric));
+    if (!pen) return;
+    HGDIOBJ previous = SelectObject(dc, pen);
+    bool drawing = false;
+    size_t plotted = 0U;
+    for (size_t index = 0U; index < count; index++) {
+        LsmOverviewSample sample;
+        bool available = false;
+        if (!lsm_overview_history_get(
+                state->overview_history, index, &sample))
+            continue;
+        const double value =
+            windows_overview_metric_value(
+                &sample, metric, &available);
+        const int x = rect.left +
+            (int)((index * (size_t)(rect.right - rect.left)) /
+                  (count - 1U));
+        if (!available) {
+            drawing = false;
+            continue;
+        }
+        double bounded = value;
+        if (bounded < 0.0) bounded = 0.0;
+        if (bounded > maximum) bounded = maximum;
+        const int y = rect.bottom -
+            (int)((bounded / maximum) *
+                  (double)(rect.bottom - rect.top));
+        if (!drawing)
+            MoveToEx(dc, x, y, NULL);
+        else
+            LineTo(dc, x, y);
+        drawing = true;
+        plotted++;
+    }
+    (void)plotted;
+    SelectObject(dc, previous);
+    DeleteObject(pen);
+}
+
+static void draw_overview_page(
+    LsmWindowsUiState *state, HDC dc, RECT content)
+{
+    if (!state) return;
+    RECT title = {
+        content.left, content.top,
+        content.right, content.top + 36
+    };
+    draw_text(
+        dc, L"Overview", title, state->title_font,
+        state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    RECT subtitle = {
+        content.left, content.top + 34,
+        content.right, content.top + 58
+    };
+    draw_text(
+        dc, L"Completed system samples retained independently of the open page",
+        subtitle, state->body_font, state->palette.summary,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    LsmOverviewSample latest;
+    const bool have_latest =
+        state->overview_history &&
+        lsm_overview_history_latest(
+            state->overview_history, &latest) &&
+        !latest.gap;
+
+    const int spacing = (int)state->design->control_spacing;
+    const int process_height = 104;
+    const int grid_top = content.top + 66;
+    const int grid_bottom = content.bottom - process_height - spacing;
+    const int card_width =
+        (content.right - content.left - 2 * spacing) / 3;
+    const int card_height =
+        (grid_bottom - grid_top - 2 * spacing) / 3;
+
+    for (size_t index = 0U;
+         index < LSM_OVERVIEW_METRIC_COUNT; index++) {
+        const int column = (int)(index % 3U);
+        const int row = (int)(index / 3U);
+        RECT card = {
+            content.left + column * (card_width + spacing),
+            grid_top + row * (card_height + spacing),
+            content.left + column * (card_width + spacing) + card_width,
+            grid_top + row * (card_height + spacing) + card_height
+        };
+        state->overview_cards[index] = card;
+        const bool hovered =
+            state->hovered_overview_item == (int)index;
+        draw_round_panel(
+            dc, &card,
+            hovered ? state->palette.card_hover : state->palette.card,
+            hovered ? windows_overview_colour((LsmOverviewMetric)index)
+                    : state->palette.border,
+            (int)state->design->card_radius);
+
+        RECT caption = {
+            card.left + 14, card.top + 8,
+            card.right - 14, card.top + 28
+        };
+        draw_text(
+            dc, windows_overview_title((LsmOverviewMetric)index),
+            caption, state->body_bold_font,
+            state->palette.summary,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        wchar_t value[96] = L"Initialising...";
+        if (have_latest)
+            windows_overview_value_text(
+                &latest, (LsmOverviewMetric)index,
+                value, sizeof(value) / sizeof(value[0]));
+        RECT value_rect = {
+            card.left + 14, card.top + 28,
+            card.right - 14, card.top + 54
+        };
+        draw_text(
+            dc, value, value_rect, state->metric_font,
+            state->palette.heading,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        RECT graph = {
+            card.left + 14, card.top + 58,
+            card.right - 14, card.bottom - 10
+        };
+        draw_overview_sparkline(
+            state, dc, graph, (LsmOverviewMetric)index);
+    }
+
+    RECT process_card = {
+        content.left, grid_bottom + spacing,
+        content.right, content.bottom
+    };
+    draw_round_panel(
+        dc, &process_card, state->palette.card,
+        state->palette.border, (int)state->design->card_radius);
+    RECT process_title = {
+        process_card.left + 14, process_card.top + 8,
+        process_card.right - 14, process_card.top + 30
+    };
+    draw_text(
+        dc, L"Top CPU processes", process_title,
+        state->body_bold_font, state->palette.heading,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    size_t process_indices[LSM_OVERVIEW_TOP_PROCESS_COUNT];
+    const size_t process_count = lsm_overview_top_cpu_processes(
+        state->processes, state->process_count, process_indices);
+    for (size_t row = 0U; row < LSM_OVERVIEW_TOP_PROCESS_COUNT; row++) {
+        wchar_t line[320] = L"";
+        if (row < process_count &&
+            process_indices[row] != SIZE_MAX) {
+            const LsmProcessInfo *process =
+                &state->processes[process_indices[row]];
+            wchar_t name[180];
+            text_to_wide(
+                process->name[0] ? process->name : "Unnamed process",
+                name, sizeof(name) / sizeof(name[0]));
+            (void)swprintf(
+                line, sizeof(line) / sizeof(line[0]),
+                L"%zu. %ls (PID %llu) - %.1f%% CPU, %.1f%% memory",
+                row + 1U, name, (unsigned long long)process->pid,
+                process->cpu_percent, process->memory_percent);
+        } else if (row == 0U) {
+            lstrcpyW(line, L"Waiting for process activity...");
+        }
+        RECT row_rect = {
+            process_card.left + 14,
+            process_card.top + 32 + (int)row * 21,
+            process_card.right - 14,
+            process_card.top + 53 + (int)row * 21
+        };
+        draw_text(
+            dc, line, row_rect, state->body_font,
+            state->palette.text,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
+}
+
 static void draw_placeholder_page(
     LsmWindowsUiState *state, HDC dc, RECT content)
 {
@@ -1856,6 +2196,8 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
         draw_performance_page(state, dc, content);
     else if (state->active_page == LSM_TAB_PROCESSES)
         draw_process_page_header(state, dc, content);
+    else if (state->active_page == LSM_TAB_OVERVIEW)
+        draw_overview_page(state, dc, content);
     else
         draw_placeholder_page(state, dc, content);
 
@@ -2182,6 +2524,22 @@ static void refresh_processes(LsmWindowsUiState *state)
     set_status(state, status);
 }
 
+
+static void refresh_overview_processes(LsmWindowsUiState *state)
+{
+    if (!state || !state->process_backend) return;
+    LsmProcessInfo *processes = NULL;
+    const size_t count = lsm_process_scan(
+        state->process_backend, &processes, LSM_PROCESS_SCAN_NONE);
+    if (count == 0U || !processes) {
+        lsm_process_list_free(processes);
+        return;
+    }
+    lsm_process_list_free(state->processes);
+    state->processes = processes;
+    state->process_count = count;
+}
+
 static void set_performance_status(LsmWindowsUiState *state)
 {
     if (!state) return;
@@ -2244,8 +2602,11 @@ static void initialise_monitor_backend(LsmWindowsUiState *state)
 
     state->monitor_initialised = true;
     state->monitor_ready = lsm_monitor_platform_init(&state->monitor);
-    if (!state->monitor_ready)
+    if (!state->monitor_ready) {
         set_status(state, L"Performance backend unavailable");
+        return;
+    }
+    (void)record_completed_monitor_sample(state);
 }
 
 static void initialise_process_backend(LsmWindowsUiState *state)
@@ -2262,25 +2623,32 @@ static void refresh_active_page(LsmWindowsUiState *state)
 {
     if (!state) return;
 
+    /* Monitoring continues regardless of the visible page. Overview history
+     * therefore represents elapsed system activity rather than tab dwell time. */
+    initialise_monitor_backend(state);
+    if (state->monitor_ready &&
+        lsm_monitor_platform_update(&state->monitor))
+        (void)record_completed_monitor_sample(state);
+
     if (state->active_page == LSM_TAB_PERFORMANCE) {
-        initialise_monitor_backend(state);
-        if (state->monitor_ready) {
-            (void)lsm_monitor_platform_update(&state->monitor);
-            append_history(state);
+        if (state->monitor_ready)
             validate_performance_selection(state);
-        }
         set_performance_status(state);
-        InvalidateRect(state->window, NULL, FALSE);
     } else if (state->active_page == LSM_TAB_PROCESSES) {
         initialise_process_backend(state);
         refresh_processes(state);
+    } else if (state->active_page == LSM_TAB_OVERVIEW) {
+        initialise_process_backend(state);
+        refresh_overview_processes(state);
+        set_status(state, L"Overview - completed system samples");
     }
+    InvalidateRect(state->window, NULL, FALSE);
 }
 
 static void show_page(LsmWindowsUiState *state, LsmTabIndex page)
 {
     if (!state || page < LSM_TAB_PERFORMANCE ||
-        page > LSM_TAB_FILESYSTEMS)
+        page >= LSM_TAB_COUNT)
         return;
 
     state->active_page = page;
@@ -2292,6 +2660,9 @@ static void show_page(LsmWindowsUiState *state, LsmTabIndex page)
         refresh_active_page(state);
     } else if (page == LSM_TAB_PROCESSES) {
         set_status(state, L"Processes - starting native backend");
+        refresh_active_page(state);
+    } else if (page == LSM_TAB_OVERVIEW) {
+        set_status(state, L"Overview - starting native backends");
         refresh_active_page(state);
     } else {
         wchar_t page_title[64];
@@ -2307,6 +2678,84 @@ static void show_page(LsmWindowsUiState *state, LsmTabIndex page)
     }
 
     InvalidateRect(state->window, NULL, FALSE);
+}
+
+
+static bool navigate_overview_card(
+    LsmWindowsUiState *state, LsmOverviewMetric metric)
+{
+    if (!state || !state->overview_history) return false;
+    LsmOverviewSample sample;
+    if (!lsm_overview_history_latest(
+            state->overview_history, &sample) || sample.gap)
+        return false;
+
+    LsmPageType type = LSM_PAGE_CPU;
+    size_t index = 0U;
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+            type = LSM_PAGE_CPU;
+            break;
+        case LSM_OVERVIEW_MEMORY:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            type = LSM_PAGE_MEMORY;
+            break;
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_IO_PRESSURE:
+            type = LSM_PAGE_DISK;
+            index = lsm_overview_resolve_disk(
+                &state->monitor, &sample);
+            if (index == SIZE_MAX) return false;
+            break;
+        case LSM_OVERVIEW_NETWORK:
+            type = LSM_PAGE_NETWORK;
+            index = lsm_overview_resolve_network(
+                &state->monitor, &sample);
+            if (index == SIZE_MAX) return false;
+            break;
+        case LSM_OVERVIEW_GPU:
+            type = LSM_PAGE_GPU;
+            index = lsm_overview_resolve_gpu(
+                &state->monitor, &sample);
+            if (index == SIZE_MAX) return false;
+            break;
+        case LSM_OVERVIEW_TEMPERATURE:
+            if (sample.temperature_source ==
+                LSM_OVERVIEW_TEMPERATURE_CPU) {
+                type = LSM_PAGE_CPU;
+            } else if (sample.temperature_source ==
+                       LSM_OVERVIEW_TEMPERATURE_GPU) {
+                type = LSM_PAGE_GPU;
+                for (size_t gpu = 0U;
+                     gpu < state->monitor.gpu_count; gpu++) {
+                    const char *identity =
+                        state->monitor.gpus[gpu].platform_identity[0]
+                            ? state->monitor.gpus[gpu].platform_identity
+                            : state->monitor.gpus[gpu].display_identifier;
+                    if (sample.temperature_identity[0] &&
+                        strcmp(
+                            sample.temperature_identity,
+                            identity) == 0) {
+                        index = gpu;
+                        goto temperature_resolved;
+                    }
+                }
+                return false;
+temperature_resolved:
+                ;
+            } else {
+                return false;
+            }
+            break;
+        case LSM_OVERVIEW_METRIC_COUNT:
+            return false;
+    }
+
+    state->active_performance_item = type;
+    state->active_performance_index = index;
+    show_page(state, LSM_TAB_PERFORMANCE);
+    return true;
 }
 
 static void show_file_menu(LsmWindowsUiState *state)
@@ -2397,6 +2846,8 @@ static void destroy_state(LsmWindowsUiState *state)
 
     lsm_process_backend_destroy(state->process_backend);
     state->process_backend = NULL;
+    lsm_overview_history_destroy(state->overview_history);
+    state->overview_history = NULL;
 
     if (state->monitor_ready)
         lsm_monitor_platform_destroy(&state->monitor);
@@ -2596,6 +3047,17 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 }
             }
 
+            int hovered_overview = -1;
+            if (state->active_page == LSM_TAB_OVERVIEW) {
+                for (size_t index = 0U;
+                     index < LSM_OVERVIEW_METRIC_COUNT; index++) {
+                    if (PtInRect(&state->overview_cards[index], point)) {
+                        hovered_overview = (int)index;
+                        break;
+                    }
+                }
+            }
+
             int hovered_performance = -1;
             if (state->active_page == LSM_TAB_PERFORMANCE) {
                 for (size_t index = 0U;
@@ -2610,10 +3072,12 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
             if (hovered_menu != state->hovered_menu ||
                 hovered_tab != state->hovered_tab ||
-                hovered_performance != state->hovered_performance_item) {
+                hovered_performance != state->hovered_performance_item ||
+                hovered_overview != state->hovered_overview_item) {
                 state->hovered_menu = hovered_menu;
                 state->hovered_tab = hovered_tab;
                 state->hovered_performance_item = hovered_performance;
+                state->hovered_overview_item = hovered_overview;
                 InvalidateRect(window, NULL, FALSE);
             }
             return 0;
@@ -2625,6 +3089,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 state->hovered_menu = -1;
                 state->hovered_tab = -1;
                 state->hovered_performance_item = -1;
+                state->hovered_overview_item = -1;
                 InvalidateRect(window, NULL, FALSE);
             }
             return 0;
@@ -2669,6 +3134,16 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 if (PtInRect(&state->page_tabs[index], point)) {
                     show_page(state, (LsmTabIndex)index);
                     return 0;
+                }
+            }
+
+            if (state->active_page == LSM_TAB_OVERVIEW) {
+                for (size_t index = 0U;
+                     index < LSM_OVERVIEW_METRIC_COUNT; index++) {
+                    if (PtInRect(&state->overview_cards[index], point) &&
+                        navigate_overview_card(
+                            state, (LsmOverviewMetric)index))
+                        return 0;
                 }
             }
 
@@ -2838,6 +3313,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     }
     state->hovered_tab = -1;
     state->hovered_performance_item = -1;
+    state->hovered_overview_item = -1;
     state->hovered_menu = -1;
 
     HWND window = CreateWindowExW(

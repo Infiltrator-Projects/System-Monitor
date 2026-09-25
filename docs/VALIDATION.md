@@ -13,7 +13,7 @@ The repository currently uses:
 
 `support/tests` contains accounting, hardware, Bluetooth, GPU, battery, filesystem, history, portability and Common-integration regression coverage. The estate currently has 20 physical `*_smoke.c` sources: consolidated subsystem suites and specialised presentation, integration and lifecycle fixtures. Related regression cases live inside their owning subsystem source rather than as separate one-case translation units. Make is the canonical executed suite. CMake retains target registration and local CTest support, while CI builds only the application through CMake so the same smoke programs are not executed twice.
 
-Automated checks should cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the project.
+Automated checks should cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the project. The metrics suite specifically covers Overview duplicate-completion suppression, explicit gaps, unavailable metrics, hotplug identity resolution, deterministic top-process ranking and bounded-ring wraparound. Hosted release verification also starts the lazily-built Overview under Xvfb so GTK construction and notebook navigation execute against a real display server.
 
 Generated Doxygen API validation is intentionally scoped to System Monitor-owned source and header-defined API types. Private implementation compounds defined only inside `.c` files are not promoted into the generated API surface; Clang documentation syntax checks still cover the complete owned source set.
 

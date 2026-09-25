@@ -21,7 +21,8 @@ static const char *const tab_labels[LSM_TAB_COUNT] = {
     "Users",
     "Details",
     "Services",
-    "File Systems"
+    "File Systems",
+    "Overview"
 };
 
 static const char *const page_titles[LSM_PAGE_COUNT] = {

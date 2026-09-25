@@ -19,6 +19,7 @@
 #include "gpu_metrics.h"
 #include "filesystem_inventory.h"
 #include "monitor_types.h"
+#include "overview_history.h"
 #include "performance_selection.h"
 #include "presentation_contract.h"
 
@@ -370,6 +371,16 @@ typedef struct {
     GtkWidget **cpu_core_labels;
 } LsmPerformanceState;
 
+/** Overview widgets backed by toolkit-neutral completed-snapshot history. */
+typedef struct {
+    LsmOverviewHistory *history;
+    GtkWidget *buttons[LSM_OVERVIEW_METRIC_COUNT];
+    GtkWidget *values[LSM_OVERVIEW_METRIC_COUNT];
+    GtkWidget *details[LSM_OVERVIEW_METRIC_COUNT];
+    LsmGraph *graphs[LSM_OVERVIEW_METRIC_COUNT];
+    GtkWidget *process_rows[LSM_OVERVIEW_TOP_PROCESS_COUNT];
+} LsmOverviewState;
+
 /** Friendly Processes-page widget state. */
 typedef struct {
     GtkWidget *processes_tree;
@@ -520,6 +531,7 @@ struct LsmApp {
     LsmShellState shell;
     LsmRuntimeState runtime;
     LsmPerformanceState performance;
+    LsmOverviewState overview;
     LsmProcessesState processes;
     LsmProcessWorkspaceState process;
     LsmDetailsState details;

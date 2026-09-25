@@ -23,6 +23,7 @@ static void check_contract_identity(void)
 {
     assert(strcmp(lsm_tab_label(LSM_TAB_PERFORMANCE), "Performance") == 0);
     assert(strcmp(lsm_tab_label(LSM_TAB_FILESYSTEMS), "File Systems") == 0);
+    assert(strcmp(lsm_tab_label(LSM_TAB_OVERVIEW), "Overview") == 0);
     assert(strcmp(lsm_performance_page_title(LSM_PAGE_CPU), "CPU") == 0);
     assert(strcmp(lsm_performance_page_title(LSM_PAGE_MEMORY), "Memory") == 0);
     assert(strcmp(lsm_summary_label(LSM_SUMMARY_NETWORK), "Network") == 0);

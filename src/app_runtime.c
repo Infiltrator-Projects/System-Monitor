@@ -17,6 +17,7 @@
 #include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
+#include "overview.h"
 #include "performance.h"
 #include "processes_ui.h"
 #include "refresh_policy.h"
@@ -33,7 +34,8 @@ static guint process_refresh_interval(const LsmApp *app)
 static gboolean process_pages_active(const LsmApp *app)
 {
     return app->runtime.active_tab == LSM_TAB_PROCESSES ||
-           app->runtime.active_tab == LSM_TAB_DETAILS;
+           app->runtime.active_tab == LSM_TAB_DETAILS ||
+           app->runtime.active_tab == LSM_TAB_OVERVIEW;
 }
 
 static guint effective_process_refresh_interval(const LsmApp *app)
@@ -77,6 +79,7 @@ void lsm_app_refresh_all(LsmApp *app)
     app->runtime.paused = FALSE;
     (void)lsm_app_refresh_processes_if_due(app, TRUE);
     lsm_performance_refresh(app);
+    lsm_overview_refresh(app);
     lsm_history_refresh(app);
     lsm_filesystems_refresh(app);
     lsm_startup_refresh(app);
@@ -127,6 +130,7 @@ void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
         case LSM_TAB_APP_HISTORY:
         case LSM_TAB_STARTUP:
         case LSM_TAB_DETAILS:
+        case LSM_TAB_OVERVIEW:
         case LSM_TAB_COUNT:
             break;
     }

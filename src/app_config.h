@@ -35,6 +35,7 @@ typedef enum {
     LSM_TAB_DETAILS,
     LSM_TAB_SERVICES,
     LSM_TAB_FILESYSTEMS,
+    LSM_TAB_OVERVIEW,
     LSM_TAB_COUNT
 } LsmTabIndex;
 

@@ -88,6 +88,14 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
     (void)lsm_pressure_read("/proc/pressure/io", &sample->io_pressure);
     lsm_hardware_update(sample, elapsed, refresh_topology, refresh_batteries);
 
+    /* Publish completion identity only after every collector for this native
+     * sample has returned. Presentation can therefore distinguish a genuinely
+     * new snapshot from repeated GTK refreshes while the worker is still busy. */
+    sample->sample_generation++;
+    if (sample->sample_generation == 0U)
+        sample->sample_generation = 1U;
+    sample->sample_monotonic_seconds = now;
+
     if (refresh_topology)
         state->last_topology_scan_monotonic = now;
     if (refresh_batteries)

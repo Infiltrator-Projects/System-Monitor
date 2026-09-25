@@ -1,0 +1,517 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file overview.c
+ * @brief GTK presentation for the completed-snapshot system Overview.
+ *
+ * The Overview never samples hardware itself. Performance's retained monitor
+ * path records completed snapshots into overview_history.c even while this tab
+ * is closed; this module only projects that bounded history into cards.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "overview.h"
+
+#include "app_internal.h"
+#include "metric_format.h"
+#include "overview_history.h"
+#include "performance.h"
+#include "presentation_contract.h"
+#include "ui_helpers.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+
+static const char *const overview_titles[LSM_OVERVIEW_METRIC_COUNT] = {
+    "CPU", "Memory", "Disk activity", "Network traffic", "GPU",
+    "Temperature", "CPU pressure", "Memory pressure", "I/O pressure"
+};
+
+static const char *overview_colour(LsmOverviewMetric metric)
+{
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+            return LSM_COLOUR_CPU;
+        case LSM_OVERVIEW_MEMORY:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            return LSM_COLOUR_MEMORY;
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_IO_PRESSURE:
+            return LSM_COLOUR_DISK;
+        case LSM_OVERVIEW_NETWORK:
+            return LSM_COLOUR_NETWORK;
+        case LSM_OVERVIEW_GPU:
+            return LSM_COLOUR_GPU;
+        case LSM_OVERVIEW_TEMPERATURE:
+            return LSM_COLOUR_BATTERY;
+        case LSM_OVERVIEW_METRIC_COUNT:
+            break;
+    }
+    return LSM_COLOUR_CPU;
+}
+
+static double overview_sample_value(const LsmOverviewSample *sample,
+                                    LsmOverviewMetric metric)
+{
+    if (!sample || sample->gap) return NAN;
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+            return sample->cpu_available ? sample->cpu_percent : NAN;
+        case LSM_OVERVIEW_MEMORY:
+            return sample->memory_available ? sample->memory_percent : NAN;
+        case LSM_OVERVIEW_DISK:
+            return sample->disk_available ? sample->disk_percent : NAN;
+        case LSM_OVERVIEW_NETWORK:
+            return sample->network_available
+                ? sample->network_bytes_per_sec : NAN;
+        case LSM_OVERVIEW_GPU:
+            return sample->gpu_available ? sample->gpu_percent : NAN;
+        case LSM_OVERVIEW_TEMPERATURE:
+            return sample->temperature_available
+                ? sample->temperature_c : NAN;
+        case LSM_OVERVIEW_CPU_PRESSURE:
+            return sample->cpu_pressure_available
+                ? sample->cpu_pressure_percent : NAN;
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            return sample->memory_pressure_available
+                ? sample->memory_pressure_percent : NAN;
+        case LSM_OVERVIEW_IO_PRESSURE:
+            return sample->io_pressure_available
+                ? sample->io_pressure_percent : NAN;
+        case LSM_OVERVIEW_METRIC_COUNT:
+            break;
+    }
+    return NAN;
+}
+
+static void overview_push_sample(LsmApp *app,
+                                 const LsmOverviewSample *sample)
+{
+    if (!app || !sample) return;
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        LsmGraph *graph = app->overview.graphs[metric];
+        if (!graph) continue;
+        lsm_graph_push(
+            graph,
+            overview_sample_value(sample, (LsmOverviewMetric)metric),
+            NAN, app->runtime.newer_on_right);
+    }
+}
+
+static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
+{
+    GtkWidget *button = gtk_button_new();
+    gtk_widget_set_hexpand(button, TRUE);
+    gtk_widget_set_vexpand(button, TRUE);
+    gtk_widget_set_name(button, "lsm-overview-card");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), "lsm-performance-card");
+
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 8);
+
+    GtkWidget *title = gtk_label_new(overview_titles[metric]);
+    gtk_widget_set_halign(title, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(title), "lsm-performance-title");
+
+    GtkWidget *value = gtk_label_new("Initialising…");
+    gtk_widget_set_halign(value, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(value), "lsm-metric-value");
+
+    GtkWidget *detail = gtk_label_new("");
+    gtk_widget_set_halign(detail, GTK_ALIGN_START);
+    gtk_label_set_ellipsize(GTK_LABEL(detail), PANGO_ELLIPSIZE_END);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(detail), "lsm-performance-summary");
+
+    const gboolean percentage =
+        metric != LSM_OVERVIEW_NETWORK &&
+        metric != LSM_OVERVIEW_TEMPERATURE;
+    const double maximum =
+        metric == LSM_OVERVIEW_TEMPERATURE ? 120.0 :
+        (percentage ? 100.0 : 0.0);
+    LsmGraph *graph = lsm_graph_new(
+        FALSE, percentage, maximum, 180, 76);
+    if (graph) {
+        lsm_graph_set_compact(graph, TRUE);
+        lsm_graph_set_colours(graph, overview_colour(metric), NULL);
+        if (metric == LSM_OVERVIEW_NETWORK)
+            lsm_graph_set_dynamic_scale(graph, 1000000.0, 1000000.0);
+    }
+
+    gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), value, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
+    if (graph)
+        gtk_box_pack_start(GTK_BOX(box), graph->area, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(button), box);
+
+    app->overview.buttons[metric] = button;
+    app->overview.values[metric] = value;
+    app->overview.details[metric] = detail;
+    app->overview.graphs[metric] = graph;
+    g_object_set_data(
+        G_OBJECT(button), "lsm-overview-metric",
+        GINT_TO_POINTER((gint)metric + 1));
+    return button;
+}
+
+static bool overview_destination(LsmApp *app, LsmOverviewMetric metric,
+                                 LsmPageType *type, size_t *index)
+{
+    if (!app || !type || !index || !app->overview.history)
+        return false;
+    LsmOverviewSample sample;
+    if (!lsm_overview_history_latest(app->overview.history, &sample) ||
+        sample.gap)
+        return false;
+
+    switch (metric) {
+        case LSM_OVERVIEW_CPU:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+            *type = LSM_PAGE_CPU;
+            *index = 0U;
+            return true;
+        case LSM_OVERVIEW_MEMORY:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+            *type = LSM_PAGE_MEMORY;
+            *index = 0U;
+            return true;
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_IO_PRESSURE:
+            *type = LSM_PAGE_DISK;
+            *index = lsm_overview_resolve_disk(&app->monitor, &sample);
+            return *index != SIZE_MAX;
+        case LSM_OVERVIEW_NETWORK:
+            *type = LSM_PAGE_NETWORK;
+            *index = lsm_overview_resolve_network(&app->monitor, &sample);
+            return *index != SIZE_MAX;
+        case LSM_OVERVIEW_GPU:
+            *type = LSM_PAGE_GPU;
+            *index = lsm_overview_resolve_gpu(&app->monitor, &sample);
+            return *index != SIZE_MAX;
+        case LSM_OVERVIEW_TEMPERATURE:
+            if (sample.temperature_source == LSM_OVERVIEW_TEMPERATURE_CPU) {
+                *type = LSM_PAGE_CPU;
+                *index = 0U;
+                return true;
+            }
+            if (sample.temperature_source == LSM_OVERVIEW_TEMPERATURE_GPU) {
+                *type = LSM_PAGE_GPU;
+                LsmOverviewSample gpu_sample = sample;
+                gpu_sample.gpu_available = true;
+                gpu_sample.gpu_index = sample.temperature_gpu_index;
+                memcpy(
+                    gpu_sample.gpu_identity, sample.temperature_identity,
+                    sizeof(gpu_sample.gpu_identity));
+                memcpy(
+                    gpu_sample.gpu_name, sample.temperature_name,
+                    sizeof(gpu_sample.gpu_name));
+                *index = lsm_overview_resolve_gpu(
+                    &app->monitor, &gpu_sample);
+                return *index != SIZE_MAX;
+            }
+            return false;
+        case LSM_OVERVIEW_METRIC_COUNT:
+            return false;
+    }
+    return false;
+}
+
+static void overview_card_clicked(GtkButton *button, gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !button) return;
+    const gint stored = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(button), "lsm-overview-metric"));
+    if (stored <= 0 || stored > (gint)LSM_OVERVIEW_METRIC_COUNT)
+        return;
+
+    LsmPageType type;
+    size_t index = 0U;
+    if (!overview_destination(
+            app, (LsmOverviewMetric)(stored - 1), &type, &index))
+        return;
+    lsm_performance_show_resource(app, type, index);
+}
+
+static void overview_set_percent(GtkWidget *label, bool available,
+                                 double value)
+{
+    char text[64];
+    lsm_metric_format_percent(available, value, text, sizeof(text));
+    lsm_ui_set_label_text(label, "%s", text);
+}
+
+static void overview_set_latest_values(LsmApp *app,
+                                       const LsmOverviewSample *sample)
+{
+    if (!app || !sample) return;
+
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_CPU],
+        sample->cpu_available, sample->cpu_percent);
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_CPU],
+        "Completed system CPU sample");
+
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_MEMORY],
+        sample->memory_available, sample->memory_percent);
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_MEMORY],
+        "Physical memory in use");
+
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_DISK],
+        sample->disk_available, sample->disk_percent);
+    if (sample->disk_available) {
+        char read_rate[64];
+        char write_rate[64];
+        char detail[192];
+        lsm_metric_format_network(
+            sample->disk_read_bytes_per_sec, false, true,
+            read_rate, sizeof(read_rate));
+        lsm_metric_format_network(
+            sample->disk_write_bytes_per_sec, false, true,
+            write_rate, sizeof(write_rate));
+        snprintf(
+            detail, sizeof(detail), "%s — R %s / W %s",
+            sample->disk_name[0] ? sample->disk_name : "Busiest disk",
+            read_rate, write_rate);
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_DISK], "%s", detail);
+    } else {
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_DISK],
+            "No measured disk activity");
+    }
+
+    if (sample->network_available) {
+        char rate[64];
+        char detail[192];
+        lsm_metric_format_network(
+            sample->network_bytes_per_sec, app->runtime.network_use_bits,
+            true, rate, sizeof(rate));
+        lsm_ui_set_label_text(
+            app->overview.values[LSM_OVERVIEW_NETWORK], "%s", rate);
+        snprintf(
+            detail, sizeof(detail), "%s — busiest adapter",
+            sample->network_name[0]
+                ? sample->network_name : "Network");
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_NETWORK], "%s", detail);
+    } else {
+        lsm_ui_set_label_text(
+            app->overview.values[LSM_OVERVIEW_NETWORK], "N/A");
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_NETWORK],
+            "No measured network traffic");
+    }
+
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_GPU],
+        sample->gpu_available, sample->gpu_percent);
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_GPU], "%s",
+        sample->gpu_available && sample->gpu_name[0]
+            ? sample->gpu_name : "GPU telemetry unavailable");
+
+    char temperature[64];
+    lsm_metric_format_celsius(
+        sample->temperature_available, sample->temperature_c,
+        temperature, sizeof(temperature));
+    lsm_ui_set_label_text(
+        app->overview.values[LSM_OVERVIEW_TEMPERATURE],
+        "%s", temperature);
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_TEMPERATURE], "%s",
+        sample->temperature_available && sample->temperature_name[0]
+            ? sample->temperature_name : "Temperature telemetry unavailable");
+
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_CPU_PRESSURE],
+        sample->cpu_pressure_available, sample->cpu_pressure_percent);
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_MEMORY_PRESSURE],
+        sample->memory_pressure_available, sample->memory_pressure_percent);
+    overview_set_percent(
+        app->overview.values[LSM_OVERVIEW_IO_PRESSURE],
+        sample->io_pressure_available, sample->io_pressure_percent);
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_CPU_PRESSURE],
+        "10 s runnable-work stall time");
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_MEMORY_PRESSURE],
+        "10 s memory stall time");
+    lsm_ui_set_label_text(
+        app->overview.details[LSM_OVERVIEW_IO_PRESSURE],
+        "10 s I/O stall time");
+}
+
+static void overview_refresh_processes(LsmApp *app)
+{
+    if (!app) return;
+    size_t indices[LSM_OVERVIEW_TOP_PROCESS_COUNT];
+    const size_t selected = lsm_overview_top_cpu_processes(
+        app->process.process_snapshot,
+        app->process.process_snapshot_count, indices);
+
+    for (size_t row = 0U; row < LSM_OVERVIEW_TOP_PROCESS_COUNT; row++) {
+        GtkWidget *label = app->overview.process_rows[row];
+        if (!label) continue;
+        if (row >= selected || indices[row] == SIZE_MAX) {
+            lsm_ui_set_label_text(
+                label, "%s", row == 0U
+                    ? "Waiting for process activity…"
+                    : "");
+            continue;
+        }
+
+        const LsmProcessInfo *process =
+            &app->process.process_snapshot[indices[row]];
+        char text[256];
+        snprintf(
+            text, sizeof(text),
+            "%zu. %s (PID %llu) — %.1f%% CPU, %.1f%% memory",
+            row + 1U,
+            process->name[0] ? process->name : "Unnamed process",
+            (unsigned long long)process->pid,
+            process->cpu_percent, process->memory_percent);
+        lsm_ui_set_label_text(label, "%s", text);
+    }
+}
+
+void lsm_overview_build(LsmApp *app, GtkWidget *container)
+{
+    if (!app || !container) return;
+    if (!app->overview.history)
+        app->overview.history = lsm_overview_history_create();
+
+    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller),
+        GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    app->runtime.page_scrollers[LSM_TAB_OVERVIEW] = scroller;
+
+    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_container_set_border_width(GTK_CONTAINER(root), 12);
+    gtk_container_add(GTK_CONTAINER(scroller), root);
+    gtk_box_pack_start(GTK_BOX(container), scroller, TRUE, TRUE, 0);
+
+    GtkWidget *title = gtk_label_new(NULL);
+    gtk_label_set_markup(
+        GTK_LABEL(title),
+        "<span size='18000' weight='bold'>Overview</span>");
+    gtk_widget_set_halign(title, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(root), title, FALSE, FALSE, 0);
+
+    GtkWidget *subtitle = gtk_label_new(
+        "Completed system samples retained independently of the open page");
+    gtk_widget_set_halign(subtitle, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(subtitle), "lsm-performance-summary");
+    gtk_box_pack_start(GTK_BOX(root), subtitle, FALSE, FALSE, 0);
+
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+    gtk_widget_set_hexpand(grid, TRUE);
+    gtk_widget_set_vexpand(grid, TRUE);
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        GtkWidget *card = overview_make_card(
+            app, (LsmOverviewMetric)metric);
+        g_signal_connect(
+            card, "clicked", G_CALLBACK(overview_card_clicked), app);
+        gtk_grid_attach(
+            GTK_GRID(grid), card,
+            (gint)(metric % 3U), (gint)(metric / 3U), 1, 1);
+    }
+    gtk_box_pack_start(GTK_BOX(root), grid, TRUE, TRUE, 0);
+
+    GtkWidget *process_card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(process_card), "lsm-performance-card");
+    GtkWidget *process_title = gtk_label_new("Top CPU processes");
+    gtk_widget_set_halign(process_title, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(process_title),
+        "lsm-performance-title");
+    gtk_box_pack_start(
+        GTK_BOX(process_card), process_title, FALSE, FALSE, 0);
+    for (size_t row = 0U; row < LSM_OVERVIEW_TOP_PROCESS_COUNT; row++) {
+        app->overview.process_rows[row] = gtk_label_new("");
+        gtk_widget_set_halign(
+            app->overview.process_rows[row], GTK_ALIGN_START);
+        gtk_label_set_ellipsize(
+            GTK_LABEL(app->overview.process_rows[row]),
+            PANGO_ELLIPSIZE_END);
+        gtk_box_pack_start(
+            GTK_BOX(process_card),
+            app->overview.process_rows[row], FALSE, FALSE, 0);
+    }
+    gtk_box_pack_start(GTK_BOX(root), process_card, FALSE, FALSE, 0);
+
+    if (app->overview.history) {
+        const size_t count =
+            lsm_overview_history_count(app->overview.history);
+        for (size_t index = 0U; index < count; index++) {
+            LsmOverviewSample sample;
+            if (lsm_overview_history_get(
+                    app->overview.history, index, &sample))
+                overview_push_sample(app, &sample);
+        }
+    }
+    lsm_overview_refresh(app);
+}
+
+void lsm_overview_record_monitor_sample(LsmApp *app)
+{
+    if (!app) return;
+    if (!app->overview.history)
+        app->overview.history = lsm_overview_history_create();
+    if (!app->overview.history ||
+        !lsm_overview_history_record(
+            app->overview.history, &app->monitor))
+        return;
+
+    if (app->runtime.page_built[LSM_TAB_OVERVIEW]) {
+        LsmOverviewSample sample;
+        if (lsm_overview_history_latest(
+                app->overview.history, &sample))
+            overview_push_sample(app, &sample);
+    }
+}
+
+void lsm_overview_refresh(LsmApp *app)
+{
+    if (!app || !app->runtime.page_built[LSM_TAB_OVERVIEW] ||
+        !app->overview.history)
+        return;
+    LsmOverviewSample sample;
+    if (lsm_overview_history_latest(app->overview.history, &sample) &&
+        !sample.gap)
+        overview_set_latest_values(app, &sample);
+    overview_refresh_processes(app);
+}
+
+void lsm_overview_destroy(LsmApp *app)
+{
+    if (!app) return;
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        lsm_graph_free(app->overview.graphs[metric]);
+        app->overview.graphs[metric] = NULL;
+        app->overview.buttons[metric] = NULL;
+        app->overview.values[metric] = NULL;
+        app->overview.details[metric] = NULL;
+    }
+    for (size_t row = 0U; row < LSM_OVERVIEW_TOP_PROCESS_COUNT; row++)
+        app->overview.process_rows[row] = NULL;
+    lsm_overview_history_destroy(app->overview.history);
+    app->overview.history = NULL;
+}

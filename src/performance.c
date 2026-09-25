@@ -21,6 +21,7 @@
 #include "app_internal.h"
 #include "common.h"
 #include "monitor.h"
+#include "overview.h"
 #include "summary_bar.h"
 #include "ui_helpers.h"
 #include "wifi_metadata.h"
@@ -33,6 +34,7 @@
 
 /* Stable stack identities prevent GTK page selection from following array
  * indices when hotplugged devices are inserted or removed. */
+static void rebuild_for_topology_change(LsmApp *app);
 
 /* Primary graphs must yield vertical space to their detail panels before the
  * page itself begins scrolling. GTK size requests are minimums, not defaults;
@@ -130,6 +132,20 @@ void performance_select_side_button(LsmApp *app, LsmDevicePage *selected)
     lsm_performance_selection_end(&app->performance.performance_selection);
 }
 
+static LsmDevicePage *page_for_type_index(const LsmApp *app,
+                                          LsmPageType type,
+                                          size_t device_index)
+{
+    if (!app || !app->performance.device_pages) return NULL;
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        if (page->type == type && page->index == device_index)
+            return page;
+    }
+    return NULL;
+}
+
 static LsmDevicePage *page_for_stack_name(const LsmApp *app,
                                           const char *stack_name)
 {
@@ -160,6 +176,31 @@ static LsmDevicePage *page_for_retained_selection(
             return page;
     }
     return NULL;
+}
+
+void lsm_performance_show_resource(LsmApp *app, LsmPageType type,
+                                   size_t index)
+{
+    if (!app || type < LSM_PAGE_CPU || type >= LSM_PAGE_COUNT)
+        return;
+    lsm_app_ensure_page_built(app, LSM_TAB_PERFORMANCE);
+    if (!app->performance.performance_stack ||
+        !app->performance.device_pages)
+        return;
+
+    if (app->monitor.topology_generation !=
+        app->performance.displayed_topology_generation)
+        rebuild_for_topology_change(app);
+
+    LsmDevicePage *page = page_for_type_index(app, type, index);
+    if (!page) return;
+
+    gtk_stack_set_visible_child_name(
+        GTK_STACK(app->performance.performance_stack), page->stack_name);
+    performance_select_side_button(app, page);
+    if (app->shell.notebook)
+        gtk_notebook_set_current_page(
+            GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_PERFORMANCE);
 }
 
 void performance_synchronise_side_selection(LsmApp *app)
@@ -820,6 +861,7 @@ void lsm_performance_refresh(LsmApp *app)
 {
     if (!app) return;
     lsm_monitor_update(&app->monitor);
+    lsm_overview_record_monitor_sample(app);
     if (app->monitor.topology_generation !=
         app->performance.displayed_topology_generation)
         rebuild_for_topology_change(app);
@@ -829,6 +871,7 @@ void lsm_performance_refresh(LsmApp *app)
     }
     performance_synchronise_side_selection(app);
     lsm_summary_bar_update(app);
+    lsm_overview_refresh(app);
 }
 
 gboolean lsm_performance_update(gpointer user_data)

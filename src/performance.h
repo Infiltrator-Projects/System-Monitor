@@ -9,7 +9,10 @@
 #ifndef INFILTRATOR_SYSTEM_MONITOR_PERFORMANCE_H
 #define INFILTRATOR_SYSTEM_MONITOR_PERFORMANCE_H
 
+#include "presentation_contract.h"
+
 #include <gtk/gtk.h>
+#include <stddef.h>
 
 typedef struct LsmApp LsmApp;
 
@@ -41,6 +44,17 @@ gboolean lsm_performance_update(gpointer user_data);
  * @param [in,out] app Application whose retained monitor and pages are updated.
  */
 void lsm_performance_refresh(LsmApp *app);
+/**
+ * Navigate to one concrete Performance resource.
+ *
+ * The Performance tab is constructed lazily if required. Device indices are
+ * expected to have been resolved against the current topology before calling.
+ *
+ * @param [in,out] app Application whose Performance selection is changed.
+ * @param type Resource class to display.
+ * @param index Current device index for device-backed resources.
+ */
+void lsm_performance_show_resource(LsmApp *app, LsmPageType type, size_t index);
 /**
  * Re-negotiate the Performance layout after a toplevel window state change.
  *

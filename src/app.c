@@ -22,6 +22,7 @@
 #include "filesystems.h"
 #include "history.h"
 #include "monitor.h"
+#include "overview.h"
 #include "performance.h"
 #include "presentation_contract.h"
 #include "preferences.h"
@@ -142,6 +143,9 @@ void lsm_app_ensure_page_built(LsmApp *app, LsmTabIndex page)
             break;
         case LSM_TAB_FILESYSTEMS:
             lsm_filesystems_build(app, container);
+            break;
+        case LSM_TAB_OVERVIEW:
+            lsm_overview_build(app, container);
             break;
         case LSM_TAB_COUNT:
             return;
@@ -332,6 +336,7 @@ void lsm_app_shutdown(LsmApp *app)
     lsm_process_group_selection_clear(app);
     lsm_history_destroy(app);
     lsm_filesystems_destroy(app);
+    lsm_overview_destroy(app);
     lsm_performance_destroy(app);
     if (app->process.filters) g_ptr_array_free(app->process.filters, TRUE);
     lsm_monitor_destroy(&app->monitor);

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.97 - 2026-09-25
+
+- Add an appended Overview tab without renumbering the existing eight persisted tab identities.
+- Retain a bounded, timestamped history of backend-completed monitor snapshots independently of the visible page; duplicate publications are ignored, skipped generations become explicit graph gaps, and unavailable metrics remain unavailable.
+- Present CPU, memory, busiest disk/network/GPU, hottest available temperature and CPU/memory/I/O pressure cards plus the three busiest CPU processes; cards navigate to the corresponding current Performance resource.
+- Resolve retained disk/network/GPU identities against current topology before navigation so hotplug and reordering cannot silently target another device.
+- Give Linux and Windows native backends explicit completed-sample generation/timestamp publication semantics and cover duplicate snapshots, missing metrics, gaps, hotplug identity, process ranking and ring wraparound in the deterministic metrics suite.
+- Add the native Windows Overview surface and keep Windows sampling active independently of the selected page, matching the shared completed-history contract.
+- Add a hosted GTK Overview navigation smoke under Xvfb so the new lazy page is constructed on a real display server during release verification.
+
 ## 1.0.96 - 2026-09-25
 
 - Close the Linux sampler timeout/exit ownership race with independently retained caller and worker references; synchronize the startup topology retry flag.
