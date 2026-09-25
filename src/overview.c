@@ -178,9 +178,16 @@ static gint overview_gauge_size(LsmOverviewMetric metric)
             return 88;
         case LSM_OVERVIEW_GPU:
             return 72;
-        default:
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_NETWORK:
+        case LSM_OVERVIEW_TEMPERATURE:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+        case LSM_OVERVIEW_IO_PRESSURE:
+        case LSM_OVERVIEW_METRIC_COUNT:
             return 0;
     }
+    return 0;
 }
 
 static void overview_gauge_colours(LsmOverviewMetric metric,
