@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.113 - 2026-09-26
+
+- Fix the 1.0.112 Overview sizing regression that could make the application wider than the desktop and push the navigation rail/window controls off-screen.
+- Remove homogeneous sizing from the asymmetric twelve-column Overview grid; narrow diagnostic cards no longer multiply their minimum width across every grid column.
+- Preserve the original anti-jitter goal by reserving small fixed pixel widths only for rapidly changing headline values such as network rate, temperature and pressure.
+- Stop blank diagnostic-card metadata fields from carrying the 120-pixel hardware-name reservation used by CPU, Memory, Disk, Network and GPU.
+- Remove the GTK compatibility declarations that existed only for the reverted homogeneous/character-width sizing approach.
+
 ## 1.0.112 - 2026-09-25
 
 - Stop the Overview plots from breathing wider and narrower as live values change by making the dashboard's twelve layout columns explicitly homogeneous.
