@@ -7,6 +7,7 @@
 - Push Overview materially closer to the approved graphical north star while preserving its real information architecture: add coloured resource icons, richer per-resource gradient cards, a graphical brand mark, stronger value hierarchy and full dashboard graph grids.
 - Upgrade the native Cairo history renderer with vertical gradient fills and restrained line glow so charts read as instrumentation instead of flat procedural plots.
 - Replace the textual Top CPU process chips with graphical rows containing process name, live CPU activity bar, CPU percentage and resident-memory value.
+- Add native Cairo radial utilisation gauges to CPU, Memory and GPU Overview cards and give those primary resources more visual weight than the secondary diagnostic cards.
 - Keep the presentation native GTK/Cairo and data-driven; no generated decorative artwork is embedded in the application.
 
 
