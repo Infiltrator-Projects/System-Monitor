@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.99 - 2026-09-25
+
+- Record the graphical System Monitor UI north star, including the dashboard reference mockup and the Amiga/Workbench-inspired GUI-first design intent.
+- Begin the first implementation polish without changing monitoring semantics: Overview now opens as the default destination for fresh profiles after the fast Performance first paint.
+- Rework Overview hierarchy around a visual hero, live-state chip, larger metric values, resource-coloured card accents and a more compact graphical top-process treatment.
+- Reorder Overview cards by visual priority so CPU, memory and GPU lead the dashboard while disk, network, temperature and pressure remain immediately visible.
+- Keep every card wired to the existing completed-snapshot history and detailed Performance navigation; this is presentation work, not a parallel monitoring path.
+
+
 ## 1.0.98 - 2026-09-25
 
 - Define System Monitor explicitly as a coherent monitoring and diagnostic product rather than a feature-count exercise.

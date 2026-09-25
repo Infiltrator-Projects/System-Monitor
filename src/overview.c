@@ -29,6 +29,31 @@ static const char *const overview_titles[LSM_OVERVIEW_METRIC_COUNT] = {
     "Temperature", "CPU pressure", "Memory pressure", "I/O pressure"
 };
 
+static const char *const overview_style_classes[LSM_OVERVIEW_METRIC_COUNT] = {
+    "lsm-overview-cpu",
+    "lsm-overview-memory",
+    "lsm-overview-disk",
+    "lsm-overview-network",
+    "lsm-overview-gpu",
+    "lsm-overview-temperature",
+    "lsm-overview-cpu-pressure",
+    "lsm-overview-memory-pressure",
+    "lsm-overview-io-pressure"
+};
+
+/* Visual priority follows the dashboard north star rather than enum order. */
+static const LsmOverviewMetric overview_layout[LSM_OVERVIEW_METRIC_COUNT] = {
+    LSM_OVERVIEW_CPU,
+    LSM_OVERVIEW_MEMORY,
+    LSM_OVERVIEW_GPU,
+    LSM_OVERVIEW_DISK,
+    LSM_OVERVIEW_NETWORK,
+    LSM_OVERVIEW_TEMPERATURE,
+    LSM_OVERVIEW_CPU_PRESSURE,
+    LSM_OVERVIEW_MEMORY_PRESSURE,
+    LSM_OVERVIEW_IO_PRESSURE
+};
+
 static const char *overview_colour(LsmOverviewMetric metric)
 {
     switch (metric) {
@@ -106,22 +131,37 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     GtkWidget *button = gtk_button_new();
     gtk_widget_set_hexpand(button, TRUE);
     gtk_widget_set_vexpand(button, TRUE);
+    gtk_widget_set_size_request(button, -1, 170);
     gtk_widget_set_name(button, "lsm-overview-card");
+    gtk_widget_set_tooltip_text(button, "Open detailed performance view");
     gtk_style_context_add_class(
         gtk_widget_get_style_context(button), "lsm-performance-card");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), "lsm-overview-card");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), overview_style_classes[metric]);
 
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_container_set_border_width(GTK_CONTAINER(box), 8);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 10);
 
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget *title = gtk_label_new(overview_titles[metric]);
     gtk_widget_set_halign(title, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(title, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(title), "lsm-performance-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(title), "lsm-overview-card-title");
 
     GtkWidget *value = gtk_label_new("Initialising…");
-    gtk_widget_set_halign(value, GTK_ALIGN_START);
+    gtk_widget_set_halign(value, GTK_ALIGN_END);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-metric-value");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(value), "lsm-overview-value");
+
+    gtk_box_pack_start(GTK_BOX(header), title, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(header), value, FALSE, FALSE, 0);
 
     GtkWidget *detail = gtk_label_new("");
     gtk_widget_set_halign(detail, GTK_ALIGN_START);
@@ -136,7 +176,7 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
         metric == LSM_OVERVIEW_TEMPERATURE ? 120.0 :
         (percentage ? 100.0 : 0.0);
     LsmGraph *graph = lsm_graph_new(
-        FALSE, percentage, maximum, 180, 76);
+        FALSE, percentage, maximum, 220, 92);
     if (graph) {
         lsm_graph_set_compact(graph, TRUE);
         lsm_graph_set_colours(graph, overview_colour(metric), NULL);
@@ -144,11 +184,10 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
             lsm_graph_set_dynamic_scale(graph, 1000000.0, 1000000.0);
     }
 
-    gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), value, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), header, FALSE, FALSE, 0);
     if (graph)
         gtk_box_pack_start(GTK_BOX(box), graph->area, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
     gtk_container_add(GTK_CONTAINER(button), box);
 
     app->overview.buttons[metric] = button;
@@ -378,10 +417,8 @@ static void overview_refresh_processes(LsmApp *app)
         char text[512];
         snprintf(
             text, sizeof(text),
-            "%zu. %s (PID %llu) — %.1f%% CPU, %.1f%% memory",
-            row + 1U,
+            "%s    %.1f%% CPU   ·   %.1f%% memory",
             process->name[0] ? process->name : "Unnamed process",
-            (unsigned long long)process->pid,
             process->cpu_percent, process->memory_percent);
         lsm_ui_set_label_text(label, "%s", text);
     }
@@ -404,37 +441,52 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     gtk_container_add(GTK_CONTAINER(scroller), root);
     gtk_box_pack_start(GTK_BOX(container), scroller, TRUE, TRUE, 0);
 
+    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_name(hero, "lsm-overview-hero");
+    gtk_widget_set_hexpand(hero, TRUE);
+
+    GtkWidget *hero_text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(hero_text, TRUE);
     GtkWidget *title = gtk_label_new(NULL);
     gtk_label_set_markup(
         GTK_LABEL(title),
-        "<span size='18000' weight='bold'>Overview</span>");
+        "<span size='22000' weight='bold'>System Monitor</span>");
     gtk_widget_set_halign(title, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(root), title, FALSE, FALSE, 0);
-
     GtkWidget *subtitle = gtk_label_new(
-        "Completed system samples retained independently of the open page");
+        "Live performance, health and activity at a glance");
     gtk_widget_set_halign(subtitle, GTK_ALIGN_START);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(subtitle), "lsm-performance-summary");
-    gtk_box_pack_start(GTK_BOX(root), subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_text), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_text), subtitle, FALSE, FALSE, 0);
+
+    GtkWidget *live = gtk_label_new("●  LIVE");
+    gtk_widget_set_name(live, "lsm-overview-live");
+    gtk_widget_set_halign(live, GTK_ALIGN_END);
+    gtk_widget_set_valign(live, GTK_ALIGN_CENTER);
+
+    gtk_box_pack_start(GTK_BOX(hero), hero_text, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(hero), live, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(root), hero, FALSE, FALSE, 0);
 
     GtkWidget *grid = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
     gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
     gtk_widget_set_hexpand(grid, TRUE);
     gtk_widget_set_vexpand(grid, TRUE);
-    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
-        GtkWidget *card = overview_make_card(
-            app, (LsmOverviewMetric)metric);
+    for (size_t slot = 0U; slot < LSM_OVERVIEW_METRIC_COUNT; slot++) {
+        const LsmOverviewMetric metric = overview_layout[slot];
+        GtkWidget *card = overview_make_card(app, metric);
         g_signal_connect(
             card, "clicked", G_CALLBACK(overview_card_clicked), app);
         gtk_grid_attach(
             GTK_GRID(grid), card,
-            (gint)(metric % 3U), (gint)(metric / 3U), 1, 1);
+            (gint)(slot % 3U), (gint)(slot / 3U), 1, 1);
     }
     gtk_box_pack_start(GTK_BOX(root), grid, TRUE, TRUE, 0);
 
-    GtkWidget *process_card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget *process_card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    gtk_widget_set_name(process_card, "lsm-overview-process-card");
     gtk_style_context_add_class(
         gtk_widget_get_style_context(process_card), "lsm-performance-card");
     GtkWidget *process_title = gtk_label_new("Top CPU processes");
@@ -448,6 +500,9 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
         app->overview.process_rows[row] = gtk_label_new("");
         gtk_widget_set_halign(
             app->overview.process_rows[row], GTK_ALIGN_START);
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(app->overview.process_rows[row]),
+            "lsm-overview-process-row");
         gtk_label_set_ellipsize(
             GTK_LABEL(app->overview.process_rows[row]),
             PANGO_ELLIPSIZE_END);

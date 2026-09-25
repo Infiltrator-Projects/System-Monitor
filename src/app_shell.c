@@ -337,6 +337,36 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         ".lsm-performance-card separator { background-color: @lsm_border; }"
         ".lsm-performance-card:hover { border-color: @lsm_connection_border; }"
+        "#lsm-overview-hero {"
+        " background-image: linear-gradient(to bottom right, @lsm_connection, @lsm_card);"
+        " border: 1px solid @lsm_connection_border;"
+        "}"
+        "#lsm-overview-live {"
+        " color: @lsm_success; background-color: alpha(@lsm_success, 0.08);"
+        " border: 1px solid alpha(@lsm_success, 0.34);"
+        " border-radius: 999px; padding: 6px 10px; font-weight: 700;"
+        "}"
+        ".lsm-overview-card {"
+        " box-shadow: 0 1px 0 alpha(@lsm_text, 0.03);"
+        "}"
+        ".lsm-overview-card-title { font-size: 15px; font-weight: 700; }"
+        ".lsm-overview-value { color: @lsm_title; font-size: 24px; font-weight: 700; }"
+        ".lsm-overview-cpu { border-top: 3px solid #00adef; }"
+        ".lsm-overview-memory { border-top: 3px solid #5c9efa; }"
+        ".lsm-overview-disk { border-top: 3px solid #638d1e; }"
+        ".lsm-overview-network { border-top: 3px solid #f5628e; }"
+        ".lsm-overview-gpu { border-top: 3px solid #de68f2; }"
+        ".lsm-overview-temperature { border-top: 3px solid #d19e47; }"
+        ".lsm-overview-cpu-pressure { border-top: 3px solid alpha(#00adef, 0.72); }"
+        ".lsm-overview-memory-pressure { border-top: 3px solid alpha(#5c9efa, 0.72); }"
+        ".lsm-overview-io-pressure { border-top: 3px solid alpha(#638d1e, 0.72); }"
+        "#lsm-overview-process-card {"
+        " background-image: linear-gradient(to right, @lsm_card, @lsm_surface);"
+        "}"
+        ".lsm-overview-process-row {"
+        " color: @lsm_heading; background-color: alpha(@lsm_neutral, 0.045);"
+        " border-radius: 5px; padding: 6px 8px;"
+        "}"
         ".lsm-metric-caption { color: @lsm_detail_label; }"
         ".lsm-metric-value { color: @lsm_heading; }"
         ".lsm-state-warning { color: @lsm_warning; }"
@@ -364,7 +394,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-performance-card {"
         " border-radius: %upx; padding: %upx;"
         "}"
-        "button, combobox button, entry, spinbutton { border-radius: %upx; }"
+        "#lsm-overview-hero {"
+        " border-radius: %upx; padding: %upx;"
+        "}"
+        "button, combobox button, entry, spinbutton { border-radius: %upx; }
         "notebook > header > tabs > tab { border-radius: %upx %upx 0 0; }"
         "#lsm-side-button { border-radius: %upx; }",
         (unsigned int)metrics->card_radius,
@@ -373,6 +406,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)(metrics->control_spacing * 2U),
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,

@@ -203,7 +203,10 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.compact_restore_maximized = FALSE;
     app->runtime.window_width = LSM_DEFAULT_WINDOW_WIDTH;
     app->runtime.window_height = LSM_DEFAULT_WINDOW_HEIGHT;
-    app->runtime.last_tab = LSM_TAB_PERFORMANCE;
+    /* Keep Performance as the fast first-paint surface, but make the graphical
+     * Overview the default destination for a fresh profile. Persisted choices
+     * still win when preferences are loaded. */
+    app->runtime.last_tab = LSM_TAB_OVERVIEW;
     app->runtime.active_tab = LSM_TAB_PERFORMANCE;
     lsm_copy_string(app->runtime.selected_performance_page,
                     sizeof(app->runtime.selected_performance_page), "cpu");
