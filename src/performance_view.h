@@ -103,12 +103,6 @@ typedef enum {
 } LsmGpuPerformanceMetric;
 
 /**
- * Project one monitor snapshot into the canonical CPU presentation.
- *
- * @param monitor Current platform-neutral monitoring snapshot.
- * @param view Caller-owned output that is fully initialised by the function.
- */
-/**
  * Project one monitor snapshot into the canonical cross-tab summary.
  *
  * @param monitor Current platform-neutral monitoring snapshot, or NULL.
@@ -119,6 +113,12 @@ void lsm_summary_performance_view(const LsmMonitor *monitor,
                                   bool network_use_bits,
                                   LsmSummaryPerformanceView *view);
 
+/**
+ * Project one monitor snapshot into the canonical CPU presentation.
+ *
+ * @param monitor Current platform-neutral monitoring snapshot.
+ * @param view Caller-owned output that is fully initialised by the function.
+ */
 void lsm_cpu_performance_view(const LsmMonitor *monitor,
                               LsmCpuPerformanceView *view);
 
