@@ -103,6 +103,90 @@ static const char *overview_icon_name(LsmOverviewMetric metric)
     return "applications-system-symbolic";
 }
 
+static gboolean overview_gauge_draw(GtkWidget *widget, cairo_t *cr,
+                                      gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !widget || !cr || !app->overview.history)
+        return FALSE;
+
+    const gint stored = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(widget), "lsm-overview-gauge-metric"));
+    if (stored <= 0 || stored > (gint)LSM_OVERVIEW_METRIC_COUNT)
+        return FALSE;
+    const LsmOverviewMetric metric = (LsmOverviewMetric)(stored - 1);
+
+    LsmOverviewSample sample;
+    const gboolean have_sample =
+        lsm_overview_history_latest(app->overview.history, &sample) &&
+        !sample.gap;
+    const double value = have_sample
+        ? overview_sample_value(&sample, metric) : NAN;
+
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(widget, &allocation);
+    const double width = (double)allocation.width;
+    const double height = (double)allocation.height;
+    const double cx = width / 2.0;
+    const double cy = height / 2.0;
+    const double radius = fmax(4.0, fmin(width, height) / 2.0 - 9.0);
+
+    GdkRGBA colour = {0.0, 0.68, 0.94, 1.0};
+    (void)gdk_rgba_parse(&colour, overview_colour(metric));
+
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_width(cr, 9.0);
+    cairo_set_source_rgba(
+        cr, colour.red, colour.green, colour.blue, 0.13);
+    cairo_arc(cr, cx, cy, radius, 0.0, 2.0 * G_PI);
+    cairo_stroke(cr);
+
+    if (isfinite(value)) {
+        const double fraction = fmax(0.0, fmin(1.0, value / 100.0));
+        const double start = -G_PI / 2.0;
+        const double end = start + fraction * 2.0 * G_PI;
+
+        cairo_set_line_width(cr, 15.0);
+        cairo_set_source_rgba(
+            cr, colour.red, colour.green, colour.blue, 0.14);
+        cairo_arc(cr, cx, cy, radius, start, end);
+        cairo_stroke(cr);
+
+        cairo_set_line_width(cr, 8.0);
+        cairo_set_source_rgba(
+            cr, colour.red, colour.green, colour.blue, 0.98);
+        cairo_arc(cr, cx, cy, radius, start, end);
+        cairo_stroke(cr);
+    }
+
+    cairo_set_line_width(cr, 1.0);
+    cairo_set_source_rgba(
+        cr, colour.red, colour.green, colour.blue, 0.30);
+    cairo_arc(cr, cx, cy, radius - 14.0, 0.0, 2.0 * G_PI);
+    cairo_stroke(cr);
+    return FALSE;
+}
+
+static GtkWidget *overview_make_gauge(LsmApp *app, LsmOverviewMetric metric)
+{
+    if (!app || (metric != LSM_OVERVIEW_CPU &&
+                 metric != LSM_OVERVIEW_MEMORY &&
+                 metric != LSM_OVERVIEW_GPU))
+        return NULL;
+
+    GtkWidget *gauge = gtk_drawing_area_new();
+    gtk_widget_set_size_request(gauge, 96, 96);
+    gtk_widget_set_hexpand(gauge, FALSE);
+    gtk_widget_set_vexpand(gauge, FALSE);
+    gtk_widget_set_valign(gauge, GTK_ALIGN_CENTER);
+    g_object_set_data(
+        G_OBJECT(gauge), "lsm-overview-gauge-metric",
+        GINT_TO_POINTER((gint)metric + 1));
+    g_signal_connect(
+        gauge, "draw", G_CALLBACK(overview_gauge_draw), app);
+    return gauge;
+}
+
 static double overview_sample_value(const LsmOverviewSample *sample,
                                     LsmOverviewMetric metric)
 {
@@ -156,7 +240,11 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     GtkWidget *button = gtk_button_new();
     gtk_widget_set_hexpand(button, TRUE);
     gtk_widget_set_vexpand(button, TRUE);
-    gtk_widget_set_size_request(button, -1, 170);
+    gtk_widget_set_size_request(
+        button, -1,
+        (metric == LSM_OVERVIEW_CPU ||
+         metric == LSM_OVERVIEW_MEMORY ||
+         metric == LSM_OVERVIEW_GPU) ? 198 : 170);
     gtk_widget_set_name(button, "lsm-overview-card");
     gtk_widget_set_tooltip_text(button, "Open detailed performance view");
     gtk_style_context_add_class(
@@ -218,8 +306,15 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     }
 
     gtk_box_pack_start(GTK_BOX(box), header, FALSE, FALSE, 0);
+
+    GtkWidget *visual = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *gauge = overview_make_gauge(app, metric);
+    if (gauge)
+        gtk_box_pack_start(GTK_BOX(visual), gauge, FALSE, FALSE, 0);
     if (graph)
-        gtk_box_pack_start(GTK_BOX(box), graph->area, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(visual), graph->area, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), visual, TRUE, TRUE, 0);
+
     gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
     gtk_container_add(GTK_CONTAINER(button), box);
 
@@ -227,6 +322,7 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     app->overview.values[metric] = value;
     app->overview.details[metric] = detail;
     app->overview.graphs[metric] = graph;
+    app->overview.gauges[metric] = gauge;
     g_object_set_data(
         G_OBJECT(button), "lsm-overview-metric",
         GINT_TO_POINTER((gint)metric + 1));
@@ -655,6 +751,9 @@ void lsm_overview_refresh(LsmApp *app)
     if (lsm_overview_history_latest(app->overview.history, &sample) &&
         !sample.gap)
         overview_set_latest_values(app, &sample);
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++)
+        if (app->overview.gauges[metric])
+            gtk_widget_queue_draw(app->overview.gauges[metric]);
     overview_refresh_processes(app);
 }
 
@@ -664,6 +763,7 @@ void lsm_overview_destroy(LsmApp *app)
     for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
         lsm_graph_free(app->overview.graphs[metric]);
         app->overview.graphs[metric] = NULL;
+        app->overview.gauges[metric] = NULL;
         app->overview.buttons[metric] = NULL;
         app->overview.values[metric] = NULL;
         app->overview.details[metric] = NULL;
