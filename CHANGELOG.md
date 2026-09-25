@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.110 - 2026-09-25
+
+- Replace the legacy menubar and cross-tab summary strip on Overview with the dashboard's integrated hero chrome while retaining those global controls on technical pages and in compact-summary mode.
+- Add target-style live health and System Settings-aware uptime blocks to the Overview hero.
+- Move CPU, Memory and GPU percentages into the centres of their multicolour radial gauges with metric captions.
+- Rebuild Overview card headers around resource icons, hardware/device identity and navigation chevrons.
+- Add CPU detail beneath the graph for maximum frequency, physical cores, logical threads and temperature.
+- Add Memory detail beneath the graph for used, cached, available and swap memory, with installed capacity/type in the card header.
+- Preserve the 1.0.109 dual-series CPU user/kernel history and aggregate disk semantics while enriching presentation without duplicating collectors.
+
 ## 1.0.109 - 2026-09-25
 
 - Retain CPU user/non-kernel and kernel percentages in the bounded completed-snapshot Overview history instead of discarding that split after collection.

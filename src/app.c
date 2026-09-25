@@ -245,7 +245,9 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(app->shell.window), main_box);
-    gtk_box_pack_start(GTK_BOX(main_box), lsm_app_menu_build(app), FALSE, FALSE, 0);
+    GtkWidget *menu_bar = lsm_app_menu_build(app);
+    g_object_set_data(G_OBJECT(app->shell.window), "lsm-main-menu-bar", menu_bar);
+    gtk_box_pack_start(GTK_BOX(main_box), menu_bar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), lsm_summary_bar_build(app),
                        FALSE, FALSE, 0);
     app->shell.pause_indicator = gtk_label_new(NULL);

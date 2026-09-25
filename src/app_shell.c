@@ -35,6 +35,20 @@
 
 #include <string.h>
 
+static void sync_integrated_overview_chrome(LsmApp *app)
+{
+    if (!app || !app->shell.window) return;
+    const gboolean integrated =
+        !app->runtime.compact_summary &&
+        app->runtime.active_tab == LSM_TAB_OVERVIEW;
+    GtkWidget *menu_bar = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-main-menu-bar");
+    if (menu_bar)
+        gtk_widget_set_visible(menu_bar, !integrated);
+    if (app->shell.summary_bar)
+        gtk_widget_set_visible(app->shell.summary_bar, !integrated);
+}
+
 void lsm_app_shell_apply_compact_summary(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
@@ -46,6 +60,7 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
     if (app->shell.pause_indicator)
         gtk_widget_set_visible(app->shell.pause_indicator,
                                app->runtime.paused && !app->runtime.compact_summary);
+    sync_integrated_overview_chrome(app);
     if (app->runtime.compact_summary) {
         if (app->runtime.window_maximized) app->runtime.compact_restore_maximized = TRUE;
         gtk_window_unmaximize(GTK_WINDOW(app->shell.window));
@@ -651,7 +666,20 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-overview-live {"
         " color: @lsm_success; background-color: alpha(@lsm_success, 0.08);"
         " border: 1px solid alpha(@lsm_success, 0.34);"
-        " border-radius: 999px; padding: 6px 10px; font-weight: 700;"
+        " border-radius: 999px; padding: 7px 11px; font-weight: 700;"
+        "}"
+        "#lsm-overview-live.lsm-status-warning {"
+        " color: @lsm_warning; border-color: alpha(@lsm_warning, 0.42);"
+        " background-color: alpha(@lsm_warning, 0.09);"
+        "}"
+        "#lsm-overview-live.lsm-status-fault {"
+        " color: @lsm_fault; border-color: alpha(@lsm_fault, 0.46);"
+        " background-color: alpha(@lsm_fault, 0.09);"
+        "}"
+        "#lsm-overview-uptime {"
+        " color: @lsm_title; background-color: alpha(@lsm_card, 0.42);"
+        " border: 1px solid alpha(@lsm_connection_border, 0.54);"
+        " border-radius: 10px; padding: 7px 12px; font-weight: 700;"
         "}"
         "#lsm-overview-root { background-color: @lsm_window; }"
         ".lsm-overview-card {"
@@ -663,7 +691,15 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         ".lsm-overview-card:hover { box-shadow: 0 3px 14px alpha(@lsm_neutral, 0.12); }"
         ".lsm-overview-card-title { font-size: 15px; font-weight: 700; }"
+        ".lsm-overview-card-meta { color: @lsm_summary; font-size: 12px; }"
+        ".lsm-overview-chevron { color: @lsm_summary; opacity: 0.72; }"
         ".lsm-overview-value { color: @lsm_title; font-size: 24px; font-weight: 700; }"
+        ".lsm-overview-gauge-value { color: @lsm_title; font-size: 22px; font-weight: 800; }"
+        ".lsm-overview-gauge-caption { color: @lsm_summary; font-size: 10px; }"
+        ".lsm-overview-stat-row { border-top: 1px solid alpha(@lsm_border, 0.55); padding-top: 6px; }"
+        ".lsm-overview-stat { padding: 0 8px; }"
+        ".lsm-overview-stat-caption { color: @lsm_detail_label; font-size: 10px; }"
+        ".lsm-overview-stat-value { color: @lsm_heading; font-size: 12px; font-weight: 700; }"
         ".lsm-overview-icon { min-width: 28px; }"
         ".lsm-overview-graph-icon {"
         " padding: 4px; opacity: 0.30;"
@@ -847,6 +883,7 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             break;
     }
     restore_page_scroll(app, page_number);
+    sync_integrated_overview_chrome(app);
     lsm_app_shell_sync_navigation(app);
 }
 

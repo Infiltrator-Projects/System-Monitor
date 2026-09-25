@@ -19,6 +19,7 @@
 #include "overview_history.h"
 #include "performance.h"
 #include "presentation_contract.h"
+#include "temporal_presentation.h"
 #include "ui_helpers.h"
 
 #include <math.h>
@@ -296,25 +297,67 @@ static gboolean overview_gauge_draw(GtkWidget *widget, cairo_t *cr,
     return FALSE;
 }
 
-static GtkWidget *overview_make_gauge(LsmApp *app, LsmOverviewMetric metric)
+static const char *overview_gauge_caption(LsmOverviewMetric metric)
 {
-    if (!app || (metric != LSM_OVERVIEW_CPU &&
-                 metric != LSM_OVERVIEW_MEMORY &&
-                 metric != LSM_OVERVIEW_GPU))
+    switch (metric) {
+        case LSM_OVERVIEW_CPU: return "CPU Usage";
+        case LSM_OVERVIEW_MEMORY: return "In Use";
+        case LSM_OVERVIEW_GPU: return "GPU Usage";
+        case LSM_OVERVIEW_DISK:
+        case LSM_OVERVIEW_NETWORK:
+        case LSM_OVERVIEW_TEMPERATURE:
+        case LSM_OVERVIEW_CPU_PRESSURE:
+        case LSM_OVERVIEW_MEMORY_PRESSURE:
+        case LSM_OVERVIEW_IO_PRESSURE:
+        case LSM_OVERVIEW_METRIC_COUNT:
+            return "";
+    }
+    return "";
+}
+
+static GtkWidget *overview_make_gauge(LsmApp *app, LsmOverviewMetric metric,
+                                      GtkWidget *value)
+{
+    if (!app || !value ||
+        (metric != LSM_OVERVIEW_CPU &&
+         metric != LSM_OVERVIEW_MEMORY &&
+         metric != LSM_OVERVIEW_GPU))
         return NULL;
 
-    GtkWidget *gauge = gtk_drawing_area_new();
+    GtkWidget *area = gtk_drawing_area_new();
     const gint gauge_size = overview_gauge_size(metric);
-    gtk_widget_set_size_request(gauge, gauge_size, gauge_size);
-    gtk_widget_set_hexpand(gauge, FALSE);
-    gtk_widget_set_vexpand(gauge, FALSE);
-    gtk_widget_set_valign(gauge, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(area, gauge_size, gauge_size);
+    gtk_widget_set_hexpand(area, FALSE);
+    gtk_widget_set_vexpand(area, FALSE);
+    gtk_widget_set_valign(area, GTK_ALIGN_CENTER);
     g_object_set_data(
-        G_OBJECT(gauge), "lsm-overview-gauge-metric",
+        G_OBJECT(area), "lsm-overview-gauge-metric",
         GINT_TO_POINTER((gint)metric + 1));
-    g_signal_connect(
-        gauge, "draw", G_CALLBACK(overview_gauge_draw), app);
-    return gauge;
+    g_signal_connect(area, "draw", G_CALLBACK(overview_gauge_draw), app);
+
+    GtkWidget *overlay = gtk_overlay_new();
+    gtk_widget_set_size_request(overlay, gauge_size, gauge_size);
+    gtk_widget_set_hexpand(overlay, FALSE);
+    gtk_widget_set_vexpand(overlay, FALSE);
+    gtk_widget_set_valign(overlay, GTK_ALIGN_CENTER);
+    gtk_container_add(GTK_CONTAINER(overlay), area);
+
+    GtkWidget *centre = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_halign(centre, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(centre, GTK_ALIGN_CENTER);
+    gtk_widget_set_halign(value, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(value), "lsm-overview-gauge-value");
+    GtkWidget *caption = gtk_label_new(overview_gauge_caption(metric));
+    gtk_widget_set_halign(caption, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(caption), "lsm-overview-gauge-caption");
+    gtk_box_pack_start(GTK_BOX(centre), value, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(centre), caption, FALSE, FALSE, 0);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), centre);
+
+    g_object_set_data(G_OBJECT(overlay), "lsm-overview-gauge-area", area);
+    return overlay;
 }
 
 static double overview_sample_value(const LsmOverviewSample *sample,
@@ -377,6 +420,75 @@ static void overview_push_sample(LsmApp *app,
     }
 }
 
+static const char *overview_stat_key(gint index)
+{
+    static const char *const keys[4] = {
+        "lsm-overview-stat-0", "lsm-overview-stat-1",
+        "lsm-overview-stat-2", "lsm-overview-stat-3"
+    };
+    return index >= 0 && index < 4 ? keys[index] : NULL;
+}
+
+static GtkWidget *overview_make_stat_cell(const char *caption)
+{
+    GtkWidget *cell = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(cell), "lsm-overview-stat");
+    GtkWidget *caption_label = gtk_label_new(caption);
+    gtk_widget_set_halign(caption_label, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(caption_label),
+        "lsm-overview-stat-caption");
+    GtkWidget *value = gtk_label_new("N/A");
+    gtk_widget_set_halign(value, GTK_ALIGN_START);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(value), "lsm-overview-stat-value");
+    gtk_box_pack_start(GTK_BOX(cell), caption_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(cell), value, FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(cell), "lsm-overview-stat-value", value);
+    return cell;
+}
+
+static GtkWidget *overview_make_primary_stats(
+    GtkWidget *button, LsmOverviewMetric metric)
+{
+    if (!button ||
+        (metric != LSM_OVERVIEW_CPU && metric != LSM_OVERVIEW_MEMORY))
+        return NULL;
+    static const char *const cpu_captions[4] = {
+        "Max Frequency", "Cores", "Threads", "Temperature"
+    };
+    static const char *const memory_captions[4] = {
+        "Used", "Cached", "Available", "Swap"
+    };
+    const char *const *captions =
+        metric == LSM_OVERVIEW_CPU ? cpu_captions : memory_captions;
+
+    GtkWidget *row = gtk_grid_new();
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(row), "lsm-overview-stat-row");
+    gtk_grid_set_column_spacing(GTK_GRID(row), 10);
+    gtk_widget_set_hexpand(row, TRUE);
+    for (gint column = 0; column < 4; column++) {
+        GtkWidget *cell = overview_make_stat_cell(captions[column]);
+        gtk_widget_set_hexpand(cell, TRUE);
+        gtk_grid_attach(GTK_GRID(row), cell, column, 0, 1, 1);
+        g_object_set_data(
+            G_OBJECT(button), overview_stat_key(column),
+            g_object_get_data(G_OBJECT(cell), "lsm-overview-stat-value"));
+    }
+    return row;
+}
+
+static GtkWidget *overview_card_data_widget(
+    LsmApp *app, LsmOverviewMetric metric, const char *key)
+{
+    if (!app || metric >= LSM_OVERVIEW_METRIC_COUNT || !key)
+        return NULL;
+    GtkWidget *button = app->overview.buttons[metric];
+    return button ? g_object_get_data(G_OBJECT(button), key) : NULL;
+}
+
 static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
 {
     GtkWidget *button = gtk_button_new();
@@ -395,6 +507,12 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_container_set_border_width(GTK_CONTAINER(box), 10);
 
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *header_icon = gtk_image_new_from_icon_name(
+        overview_icon_name(metric), GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(header_icon), 21);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(header_icon), "lsm-overview-icon");
+
     GtkWidget *title = gtk_label_new(overview_titles[metric]);
     gtk_widget_set_halign(title, GTK_ALIGN_START);
     gtk_widget_set_hexpand(title, TRUE);
@@ -410,8 +528,27 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-overview-value");
 
+    GtkWidget *meta = gtk_label_new("");
+    gtk_widget_set_halign(meta, GTK_ALIGN_END);
+    gtk_label_set_ellipsize(GTK_LABEL(meta), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_size_request(meta, 120, -1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(meta), "lsm-overview-card-meta");
+    GtkWidget *chevron = gtk_image_new_from_icon_name(
+        "go-next-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(chevron), 14);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(chevron), "lsm-overview-chevron");
+
+    gtk_box_pack_start(GTK_BOX(header), header_icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header), title, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(header), value, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), chevron, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(header), meta, FALSE, FALSE, 0);
+    if (metric != LSM_OVERVIEW_CPU &&
+        metric != LSM_OVERVIEW_MEMORY &&
+        metric != LSM_OVERVIEW_GPU)
+        gtk_box_pack_end(GTK_BOX(header), value, FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(button), "lsm-overview-meta", meta);
 
     GtkWidget *detail = gtk_label_new("");
     gtk_widget_set_halign(detail, GTK_ALIGN_START);
@@ -448,7 +585,7 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_box_pack_start(GTK_BOX(box), header, FALSE, FALSE, 0);
 
     GtkWidget *visual = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget *gauge = overview_make_gauge(app, metric);
+    GtkWidget *gauge = overview_make_gauge(app, metric, value);
     if (gauge)
         gtk_box_pack_start(GTK_BOX(visual), gauge, FALSE, FALSE, 0);
     if (graph) {
@@ -477,13 +614,18 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_box_pack_start(GTK_BOX(box), visual, TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
+    GtkWidget *stats = overview_make_primary_stats(button, metric);
+    if (stats)
+        gtk_box_pack_start(GTK_BOX(box), stats, FALSE, FALSE, 0);
     gtk_container_add(GTK_CONTAINER(button), box);
 
     app->overview.buttons[metric] = button;
     app->overview.values[metric] = value;
     app->overview.details[metric] = detail;
     app->overview.graphs[metric] = graph;
-    app->overview.gauges[metric] = gauge;
+    app->overview.gauges[metric] = gauge
+        ? g_object_get_data(G_OBJECT(gauge), "lsm-overview-gauge-area")
+        : NULL;
     g_object_set_data(
         G_OBJECT(button), "lsm-overview-metric",
         GINT_TO_POINTER((gint)metric + 1));
@@ -601,6 +743,9 @@ static void overview_set_latest_values(LsmApp *app,
     overview_set_percent(
         app->overview.values[LSM_OVERVIEW_CPU],
         sample->cpu_available, sample->cpu_percent);
+    lsm_ui_set_label_text(
+        overview_card_data_widget(app, LSM_OVERVIEW_CPU, "lsm-overview-meta"),
+        "%s", app->monitor.cpu.model[0] ? app->monitor.cpu.model : "Processor");
     if (sample->cpu_breakdown_available) {
         lsm_ui_set_label_text(
             app->overview.details[LSM_OVERVIEW_CPU],
@@ -611,6 +756,32 @@ static void overview_set_latest_values(LsmApp *app,
             app->overview.details[LSM_OVERVIEW_CPU],
             "User/kernel split unavailable");
     }
+    {
+        char speed[48], temperature_text[48], cores[32], threads[32];
+        if (isfinite(app->monitor.cpu.max_frequency_ghz) &&
+            app->monitor.cpu.max_frequency_ghz > 0.0)
+            snprintf(speed, sizeof(speed), "%.2f GHz",
+                     app->monitor.cpu.max_frequency_ghz);
+        else
+            snprintf(speed, sizeof(speed), "N/A");
+        lsm_metric_format_celsius(
+            app->monitor.cpu.temperature_available,
+            app->monitor.cpu.temperature_c,
+            temperature_text, sizeof(temperature_text));
+        snprintf(cores, sizeof(cores), "%u", app->monitor.cpu.physical_cores);
+        snprintf(threads, sizeof(threads), "%u", app->monitor.cpu.logical_cores);
+        const char *values[4] = {
+            speed,
+            app->monitor.cpu.physical_cores ? cores : "N/A",
+            app->monitor.cpu.logical_cores ? threads : "N/A",
+            temperature_text
+        };
+        for (gint index = 0; index < 4; index++)
+            lsm_ui_set_label_text(
+                overview_card_data_widget(
+                    app, LSM_OVERVIEW_CPU, overview_stat_key(index)),
+                "%s", values[index]);
+    }
 
     overview_set_percent(
         app->overview.values[LSM_OVERVIEW_MEMORY],
@@ -618,6 +789,38 @@ static void overview_set_latest_values(LsmApp *app,
     lsm_ui_set_label_text(
         app->overview.details[LSM_OVERVIEW_MEMORY],
         "Physical memory in use");
+    {
+        char total[64], used[64], cached[64], available[64];
+        char swap_used[64], swap_total[64], swap[144], identity[192];
+        lsm_format_bytes(app->monitor.memory.total_bytes, total, sizeof(total));
+        lsm_format_bytes(app->monitor.memory.used_bytes, used, sizeof(used));
+        lsm_format_bytes(app->monitor.memory.cached_bytes, cached, sizeof(cached));
+        lsm_format_bytes(
+            app->monitor.memory.available_bytes, available, sizeof(available));
+        lsm_format_bytes(
+            app->monitor.memory.swap_used_bytes, swap_used, sizeof(swap_used));
+        lsm_format_bytes(
+            app->monitor.memory.swap_total_bytes, swap_total, sizeof(swap_total));
+        snprintf(swap, sizeof(swap), "%s / %s", swap_used, swap_total);
+        const char *kind =
+            app->monitor.memory.module_count > 0U &&
+            app->monitor.memory.modules[0].memory_type[0]
+                ? app->monitor.memory.modules[0].memory_type : "";
+        if (kind[0])
+            snprintf(identity, sizeof(identity), "%s %s", total, kind);
+        else
+            snprintf(identity, sizeof(identity), "%s", total);
+        lsm_ui_set_label_text(
+            overview_card_data_widget(
+                app, LSM_OVERVIEW_MEMORY, "lsm-overview-meta"),
+            "%s", identity);
+        const char *values[4] = { used, cached, available, swap };
+        for (gint index = 0; index < 4; index++)
+            lsm_ui_set_label_text(
+                overview_card_data_widget(
+                    app, LSM_OVERVIEW_MEMORY, overview_stat_key(index)),
+                "%s", values[index]);
+    }
 
     overview_set_percent(
         app->overview.values[LSM_OVERVIEW_DISK],
@@ -639,6 +842,11 @@ static void overview_set_latest_values(LsmApp *app,
             read_rate, write_rate);
         lsm_ui_set_label_text(
             app->overview.details[LSM_OVERVIEW_DISK], "%s", detail);
+        lsm_ui_set_label_text(
+            overview_card_data_widget(
+                app, LSM_OVERVIEW_DISK, "lsm-overview-meta"),
+            "%zu physical disk%s", app->monitor.disk_count,
+            app->monitor.disk_count == 1U ? "" : "s");
     } else {
         lsm_ui_set_label_text(
             app->overview.details[LSM_OVERVIEW_DISK],
@@ -659,6 +867,10 @@ static void overview_set_latest_values(LsmApp *app,
                 ? sample->network_name : "Network");
         lsm_ui_set_label_text(
             app->overview.details[LSM_OVERVIEW_NETWORK], "%s", detail);
+        lsm_ui_set_label_text(
+            overview_card_data_widget(
+                app, LSM_OVERVIEW_NETWORK, "lsm-overview-meta"),
+            "%s", sample->network_name[0] ? sample->network_name : "Network");
     } else {
         lsm_ui_set_label_text(
             app->overview.values[LSM_OVERVIEW_NETWORK], "N/A");
@@ -674,6 +886,9 @@ static void overview_set_latest_values(LsmApp *app,
         app->overview.details[LSM_OVERVIEW_GPU], "%s",
         sample->gpu_available && sample->gpu_name[0]
             ? sample->gpu_name : "GPU telemetry unavailable");
+    lsm_ui_set_label_text(
+        overview_card_data_widget(app, LSM_OVERVIEW_GPU, "lsm-overview-meta"),
+        "%s", sample->gpu_name[0] ? sample->gpu_name : "Graphics");
 
     char temperature[64];
     lsm_metric_format_celsius(
@@ -705,6 +920,35 @@ static void overview_set_latest_values(LsmApp *app,
     lsm_ui_set_label_text(
         app->overview.details[LSM_OVERVIEW_IO_PRESSURE],
         "Kernel PSI · 10 s I/O stall average");
+
+    GtkWidget *page = app->runtime.page_containers[LSM_TAB_OVERVIEW];
+    GtkWidget *uptime_widget = page
+        ? g_object_get_data(G_OBJECT(page), "lsm-overview-uptime") : NULL;
+    if (uptime_widget) {
+        char uptime[128], block[176];
+        if (!lsm_temporal_format_elapsed_seconds(
+                app->monitor.cpu.uptime_seconds, uptime, sizeof(uptime)))
+            snprintf(uptime, sizeof(uptime), "N/A");
+        snprintf(block, sizeof(block), "Uptime\n%s", uptime);
+        lsm_ui_set_label_text(uptime_widget, "%s", block);
+    }
+    GtkWidget *status = page
+        ? g_object_get_data(G_OBJECT(page), "lsm-overview-status") : NULL;
+    if (status) {
+        GtkStyleContext *style = gtk_widget_get_style_context(status);
+        gtk_style_context_remove_class(style, "lsm-status-warning");
+        gtk_style_context_remove_class(style, "lsm-status-fault");
+        if (sample->temperature_available && sample->temperature_c >= 95.0) {
+            lsm_ui_set_label_text(status, "●  Thermal Fault");
+            gtk_style_context_add_class(style, "lsm-status-fault");
+        } else if (sample->temperature_available &&
+                   sample->temperature_c >= 80.0) {
+            lsm_ui_set_label_text(status, "●  Thermal Warning");
+            gtk_style_context_add_class(style, "lsm-status-warning");
+        } else {
+            lsm_ui_set_label_text(status, "●  All Systems Nominal");
+        }
+    }
 }
 
 static void overview_refresh_processes(LsmApp *app)
@@ -790,15 +1034,23 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     gtk_box_pack_start(GTK_BOX(hero_text), title, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hero_text), subtitle, FALSE, FALSE, 0);
 
-    GtkWidget *live = gtk_label_new("●  LIVE");
-    gtk_widget_set_name(live, "lsm-overview-live");
-    gtk_widget_set_halign(live, GTK_ALIGN_END);
-    gtk_widget_set_valign(live, GTK_ALIGN_CENTER);
+    GtkWidget *status = gtk_label_new("●  All Systems Nominal");
+    gtk_widget_set_name(status, "lsm-overview-live");
+    gtk_widget_set_halign(status, GTK_ALIGN_END);
+    gtk_widget_set_valign(status, GTK_ALIGN_CENTER);
+
+    GtkWidget *uptime = gtk_label_new("Uptime\nN/A");
+    gtk_widget_set_name(uptime, "lsm-overview-uptime");
+    gtk_widget_set_halign(uptime, GTK_ALIGN_END);
+    gtk_widget_set_valign(uptime, GTK_ALIGN_CENTER);
 
     gtk_box_pack_start(GTK_BOX(hero), brand_mark, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hero), hero_text, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(hero), live, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(hero), uptime, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(hero), status, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(root), hero, FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(container), "lsm-overview-status", status);
+    g_object_set_data(G_OBJECT(container), "lsm-overview-uptime", uptime);
 
     GtkWidget *grid = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
