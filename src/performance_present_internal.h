@@ -26,6 +26,8 @@ bool performance_present_core_page(LsmApp *app, LsmDevicePage *page);
 /**
  * Append one core-resource sample to retained graph histories.
  *
+ * @param [in,out] app Application owning the completed monitor snapshot.
+ * @param [in,out] page Core-resource page whose graph histories receive it.
  * @return true when @p page belongs to the core-resource family.
  */
 bool performance_record_core_page_sample(
@@ -39,7 +41,12 @@ bool performance_record_core_page_sample(
  */
 void performance_present_device_page(LsmApp *app, LsmDevicePage *page);
 
-/** Append one device-resource sample to retained graph histories. */
+/**
+ * Append one device-resource sample to retained graph histories.
+ *
+ * @param [in,out] app Application owning the completed monitor snapshot.
+ * @param [in,out] page Device page whose graph histories receive the sample.
+ */
 void performance_record_device_page_sample(
     LsmApp *app, LsmDevicePage *page);
 
