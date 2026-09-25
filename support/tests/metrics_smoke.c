@@ -662,6 +662,8 @@ int main(void)
     monitor.sample_generation = 1U;
     monitor.sample_monotonic_seconds = 10.0;
     monitor.cpu.usage_percent = 25.0;
+    monitor.cpu.user_percent = 17.0;
+    monitor.cpu.kernel_percent = 8.0;
     monitor.memory.total_bytes = 1024U;
     monitor.memory.usage_percent = 50.0;
     monitor.disk_count = 2U;
@@ -694,6 +696,10 @@ int main(void)
 
     LsmOverviewSample sample;
     assert(lsm_overview_history_latest(history, &sample));
+    assert(sample.cpu_available && sample.cpu_percent == 25.0);
+    assert(sample.cpu_breakdown_available);
+    assert(sample.cpu_user_percent == 17.0);
+    assert(sample.cpu_kernel_percent == 8.0);
     assert(sample.disk_available && sample.disk_index == SIZE_MAX);
     assert(sample.disk_percent == 46.0);
     assert(sample.disk_read_bytes_per_sec == 4000.0);

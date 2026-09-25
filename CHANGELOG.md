@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.109 - 2026-09-25
+
+- Retain CPU user/non-kernel and kernel percentages in the bounded completed-snapshot Overview history instead of discarding that split after collection.
+- Make the Overview CPU plot a true dual-series instrument like the approved reference: solid cyan user/non-kernel activity and dashed violet kernel activity share the same 0-100% graph.
+- Keep the large CPU value and radial gauge as total utilisation while replacing the generic card caption with the live User and Kernel percentages.
+- Add deterministic Overview-history regression coverage for the retained CPU split.
+
 ## 1.0.108 - 2026-09-25
 
 - Recompose Overview as a single-viewport dashboard: remove its document-style scroller and fixed card heights so the normal window is filled rather than extending below the page.

@@ -56,6 +56,9 @@ typedef struct {
 
     bool cpu_available;
     double cpu_percent;
+    bool cpu_breakdown_available;       /**< User/non-kernel and kernel shares are both valid. */
+    double cpu_user_percent;            /**< User plus nice scheduler time. */
+    double cpu_kernel_percent;          /**< System, IRQ and soft-IRQ scheduler time. */
 
     bool memory_available;
     double memory_percent;

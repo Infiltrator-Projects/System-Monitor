@@ -218,6 +218,14 @@ static void derive_sample(const LsmMonitor *monitor,
         sample->cpu_available = true;
         sample->cpu_percent = bounded_percent(monitor->cpu.usage_percent);
     }
+    if (isfinite(monitor->cpu.user_percent) &&
+        isfinite(monitor->cpu.kernel_percent)) {
+        sample->cpu_breakdown_available = true;
+        sample->cpu_user_percent =
+            bounded_percent(monitor->cpu.user_percent);
+        sample->cpu_kernel_percent =
+            bounded_percent(monitor->cpu.kernel_percent);
+    }
     if (monitor->memory.total_bytes > 0U &&
         isfinite(monitor->memory.usage_percent)) {
         sample->memory_available = true;

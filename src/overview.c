@@ -358,6 +358,18 @@ static void overview_push_sample(LsmApp *app,
     for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
         LsmGraph *graph = app->overview.graphs[metric];
         if (!graph) continue;
+
+        if ((LsmOverviewMetric)metric == LSM_OVERVIEW_CPU) {
+            const bool split_available =
+                !sample->gap && sample->cpu_breakdown_available;
+            lsm_graph_push(
+                graph,
+                split_available ? sample->cpu_user_percent : NAN,
+                split_available ? sample->cpu_kernel_percent : NAN,
+                app->runtime.newer_on_right);
+            continue;
+        }
+
         lsm_graph_push(
             graph,
             overview_sample_value(sample, (LsmOverviewMetric)metric),
@@ -414,9 +426,19 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
         metric == LSM_OVERVIEW_TEMPERATURE ? 120.0 :
         (percentage ? 100.0 : 0.0);
     LsmGraph *graph = lsm_graph_new(
-        FALSE, percentage, maximum, 220, overview_graph_height(metric));
+        metric == LSM_OVERVIEW_CPU,
+        percentage, maximum, 220, overview_graph_height(metric));
     if (graph) {
-        lsm_graph_set_colours(graph, overview_colour(metric), NULL);
+        /*
+         * CPU follows the reference dashboard's two-trace treatment:
+         * user/non-kernel work is the solid cyan series and kernel work is
+         * the dashed violet series.  The card headline and dial remain total
+         * CPU utilisation, so the split adds diagnosis without losing the
+         * simple at-a-glance total.
+         */
+        lsm_graph_set_colours(
+            graph, overview_colour(metric),
+            metric == LSM_OVERVIEW_CPU ? "#7f58ff" : NULL);
         gtk_style_context_add_class(
             gtk_widget_get_style_context(graph->area), "lsm-overview-graph");
         if (metric == LSM_OVERVIEW_NETWORK)
@@ -579,9 +601,16 @@ static void overview_set_latest_values(LsmApp *app,
     overview_set_percent(
         app->overview.values[LSM_OVERVIEW_CPU],
         sample->cpu_available, sample->cpu_percent);
-    lsm_ui_set_label_text(
-        app->overview.details[LSM_OVERVIEW_CPU],
-        "Completed system CPU sample");
+    if (sample->cpu_breakdown_available) {
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_CPU],
+            "User %.1f%% · Kernel %.1f%%",
+            sample->cpu_user_percent, sample->cpu_kernel_percent);
+    } else {
+        lsm_ui_set_label_text(
+            app->overview.details[LSM_OVERVIEW_CPU],
+            "User/kernel split unavailable");
+    }
 
     overview_set_percent(
         app->overview.values[LSM_OVERVIEW_MEMORY],
