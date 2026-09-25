@@ -472,8 +472,9 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
             gpu->metrics_source[0] = '\0';
         }
 
-        const uint64_t used = telemetry && telemetry->vram_used
-            ? lsm_read_u64_or_zero(telemetry->vram_used) : 0U;
+        uint64_t used = 0U;
+        gpu->memory_usage_available = telemetry && telemetry->vram_used &&
+            lsm_read_u64_file(telemetry->vram_used, &used);
         const uint64_t total = telemetry && telemetry->vram_total
             ? lsm_read_u64_or_zero(telemetry->vram_total) : 0U;
         gpu->memory_used_bytes = used;

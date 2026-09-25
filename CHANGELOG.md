@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.96 - 2026-09-25
+
+- Close the Linux sampler timeout/exit ownership race with independently retained caller and worker references; synchronize the startup topology retry flag.
+- Suppress CPU counter-rollback spikes, invalidate disk/network baselines across missing samples, and reject missing or malformed network counters instead of reporting sampled zero.
+- Separate GPU memory capacity from adapter-wide usage availability; stop presenting DXGI process-local memory as whole-GPU consumption, and show unavailable usage explicitly in both native presentations.
+- Stop substituting nominal CPU frequency for unavailable current/maximum telemetry; remove unaligned CPUID brand-buffer writes and bound netlink attribute decoding.
+- Reject invalid persisted history durations and avoid signed rounding overflow during display.
+- Match file users by device/inode identity, including hard links and pathname replacement, rather than by canonical path text.
+- Serialize release package creation to prevent tar/source-directory races; exclude Windows binaries from source payloads, avoid pipefail/SIGPIPE in version inspection, and discard archive ownership during font preparation.
+- Add deterministic regressions within the existing subsystem suites and correct asynchronous API, ownership, metric-availability and Windows documentation contracts.
+
 ## 1.0.95 - 2026-09-25
 
 - Remove the native Windows copies of Common's Day/Night palette and System/Day/Night enum; Win32 now projects its `COLORREF` adapter directly from the exact Common 1.19.27 theme contract.

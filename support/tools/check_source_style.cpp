@@ -894,6 +894,8 @@ static void check_shared_release_contract(void)
     (void)size;
     if (makefile) {
         require_text_marker("Makefile", makefile,
+                            "release:\n\t$(MAKE) deb\n\t$(MAKE) native-installer");
+        require_text_marker("Makefile", makefile,
                             "common-library: common-check");
         if (strstr(makefile, "INFILTRATR_COMMON_SOURCES"))
             report_error("Makefile: Common private source membership must remain Common-owned");
@@ -932,6 +934,7 @@ static void check_shared_release_contract(void)
 
     char *ci = read_file(".github/workflows/ci.yml", &size);
     if (ci) {
+        require_text_marker(".github/workflows/ci.yml", ci, "make -j2 release");
         require_text_marker(".github/workflows/ci.yml", ci,
                             "REQUIRE_I386=1 make check");
         require_text_marker(".github/workflows/ci.yml", ci,
@@ -958,11 +961,11 @@ static void check_shared_release_contract(void)
         if (strstr(release, "System-Monitor-${version}-source.zip"))
             report_error(
                 ".github/workflows/release.yml: releases must upload only "
-                "the .deb and .run artifacts");
+                "the .deb, .run and .exe artifacts");
         require_text_marker(".github/workflows/release.yml", release,
                             "test \"$head_commit\" = \"$EXPECTED_SHA\"");
         require_text_marker(".github/workflows/release.yml", release,
-                            "make -j2 deb native-installer");
+                            "make -j2 release");
         require_text_marker(".github/workflows/release.yml", release,
                             "published releases are immutable");
         if (strstr(release, "REQUIRE_I386=1 make check") ||

@@ -185,7 +185,8 @@ static void update_all_disk_partitions(LsmMonitor *monitor,
 
 /**
  * Rescan physical block devices through native block-class sysfs. Existing
- * counter baselines are preserved by stable kernel device name.
+ * counter baselines are preserved only when both name and instance identity
+ * match, because Linux can reuse a block-device name after hotplug.
  */
 static bool refresh_disks(LsmMonitor *monitor)
 {
@@ -266,19 +267,20 @@ static LsmDiskInfo *find_disk(LsmMonitor *monitor, const char *name)
 static void update_disks(LsmMonitor *monitor, double elapsed)
 {
     FILE *file = fopen("/proc/diskstats", "r");
-    if (!file) return;
+    bool sampled[LSM_MAX_DISKS] = {false};
     char line[512], name[64];
     unsigned major = 0, minor = 0;
     unsigned long long reads = 0, read_merged = 0, read_sectors = 0, read_ms = 0;
     unsigned long long writes = 0, write_merged = 0, write_sectors = 0, write_ms = 0;
     unsigned long long in_progress = 0, io_ms = 0, weighted_ms = 0;
-    while (fgets(line, sizeof(line), file)) {
+    while (file && fgets(line, sizeof(line), file)) {
         int count = sscanf(line, "%u %u %63s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
                            &major, &minor, name, &reads, &read_merged, &read_sectors, &read_ms,
                            &writes, &write_merged, &write_sectors, &write_ms, &in_progress, &io_ms, &weighted_ms);
         if (count < 14) continue;
         LsmDiskInfo *disk = find_disk(monitor, name);
         if (!disk) continue;
+        sampled[(size_t)(disk - monitor->disks)] = true;
         const LsmDiskCounters counters = {
             .read_operations = reads,
             .read_sectors = read_sectors,
@@ -294,7 +296,14 @@ static void update_disks(LsmMonitor *monitor, double elapsed)
         if (state)
             lsm_disk_accounting_update(disk, &state->accounting, &counters, elapsed);
     }
-    fclose(file);
+    if (file) fclose(file);
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        if (sampled[index]) continue;
+        LsmLinuxDiskState *state = find_disk_state(monitor, monitor->disks[index].name);
+        if (state)
+            lsm_disk_accounting_update(
+                &monitor->disks[index], &state->accounting, NULL, elapsed);
+    }
 }
 
 static int compare_network_names(const void *left, const void *right)
@@ -460,14 +469,18 @@ static void update_networks(LsmMonitor *monitor, double elapsed,
         LsmNetInfo *net = &monitor->nets[i];
         uint64_t rx = net->rx_bytes_total;
         uint64_t tx = net->tx_bytes_total;
+        bool counters_available = false;
         for (size_t index = 0; index < counter_count; index++) {
             if (strcmp(net->name, counters[index].name) != 0) continue;
             rx = counters[index].rx_bytes;
             tx = counters[index].tx_bytes;
+            counters_available = true;
             break;
         }
         LsmLinuxNetworkState *state = find_network_state(monitor, net->name);
-        if (state && state->initialized) {
+        net->rx_bytes_per_sec = 0.0;
+        net->tx_bytes_per_sec = 0.0;
+        if (counters_available && state && state->initialized) {
             (void)lsm_u64_counter_rate(
                 rx, state->previous_rx, 1.0L, elapsed,
                 &net->rx_bytes_per_sec);
@@ -480,14 +493,16 @@ static void update_networks(LsmMonitor *monitor, double elapsed,
         if (state) {
             state->previous_rx = rx;
             state->previous_tx = tx;
-            state->initialized = true;
+            /* A missing sample breaks the time interval. Reusing its old
+             * counters would divide several intervals by one on recovery. */
+            state->initialized = counters_available;
         }
         if (refresh_link_metadata || !net->connection_state[0])
             update_network_link_details(net);
         LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
         if (backend && backend->wifi_metadata)
             lsm_wifi_metadata_refresh(backend->wifi_metadata, net);
-        if (net->link_speed_mbps > 0.0) {
+        if (counters_available && net->link_speed_mbps > 0.0) {
             const long double bytes_per_second =
                 (long double)net->rx_bytes_per_sec +
                 (long double)net->tx_bytes_per_sec;

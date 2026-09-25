@@ -167,9 +167,9 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
                              size_t capacity);
 
 /**
- * Read the best available CPU/package temperature through cached native paths.
+ * Read the best available CPU/package temperature from native sensor paths.
  *
- * @param [in,out] sources Native-source context containing sensor discovery.
+ * @param [in,out] sources Native-source context supplying the sysfs root.
  * @return Temperature in degrees Celsius, or NAN when unavailable.
  */
 double lsm_sources_read_cpu_temperature(LsmSystemSources *sources);

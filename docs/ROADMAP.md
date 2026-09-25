@@ -13,7 +13,7 @@ a backlog of work required before the application can be considered finished.
 - represent inaccessible or unsupported telemetry as unavailable rather than guessed
 - preserve direct native collection where it is stronger than external helper programs
 - consume Common only for genuinely generic mechanisms that are at least as strong as the local implementation
-- keep proprietary font binaries outside redistributed source and packages while retaining the preferred-family/system-fallback presentation contract
+- keep font binaries out of Linux packages; Windows embeds the three Common-verified faces as process-private resources, as documented in Portability
 - require the exact release revision to pass warnings-as-errors, sanitizers, portability, documentation and package gates
 
 ## Maintenance priorities
@@ -29,6 +29,14 @@ Additional devices, telemetry, native platform backends or presentation work are
 optional expansion, not missing completion work. A new collector is admitted
 only when its source semantics, availability rules, ownership and validation
 strategy are explicit.
+
+## Outstanding assurance work
+
+Feature completeness is not a claim of defect freedom or exhaustive line-by-line
+assurance. The 1.0.96 audit evidence and remaining validation boundaries are in
+[Validation](VALIDATION.md). In particular, physical hardware, privileged process
+control and native Windows runtime behaviour require evidence on their target
+systems; cross-compilation alone does not close those gates.
 
 ## Completion rule
 

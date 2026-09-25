@@ -116,3 +116,22 @@ Both Make and CMake build the same application and exact Common pin. Make owns t
 ## Build contract
 
 Direct `make install` is disabled. Installation is owned by the Debian package or native installer. A release is published only from the exact tested `main` commit, and published tags/assets are treated as immutable.
+
+## Sampling failure and ownership contracts
+
+The Linux monitor API is serially owned by the application. `update` requests
+work and publishes a completed snapshot when one exists; success does not imply
+that a fresh sample has completed. A caller and sampler each retain a reference
+from thread creation. Shutdown requests stop, waits up to 250 ms for the sampler,
+and releases caller ownership. The final reference destroys collector state,
+including when timeout races with worker exit. A permanently blocked native call
+can therefore retain worker resources until process exit; bounded waiting is not
+cancellation. Optional global vendor/peripheral providers currently assume one
+active application monitor.
+
+Missing disk/network samples invalidate their rate baselines. The next valid
+sample establishes a baseline instead of assigning a multi-interval delta to one
+interval. CPU counter rollback similarly suppresses the affected interval. GPU
+memory capacity and sampled adapter-wide usage have separate availability: an
+unknown usage value must not render as measured zero. Linux nominal CPU frequency
+is never substituted for an unavailable current or maximum clock.

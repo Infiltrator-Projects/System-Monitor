@@ -116,10 +116,11 @@ size_t lsm_process_inspection_threads(LsmProcessId pid,
 /**
  * Find processes whose descriptors resolve to an exact filesystem object.
  *
- * The requested path is canonicalised once. Each candidate descriptor target
- * is canonicalised only when it denotes a filesystem path; socket and pipe
- * targets are ignored. The scan is user initiated and O(PF), where P is the
- * number of visible processes and F their descriptor counts.
+ * Compare device/inode identity from stat(path) and stat(/proc/PID/fd/N),
+ * so hard links match and a replaced pathname does not identify the old file.
+ * This is a best-effort snapshot: descriptors may close or be reused during
+ * the scan. Work is O(P + sum(F)), where P is visible processes and F is each
+ * process's descriptor count; denied descriptors are skipped.
  *
  * @param [in] path Existing filesystem path to search for.
  * @param [out] out_items Receives a heap array owned by the caller.

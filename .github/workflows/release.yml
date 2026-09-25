@@ -68,7 +68,7 @@ jobs:
       - name: Build release packages
         run: |
           set -euo pipefail
-          make -j2 deb native-installer
+          make -j2 release
           version=$(tr -d '[:space:]' < support/VERSION)
           windows_app="system-monitor-${version}-windows.exe"
           version_header=build/windows-version.h
@@ -108,7 +108,8 @@ jobs:
             -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
             -o "$windows_app"
-          strings "$windows_app" | grep -Fq "$version"
+          strings "$windows_app" > build/windows-strings.txt
+          grep -Fq "$version" build/windows-strings.txt
           pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
           grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
           if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|PDH\.DLL|POWRPROF\.dll|DXGI\.dll|SETUPAPI\.dll|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then

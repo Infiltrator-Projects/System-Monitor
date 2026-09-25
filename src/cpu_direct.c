@@ -160,11 +160,15 @@ static bool direct_brand(char *destination, size_t destination_size)
     if (maximum < 0x80000004U) return false;
 
     char brand[49] = {0};
-    unsigned *words = (unsigned *)(void *)brand;
+    unsigned words[12] = {0};
     for (unsigned leaf = 0x80000002U; leaf <= 0x80000004U; leaf++) {
-        __cpuid(leaf, words[0], words[1], words[2], words[3]);
-        words += 4;
+        const unsigned offset = (leaf - 0x80000002U) * 4U;
+        __cpuid(leaf, words[offset], words[offset + 1U],
+                words[offset + 2U], words[offset + 3U]);
     }
+    /* CPUID writes aligned integer objects; copy their x86 byte layout into
+     * the text buffer without an alignment/strict-aliasing violating cast. */
+    memcpy(brand, words, sizeof(words));
     lsm_trim(brand);
     if (!brand[0]) return false;
     lsm_copy_string(destination, destination_size, brand);

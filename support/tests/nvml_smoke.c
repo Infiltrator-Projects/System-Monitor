@@ -26,6 +26,7 @@ static void assert_first_device(const LsmGpuInfo *gpu)
     assert(gpu->encoder_available && fabs(gpu->encoder_percent - 5.0) < 0.01);
     assert(gpu->decoder_available && fabs(gpu->decoder_percent - 7.0) < 0.01);
     assert(gpu->memory_total_bytes == (8ULL << 30));
+    assert(gpu->memory_usage_available);
     assert(gpu->memory_used_bytes == (2ULL << 30));
     assert(gpu->temperature_available && fabs(gpu->temperature_c - 65.0) < 0.01);
     assert(gpu->core_clock_available && fabs(gpu->core_clock_mhz - 2100.0) < 0.01);

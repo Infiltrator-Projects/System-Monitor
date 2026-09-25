@@ -307,6 +307,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
     target_compile_definitions(lsm-backend-smoke PRIVATE _DEFAULT_SOURCE)
+    target_link_options(lsm-backend-smoke PRIVATE
+        -Wl,--wrap=pthread_timedjoin_np,--wrap=pthread_detach,--wrap=lsm_sources_destroy,--wrap=lsm_sources_read_network_counters)
     add_executable(lsm-monitor-platform-smoke
         support/tests/monitor_platform_smoke.c src/monitor.c)
 

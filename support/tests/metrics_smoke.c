@@ -87,6 +87,24 @@ int main(void)
     assert(near(cpu.interrupts_per_sec, 50.0));
     assert(near(cpu.context_switches_per_sec, 25.0));
 
+    /* Idle/iowait can decrease while total ticks still increase. A failed
+     * delta must not become a fabricated all-busy sample. */
+    LsmCpuAccountingSample idle_reset = second;
+    idle_reset.cpus[0].total += 20U;
+    idle_reset.cpus[0].idle -= 1U;
+    lsm_cpu_accounting_apply(&cpu, &state, &idle_reset, false, 1.0);
+    assert(cpu.usage_percent == 0.0);
+    assert(cpu.user_percent == 0.0);
+    assert(cpu.kernel_percent == 0.0);
+
+    cpu.usage_percent = 75.0;
+    cpu.core_usage[0] = 90.0;
+    lsm_cpu_accounting_apply(&cpu, &state, &first, false, 1.0);
+    assert(cpu.usage_percent == 0.0);
+    assert(cpu.core_usage[0] == 0.0);
+    lsm_cpu_accounting_apply(&cpu, &state, &second, false, 2.0);
+    assert(near(cpu.usage_percent, 64.7887));
+
     LsmCpuAccountingSample malformed;
     assert(!lsm_cpu_accounting_parse("cpu0 1 2 3 4\n", &malformed));
     assert(!lsm_cpu_accounting_parse("cpu 1 2 3\n", &malformed));
@@ -180,6 +198,16 @@ int main(void)
         disk.read_bytes_total != 1560576U ||
         disk.write_bytes_total != 3121152U)
         return 2;
+
+    lsm_disk_accounting_update(&disk, &state, NULL, 2.0);
+    if (state.initialized || disk.read_bytes_per_sec != 0.0 ||
+        disk.write_bytes_per_sec != 0.0 || disk.active_percent != 0.0 ||
+        disk.average_response_ms != 0.0 || disk.queue_length != 0.0)
+        return 5;
+    lsm_disk_accounting_update(&disk, &state, &second, 2.0);
+    if (!state.initialized || disk.read_bytes_per_sec != 0.0 ||
+        disk.active_percent != 0.0)
+        return 6;
 
     const LsmDiskCounters reset = {0};
     lsm_disk_accounting_update(&disk, &state, &reset, 1.0);

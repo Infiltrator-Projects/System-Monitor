@@ -19,7 +19,21 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
                                 const LsmDiskCounters *counters,
                                 double elapsed_seconds)
 {
-    if (!disk || !state || !counters) return;
+    if (!disk || !state) return;
+    disk->read_bytes_per_sec = 0.0;
+    disk->write_bytes_per_sec = 0.0;
+    disk->active_percent = 0.0;
+    disk->read_response_ms = 0.0;
+    disk->write_response_ms = 0.0;
+    disk->average_response_ms = 0.0;
+    disk->queue_length = 0.0;
+    disk->in_progress_operations = 0U;
+    if (!counters) {
+        /* A missing interval cannot be charged to the next sample's elapsed
+         * time. Keep cumulative totals, but require a new baseline. */
+        state->initialized = false;
+        return;
+    }
     disk->read_bytes_total = lsm_u64_multiply_saturating(
         counters->read_sectors, 512U);
     disk->write_bytes_total = lsm_u64_multiply_saturating(

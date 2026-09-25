@@ -30,10 +30,11 @@
 bool lsm_monitor_platform_init(LsmMonitor *monitor);
 
 /**
- * Perform one native sampling cycle.
+ * Request native sampling and publish completed data without requiring I/O
+ * to finish synchronously. Linux may retain the preceding public snapshot.
  *
  * @param [in,out] monitor Initialised snapshot to update.
- * @return true when the platform update cycle completed.
+ * @return true when the backend accepted the update request.
  */
 bool lsm_monitor_platform_update(LsmMonitor *monitor);
 
@@ -45,7 +46,8 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor);
 void lsm_monitor_platform_request_topology_refresh(LsmMonitor *monitor);
 
 /**
- * Release every resource owned by the native monitoring implementation.
+ * Release caller ownership of the native monitoring implementation. A backend
+ * may defer cleanup to an outstanding worker with independent lifetime.
  *
  * @param [in,out] monitor Initialised or partially initialised snapshot.
  */

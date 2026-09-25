@@ -234,7 +234,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make -j2 deb native-installer
+          make -j2 release
           version=$(tr -d '[:space:]' < support/VERSION)
           deb="infiltrator-system-monitor_${version}_amd64.deb"
           test -f "$deb"

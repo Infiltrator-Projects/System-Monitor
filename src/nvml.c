@@ -287,6 +287,7 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
         if (api.device_get_memory_info) {
             nvmlMemory_t memory;
             if (api.device_get_memory_info(device, &memory) == NVML_SUCCESS) {
+                gpu->memory_usage_available = true;
                 gpu->memory_used_bytes = memory.used;
                 gpu->memory_total_bytes = memory.total;
                 gpu->memory_percent = lsm_percent_u64(memory.used, memory.total);

@@ -253,6 +253,7 @@ typedef struct {
     double fan_percent;
     bool supported_metrics;
     bool utilization_available; /**< A sampled zero is valid when this is true. */
+    bool memory_usage_available; /**< Current adapter-wide used bytes; independent of capacity. */
     bool memory_busy_available;
     bool encoder_available;
     bool decoder_available;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file monitor_linux_internal.h
- * @brief Private collector boundaries used by monitor.c.
+ * @brief Private collector boundaries used by monitor_backend_linux.c.
  *
  * These functions are intentionally not installed as a public API. Each
  * module owns one coherent Linux subsystem and mutates only its portion of the
@@ -162,7 +162,8 @@ void lsm_cpu_memory_shutdown(LsmMonitor *monitor);
  * Discover storage/network topology and establish cumulative-counter baselines.
  *
  * @param [in,out] monitor Retained monitor snapshot.
- * @return true when the native source context was created successfully.
+ * @return true when initial disk and network inventories could be allocated.
+ *         An unavailable native source can still yield an empty inventory.
  */
 bool lsm_storage_initialise(LsmMonitor *monitor);
 /**

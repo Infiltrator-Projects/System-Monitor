@@ -367,7 +367,7 @@ static double read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum)
         if (count > 0U) return total_khz / (double)count / 1000000.0;
     }
 
-    if (cpu->base_frequency_ghz > 0.0) return cpu->base_frequency_ghz;
+    /* Nominal/base frequency does not establish current or maximum speed. */
     return 0.0;
 }
 

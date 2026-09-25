@@ -677,8 +677,11 @@ void lsm_gpu_performance_view(const LsmGpuInfo *gpu, size_t index,
     } else if (gpu->memory_total_bytes > 0U) {
         char used[64];
         char total[64];
-        infiltratr_format_bytes(
-            gpu->memory_used_bytes, used, sizeof(used));
+        if (gpu->memory_usage_available)
+            infiltratr_format_bytes(
+                gpu->memory_used_bytes, used, sizeof(used));
+        else
+            infiltratr_copy_string(used, sizeof(used), "N/A");
         infiltratr_format_bytes(
             gpu->memory_total_bytes, total, sizeof(total));
         (void)snprintf(value, sizeof(value), "%.56s / %.56s", used, total);

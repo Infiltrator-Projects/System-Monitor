@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -41,7 +42,7 @@ struct LsmLinuxSamplerState {
     bool request_pending;
     bool sample_ready;
     bool stop_requested;
-    bool detached_cleanup;
+    atomic_uint references;
 };
 
 #define LSM_SAMPLER_SHUTDOWN_WAIT_MS 250L
@@ -94,9 +95,12 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
     return true;
 }
 
-static void sampler_cleanup_detached(LsmLinuxSamplerState *sampler)
+static void sampler_release(LsmLinuxSamplerState *sampler)
 {
-    if (!sampler) return;
+    if (!sampler ||
+        atomic_fetch_sub_explicit(&sampler->references, 1U,
+                                  memory_order_acq_rel) != 1U)
+        return;
     LsmLinuxMonitorBackendState *state = sampler->backend;
     lsm_hardware_shutdown(&sampler->sample);
     lsm_cpu_memory_shutdown(&sampler->sample);
@@ -121,8 +125,11 @@ static void *sampler_thread_main(void *user_data)
     /* Storage topology can enter statvfs() on slow or blocked mounts and
      * hardware discovery can touch device interfaces. Perform both only after
      * the worker owns execution so GTK activation can construct the window. */
-    if (!lsm_storage_initialise(&sampler->sample))
+    if (!lsm_storage_initialise(&sampler->sample)) {
+        (void)pthread_mutex_lock(&sampler->mutex);
         sampler->backend->topology_refresh_requested = true;
+        (void)pthread_mutex_unlock(&sampler->mutex);
+    }
     lsm_hardware_initialise(&sampler->sample);
 
     for (;;) {
@@ -131,12 +138,7 @@ static void *sampler_thread_main(void *user_data)
         while (!sampler->request_pending && !sampler->stop_requested)
             (void)pthread_cond_wait(&sampler->condition, &sampler->mutex);
         if (sampler->stop_requested) {
-            const bool detached_cleanup = sampler->detached_cleanup;
             (void)pthread_mutex_unlock(&sampler->mutex);
-            if (detached_cleanup) {
-                sampler_cleanup_detached(sampler);
-                return NULL;
-            }
             break;
         }
         sampler->request_pending = false;
@@ -155,12 +157,13 @@ static void *sampler_thread_main(void *user_data)
         }
         (void)pthread_mutex_unlock(&sampler->mutex);
     }
+    sampler_release(sampler);
     return NULL;
 }
 
-static bool destroy_sampler(LsmLinuxMonitorBackendState *state)
+static void destroy_sampler(LsmLinuxMonitorBackendState *state)
 {
-    if (!state || !state->sampler_state) return true;
+    if (!state || !state->sampler_state) return;
     LsmLinuxSamplerState *sampler = state->sampler_state;
     if (sampler->thread_started) {
         (void)pthread_mutex_lock(&sampler->mutex);
@@ -177,27 +180,15 @@ static bool destroy_sampler(LsmLinuxMonitorBackendState *state)
                 sampler->thread, NULL, &deadline);
 
         if (join_result != 0) {
-            /* A native collector can be stuck inside an uncancellable kernel
-             * or device call. Hand ownership to the detached worker instead of
-             * making GTK shutdown wait forever. If it later returns it performs
-             * complete backend cleanup itself; process exit safely terminates
-             * it otherwise. */
-            (void)pthread_mutex_lock(&sampler->mutex);
-            sampler->detached_cleanup = true;
-            (void)pthread_mutex_unlock(&sampler->mutex);
+            /* Both parties own a reference from thread creation onward. A
+             * timeout may race with worker exit, so cleanup cannot depend on
+             * a flag transferred after the timed join. The last reference
+             * releases the backend in either order, including a blocked
+             * collector that finishes after the GUI has relinquished it. */
             (void)pthread_detach(sampler->thread);
-            return false;
         }
-        sampler->thread_started = false;
     }
-
-    lsm_hardware_shutdown(&sampler->sample);
-    lsm_cpu_memory_shutdown(&sampler->sample);
-    (void)pthread_cond_destroy(&sampler->condition);
-    (void)pthread_mutex_destroy(&sampler->mutex);
-    free(sampler);
-    state->sampler_state = NULL;
-    return true;
+    sampler_release(sampler);
 }
 
 bool lsm_monitor_platform_init(LsmMonitor *monitor)
@@ -229,6 +220,7 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
         return false;
     }
     sampler->backend = state;
+    atomic_init(&sampler->references, 1U);
     sampler->sample.backend_state = state;
     state->sampler_state = sampler;
 
@@ -259,9 +251,12 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
     copy_public_snapshot(monitor, &sampler->sample, state, false);
 
     sampler->request_pending = true;
+    (void)atomic_fetch_add_explicit(&sampler->references, 1U,
+                                    memory_order_relaxed);
     const int thread_error = pthread_create(
         &sampler->thread, NULL, sampler_thread_main, sampler);
     if (thread_error != 0) {
+        sampler_release(sampler);
         lsm_monitor_platform_destroy(monitor);
         return false;
     }
@@ -316,15 +311,7 @@ void lsm_monitor_platform_destroy(LsmMonitor *monitor)
 
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (state) {
-        if (!destroy_sampler(state)) {
-            monitor->backend_state = NULL;
-            return;
-        }
-        lsm_wifi_metadata_destroy(state->wifi_metadata);
-        state->wifi_metadata = NULL;
-        lsm_sources_destroy(state->system_sources);
-        state->system_sources = NULL;
-        free(state);
+        destroy_sampler(state);
     }
     monitor->backend_state = NULL;
 }

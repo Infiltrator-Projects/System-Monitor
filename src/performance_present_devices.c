@@ -197,7 +197,9 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
 
     const double utilisation = gpu->utilization_available
         ? gpu->utilization_percent : 0.0;
-    lsm_graph_push(page->graph, utilisation, gpu->memory_percent,
+    const double memory_percent = gpu->memory_usage_available &&
+        gpu->memory_total_bytes > 0U ? gpu->memory_percent : NAN;
+    lsm_graph_push(page->graph, utilisation, memory_percent,
                    app->runtime.newer_on_right);
     lsm_graph_push(page->side_graph, utilisation, 0.0,
                    app->runtime.newer_on_right);
@@ -222,7 +224,7 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
             lsm_metric_format_percent(available, value, graph_metric,
                                       sizeof(graph_metric)));
     }
-    lsm_graph_push(widgets->memory_graph, gpu->memory_percent, 0.0,
+    lsm_graph_push(widgets->memory_graph, memory_percent, 0.0,
                    app->runtime.newer_on_right);
     if (gpu->memory_total_bytes > 0U)
         lsm_ui_set_label_text(widgets->memory_graph_value, "%s",
@@ -245,8 +247,10 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
     if (gpu->shared_system_memory)
         lsm_ui_set_label_text(widgets->memory_usage, "Dynamic");
     else
-        lsm_ui_set_label_text(widgets->memory_usage, "%.0f%%",
-                              gpu->memory_percent);
+        lsm_ui_set_label_text(widgets->memory_usage, "%s",
+            lsm_metric_format_percent(
+                gpu->memory_usage_available && gpu->memory_total_bytes > 0U,
+                gpu->memory_percent, a, sizeof(a)));
     lsm_ui_set_label_text(
         widgets->temperature, "%s",
         view.metric_values[LSM_GPU_VIEW_TEMPERATURE]);
@@ -261,7 +265,9 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
         lsm_ui_set_label_text(widgets->memory_total, "None");
     } else if (gpu->memory_total_bytes > 0) {
         lsm_ui_set_label_text(widgets->memory_used, "%s",
-                           lsm_format_bytes(gpu->memory_used_bytes, a, sizeof(a)));
+            gpu->memory_usage_available
+                ? lsm_format_bytes(gpu->memory_used_bytes, a, sizeof(a))
+                : "N/A");
         lsm_ui_set_label_text(widgets->memory_total, "%s",
                            lsm_format_bytes(gpu->memory_total_bytes, a, sizeof(a)));
     } else {

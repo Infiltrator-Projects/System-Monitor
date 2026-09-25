@@ -1525,35 +1525,12 @@ static void update_gpu_dxgi_memory(
                 else
                     gpu->memory_total_bytes = 0U;
 
-                IDXGIAdapter3 *adapter3 = NULL;
-                const HRESULT queried = IDXGIAdapter1_QueryInterface(
-                    adapter, &IID_IDXGIAdapter3, (void **)&adapter3);
-                if (SUCCEEDED(queried) && adapter3) {
-                    DXGI_QUERY_VIDEO_MEMORY_INFO memory;
-                    memset(&memory, 0, sizeof(memory));
-                    if (SUCCEEDED(IDXGIAdapter3_QueryVideoMemoryInfo(
-                            adapter3, 0U,
-                            DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory))) {
-                        gpu->memory_used_bytes =
-                            (uint64_t)memory.CurrentUsage;
-                        if (!gpu->shared_system_memory &&
-                            gpu->memory_total_bytes > 0U) {
-                            gpu->memory_percent = infiltratr_percent_u64(
-                                gpu->memory_used_bytes,
-                                gpu->memory_total_bytes);
-                        } else {
-                            gpu->memory_percent = 0.0;
-                        }
-                        gpu->supported_metrics = true;
-                        infiltratr_copy_string(
-                            gpu->metrics_source,
-                            sizeof(gpu->metrics_source),
-                            gpu->engine_metrics_capable
-                                ? "Windows PDH + DXGI telemetry"
-                                : "Windows DXGI adapter memory");
-                    }
-                    IDXGIAdapter3_Release(adapter3);
-                }
+                /* QueryVideoMemoryInfo.CurrentUsage belongs to the calling
+                 * process, not this adapter as a whole. DXGI establishes
+                 * capacity here; adapter-wide consumption remains unavailable. */
+                gpu->memory_usage_available = false;
+                gpu->memory_used_bytes = 0U;
+                gpu->memory_percent = 0.0;
             }
         }
 

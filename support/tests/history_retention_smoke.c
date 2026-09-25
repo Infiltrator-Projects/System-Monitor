@@ -151,7 +151,10 @@ int main(void)
     if (!legacy) return fail("unable to create decimal-comma history fixture");
     if (fputs("# System-Monitor App History v1\n"
               "uid:1000|/legacy\tlegacy\tuser\t/legacy"
-              "\t1,500000\t2,250000\t3\t4\t5\t10\t20\n",
+              "\t1,500000\t2,250000\t3\t4\t5\t10\t20\n"
+              "negative\tbad\tuser\t/bad\t-1\t2\t0\t0\t0\t10\t20\n"
+              "huge\tbad\tuser\t/bad\t1e300\t2\t0\t0\t0\t10\t20\n"
+              "active\tbad\tuser\t/bad\t1\t-2\t0\t0\t0\t10\t20\n",
               legacy) == EOF ||
         fclose(legacy) != 0)
         return fail("unable to write decimal-comma history fixture");
@@ -160,7 +163,7 @@ int main(void)
         return fail("unable to load decimal-comma history fixture");
     if (lsm_history_test_retained_count(legacy_app) != 1U ||
         !lsm_history_test_contains(legacy_app, "uid:1000|/legacy"))
-        return fail("legacy decimal-comma history was not recovered");
+        return fail("history accepted invalid durations or lost decimal-comma recovery");
     lsm_history_save(legacy_app);
     if (!history_contains_text(history_path, "\t1.500000\t2.250000\t"))
         return fail("legacy decimal-comma history was not canonicalised");

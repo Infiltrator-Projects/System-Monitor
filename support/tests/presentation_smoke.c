@@ -216,6 +216,19 @@ static void check_device_projection(void)
         view.metric_values[LSM_GPU_VIEW_TELEMETRY],
         "Windows display adapter identification") == 0);
 
+    /* Capacity alone cannot establish zero usage (DXGI is process-scoped). */
+    gpu.memory_total_bytes = 1024U;
+    gpu.memory_used_bytes = 0U;
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strncmp(view.metric_values[LSM_GPU_VIEW_MEMORY], "N/A / ", 6U) == 0);
+    gpu.memory_usage_available = true;
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strncmp(view.metric_values[LSM_GPU_VIEW_MEMORY], "N/A", 3U) != 0);
+    gpu.memory_usage_available = false;
+    gpu.memory_used_bytes = 512U;
+    lsm_gpu_performance_view(&gpu, 0U, &view);
+    assert(strncmp(view.metric_values[LSM_GPU_VIEW_MEMORY], "N/A / ", 6U) == 0);
+
     gpu.metrics_source[0] = '\0';
     gpu.supported_metrics = false;
     lsm_gpu_performance_view(&gpu, 0U, &view);

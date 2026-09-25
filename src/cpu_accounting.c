@@ -129,16 +129,24 @@ void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
     if (!cpu || !state || !sample || sample->cpu_count == 0U) return;
     const size_t usable = sample->cpu_count < (size_t)cpu->logical_cores + 1U
         ? sample->cpu_count : (size_t)cpu->logical_cores + 1U;
-    for (size_t index = 0U; index < usable; index++) {
+    /* A reset must not retain the preceding busy sample. Idle includes
+     * iowait, which Linux can decrease; reject that interval instead of
+     * interpreting the failed delta as zero idle (100% busy). */
+    cpu->usage_percent = 0.0;
+    cpu->user_percent = 0.0;
+    cpu->kernel_percent = 0.0;
+    memset(cpu->core_usage, 0, sizeof(cpu->core_usage));
+    for (size_t index = 0U;
+         index < usable && index < LSM_MAX_CPUS + 1U; index++) {
         const LsmCpuCounters *current = &sample->cpus[index];
         const LsmCpuCounters *previous = &state->previous[index];
         uint64_t total_delta = 0U;
+        uint64_t idle_delta = 0U;
         if (!initial &&
             lsm_u64_counter_delta(current->total, previous->total,
-                                  &total_delta)) {
-            uint64_t idle_delta = total_delta;
-            (void)lsm_u64_counter_delta(
-                current->idle, previous->idle, &idle_delta);
+                                  &total_delta) &&
+            lsm_u64_counter_delta(current->idle, previous->idle,
+                                  &idle_delta)) {
             const double usage = idle_delta <= total_delta
                 ? lsm_percent_u64(total_delta - idle_delta, total_delta) : 0.0;
             if (index == 0U) {

@@ -233,7 +233,8 @@ int main(int argc, char **argv)
         "--numeric-owner", "--exclude-vcs", "--exclude=./build",
         "--exclude=./build-*",
         "--exclude=*.deb", "--exclude=*.zip", "--exclude=*.tar.gz",
-        "--exclude=*.run", "-C", root, "-czf", payload, ".", NULL
+        "--exclude=*.run", "--exclude=*.exe",
+        "-C", root, "-czf", payload, ".", NULL
     };
     const int tar_result = run_command(tar_arguments);
     if (tar_result != 0) {

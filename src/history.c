@@ -221,8 +221,11 @@ static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *render
     if (field == HIST_COL_CPU_SECONDS || field == HIST_COL_ACTIVE_SECONDS) {
         double seconds = 0.0;
         gtk_tree_model_get(model, iter, field, &seconds, -1);
-        const uint64_t rounded = seconds > 0.0 ?
-            (uint64_t)llround(seconds) : 0U;
+        /* Persisted data and accumulated totals can exceed signed long long.
+         * Round in floating point, then bound before converting to uint64_t. */
+        const long double whole = roundl((long double)seconds);
+        const uint64_t rounded = !isfinite(seconds) || seconds <= 0.0 ? 0U :
+            whole >= (long double)UINT64_MAX ? UINT64_MAX : (uint64_t)whole;
         (void)lsm_temporal_format_duration_seconds(
             rounded, text, sizeof(text));
     } else if (field == HIST_COL_READ_BYTES || field == HIST_COL_WRITE_BYTES ||
@@ -469,10 +472,12 @@ static gboolean history_load_record(LsmApp *app, char *line)
     int64_t last_seen = 0;
     bool cpu_legacy_decimal = false;
     bool active_legacy_decimal = false;
-    if (!numeric_io_parse_persisted_double(
-            fields[4], &cpu_seconds, &cpu_legacy_decimal) ||
-        !numeric_io_parse_persisted_double(
-            fields[5], &active_seconds, &active_legacy_decimal) ||
+    if (!numeric_io_parse_persisted_double_range(
+            fields[4], 0.0, (double)UINT64_MAX,
+            &cpu_seconds, &cpu_legacy_decimal) ||
+        !numeric_io_parse_persisted_double_range(
+            fields[5], 0.0, (double)UINT64_MAX,
+            &active_seconds, &active_legacy_decimal) ||
         !infiltratr_parse_u64(fields[6], 10U, &read_bytes) ||
         !infiltratr_parse_u64(fields[7], 10U, &write_bytes) ||
         !infiltratr_parse_u64(fields[8], 10U, &peak_rss_bytes) ||

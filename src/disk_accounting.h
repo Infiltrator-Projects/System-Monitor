@@ -50,7 +50,7 @@ typedef struct {
  *
  * @param [in,out] disk Published disk metrics.
  * @param [in,out] state Private retained counter baselines.
- * @param [in] counters Current cumulative kernel counters.
+ * @param [in] counters Current cumulative kernel counters, or NULL to invalidate a missing sample.
  * @param [in] elapsed_seconds Monotonic sample interval.
  */
 void lsm_disk_accounting_update(LsmDiskInfo *disk,

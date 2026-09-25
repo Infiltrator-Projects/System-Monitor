@@ -294,21 +294,6 @@ static void read_process_name(pid_t pid, char *name, size_t size)
         snprintf(name, size, "PID %d", pid);
 }
 
-static bool canonical_descriptor_target(const char *target, char *resolved,
-                                        size_t resolved_size)
-{
-    if (!target || target[0] != '/' || !resolved || resolved_size == 0U)
-        return false;
-    char candidate[LSM_INSPECTION_TARGET_LEN];
-    lsm_copy_string(candidate, sizeof(candidate), target);
-    char *deleted = strstr(candidate, " (deleted)");
-    if (deleted && deleted[10] == '\0') *deleted = '\0';
-    char real[PATH_MAX];
-    if (!lsm_realpath_copy(candidate, real, sizeof(real))) return false;
-    lsm_copy_string(resolved, resolved_size, real);
-    return true;
-}
-
 static int compare_file_user(const void *left, const void *right)
 {
     const LsmFileUserInfo *a = left;
@@ -326,8 +311,8 @@ size_t lsm_process_inspection_find_file_users(const char *path,
         return 0U;
     }
     *out_items = NULL;
-    char requested[PATH_MAX];
-    if (!lsm_realpath_copy(path, requested, sizeof(requested))) return 0U;
+    struct stat requested;
+    if (stat(path, &requested) != 0) return 0U;
 
     DIR *proc = opendir(procfs_root());
     if (!proc) return 0U;
@@ -344,10 +329,16 @@ size_t lsm_process_inspection_find_file_users(const char *path,
         const size_t file_count = lsm_process_inspection_open_files(
             (LsmProcessId)pid, &files);
         for (size_t index = 0U; index < file_count; index++) {
-            char resolved[PATH_MAX];
-            if (!canonical_descriptor_target(files[index].target, resolved,
-                                             sizeof(resolved)) ||
-                strcmp(resolved, requested) != 0)
+            char descriptor_path[PATH_MAX];
+            char suffix[64];
+            (void)snprintf(suffix, sizeof(suffix), "fd/%d", files[index].descriptor);
+            struct stat opened;
+            /* /proc/PID/fd refers to the opened inode, including unlinked
+             * files. Path text misses hard links and can falsely match a
+             * replacement created under a deleted file's former name. */
+            if (!process_path(descriptor_path, sizeof(descriptor_path), pid, suffix) ||
+                stat(descriptor_path, &opened) != 0 ||
+                opened.st_dev != requested.st_dev || opened.st_ino != requested.st_ino)
                 continue;
             if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
                                    count + 1U, 32U))

@@ -23,27 +23,30 @@
 #include "monitor_types.h"
 
 /**
- * Discover devices, initialise collectors and establish rate baselines.
+ * Initialise collectors and start discovery and rate-baseline collection.
  *
  * Partial optional telemetry is acceptable; the function fails only when the
  * core monitor context cannot be made usable. The caller should pass a zeroed
  * object and must call lsm_monitor_destroy() after any successful return.
  *
  * @param monitor Caller-owned zeroed monitoring model.
- * @return true when core monitoring is ready for updates.
+ * @return true when core monitoring accepts updates. Linux device discovery
+ *         continues asynchronously; this does not guarantee a full sample.
  */
 bool lsm_monitor_init(LsmMonitor *monitor);
 
 /**
- * Refresh every due category and calculate rates from prior samples.
+ * Request sampling and publish the latest completed snapshot, if one exists.
  *
- * Fast and slow cadences are coordinated internally. Individual unavailable
- * metrics are cleared or marked unavailable without invalidating unrelated
- * categories.
+ * Fast and slow cadences are coordinated internally. Each metric's availability
+ * and baseline contract governs failures without invalidating unrelated data.
+ *
+ * Linux queues work without waiting for native I/O. A successful call may
+ * retain the preceding public snapshot while the worker is still collecting.
  *
  * @param monitor Initialised model to update in place.
- * @return true when the update cycle completed; optional field failures do not
- *         by themselves make the whole cycle fail.
+ * @return true when the backend accepted the update; optional field failures
+ *         do not by themselves make the whole cycle fail.
  */
 bool lsm_monitor_update(LsmMonitor *monitor);
 
@@ -72,7 +75,11 @@ void lsm_monitor_set_process_totals(LsmMonitor *monitor,
                                     size_t process_count);
 
 /**
- * Release every adapter, descriptor, worker and retained baseline.
+ * Relinquish ownership of adapters, workers and retained baselines.
+ *
+ * Linux waits briefly for its sampler, then lets an outstanding worker own
+ * cleanup. The caller may release the public model immediately on return;
+ * blocked native resources may outlive it until collection finishes or exit.
  *
  * @param monitor Initialised or partially initialised model; NULL is accepted.
  */

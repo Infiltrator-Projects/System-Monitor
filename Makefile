@@ -507,6 +507,7 @@ monitor-platform-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) \
 		support/tests/backend_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
+		-Wl,--wrap=pthread_timedjoin_np,--wrap=pthread_detach,--wrap=lsm_sources_destroy,--wrap=lsm_sources_read_network_counters \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
 		-o $(BUILD_DIR)/backend-smoke
 	./$(BUILD_DIR)/backend-smoke
@@ -647,6 +648,12 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 		$(BUILD_DIR)/native-installer-smoke-b.run >/dev/null
 	cmp -s $(BUILD_DIR)/native-installer-smoke-a.run \
 		$(BUILD_DIR)/native-installer-smoke-b.run
+	@payload_line=$$(awk '/^__LSM_NATIVE_PAYLOAD_BELOW__$$/ {print NR + 1; exit}' \
+		$(BUILD_DIR)/native-installer-smoke-a.run); \
+		test -n "$$payload_line"; \
+		tail -n +"$$payload_line" $(BUILD_DIR)/native-installer-smoke-a.run | \
+			tar -tzf - > $(BUILD_DIR)/native-installer-contents.txt
+	@! grep -Eq '\.exe$$' $(BUILD_DIR)/native-installer-contents.txt
 	./$(BUILD_DIR)/native-installer-smoke-a.run --help >/dev/null
 	rm -f $(BUILD_DIR)/native-installer-smoke-a.run \
 		$(BUILD_DIR)/native-installer-smoke-b.run
@@ -818,7 +825,7 @@ dist: common-check clean
 	@tmp=$$(mktemp -d); root="$$tmp/System-Monitor-$(VERSION)-source"; \
 		mkdir -p "$$root"; \
 		tar --exclude-vcs --exclude='./build' --exclude='./build-*' \
-			--exclude='*.deb' --exclude='*.run' --exclude='*.tar.gz' --exclude='*.zip' \
+			--exclude='*.deb' --exclude='*.run' --exclude='*.exe' --exclude='*.tar.gz' --exclude='*.zip' \
 			-cf - . | tar -xf - -C "$$root"; \
 		find "$$root" -exec touch -h -d '@$(DIST_SOURCE_DATE_EPOCH)' {} +; \
 		rm -f "$(CURDIR)/$(SOURCE_ZIP)"; \

@@ -148,7 +148,8 @@ int main(int argc, char **argv)
         run("curl -fsSL --retry 5 " + shell_quote(archive_url) +
             " -o " + shell_quote(archive.string()));
         verify_sha256(archive, archive_sha, output_dir);
-        run("tar -xJf " + shell_quote(archive.string()) +
+        // Compiler inputs need file contents, not the archive creator's UID/GID.
+        run("tar --no-same-owner -xJf " + shell_quote(archive.string()) +
             " -C " + shell_quote(output_dir.string()));
 
         copy_verified(

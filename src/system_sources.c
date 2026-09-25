@@ -429,6 +429,8 @@ typedef struct {
     uint64_t tx_bytes;
     unsigned char operstate;
     unsigned flags;
+    bool counters_available;
+    bool counters_64bit;
 } LsmRouteLink;
 
 static void format_mac(const unsigned char *bytes, size_t length,
@@ -451,7 +453,8 @@ static void apply_route_link_attribute(LsmRouteLink *record,
 
     switch (attribute->rta_type) {
     case IFLA_IFNAME:
-        lsm_copy_string(record->name, sizeof(record->name), RTA_DATA(attribute));
+        if (memchr(RTA_DATA(attribute), '\0', RTA_PAYLOAD(attribute)))
+            lsm_copy_string(record->name, sizeof(record->name), RTA_DATA(attribute));
         break;
     case IFLA_ADDRESS:
         format_mac(RTA_DATA(attribute), RTA_PAYLOAD(attribute),
@@ -468,15 +471,18 @@ static void apply_route_link_attribute(LsmRouteLink *record,
             memcpy(&statistics, RTA_DATA(attribute), sizeof(statistics));
             record->rx_bytes = statistics.rx_bytes;
             record->tx_bytes = statistics.tx_bytes;
+            record->counters_available = true;
+            record->counters_64bit = true;
         }
         break;
     case IFLA_STATS:
-        if (record->rx_bytes == 0U && record->tx_bytes == 0U &&
+        if (!record->counters_64bit &&
             RTA_PAYLOAD(attribute) >= sizeof(struct rtnl_link_stats)) {
             struct rtnl_link_stats statistics;
             memcpy(&statistics, RTA_DATA(attribute), sizeof(statistics));
             record->rx_bytes = statistics.rx_bytes;
             record->tx_bytes = statistics.tx_bytes;
+            record->counters_available = true;
         }
         break;
     default:
@@ -514,7 +520,7 @@ static size_t route_link_dump(LsmSystemSources *sources,
     size_t count = 0U;
     bool complete = false;
     while (!complete) {
-        unsigned char buffer[32768];
+        _Alignas(struct nlmsghdr) unsigned char buffer[32768];
         const ssize_t received = recv(sources->network_request_fd, buffer, sizeof(buffer), 0);
         if (received < 0) {
             if (errno == EINTR) continue;
@@ -535,7 +541,9 @@ static size_t route_link_dump(LsmSystemSources *sources,
                 complete = true;
                 break;
             }
-            if (header->nlmsg_type != RTM_NEWLINK || count >= capacity) continue;
+            if (header->nlmsg_type != RTM_NEWLINK || count >= capacity ||
+                header->nlmsg_len < NLMSG_LENGTH(sizeof(struct ifinfomsg)))
+                continue;
 
             struct ifinfomsg *information = NLMSG_DATA(header);
             if ((information->ifi_flags & IFF_LOOPBACK) != 0U) continue;
@@ -559,6 +567,7 @@ static size_t route_link_dump(LsmSystemSources *sources,
 bool lsm_sources_init(LsmSystemSources **out)
 {
     if (!out) return false;
+    *out = NULL;
     LsmSystemSources *sources = calloc(1U, sizeof(*sources));
     if (!sources) return false;
     sources->network_request_fd = -1;
@@ -992,11 +1001,16 @@ static size_t network_counters_sysfs(LsmSystemSources *sources,
         if (!child_path(path, sizeof(path), root, entry->d_name, "/operstate") ||
             !lsm_read_text_file(path, state, sizeof(state)) || strcmp(state, "up") != 0)
             continue;
+        uint64_t rx_bytes = 0U;
+        uint64_t tx_bytes = 0U;
+        if (!child_path(path, sizeof(path), root, entry->d_name, "/statistics/rx_bytes") ||
+            !lsm_read_u64_file(path, &rx_bytes) ||
+            !child_path(path, sizeof(path), root, entry->d_name, "/statistics/tx_bytes") ||
+            !lsm_read_u64_file(path, &tx_bytes))
+            continue;
         lsm_copy_string(records[count].name, sizeof(records[count].name), entry->d_name);
-        if (child_path(path, sizeof(path), root, entry->d_name, "/statistics/rx_bytes"))
-            records[count].rx_bytes = lsm_read_u64_or_zero(path);
-        if (child_path(path, sizeof(path), root, entry->d_name, "/statistics/tx_bytes"))
-            records[count].tx_bytes = lsm_read_u64_or_zero(path);
+        records[count].rx_bytes = rx_bytes;
+        records[count].tx_bytes = tx_bytes;
         count++;
     }
     closedir(directory);
@@ -1052,6 +1066,7 @@ size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
     if (link_count == 0U) return network_counters_sysfs(sources, records, capacity);
     size_t count = 0U;
     for (size_t index = 0U; index < link_count && count < capacity; index++) {
+        if (!links[index].counters_available) continue;
         if (links[index].operstate != IF_OPER_UP &&
             (links[index].flags & IFF_RUNNING) == 0U)
             continue;
@@ -1070,7 +1085,7 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
         sources->network_request_fd < 0) return true;
     bool changed = false;
     for (;;) {
-        unsigned char buffer[8192];
+        _Alignas(struct nlmsghdr) unsigned char buffer[8192];
         const ssize_t received = recv(sources->network_event_fd, buffer, sizeof(buffer), 0);
         if (received < 0) {
             if (errno == EINTR) continue;

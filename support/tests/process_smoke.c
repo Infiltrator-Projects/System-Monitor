@@ -485,6 +485,34 @@ int main(void)
         return 10;
     }
     lsm_process_inspection_free(users);
+    char alias[PATH_MAX];
+    if (!join(alias, sizeof(alias), root, "hard-link.txt") ||
+        link(target, alias) != 0) {
+        remove_tree(root);
+        return 11;
+    }
+    users = NULL;
+    const size_t alias_count = lsm_process_inspection_find_file_users(alias, &users);
+    lsm_process_inspection_free(users);
+    if (alias_count != 2U) {
+        remove_tree(root);
+        return 12;
+    }
+    /* Keep one descriptor on the old inode while replacing the selected path. */
+    if (!join(path, sizeof(path), root, "123/fd/3") || unlink(path) != 0 ||
+        symlink(alias, path) != 0 || unlink(target) != 0 ||
+        !write_text(target, "replacement\n")) {
+        remove_tree(root);
+        return 13;
+    }
+    users = NULL;
+    const size_t replacement_count = lsm_process_inspection_find_file_users(target, &users);
+    const bool replacement_ok = replacement_count == 1U && users[0].pid == 456U;
+    lsm_process_inspection_free(users);
+    if (!replacement_ok) {
+        remove_tree(root);
+        return 14;
+    }
     remove_tree(root);
     puts("Process inspection parsers and file-owner search passed.");
     return 0;

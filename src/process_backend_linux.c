@@ -91,9 +91,9 @@ typedef struct {
     char name[64];
 } UidNameEntry;
 
-/* One context is owned by each application instance. GTK invokes scans
- * serially from the main loop, so no locking is required. start_ticks
- * protects every delta from PID reuse. */
+/* The process-scanner worker owns and scans this context serially. GTK sees
+ * completed plain-data snapshots, never these mutable baselines. Independent
+ * inspectors may own separate contexts; start_ticks protects PID reuse. */
 struct LsmProcessBackend {
     PreviousProcessSample *samples;
     size_t sample_count;

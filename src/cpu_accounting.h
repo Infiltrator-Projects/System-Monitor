@@ -22,7 +22,7 @@ typedef struct {
     uint64_t total; /**< Total scheduler ticks. */
     uint64_t idle;  /**< Idle plus I/O-wait ticks. */
     uint64_t user;  /**< User and nice scheduler ticks. */
-    uint64_t kernel; /**< System, IRQ, soft-IRQ and steal scheduler ticks. */
+    uint64_t kernel; /**< System, IRQ and soft-IRQ ticks; steal is total-only. */
 } LsmCpuCounters;
 
 /** Retained scheduler baselines owned by the native collector. */
@@ -63,6 +63,9 @@ bool lsm_cpu_accounting_read(const char *path,
 
 /**
  * Apply a parsed scheduler sample to retained CPU state.
+ *
+ * Initial samples and counter rollbacks publish zero usage and establish the
+ * next baseline. I/O-wait rollback invalidates utilisation for that interval.
  *
  * @param [in,out] cpu Published CPU metrics.
  * @param [in,out] state Private retained counter baselines.

@@ -780,6 +780,23 @@ int main(void)
             microsoft_reserved = true;
     }
 
+    /* A missing or malformed sysfs counter is not a sampled zero. */
+    LsmNetworkCounterRecord counters[4] = {0};
+    if (lsm_sources_read_network_counters(sources, counters, 4U) != 0U)
+        return 8;
+    if (!lsm_join_path(path, sizeof(path), root,
+                       "/sys/class/net/eth0/statistics/rx_bytes") ||
+        !write_text(path, "0\n") ||
+        !lsm_join_path(path, sizeof(path), root,
+                       "/sys/class/net/eth0/statistics/tx_bytes") ||
+        !write_text(path, "42\n") ||
+        lsm_sources_read_network_counters(sources, counters, 4U) != 1U ||
+        counters[0].rx_bytes != 0U || counters[0].tx_bytes != 42U)
+        return 9;
+    if (!write_text(path, "invalid\n") ||
+        lsm_sources_read_network_counters(sources, counters, 4U) != 0U)
+        return 10;
+
     bool physical_network = false;
     bool hyperv_network = false;
     for (size_t index = 0U; index < network_count; index++) {
