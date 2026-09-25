@@ -2068,7 +2068,7 @@ static void layout_process_list(LsmWindowsUiState *state)
     RECT client;
     if (!GetClientRect(state->window, &client)) return;
     const RECT content =
-        content_rect_for_client(client.right, client.bottom);
+        content_rect_for_client(state, client.right, client.bottom);
 
     const int top = content.top + 78;
     MoveWindow(
