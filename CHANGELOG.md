@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.105 - 2026-09-25
+
+- Make the Overview Disk activity card system-wide instead of silently changing identity to whichever physical disk is busiest in each sample.
+- Graph mean active time across all measured physical disks and sum read/write throughput across all disks, with an explicit physical-disk count in the card detail.
+- Make the Overview Disk card navigate to the Disks category rather than to a retained busiest-device identity.
+- Preserve Linux PSI precision on the CPU, Memory and I/O pressure cards to two decimal places; small but real stalls below one percent no longer render as a misleading 0%.
+- Clarify the pressure-card captions as kernel PSI 10-second stall averages and add deterministic aggregate-disk regression coverage.
+
+
 ## 1.0.104 - 2026-09-25
 
 - Fix the category device rail after live 1.0.103 testing showed the correct empty rail width but no visible device buttons for multi-device categories.

@@ -65,34 +65,40 @@ static void derive_disk(const LsmMonitor *monitor, LsmOverviewSample *sample)
     if (!monitor || !sample || monitor->disk_count == 0U)
         return;
 
-    size_t busiest = SIZE_MAX;
-    double busiest_activity = -1.0;
-    for (size_t index = 0U; index < monitor->disk_count; index++) {
-        const double activity = monitor->disks[index].active_percent;
-        if (!isfinite(activity) || activity < 0.0) continue;
-        if (busiest == SIZE_MAX || activity > busiest_activity) {
-            busiest = index;
-            busiest_activity = activity;
-        }
-    }
-    if (busiest == SIZE_MAX) return;
+    double activity_total = 0.0;
+    double read_total = 0.0;
+    double write_total = 0.0;
+    size_t activity_count = 0U;
 
-    const LsmDiskInfo *disk = &monitor->disks[busiest];
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        const LsmDiskInfo *disk = &monitor->disks[index];
+        if (isfinite(disk->active_percent) && disk->active_percent >= 0.0) {
+            activity_total += bounded_percent(disk->active_percent);
+            activity_count++;
+        }
+        if (isfinite(disk->read_bytes_per_sec) &&
+            disk->read_bytes_per_sec >= 0.0)
+            read_total += disk->read_bytes_per_sec;
+        if (isfinite(disk->write_bytes_per_sec) &&
+            disk->write_bytes_per_sec >= 0.0)
+            write_total += disk->write_bytes_per_sec;
+    }
+    if (activity_count == 0U) return;
+
+    /*
+     * Overview is system-wide. A disk card that silently changes identity to
+     * whichever device is busiest makes the graph describe different hardware
+     * from sample to sample. Use the mean physical-disk active-time percentage
+     * for the bounded 0-100 graph, and sum throughput across every disk.
+     */
     sample->disk_available = true;
-    sample->disk_percent = bounded_percent(disk->active_percent);
-    sample->disk_read_bytes_per_sec =
-        isfinite(disk->read_bytes_per_sec) && disk->read_bytes_per_sec >= 0.0
-            ? disk->read_bytes_per_sec : 0.0;
-    sample->disk_write_bytes_per_sec =
-        isfinite(disk->write_bytes_per_sec) && disk->write_bytes_per_sec >= 0.0
-            ? disk->write_bytes_per_sec : 0.0;
-    sample->disk_index = busiest;
-    copy_identity(
-        sample->disk_identity, sizeof(sample->disk_identity),
-        disk->instance_identity, disk->name);
-    infiltratr_copy_string(
-        sample->disk_name, sizeof(sample->disk_name),
-        disk->model[0] ? disk->model : disk->name);
+    sample->disk_percent =
+        bounded_percent(activity_total / (double)activity_count);
+    sample->disk_read_bytes_per_sec = read_total;
+    sample->disk_write_bytes_per_sec = write_total;
+    sample->disk_index = SIZE_MAX;
+    sample->disk_identity[0] = '\0';
+    sample->disk_name[0] = '\0';
 }
 
 static void derive_network(const LsmMonitor *monitor,

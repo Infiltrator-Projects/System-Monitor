@@ -224,8 +224,8 @@ static bool overview_destination(LsmApp *app, LsmOverviewMetric metric,
         case LSM_OVERVIEW_DISK:
         case LSM_OVERVIEW_IO_PRESSURE:
             *type = LSM_PAGE_DISK;
-            *index = lsm_overview_resolve_disk(&app->monitor, &sample);
-            return *index != SIZE_MAX;
+            *index = 0U;
+            return app->monitor.disk_count > 0U;
         case LSM_OVERVIEW_NETWORK:
             *type = LSM_PAGE_NETWORK;
             *index = lsm_overview_resolve_network(&app->monitor, &sample);
@@ -287,6 +287,22 @@ static void overview_set_percent(GtkWidget *label, bool available,
     lsm_ui_set_label_text(label, "%s", text);
 }
 
+static void overview_set_pressure(GtkWidget *label, bool available,
+                                  double value)
+{
+    if (!available || !isfinite(value)) {
+        lsm_ui_set_label_text(label, "N/A");
+        return;
+    }
+
+    /*
+     * Linux PSI is commonly well below one percent on a healthy workstation.
+     * The ordinary whole-percent formatter made genuine 0.01-0.49%% stalls
+     * look permanently zero, so preserve the precision supplied by procfs.
+     */
+    lsm_ui_set_label_text(label, "%.2f%%", value);
+}
+
 static void overview_set_latest_values(LsmApp *app,
                                        const LsmOverviewSample *sample)
 {
@@ -320,8 +336,9 @@ static void overview_set_latest_values(LsmApp *app,
             sample->disk_write_bytes_per_sec, false, true,
             write_rate, sizeof(write_rate));
         snprintf(
-            detail, sizeof(detail), "%s — R %s / W %s",
-            sample->disk_name[0] ? sample->disk_name : "Busiest disk",
+            detail, sizeof(detail), "%zu physical disk%s — R %s / W %s",
+            app->monitor.disk_count,
+            app->monitor.disk_count == 1U ? "" : "s",
             read_rate, write_rate);
         lsm_ui_set_label_text(
             app->overview.details[LSM_OVERVIEW_DISK], "%s", detail);
@@ -373,24 +390,24 @@ static void overview_set_latest_values(LsmApp *app,
         sample->temperature_available && sample->temperature_name[0]
             ? sample->temperature_name : "Temperature telemetry unavailable");
 
-    overview_set_percent(
+    overview_set_pressure(
         app->overview.values[LSM_OVERVIEW_CPU_PRESSURE],
         sample->cpu_pressure_available, sample->cpu_pressure_percent);
-    overview_set_percent(
+    overview_set_pressure(
         app->overview.values[LSM_OVERVIEW_MEMORY_PRESSURE],
         sample->memory_pressure_available, sample->memory_pressure_percent);
-    overview_set_percent(
+    overview_set_pressure(
         app->overview.values[LSM_OVERVIEW_IO_PRESSURE],
         sample->io_pressure_available, sample->io_pressure_percent);
     lsm_ui_set_label_text(
         app->overview.details[LSM_OVERVIEW_CPU_PRESSURE],
-        "10 s runnable-work stall time");
+        "Kernel PSI · 10 s runnable-work stall average");
     lsm_ui_set_label_text(
         app->overview.details[LSM_OVERVIEW_MEMORY_PRESSURE],
-        "10 s memory stall time");
+        "Kernel PSI · 10 s memory stall average");
     lsm_ui_set_label_text(
         app->overview.details[LSM_OVERVIEW_IO_PRESSURE],
-        "10 s I/O stall time");
+        "Kernel PSI · 10 s I/O stall average");
 }
 
 static void overview_refresh_processes(LsmApp *app)

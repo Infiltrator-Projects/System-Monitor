@@ -61,12 +61,12 @@ typedef struct {
     double memory_percent;
 
     bool disk_available;
-    double disk_percent;
-    double disk_read_bytes_per_sec;
-    double disk_write_bytes_per_sec;
-    size_t disk_index;
-    char disk_identity[LSM_IDENTITY_LEN];
-    char disk_name[LSM_NAME_LEN];
+    double disk_percent;              /**< Mean active time across measured physical disks. */
+    double disk_read_bytes_per_sec;   /**< Aggregate physical-disk read throughput. */
+    double disk_write_bytes_per_sec;  /**< Aggregate physical-disk write throughput. */
+    size_t disk_index;                /**< SIZE_MAX for aggregate Overview samples. */
+    char disk_identity[LSM_IDENTITY_LEN]; /**< Reserved for retained single-device resolution. */
+    char disk_name[LSM_NAME_LEN];     /**< Reserved for retained single-device resolution. */
 
     bool network_available;
     double network_bytes_per_sec;

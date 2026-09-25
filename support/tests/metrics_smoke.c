@@ -668,9 +668,13 @@ int main(void)
     strcpy(monitor.disks[0].name, "sda");
     strcpy(monitor.disks[0].instance_identity, "disk-a");
     monitor.disks[0].active_percent = 12.0;
+    monitor.disks[0].read_bytes_per_sec = 1000.0;
+    monitor.disks[0].write_bytes_per_sec = 2000.0;
     strcpy(monitor.disks[1].name, "nvme0n1");
     strcpy(monitor.disks[1].instance_identity, "disk-b");
     monitor.disks[1].active_percent = 80.0;
+    monitor.disks[1].read_bytes_per_sec = 3000.0;
+    monitor.disks[1].write_bytes_per_sec = 4000.0;
     monitor.net_count = 1U;
     strcpy(monitor.nets[0].name, "eth0");
     strcpy(monitor.nets[0].mac, "00:11:22:33:44:55");
@@ -690,8 +694,11 @@ int main(void)
 
     LsmOverviewSample sample;
     assert(lsm_overview_history_latest(history, &sample));
-    assert(sample.disk_available && sample.disk_index == 1U);
-    assert(strcmp(sample.disk_identity, "disk-b") == 0);
+    assert(sample.disk_available && sample.disk_index == SIZE_MAX);
+    assert(sample.disk_percent == 46.0);
+    assert(sample.disk_read_bytes_per_sec == 4000.0);
+    assert(sample.disk_write_bytes_per_sec == 6000.0);
+    assert(sample.disk_identity[0] == '\0' && sample.disk_name[0] == '\0');
     assert(sample.network_available && sample.network_bytes_per_sec == 3000.0);
     assert(sample.gpu_available && sample.gpu_percent == 60.0);
     assert(sample.cpu_pressure_available && sample.cpu_pressure_percent == 3.0);
@@ -710,7 +717,12 @@ int main(void)
     LsmDiskInfo moved = monitor.disks[1];
     monitor.disks[1] = monitor.disks[0];
     monitor.disks[0] = moved;
-    assert(lsm_overview_resolve_disk(&monitor, &sample) == 0U);
+    LsmOverviewSample retained_disk = {0};
+    retained_disk.disk_available = true;
+    retained_disk.disk_index = 1U;
+    strcpy(retained_disk.disk_identity, "disk-b");
+    strcpy(retained_disk.disk_name, "nvme0n1");
+    assert(lsm_overview_resolve_disk(&monitor, &retained_disk) == 0U);
 
     monitor.sample_generation = 4U;
     monitor.sample_monotonic_seconds = 13.0;
