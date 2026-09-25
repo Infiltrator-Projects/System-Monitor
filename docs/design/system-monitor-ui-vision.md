@@ -39,6 +39,6 @@ The long-term shell direction is a persistent graphical category rail rather tha
 
 ## First implementation pass
 
-Version 1.0.99 begins the transition by strengthening the existing Overview rather than replacing working architecture. It adds a visual hero, live-state treatment, stronger metric hierarchy, resource-coloured card accents, larger values, visual-priority card ordering and a cleaner top-process summary. Fresh profiles land on Overview after the intentionally fast Performance first paint.
+Version 1.0.99 began the transition by strengthening the existing Overview rather than replacing working architecture. It adds a visual hero, live-state treatment, stronger metric hierarchy, resource-coloured card accents, larger values, visual-priority card ordering and a cleaner top-process summary. Fresh profiles land on Overview after the intentionally fast Performance first paint.
 
 Subsequent polish should continue toward the reference without adding features merely to fill the mockup.

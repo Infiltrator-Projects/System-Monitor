@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.100 - 2026-09-25
+
+- Preserve the approved graphical System Monitor UI mockup directly in the repository and make the maintained UI vision document reference that image.
+- Remove the temporary hand-built SVG substitute so future UI work has one unambiguous visual north star.
+- Carry forward the 1.0.99 graphical Overview polish unchanged while advancing the immutable release identity after 1.0.99 was published.
+
+
 ## 1.0.99 - 2026-09-25
 
 - Record the graphical System Monitor UI north star, including the dashboard reference mockup and the Amiga/Workbench-inspired GUI-first design intent.
