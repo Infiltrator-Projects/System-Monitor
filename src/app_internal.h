@@ -383,6 +383,7 @@ typedef struct {
     GtkWidget *values[LSM_OVERVIEW_METRIC_COUNT];
     GtkWidget *details[LSM_OVERVIEW_METRIC_COUNT];
     LsmGraph *graphs[LSM_OVERVIEW_METRIC_COUNT];
+    GtkWidget *gauges[LSM_OVERVIEW_METRIC_COUNT];
     GtkWidget *process_rows[LSM_OVERVIEW_TOP_PROCESS_COUNT];
     GtkWidget *process_names[LSM_OVERVIEW_TOP_PROCESS_COUNT];
     GtkWidget *process_cpu_bars[LSM_OVERVIEW_TOP_PROCESS_COUNT];
