@@ -629,7 +629,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " border: 1px solid @lsm_border;"
         "}"
         ".lsm-performance-card separator { background-color: @lsm_border; }"
-        ".lsm-performance-card:hover { border-color: @lsm_connection_border; }"
+        ".lsm-performance-card:hover { border-color: @lsm_connection_border; }");
+
+    g_string_append(
+        css,
         "#lsm-overview-hero {"
         " background-image: linear-gradient(115deg,"
         " alpha(#006cff, 0.32), alpha(#172b55, 0.88) 46%,"
