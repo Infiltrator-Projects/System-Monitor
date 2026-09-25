@@ -34,8 +34,7 @@ static guint process_refresh_interval(const LsmApp *app)
 static gboolean process_pages_active(const LsmApp *app)
 {
     return app->runtime.active_tab == LSM_TAB_PROCESSES ||
-           app->runtime.active_tab == LSM_TAB_DETAILS ||
-           app->runtime.active_tab == LSM_TAB_OVERVIEW;
+           app->runtime.active_tab == LSM_TAB_DETAILS;
 }
 
 static guint effective_process_refresh_interval(const LsmApp *app)
@@ -70,6 +69,33 @@ gboolean lsm_app_refresh_processes_if_due(LsmApp *app, gboolean force)
 static gboolean process_timer_update(gpointer user_data)
 {
     return lsm_app_refresh_processes_if_due(user_data, FALSE);
+}
+
+static gboolean services_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_SERVICES)
+        return G_SOURCE_CONTINUE;
+    return lsm_services_update(app);
+}
+
+static gboolean users_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_USERS)
+        return G_SOURCE_CONTINUE;
+    return lsm_users_update(app);
+}
+
+static gboolean filesystem_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_FILESYSTEMS)
+        return G_SOURCE_CONTINUE;
+    return lsm_filesystems_update(app);
 }
 
 void lsm_app_refresh_all(LsmApp *app)
@@ -111,19 +137,19 @@ void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
             if (!app->runtime.services_timer)
                 app->runtime.services_timer = g_timeout_add_seconds(
                     LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
-                    lsm_services_update, app);
+                    services_timer_update, app);
             break;
         case LSM_TAB_USERS:
             if (!app->runtime.users_timer)
                 app->runtime.users_timer = g_timeout_add_seconds(
                     LSM_USER_UPDATE_INTERVAL_SECONDS,
-                    lsm_users_update, app);
+                    users_timer_update, app);
             break;
         case LSM_TAB_FILESYSTEMS:
             if (!app->runtime.filesystem_timer)
                 app->runtime.filesystem_timer = g_timeout_add_seconds(
                     LSM_FILESYSTEM_UPDATE_INTERVAL_SECONDS,
-                    lsm_filesystems_update, app);
+                    filesystem_timer_update, app);
             break;
         case LSM_TAB_PERFORMANCE:
         case LSM_TAB_PROCESSES:

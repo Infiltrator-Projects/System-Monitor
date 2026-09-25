@@ -25,4 +25,16 @@ typedef struct LsmDevicePage LsmDevicePage;
  */
 void lsm_performance_present_page(LsmApp *app, LsmDevicePage *page);
 
+/**
+ * Append one completed monitor sample to a Performance page's retained graphs.
+ *
+ * This is deliberately separate from widget presentation so hidden pages retain
+ * accurate history without formatting labels or mutating hidden GTK controls.
+ *
+ * @param [in,out] app Application containing the completed monitor snapshot.
+ * @param [in,out] page Page whose graph histories receive the sample.
+ */
+void lsm_performance_record_page_sample(
+    LsmApp *app, LsmDevicePage *page);
+
 #endif

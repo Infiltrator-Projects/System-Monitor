@@ -731,6 +731,7 @@ void lsm_performance_destroy(LsmApp *app)
     g_free(app->performance.cpu_core_labels);
     app->performance.cpu_core_graphs = NULL;
     app->performance.cpu_core_labels = NULL;
+    app->performance.recorded_sample_generation = 0U;
     app->performance.performance_stack = NULL;
     app->performance.side_scroller = NULL;
     app->performance.sidepane = NULL;
@@ -952,17 +953,55 @@ static void rebuild_for_topology_change(LsmApp *app)
 void lsm_performance_refresh(LsmApp *app)
 {
     if (!app) return;
-    lsm_monitor_update(&app->monitor);
-    lsm_overview_record_monitor_sample(app);
+    (void)lsm_monitor_update(&app->monitor);
+
     if (app->monitor.topology_generation !=
         app->performance.displayed_topology_generation)
         rebuild_for_topology_change(app);
-    for (guint i = 0; i < app->performance.device_pages->len; i++) {
-        LsmDevicePage *page = g_ptr_array_index(app->performance.device_pages, i);
-        lsm_performance_present_page(app, page);
+
+    /*
+     * Retain graph history once per completed backend sample. Presentation is
+     * deliberately separate: hidden Performance pages keep accurate history
+     * without paying the GTK formatting/layout cost every timer tick.
+     */
+    if (app->monitor.sample_generation != 0U &&
+        app->monitor.sample_generation !=
+            app->performance.recorded_sample_generation) {
+        if (app->performance.device_pages) {
+            for (guint index = 0U;
+                 index < app->performance.device_pages->len; index++) {
+                LsmDevicePage *page =
+                    g_ptr_array_index(app->performance.device_pages, index);
+                lsm_performance_record_page_sample(app, page);
+            }
+        }
+        app->performance.recorded_sample_generation =
+            app->monitor.sample_generation;
+        lsm_overview_record_monitor_sample(app);
     }
-    performance_synchronise_side_selection(app);
-    lsm_summary_bar_update(app);
+
+    if (app->runtime.active_tab == LSM_TAB_PERFORMANCE &&
+        app->performance.performance_stack &&
+        app->performance.device_pages) {
+        const char *visible = gtk_stack_get_visible_child_name(
+            GTK_STACK(app->performance.performance_stack));
+        for (guint index = 0U;
+             index < app->performance.device_pages->len; index++) {
+            LsmDevicePage *page =
+                g_ptr_array_index(app->performance.device_pages, index);
+            const gboolean selected =
+                visible && strcmp(page->stack_name, visible) == 0;
+            const gboolean rail_visible =
+                page->button && gtk_widget_get_mapped(page->button);
+            if (selected || rail_visible)
+                lsm_performance_present_page(app, page);
+        }
+        performance_synchronise_side_selection(app);
+    }
+
+    if (app->shell.summary_bar &&
+        gtk_widget_get_mapped(app->shell.summary_bar))
+        lsm_summary_bar_update(app);
     lsm_overview_refresh(app);
 }
 

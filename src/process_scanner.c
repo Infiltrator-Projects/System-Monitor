@@ -28,8 +28,10 @@ struct LsmProcessScanner {
     LsmProcessInfo *completed;
     size_t completed_count;
     unsigned requested_flags;
+    unsigned active_flags;
     atomic_uint references;
     bool request_pending;
+    bool scan_in_progress;
     bool result_ready;
     bool stop_requested;
 };
@@ -62,7 +64,9 @@ static void *scanner_thread_main(void *user_data)
             break;
         }
         flags = scanner->requested_flags;
+        scanner->active_flags = flags;
         scanner->request_pending = false;
+        scanner->scan_in_progress = true;
         (void)pthread_mutex_unlock(&scanner->mutex);
 
         LsmProcessInfo *processes = NULL;
@@ -70,6 +74,7 @@ static void *scanner_thread_main(void *user_data)
             scanner->backend, &processes, flags);
 
         (void)pthread_mutex_lock(&scanner->mutex);
+        scanner->scan_in_progress = false;
         if (scanner->stop_requested) {
             (void)pthread_mutex_unlock(&scanner->mutex);
             lsm_process_list_free(processes);
@@ -139,9 +144,22 @@ bool lsm_process_scanner_request(LsmProcessScanner *scanner,
         (void)pthread_mutex_unlock(&scanner->mutex);
         return false;
     }
+    if (scanner->scan_in_progress) {
+        /* Timer requests matching the work already in flight are redundant.
+         * A changed enrichment request (for example opening Details) is kept as
+         * one follow-up scan so newly visible fields do not wait indefinitely. */
+        if (scan_flags != scanner->active_flags) {
+            scanner->requested_flags = scan_flags;
+            scanner->request_pending = true;
+        }
+        (void)pthread_mutex_unlock(&scanner->mutex);
+        return false;
+    }
     scanner->requested_flags = scan_flags;
-    scanner->request_pending = true;
-    (void)pthread_cond_signal(&scanner->condition);
+    if (!scanner->request_pending) {
+        scanner->request_pending = true;
+        (void)pthread_cond_signal(&scanner->condition);
+    }
     (void)pthread_mutex_unlock(&scanner->mutex);
     return true;
 }

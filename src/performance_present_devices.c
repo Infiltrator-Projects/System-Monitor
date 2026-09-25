@@ -61,15 +61,6 @@ static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
     char receive[64], send[64], received[64], sent[64];
     char scale[64], mid_scale[64], compact_rates[64];
 
-    const double rx_rate = device->traffic_available
-        ? device->rx_bytes_per_sec : 0.0;
-    const double tx_rate = device->traffic_available
-        ? device->tx_bytes_per_sec : 0.0;
-    lsm_graph_push(page->graph, rx_rate, tx_rate,
-                   app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, rx_rate, tx_rate,
-                   app->runtime.newer_on_right);
-
     if (device->traffic_available) {
         lsm_metric_format_network(
             (long double)device->rx_bytes_per_sec,
@@ -195,20 +186,10 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
                           : (gpu->engine_metrics_capable
                                  ? "Peak engine utilisation" : "Utilisation"));
 
-    const double utilisation = gpu->utilization_available
-        ? gpu->utilization_percent : 0.0;
-    const double memory_percent = gpu->memory_usage_available &&
-        gpu->memory_total_bytes > 0U ? gpu->memory_percent : NAN;
-    lsm_graph_push(page->graph, utilisation, memory_percent,
-                   app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, utilisation, 0.0,
-                   app->runtime.newer_on_right);
-
     char graph_metric[32];
     LsmGpuGraphSlot *single = &widgets->single_engine_graph;
     const bool single_available = lsm_gpu_metric_available(gpu, single->metric);
     const double single_value = lsm_gpu_metric_value(gpu, single->metric);
-    lsm_graph_push(single->graph, single_value, 0.0, app->runtime.newer_on_right);
     lsm_ui_set_label_text(
         single->value, "%s",
         lsm_metric_format_percent(single_available, single_value, graph_metric,
@@ -218,14 +199,11 @@ static void update_gpu_page(LsmApp *app, LsmDevicePage *page)
         LsmGpuGraphSlot *slot = &widgets->engine_graphs[slot_index];
         const bool available = lsm_gpu_metric_available(gpu, slot->metric);
         const double value = lsm_gpu_metric_value(gpu, slot->metric);
-        lsm_graph_push(slot->graph, value, 0.0, app->runtime.newer_on_right);
         lsm_ui_set_label_text(
             slot->value, "%s",
             lsm_metric_format_percent(available, value, graph_metric,
                                       sizeof(graph_metric)));
     }
-    lsm_graph_push(widgets->memory_graph, memory_percent, 0.0,
-                   app->runtime.newer_on_right);
     if (gpu->memory_total_bytes > 0U)
         lsm_ui_set_label_text(widgets->memory_graph_value, "%s",
             lsm_format_bytes(gpu->memory_total_bytes, graph_metric,
@@ -504,11 +482,6 @@ static void update_battery_page(LsmApp *app, LsmDevicePage *page)
     format_battery_charge(battery, charge, sizeof(charge));
     const bool exact_capacity = isfinite(battery->capacity_percent);
     const bool coarse_capacity = usable_battery_level(battery->capacity_level);
-    const double graph_value = exact_capacity
-        ? battery->capacity_percent
-        : coarse_battery_graph_value(battery->capacity_level);
-    lsm_graph_push(page->graph, graph_value, 0.0, app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, graph_value, 0.0, app->runtime.newer_on_right);
     lsm_ui_set_label_text(page->button_value, "%s — %s", charge,
                           battery->status[0] ? battery->status : "N/A");
     lsm_ui_set_label_text(widgets->product, "%s",
@@ -540,12 +513,6 @@ static void update_npu_page(LsmApp *app, LsmDevicePage *page)
                                !npu->supported_metrics);
     char bytes[64];
     char metric[64];
-    const double utilization = npu->utilization_available
-        ? npu->utilization_percent : 0.0;
-    const double memory = npu->memory_total_available
-        ? npu->memory_percent : 0.0;
-    lsm_graph_push(page->graph, utilization, memory, app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, utilization, 0.0, app->runtime.newer_on_right);
     if (npu->utilization_available) {
         if (npu->utilization_percent < 0.5) {
             lsm_ui_set_label_text(page->button_value, "Idle");
@@ -608,6 +575,101 @@ static void update_npu_page(LsmApp *app, LsmDevicePage *page)
                           npu->device_identifier[0]
                               ? npu->device_identifier
                               : "N/A");
+}
+
+void performance_record_device_page_sample(
+    LsmApp *app, LsmDevicePage *page)
+{
+    if (!app || !page) return;
+
+    switch (page->type) {
+        case LSM_PAGE_BLUETOOTH: {
+            if (page->index >= app->monitor.bluetooth_device_count) return;
+            const LsmBluetoothDeviceInfo *device =
+                &app->monitor.bluetooth_devices[page->index];
+            const double rx_rate = device->traffic_available
+                ? device->rx_bytes_per_sec : 0.0;
+            const double tx_rate = device->traffic_available
+                ? device->tx_bytes_per_sec : 0.0;
+            lsm_graph_push(page->graph, rx_rate, tx_rate,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, rx_rate, tx_rate,
+                           app->runtime.newer_on_right);
+            break;
+        }
+        case LSM_PAGE_GPU: {
+            if (page->index >= app->monitor.gpu_count) return;
+            const LsmGpuInfo *gpu = &app->monitor.gpus[page->index];
+            LsmGpuPageWidgets *widgets = &page->widgets.gpu;
+            const double utilisation = gpu->utilization_available
+                ? gpu->utilization_percent : 0.0;
+            const double memory_percent =
+                gpu->memory_usage_available && gpu->memory_total_bytes > 0U
+                    ? gpu->memory_percent : NAN;
+            lsm_graph_push(page->graph, utilisation, memory_percent,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, utilisation, 0.0,
+                           app->runtime.newer_on_right);
+
+            LsmGpuMetric defaults[LSM_GPU_GRAPH_SLOT_COUNT];
+            if (!widgets->graph_defaults_initialised)
+                lsm_gpu_default_metrics(
+                    gpu, defaults, LSM_GPU_GRAPH_SLOT_COUNT);
+            const LsmGpuMetric single_metric =
+                widgets->graph_defaults_initialised
+                    ? widgets->single_engine_graph.metric : defaults[0];
+            lsm_graph_push(
+                widgets->single_engine_graph.graph,
+                lsm_gpu_metric_value(gpu, single_metric), 0.0,
+                app->runtime.newer_on_right);
+            for (size_t slot_index = 0U;
+                 slot_index < LSM_GPU_GRAPH_SLOT_COUNT; slot_index++) {
+                const LsmGpuMetric metric =
+                    widgets->graph_defaults_initialised
+                        ? widgets->engine_graphs[slot_index].metric
+                        : defaults[slot_index];
+                lsm_graph_push(
+                    widgets->engine_graphs[slot_index].graph,
+                    lsm_gpu_metric_value(gpu, metric), 0.0,
+                    app->runtime.newer_on_right);
+            }
+            lsm_graph_push(widgets->memory_graph, memory_percent, 0.0,
+                           app->runtime.newer_on_right);
+            break;
+        }
+        case LSM_PAGE_BATTERY: {
+            if (page->index >= app->monitor.battery_count) return;
+            const LsmBatteryInfo *battery =
+                &app->monitor.batteries[page->index];
+            const double graph_value = isfinite(battery->capacity_percent)
+                ? battery->capacity_percent
+                : coarse_battery_graph_value(battery->capacity_level);
+            lsm_graph_push(page->graph, graph_value, 0.0,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, graph_value, 0.0,
+                           app->runtime.newer_on_right);
+            break;
+        }
+        case LSM_PAGE_NPU: {
+            if (page->index >= app->monitor.npu_count) return;
+            const LsmNpuInfo *npu = &app->monitor.npus[page->index];
+            const double utilisation = npu->utilization_available
+                ? npu->utilization_percent : 0.0;
+            const double memory = npu->memory_total_available
+                ? npu->memory_percent : 0.0;
+            lsm_graph_push(page->graph, utilisation, memory,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, utilisation, 0.0,
+                           app->runtime.newer_on_right);
+            break;
+        }
+        case LSM_PAGE_CPU:
+        case LSM_PAGE_MEMORY:
+        case LSM_PAGE_DISK:
+        case LSM_PAGE_NETWORK:
+        case LSM_PAGE_COUNT:
+            break;
+    }
 }
 
 void performance_present_device_page(LsmApp *app, LsmDevicePage *page)

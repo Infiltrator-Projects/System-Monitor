@@ -883,6 +883,11 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             lsm_overview_refresh(app);
             break;
         case LSM_TAB_PERFORMANCE:
+            /* Hidden Performance pages retain graph history without GTK
+             * presentation. Project the current snapshot immediately when the
+             * user returns instead of waiting for the next timer tick. */
+            lsm_performance_refresh(app);
+            break;
         case LSM_TAB_COUNT:
             break;
     }

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.114 - 2026-09-26
+
+- Separate completed-sample graph retention from GTK Performance presentation: every device keeps accurate history, while hidden pages no longer reformat and relayout their full widget trees every timer tick.
+- Generation-gate Overview presentation so monitor telemetry and process snapshots update only the portions that actually changed instead of causing duplicate full dashboard refreshes.
+- Load-shed the asynchronous monitor and process workers by coalescing redundant timer requests while a same-purpose scan is already in flight; changed process-enrichment requirements still queue one follow-up scan.
+- Keep Processes and Details on the foreground process cadence while Overview and other tabs use the existing two-second background cadence, preserving App History without a full one-second /proc sweep everywhere.
+- Cache per-process command-line and cgroup metadata for five seconds, sample expensive per-process GPU fdinfo at two-second intervals while GPU data is requested, and stop sorting the entire multi-kilobyte process-record array by CPU when presentation layers already own ordering.
+- Move Bluetooth HCI connection-list reconciliation to the topology cadence instead of opening a raw HCI socket and issuing HCIGETCONNLIST for every controller on every telemetry sample.
+- Render smooth Catmull-Rom graph history with Cairo cubic Bezier segments instead of five interpolated line segments per interval, preserving the curve while reducing path construction.
+- After Services, Users or File Systems has been opened, keep its timer lightweight while hidden and perform the actual inventory refresh only when that tab is active.
+- Skip hidden summary-bar formatting and restrict Performance widget presentation to the selected page plus mapped device-rail entries.
+
 ## 1.0.113 - 2026-09-26
 
 - Fix the 1.0.112 Overview sizing regression that could make the application wider than the desktop and push the navigation rail/window controls off-screen.

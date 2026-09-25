@@ -40,6 +40,7 @@ struct LsmLinuxSamplerState {
     LsmMonitor completed;
     bool thread_started;
     bool request_pending;
+    bool sample_in_progress;
     bool sample_ready;
     bool stop_requested;
     atomic_uint references;
@@ -150,20 +151,23 @@ static void *sampler_thread_main(void *user_data)
             break;
         }
         sampler->request_pending = false;
+        sampler->sample_in_progress = true;
         force_topology = sampler->backend->topology_refresh_requested;
         sampler->backend->topology_refresh_requested = false;
         (void)pthread_mutex_unlock(&sampler->mutex);
 
-        if (!sample_once(sampler->backend, &sampler->sample, force_topology))
-            continue;
+        const bool sampled =
+            sample_once(sampler->backend, &sampler->sample, force_topology);
 
         (void)pthread_mutex_lock(&sampler->mutex);
-        if (!sampler->stop_requested) {
+        sampler->sample_in_progress = false;
+        if (sampled && !sampler->stop_requested) {
             sampler->completed = sampler->sample;
             sampler->completed.backend_state = NULL;
             sampler->sample_ready = true;
         }
         (void)pthread_mutex_unlock(&sampler->mutex);
+        if (!sampled) continue;
     }
     sampler_release(sampler);
     return NULL;
@@ -287,8 +291,10 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
         copy_public_snapshot(monitor, &sampler->completed, state, true);
         sampler->sample_ready = false;
     }
-    sampler->request_pending = true;
-    (void)pthread_cond_signal(&sampler->condition);
+    if (!sampler->request_pending && !sampler->sample_in_progress) {
+        sampler->request_pending = true;
+        (void)pthread_cond_signal(&sampler->condition);
+    }
     (void)pthread_mutex_unlock(&sampler->mutex);
 
     /* A refresh request is considered successful even when the worker is

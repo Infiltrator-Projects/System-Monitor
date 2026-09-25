@@ -24,12 +24,24 @@
 bool performance_present_core_page(LsmApp *app, LsmDevicePage *page);
 
 /**
+ * Append one core-resource sample to retained graph histories.
+ *
+ * @return true when @p page belongs to the core-resource family.
+ */
+bool performance_record_core_page_sample(
+    LsmApp *app, LsmDevicePage *page);
+
+/**
  * Present Bluetooth, GPU, battery or NPU state from the retained snapshot.
  *
  * @param [in,out] app Application owning the current monitor snapshot and widgets.
  * @param [in,out] page Device-oriented Performance page to refresh.
  */
 void performance_present_device_page(LsmApp *app, LsmDevicePage *page);
+
+/** Append one device-resource sample to retained graph histories. */
+void performance_record_device_page_sample(
+    LsmApp *app, LsmDevicePage *page);
 
 /**
  * Choose the best user-facing hardware name without promoting bus identifiers.

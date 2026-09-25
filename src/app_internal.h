@@ -374,6 +374,7 @@ typedef struct {
     GtkWidget *cpu_core_grid;
     LsmGraph **cpu_core_graphs;
     GtkWidget **cpu_core_labels;
+    uint64_t recorded_sample_generation;
 } LsmPerformanceState;
 
 /** Overview widgets backed by toolkit-neutral completed-snapshot history. */
@@ -389,6 +390,8 @@ typedef struct {
     GtkWidget *process_cpu_bars[LSM_OVERVIEW_TOP_PROCESS_COUNT];
     GtkWidget *process_cpu_values[LSM_OVERVIEW_TOP_PROCESS_COUNT];
     GtkWidget *process_memory_values[LSM_OVERVIEW_TOP_PROCESS_COUNT];
+    uint64_t displayed_monitor_generation;
+    uint64_t displayed_process_generation;
 } LsmOverviewState;
 
 /** Friendly Processes-page widget state. */
@@ -410,6 +413,7 @@ typedef struct {
     GPtrArray *filters;
     LsmProcessInfo *process_snapshot;
     size_t process_snapshot_count;
+    uint64_t process_snapshot_generation;
     LsmProcessId selected_pid;
     LsmProcessInstanceId selected_instance_id;
     LsmProcessId *selected_group_pids;

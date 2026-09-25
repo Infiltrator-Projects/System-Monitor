@@ -86,31 +86,19 @@ static void append_series_segment(cairo_t *cr,
         return;
     }
 
+    /* A Catmull-Rom segment is exactly representable as one cubic Bezier.
+     * Cairo can therefore render the same smooth curve with one curve command
+     * per sample interval instead of five interpolated line segments. */
     for (size_t i = 0U; i + 1U < count; i++) {
         const size_t p0 = i > 0U ? i - 1U : i;
         const size_t p1 = i;
         const size_t p2 = i + 1U;
         const size_t p3 = i + 2U < count ? i + 2U : i + 1U;
-        for (int step = 1; step <= 5; step++) {
-            const double t = (double)step / 5.0;
-            const double t2 = t * t;
-            const double t3 = t2 * t;
-            const double px = 0.5 * (
-                (2.0 * x[p1]) +
-                (-x[p0] + x[p2]) * t +
-                (2.0 * x[p0] - 5.0 * x[p1] +
-                 4.0 * x[p2] - x[p3]) * t2 +
-                (-x[p0] + 3.0 * x[p1] -
-                 3.0 * x[p2] + x[p3]) * t3);
-            const double py = 0.5 * (
-                (2.0 * y[p1]) +
-                (-y[p0] + y[p2]) * t +
-                (2.0 * y[p0] - 5.0 * y[p1] +
-                 4.0 * y[p2] - y[p3]) * t2 +
-                (-y[p0] + 3.0 * y[p1] -
-                 3.0 * y[p2] + y[p3]) * t3);
-            cairo_line_to(cr, px, py);
-        }
+        const double c1x = x[p1] + (x[p2] - x[p0]) / 6.0;
+        const double c1y = y[p1] + (y[p2] - y[p0]) / 6.0;
+        const double c2x = x[p2] - (x[p3] - x[p1]) / 6.0;
+        const double c2y = y[p2] - (y[p3] - y[p1]) / 6.0;
+        cairo_curve_to(cr, c1x, c1y, c2x, c2y, x[p2], y[p2]);
     }
 }
 

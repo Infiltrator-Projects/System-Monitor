@@ -1027,6 +1027,9 @@ gboolean lsm_processes_update(gpointer user_data)
     lsm_process_list_free(app->process.process_snapshot);
     app->process.process_snapshot = processes;
     app->process.process_snapshot_count = count;
+    app->process.process_snapshot_generation++;
+    if (app->process.process_snapshot_generation == 0U)
+        app->process.process_snapshot_generation = 1U;
     app->processes.processes_model_dirty = TRUE;
     app->details.details_model_dirty = TRUE;
     lsm_overview_refresh(app);

@@ -75,6 +75,14 @@ void performance_present_set_temperature_state(GtkWidget *widget,
     }
 }
 
+void lsm_performance_record_page_sample(
+    LsmApp *app, LsmDevicePage *page)
+{
+    if (!app || !page) return;
+    if (!performance_record_core_page_sample(app, page))
+        performance_record_device_page_sample(app, page);
+}
+
 void lsm_performance_present_page(LsmApp *app, LsmDevicePage *page)
 {
     if (!app || !page) return;

@@ -1422,16 +1422,33 @@ void lsm_overview_record_monitor_sample(LsmApp *app)
 void lsm_overview_refresh(LsmApp *app)
 {
     if (!app || !app->runtime.page_built[LSM_TAB_OVERVIEW] ||
+        app->runtime.active_tab != LSM_TAB_OVERVIEW ||
         !app->overview.history)
         return;
+
     LsmOverviewSample sample;
-    if (lsm_overview_history_latest(app->overview.history, &sample) &&
-        !sample.gap)
+    const gboolean have_monitor =
+        lsm_overview_history_latest(app->overview.history, &sample) &&
+        !sample.gap;
+    const gboolean monitor_changed =
+        have_monitor &&
+        sample.generation != app->overview.displayed_monitor_generation;
+    const gboolean process_changed =
+        app->process.process_snapshot_generation !=
+        app->overview.displayed_process_generation;
+
+    if (monitor_changed) {
         overview_set_latest_values(app, &sample);
-    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++)
-        if (app->overview.gauges[metric])
-            gtk_widget_queue_draw(app->overview.gauges[metric]);
-    overview_refresh_processes(app);
+        for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++)
+            if (app->overview.gauges[metric])
+                gtk_widget_queue_draw(app->overview.gauges[metric]);
+        app->overview.displayed_monitor_generation = sample.generation;
+    }
+    if (process_changed) {
+        overview_refresh_processes(app);
+        app->overview.displayed_process_generation =
+            app->process.process_snapshot_generation;
+    }
 }
 
 void lsm_overview_destroy(LsmApp *app)
@@ -1454,4 +1471,6 @@ void lsm_overview_destroy(LsmApp *app)
     }
     lsm_overview_history_destroy(app->overview.history);
     app->overview.history = NULL;
+    app->overview.displayed_monitor_generation = 0U;
+    app->overview.displayed_process_generation = 0U;
 }

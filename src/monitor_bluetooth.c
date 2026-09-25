@@ -61,16 +61,19 @@ void lsm_monitor_bluetooth_reconcile_states(LsmMonitor *monitor)
     }
     memcpy(state->bluetooth_devices, next, sizeof(next));
     state->bluetooth_device_count = count;
+
+    /* Handle-to-address membership changes with Bluetooth topology, not with
+     * every byte-rate sample. Refreshing here avoids opening a raw HCI socket
+     * and issuing HCIGETCONNLIST once per controller every second. */
+    for (size_t index = 0U; index < monitor->bluetooth_count; index++)
+        (void)lsm_bluetooth_traffic_refresh_connections(
+            monitor->bluetooth[index].name);
 }
 
 void lsm_monitor_bluetooth_update_traffic(LsmMonitor *monitor, double elapsed)
 {
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (!state) return;
-
-    for (size_t index = 0U; index < monitor->bluetooth_count; index++)
-        (void)lsm_bluetooth_traffic_refresh_connections(
-            monitor->bluetooth[index].name);
 
     const size_t count =
         monitor->bluetooth_device_count < state->bluetooth_device_count

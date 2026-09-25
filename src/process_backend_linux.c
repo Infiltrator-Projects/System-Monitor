@@ -55,6 +55,8 @@
 #define IOPRIO_WHO_PROCESS 1
 #endif
 #define LSM_IOPRIO_VALUE(class_id, data) (((class_id) << IOPRIO_CLASS_SHIFT) | (data))
+#define LSM_PROCESS_METADATA_REFRESH_SECONDS 5.0
+#define LSM_PROCESS_GPU_REFRESH_SECONDS 2.0
 
 typedef struct {
     uint64_t cpu_ticks;
@@ -76,6 +78,17 @@ typedef struct {
     double sampled_at;
     double gpu_sampled_at;
     LsmProcessGpuSnapshot gpu;
+    double gpu_percent;
+    uint64_t gpu_memory_bytes;
+    char gpu_engine[256];
+    char *command;
+    char *cgroup_path;
+    double command_sampled_at;
+    double cgroup_sampled_at;
+    bool gpu_snapshot_valid;
+    bool gpu_available;
+    bool gpu_memory_available;
+    bool cgroup_v2;
     unsigned generation;
 } PreviousProcessSample;
 
@@ -659,14 +672,6 @@ static double read_uptime_seconds(void)
     return lsm_process_linux_parse_uptime_record(text, &uptime) ? uptime : 0.0;
 }
 
-static int compare_process_cpu(const void *left, const void *right)
-{
-    const LsmProcessInfo *a = left, *b = right;
-    if (a->cpu_percent < b->cpu_percent) return 1;
-    if (a->cpu_percent > b->cpu_percent) return -1;
-    return a->pid > b->pid ? 1 : a->pid < b->pid ? -1 : 0;
-}
-
 double lsm_process_cpu_total_percent(uint64_t process_delta,
                                      uint64_t system_delta)
 {
@@ -722,12 +727,62 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         process.instance_id = native_stat.start_ticks;
         process.priority = priority_from_nice(native_stat.nice_value);
         process.efficiency_mode = native_stat.nice_value >= 10;
+
+        PreviousProcessSample *sample = find_or_create_sample(
+            backend, searchable_sample_count, pid);
+        const bool same_process =
+            sample && sample->start_ticks == process.instance_id &&
+            sample->start_ticks != 0U;
+
         read_process_status(backend, pid, &process, &native_status);
         process.owned_by_current_user = native_status.uid_available &&
             native_status.uid == backend->current_uid;
-        read_process_command(pid, &process);
+
+        const double command_age = sample
+            ? sampled_at - sample->command_sampled_at : INFINITY;
+        if (same_process && sample->command &&
+            command_age >= 0.0 &&
+            command_age < LSM_PROCESS_METADATA_REFRESH_SECONDS) {
+            lsm_copy_string(process.command, sizeof(process.command),
+                            sample->command);
+        } else {
+            read_process_command(pid, &process);
+            if (sample) {
+                char *command = strdup(process.command);
+                if (command) {
+                    free(sample->command);
+                    sample->command = command;
+                    sample->command_sampled_at = sampled_at;
+                }
+            }
+        }
+
         read_process_io(pid, &process);
-        if (scan_flags) (void)lsm_process_enrich(pid, &process, scan_flags);
+
+        unsigned enrich_flags = scan_flags;
+        const double cgroup_age = sample
+            ? sampled_at - sample->cgroup_sampled_at : INFINITY;
+        if ((scan_flags & LSM_PROCESS_SCAN_CGROUP) != 0U &&
+            same_process && sample->cgroup_path &&
+            cgroup_age >= 0.0 &&
+            cgroup_age < LSM_PROCESS_METADATA_REFRESH_SECONDS) {
+            lsm_copy_string(process.cgroup_path, sizeof(process.cgroup_path),
+                            sample->cgroup_path);
+            process.cgroup_v2 = sample->cgroup_v2;
+            enrich_flags &= ~LSM_PROCESS_SCAN_CGROUP;
+        }
+        if (enrich_flags)
+            (void)lsm_process_enrich(pid, &process, enrich_flags);
+        if ((scan_flags & LSM_PROCESS_SCAN_CGROUP) != 0U &&
+            (enrich_flags & LSM_PROCESS_SCAN_CGROUP) != 0U && sample) {
+            char *cgroup = strdup(process.cgroup_path);
+            if (cgroup) {
+                free(sample->cgroup_path);
+                sample->cgroup_path = cgroup;
+                sample->cgroup_v2 = process.cgroup_v2;
+                sample->cgroup_sampled_at = sampled_at;
+            }
+        }
 
         process.memory_percent =
             lsm_percent_u64(process.rss_bytes, total_memory);
@@ -746,11 +801,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                 (uint64_t)(uptime - started_after_boot) : 0;
         }
 
-        PreviousProcessSample *sample = find_or_create_sample(
-            backend, searchable_sample_count, pid);
         if (sample) {
-            bool same_process = sample->start_ticks == process.instance_id &&
-                                sample->start_ticks != 0;
             uint64_t process_delta = 0U;
             if (same_process && total_delta > 0U &&
                 lsm_u64_counter_delta(
@@ -768,22 +819,52 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                     &process.write_bytes_per_sec);
             }
             if ((scan_flags & LSM_PROCESS_SCAN_GPU) != 0U) {
-                LsmProcessGpuSnapshot gpu;
-                if (lsm_process_gpu_read("/proc", pid, &gpu)) {
-                    process.gpu_memory_bytes = gpu.memory_available
-                        ? gpu.memory_bytes : 0U;
-                    process.gpu_memory_available = gpu.memory_available;
-                    const double gpu_interval = sampled_at - sample->gpu_sampled_at;
-                    if (same_process && sample->gpu_sampled_at > 0.0)
-                        lsm_process_gpu_normalise(&gpu, &sample->gpu);
-                    process.gpu_available = same_process &&
-                        sample->gpu_sampled_at > 0.0 &&
-                        lsm_process_gpu_calculate_engine(
-                            &gpu, &sample->gpu, gpu_interval,
-                            &process.gpu_percent, process.gpu_engine,
-                            sizeof(process.gpu_engine));
-                    sample->gpu = gpu;
+                const double gpu_interval =
+                    sampled_at - sample->gpu_sampled_at;
+                const bool gpu_due =
+                    !same_process || sample->gpu_sampled_at <= 0.0 ||
+                    gpu_interval < 0.0 ||
+                    gpu_interval >= LSM_PROCESS_GPU_REFRESH_SECONDS;
+
+                if (gpu_due) {
+                    LsmProcessGpuSnapshot gpu;
+                    if (lsm_process_gpu_read("/proc", pid, &gpu)) {
+                        process.gpu_memory_bytes = gpu.memory_available
+                            ? gpu.memory_bytes : 0U;
+                        process.gpu_memory_available = gpu.memory_available;
+                        if (same_process && sample->gpu_snapshot_valid)
+                            lsm_process_gpu_normalise(&gpu, &sample->gpu);
+                        process.gpu_available =
+                            same_process && sample->gpu_snapshot_valid &&
+                            lsm_process_gpu_calculate_engine(
+                                &gpu, &sample->gpu, gpu_interval,
+                                &process.gpu_percent, process.gpu_engine,
+                                sizeof(process.gpu_engine));
+                        sample->gpu = gpu;
+                        sample->gpu_snapshot_valid = true;
+                    } else {
+                        process.gpu_available = false;
+                        process.gpu_memory_available = false;
+                        sample->gpu_snapshot_valid = false;
+                    }
+                    sample->gpu_percent = process.gpu_percent;
+                    sample->gpu_memory_bytes = process.gpu_memory_bytes;
+                    lsm_copy_string(sample->gpu_engine,
+                                    sizeof(sample->gpu_engine),
+                                    process.gpu_engine);
+                    sample->gpu_available = process.gpu_available;
+                    sample->gpu_memory_available =
+                        process.gpu_memory_available;
                     sample->gpu_sampled_at = sampled_at;
+                } else {
+                    process.gpu_percent = sample->gpu_percent;
+                    process.gpu_memory_bytes = sample->gpu_memory_bytes;
+                    lsm_copy_string(process.gpu_engine,
+                                    sizeof(process.gpu_engine),
+                                    sample->gpu_engine);
+                    process.gpu_available = sample->gpu_available;
+                    process.gpu_memory_available =
+                        sample->gpu_memory_available;
                 }
             }
             sample->start_ticks = process.instance_id;
@@ -802,20 +883,33 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     const bool samples_appended =
         backend->sample_count > searchable_sample_count;
 
-    /* Drop retained samples after their process disappears. */
-    size_t write = 0;
-    for (size_t i = 0; i < backend->sample_count; i++) {
-        if (backend->samples[i].generation == backend->generation) {
-            backend->samples[write++] = backend->samples[i];
+    /* Drop retained samples after their process disappears. Dynamic metadata
+     * belongs to the retained identity, so release dead entries before compacting
+     * the PID-sorted vector. */
+    size_t write = 0U;
+    for (size_t i = 0U; i < backend->sample_count; i++) {
+        if (backend->samples[i].generation != backend->generation) {
+            free(backend->samples[i].command);
+            free(backend->samples[i].cgroup_path);
+            backend->samples[i].command = NULL;
+            backend->samples[i].cgroup_path = NULL;
+            continue;
         }
+        if (write != i) {
+            backend->samples[write] = backend->samples[i];
+            backend->samples[i].command = NULL;
+            backend->samples[i].cgroup_path = NULL;
+        }
+        write++;
     }
     backend->sample_count = write;
     if (samples_appended && backend->sample_count > 1U)
         qsort(backend->samples, backend->sample_count,
               sizeof(*backend->samples), compare_sample_pid);
 
-    if (count > 1U)
-        qsort(processes, count, sizeof(*processes), compare_process_cpu);
+    /* Presentation owns ordering. Overview performs a bounded top-N selection,
+     * while GTK process models apply their configured sort without physically
+     * moving these multi-kilobyte records in the backend. */
     *out_processes = processes;
     return count;
 }
@@ -1230,6 +1324,10 @@ LsmProcessBackend *lsm_process_backend_create(void)
 void lsm_process_backend_destroy(LsmProcessBackend *backend)
 {
     if (!backend) return;
+    for (size_t index = 0U; index < backend->sample_count; index++) {
+        free(backend->samples[index].command);
+        free(backend->samples[index].cgroup_path);
+    }
     free(backend->passwd_buffer);
     free(backend->samples);
     free(backend);

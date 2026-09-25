@@ -81,12 +81,6 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
 
     lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
     lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
-    lsm_graph_push(
-        page->graph, cpu->usage_percent, 0.0,
-        app->runtime.newer_on_right);
-    lsm_graph_push(
-        page->side_graph, cpu->usage_percent, 0.0,
-        app->runtime.newer_on_right);
 
     GtkWidget *metric_widgets[LSM_CPU_METRIC_COUNT] = {
         widgets->utilisation, widgets->speed,
@@ -126,10 +120,6 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     }
 
     for (unsigned index = 0U; index < cpu->logical_cores; index++) {
-        lsm_graph_push(
-            app->performance.cpu_core_graphs[index],
-            cpu->core_usage[index], 0.0,
-            app->runtime.newer_on_right);
         lsm_ui_set_label_text(
             app->performance.cpu_core_labels[index],
             "CPU %u — %.0f%%", index, cpu->core_usage[index]);
@@ -138,17 +128,10 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
 
 static void update_memory_page(LsmApp *app, LsmDevicePage *page)
 {
-    LsmMemoryInfo *memory = &app->monitor.memory;
     LsmMemoryPageWidgets *widgets = &page->widgets.memory;
     LsmMemoryPerformanceView view;
     lsm_memory_performance_view(&app->monitor, &view);
 
-    lsm_graph_push(
-        page->graph, memory->usage_percent, 0.0,
-        app->runtime.newer_on_right);
-    lsm_graph_push(
-        page->side_graph, memory->usage_percent, 0.0,
-        app->runtime.newer_on_right);
     lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
     lsm_ui_set_label_text(page->subtitle, "%s", view.subtitle);
 
@@ -191,15 +174,8 @@ static void update_disk_page(LsmApp *app, LsmDevicePage *page)
     LsmDiskPageWidgets *widgets = &page->widgets.disk;
     LsmDevicePerformanceView view;
     lsm_disk_performance_view(disk, page->index, &view);
-    const double megabyte = 1024.0 * 1024.0;
-    const double read_mb = disk->read_bytes_per_sec / megabyte;
-    const double write_mb = disk->write_bytes_per_sec / megabyte;
     char total[64], used[96];
 
-    lsm_graph_push(page->graph, disk->active_percent, 0.0, app->runtime.newer_on_right);
-    lsm_graph_push(page->secondary_graph, read_mb, write_mb,
-                   app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, disk->active_percent, 0.0, app->runtime.newer_on_right);
     lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
     lsm_ui_set_label_text(
         widgets->read_speed, "%s",
@@ -302,10 +278,6 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
     }
     char total_received[64], total_sent[64];
     char scale[64], mid_scale[64], frequency[64];
-    lsm_graph_push(page->graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
-                   app->runtime.newer_on_right);
-    lsm_graph_push(page->side_graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
-                   app->runtime.newer_on_right);
 
     lsm_metric_format_network(
         (long double)net->rx_bytes_total, app->runtime.network_use_bits, false,
@@ -362,6 +334,73 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(page->scale_label, "%s", scale);
     if (widgets->mid_scale)
         lsm_ui_set_label_text(widgets->mid_scale, "%s", mid_scale);
+}
+
+bool performance_record_core_page_sample(
+    LsmApp *app, LsmDevicePage *page)
+{
+    if (!app || !page) return false;
+
+    switch (page->type) {
+        case LSM_PAGE_CPU: {
+            const LsmCpuInfo *cpu = &app->monitor.cpu;
+            lsm_graph_push(page->graph, cpu->usage_percent, 0.0,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, cpu->usage_percent, 0.0,
+                           app->runtime.newer_on_right);
+            if (app->performance.cpu_core_graphs) {
+                for (unsigned index = 0U;
+                     index < cpu->logical_cores; index++) {
+                    lsm_graph_push(
+                        app->performance.cpu_core_graphs[index],
+                        cpu->core_usage[index], 0.0,
+                        app->runtime.newer_on_right);
+                }
+            }
+            return true;
+        }
+        case LSM_PAGE_MEMORY: {
+            const LsmMemoryInfo *memory = &app->monitor.memory;
+            lsm_graph_push(page->graph, memory->usage_percent, 0.0,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, memory->usage_percent, 0.0,
+                           app->runtime.newer_on_right);
+            return true;
+        }
+        case LSM_PAGE_DISK: {
+            if (page->index >= app->monitor.disk_count) return true;
+            const LsmDiskInfo *disk = &app->monitor.disks[page->index];
+            const double megabyte = 1024.0 * 1024.0;
+            lsm_graph_push(page->graph, disk->active_percent, 0.0,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(
+                page->secondary_graph,
+                disk->read_bytes_per_sec / megabyte,
+                disk->write_bytes_per_sec / megabyte,
+                app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, disk->active_percent, 0.0,
+                           app->runtime.newer_on_right);
+            return true;
+        }
+        case LSM_PAGE_NETWORK: {
+            if (page->index >= app->monitor.net_count) return true;
+            const LsmNetInfo *net = &app->monitor.nets[page->index];
+            lsm_graph_push(
+                page->graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
+                app->runtime.newer_on_right);
+            lsm_graph_push(
+                page->side_graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
+                app->runtime.newer_on_right);
+            return true;
+        }
+        case LSM_PAGE_BLUETOOTH:
+        case LSM_PAGE_GPU:
+        case LSM_PAGE_BATTERY:
+        case LSM_PAGE_NPU:
+        case LSM_PAGE_COUNT:
+            return false;
+    }
+    return false;
 }
 
 bool performance_present_core_page(LsmApp *app, LsmDevicePage *page)
