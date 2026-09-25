@@ -128,9 +128,19 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
     if (fill) {
         cairo_new_path(cr);
         if (make_series_path(cr, history, maximum, width, height, true)) {
-            cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue,
-                                  compact ? 0.18 : 0.20);
+            cairo_pattern_t *gradient =
+                cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
+            cairo_pattern_add_color_stop_rgba(
+                gradient, 0.0, colour->red, colour->green, colour->blue,
+                compact ? 0.22 : 0.38);
+            cairo_pattern_add_color_stop_rgba(
+                gradient, 0.58, colour->red, colour->green, colour->blue,
+                compact ? 0.14 : 0.20);
+            cairo_pattern_add_color_stop_rgba(
+                gradient, 1.0, colour->red, colour->green, colour->blue, 0.025);
+            cairo_set_source(cr, gradient);
             cairo_fill(cr);
+            cairo_pattern_destroy(gradient);
         }
     }
 
@@ -143,8 +153,13 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
 
     cairo_new_path(cr);
     if (make_series_path(cr, history, maximum, width, height, false)) {
+        cairo_set_source_rgba(
+            cr, colour->red, colour->green, colour->blue,
+            compact ? 0.16 : 0.20);
+        cairo_set_line_width(cr, compact ? 5.0 : 7.0);
+        cairo_stroke_preserve(cr);
         cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
-        cairo_set_line_width(cr, compact ? 1.45 : 1.65);
+        cairo_set_line_width(cr, compact ? 1.55 : 1.85);
         cairo_stroke(cr);
     }
     cairo_set_dash(cr, NULL, 0, 0.0);
@@ -180,23 +195,25 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     cairo_rectangle(cr, 0.0, 0.0, width, height);
     cairo_fill(cr);
 
-    if (!graph->compact) {
+    {
+        const int divisions = graph->compact ? 4 : 10;
         cairo_set_source_rgba(cr, graph->primary_colour.red,
                               graph->primary_colour.green,
-                              graph->primary_colour.blue, 0.13);
-        cairo_set_line_width(cr, 0.50);
-        for (int i = 1; i < 10; i++) {
-            const double x = width * i / 10.0;
+                              graph->primary_colour.blue,
+                              graph->compact ? 0.055 : 0.13);
+        cairo_set_line_width(cr, graph->compact ? 0.35 : 0.50);
+        for (int i = 1; i < divisions; i++) {
+            const double x = width * i / (double)divisions;
             cairo_move_to(cr, x, 0.0);
             cairo_line_to(cr, x, height);
         }
-        for (int i = 1; i < 10; i++) {
-            const double y = height * i / 10.0;
+        for (int i = 1; i < divisions; i++) {
+            const double y = height * i / (double)divisions;
             cairo_move_to(cr, 0.0, y);
             cairo_line_to(cr, width, y);
         }
         cairo_stroke(cr);
-        if (graph->emphasise_midline) {
+        if (!graph->compact && graph->emphasise_midline) {
             cairo_set_source_rgba(cr, graph->primary_colour.red,
                                   graph->primary_colour.green,
                                   graph->primary_colour.blue, 0.24);
