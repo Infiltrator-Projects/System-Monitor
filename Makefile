@@ -743,7 +743,7 @@ process-export-smoke: | $(BUILD_DIR)
 # Instrument deterministic accounting, parsing, selection, formatting and
 # cadence modules. The consolidated subsystem runners exercise the same case
 # bodies while four executables replace seventeen one-case coverage programs.
-COVERAGE_METRICS_SOURCES := src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c src/gpu_metrics.c src/performance_selection.c
+COVERAGE_METRICS_SOURCES := src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c
 COVERAGE_STORAGE_SOURCES := src/mountinfo.c src/storage_metadata.c src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c src/smbios_memory.c src/system_sources.c
 COVERAGE_PROCESS_SOURCES := src/process_model.c src/process_grouping.c src/process_gpu.c src/process_inspection.c src/process_backend_linux.c
 COVERAGE_ACCELERATOR_SOURCES := src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
@@ -778,9 +778,9 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/storage-smoke
 	$(COVERAGE_DIR)/process-smoke
 	$(COVERAGE_DIR)/accelerator-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/pressure.c ../../src/sample_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/npu_telemetry.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
-	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 17) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
-	@echo "Coverage scope: 17 deterministic core modules, each at least 65%; this is not a whole-application percentage."
+	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/pressure.c ../../src/sample_history.c ../../src/overview_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/npu_telemetry.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
+	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 18) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	@echo "Coverage scope: 18 deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."
 
 install install-built uninstall:
