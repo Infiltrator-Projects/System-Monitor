@@ -601,7 +601,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		support/tests/metrics_smoke.c src/cpu_accounting.c src/disk_accounting.c \
 		src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c \
-		src/sample_history.c src/gpu_metrics.c src/performance_selection.c \
+		src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/metrics-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./$(BUILD_DIR)/metrics-sanitized
