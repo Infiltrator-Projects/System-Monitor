@@ -11,6 +11,7 @@
 #define INFILTRATOR_SYSTEM_MONITOR_PROCESS_BACKEND_LINUX_INTERNAL_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * Parse the first uptime field from one Linux /proc/uptime record.
@@ -24,5 +25,8 @@
  * @return true when the first field is syntactically complete and valid.
  */
 bool lsm_process_linux_parse_uptime_record(const char *text, double *uptime);
+
+/** Parse the aggregate cpu row at the start of Linux /proc/stat. */
+bool lsm_process_linux_parse_total_cpu_ticks(const char *text, uint64_t *total);
 
 #endif
