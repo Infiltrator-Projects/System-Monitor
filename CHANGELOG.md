@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.101 - 2026-09-25
+
+- Replace the visible Linux top-level notebook tab strip with a persistent left navigation rail matching the approved UI mockup direction.
+- Promote Overview, CPU, Memory, Disks, Network, GPU and Battery to icon-led primary destinations while preserving the existing Performance resource/device identities and lazy page construction.
+- Keep Processes, App History, Startup Apps, Users, Details, Services and File Systems in the same rail so the whole application reads as one GUI-first product rather than a row of administrative tabs.
+- Add resource-coloured symbolic icons, a stronger cyan selected state, compact separators and a dedicated graphite navigation surface without changing collectors or monitoring semantics.
+- Keep the notebook internally as the stable page container and synchronise the new rail with both notebook changes and Performance device selection.
+
+
 ## 1.0.100 - 2026-09-25
 
 - Preserve the approved graphical System Monitor UI mockup directly in the repository and make the maintained UI vision document reference that image.
