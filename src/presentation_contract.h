@@ -34,6 +34,16 @@ typedef enum {
     LSM_PAGE_COUNT
 } LsmPageType;
 
+/** Cross-tab summary resource order shared by every native front end. */
+typedef enum {
+    LSM_SUMMARY_CPU = 0,
+    LSM_SUMMARY_MEMORY,
+    LSM_SUMMARY_DISK,
+    LSM_SUMMARY_NETWORK,
+    LSM_SUMMARY_GPU,
+    LSM_SUMMARY_COUNT
+} LsmSummaryField;
+
 /** Canonical Performance geometry. Native toolkits map these logical pixels. */
 enum {
     LSM_PRIMARY_GRAPH_MIN_HEIGHT = 120,
@@ -134,6 +144,14 @@ typedef enum {
  * @return Static UTF-8 label owned by the presentation contract.
  */
 const char *lsm_tab_label(LsmTabIndex tab);
+
+/**
+ * Return the canonical label for one cross-tab summary resource.
+ *
+ * @param field Summary resource identity.
+ * @return Static UTF-8 label owned by the presentation contract.
+ */
+const char *lsm_summary_label(LsmSummaryField field);
 
 /**
  * Return the canonical default title for one Performance resource.

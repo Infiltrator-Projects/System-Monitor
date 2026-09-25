@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.95 - 2026-09-25
+
+- Remove the native Windows copies of Common's Day/Night palette and System/Day/Night enum; Win32 now projects its `COLORREF` adapter directly from the exact Common 1.19.27 theme contract.
+- Remove duplicated Windows screen/section/control spacing and radius constants and consume Common's design metrics at the rendering boundary, with ABI/size/range validation before the window is created.
+- Centralise the five-item cross-tab summary labels and formatted values in the platform-neutral presentation layer so GTK and Win32 share CPU, memory, disk, network and GPU availability/unit semantics; Windows now shows the live disk/network/GPU summary values it already collected instead of permanent placeholders.
+- Remove the accidental Windows summary-loop dependency on `LSM_MEMORY_DETAIL_COUNT`; summary iteration is now typed by its own `LSM_SUMMARY_COUNT` contract.
+- Make Win32 UTF-8 conversion strict by removing the ANSI-code-page fallback that could silently reinterpret malformed project text.
+- Add deterministic summary projection coverage and source-ownership gates preventing local Common palette/geometry copies or ACP fallback from returning.
+
+
 ## 1.0.94 - 2026-09-25
 
 - Pin Make, CMake and the source gitlink to released Infiltratr Common 1.19.27 at `3ef3710df6563df305b6d8e2dc9d1a41c61843ba`.

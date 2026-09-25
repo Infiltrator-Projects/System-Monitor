@@ -35,6 +35,14 @@ static const char *const page_titles[LSM_PAGE_COUNT] = {
     "NPU"
 };
 
+static const char *const summary_labels[LSM_SUMMARY_COUNT] = {
+    "CPU",
+    "Memory",
+    "Disk",
+    "Network",
+    "GPU"
+};
+
 static const char *const stack_prefixes[LSM_PAGE_COUNT] = {
     "cpu",
     "memory",
@@ -126,6 +134,11 @@ static size_t checked_index(int value, size_t count)
 const char *lsm_tab_label(LsmTabIndex tab)
 {
     return tab_labels[checked_index((int)tab, LSM_TAB_COUNT)];
+}
+
+const char *lsm_summary_label(LsmSummaryField field)
+{
+    return summary_labels[checked_index((int)field, LSM_SUMMARY_COUNT)];
 }
 
 const char *lsm_performance_page_title(LsmPageType type)

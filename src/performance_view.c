@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file performance_view.c
- * @brief Platform-neutral CPU and memory Performance value projection.
+ * @brief Platform-neutral Performance and cross-tab summary value projection.
  *
  * The implementation uses only plain monitor data plus the portable Infiltratr
  * Common formatting contract. GTK and Win32 render these strings but do not
@@ -94,6 +94,95 @@ static void append_text(char *buffer, size_t size, size_t *used,
         return;
     }
     *used += count;
+}
+
+void lsm_summary_performance_view(const LsmMonitor *monitor,
+                                  bool network_use_bits,
+                                  LsmSummaryPerformanceView *view)
+{
+    if (!view) return;
+    memset(view, 0, sizeof(*view));
+    for (size_t index = 0U; index < LSM_SUMMARY_COUNT; index++)
+        infiltratr_copy_string(
+            view->values[index], sizeof(view->values[index]), "N/A");
+    if (!monitor) return;
+
+    infiltratr_format_percent(
+        isfinite(monitor->cpu.usage_percent),
+        monitor->cpu.usage_percent,
+        view->values[LSM_SUMMARY_CPU],
+        sizeof(view->values[LSM_SUMMARY_CPU]));
+    infiltratr_format_percent(
+        isfinite(monitor->memory.usage_percent),
+        monitor->memory.usage_percent,
+        view->values[LSM_SUMMARY_MEMORY],
+        sizeof(view->values[LSM_SUMMARY_MEMORY]));
+
+    bool disk_available = false;
+    double disk_peak = 0.0;
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        const double value = monitor->disks[index].active_percent;
+        if (!isfinite(value)) continue;
+        if (!disk_available || value > disk_peak) disk_peak = value;
+        disk_available = true;
+    }
+    infiltratr_format_percent(
+        disk_available, disk_peak,
+        view->values[LSM_SUMMARY_DISK],
+        sizeof(view->values[LSM_SUMMARY_DISK]));
+
+    if (monitor->net_count > 0U) {
+        long double network_rate = 0.0L;
+        double network_peak = 0.0;
+        bool utilisation_available = false;
+        for (size_t index = 0U; index < monitor->net_count; index++) {
+            const LsmNetInfo *net = &monitor->nets[index];
+            if (isfinite(net->rx_bytes_per_sec) && net->rx_bytes_per_sec > 0.0)
+                network_rate += (long double)net->rx_bytes_per_sec;
+            if (isfinite(net->tx_bytes_per_sec) && net->tx_bytes_per_sec > 0.0)
+                network_rate += (long double)net->tx_bytes_per_sec;
+            if (net->utilisation_available &&
+                isfinite(net->utilisation_percent) &&
+                (!utilisation_available ||
+                 net->utilisation_percent > network_peak)) {
+                network_peak = net->utilisation_percent;
+                utilisation_available = true;
+            }
+        }
+
+        char rate[64];
+        infiltratr_format_network(
+            network_rate, network_use_bits, true, rate, sizeof(rate));
+        if (utilisation_available && network_peak > 0.0) {
+            char percent[32];
+            infiltratr_format_percent(
+                true, network_peak, percent, sizeof(percent));
+            (void)snprintf(
+                view->values[LSM_SUMMARY_NETWORK],
+                sizeof(view->values[LSM_SUMMARY_NETWORK]),
+                "%s (%s)", rate, percent);
+        } else {
+            infiltratr_copy_string(
+                view->values[LSM_SUMMARY_NETWORK],
+                sizeof(view->values[LSM_SUMMARY_NETWORK]), rate);
+        }
+    }
+
+    bool gpu_available = false;
+    double gpu_peak = 0.0;
+    for (size_t index = 0U; index < monitor->gpu_count; index++) {
+        const LsmGpuInfo *gpu = &monitor->gpus[index];
+        if (!gpu->utilization_available ||
+            !isfinite(gpu->utilization_percent))
+            continue;
+        if (!gpu_available || gpu->utilization_percent > gpu_peak)
+            gpu_peak = gpu->utilization_percent;
+        gpu_available = true;
+    }
+    infiltratr_format_percent(
+        gpu_available, gpu_peak,
+        view->values[LSM_SUMMARY_GPU],
+        sizeof(view->values[LSM_SUMMARY_GPU]));
 }
 
 void lsm_cpu_performance_view(const LsmMonitor *monitor,

@@ -867,6 +867,29 @@ static void check_shell_boundary(void)
 static void check_shared_release_contract(void)
 {
     size_t size = 0U;
+
+    char *windows = read_file("src/main_windows.c", &size);
+    if (windows) {
+        require_text_marker(
+            "src/main_windows.c", windows, "infiltratr_theme_resolve");
+        require_text_marker(
+            "src/main_windows.c", windows, "infiltratr_design_metrics");
+        require_text_marker(
+            "src/main_windows.c", windows, "lsm_summary_performance_view");
+        if (strstr(windows, "windows_day_palette") ||
+            strstr(windows, "windows_night_palette"))
+            report_error(
+                "src/main_windows.c: Common Day/Night palettes must not be mirrored locally");
+        if (strstr(windows, "CP_ACP"))
+            report_error(
+                "src/main_windows.c: invalid UTF-8 must not be silently reinterpreted as ACP");
+        if (strstr(windows, "#define LSM_WINDOWS_SCREEN_PADDING") ||
+            strstr(windows, "#define LSM_WINDOWS_CARD_RADIUS") ||
+            strstr(windows, "#define LSM_WINDOWS_CONTROL_SPACING"))
+            report_error(
+                "src/main_windows.c: shared design metrics must come from Common");
+        free(windows);
+    }
     char *makefile = read_file("Makefile", &size);
     (void)size;
     if (makefile) {

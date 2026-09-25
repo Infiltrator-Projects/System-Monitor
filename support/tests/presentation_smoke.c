@@ -25,6 +25,7 @@ static void check_contract_identity(void)
     assert(strcmp(lsm_tab_label(LSM_TAB_FILESYSTEMS), "File Systems") == 0);
     assert(strcmp(lsm_performance_page_title(LSM_PAGE_CPU), "CPU") == 0);
     assert(strcmp(lsm_performance_page_title(LSM_PAGE_MEMORY), "Memory") == 0);
+    assert(strcmp(lsm_summary_label(LSM_SUMMARY_NETWORK), "Network") == 0);
     assert(strcmp(lsm_performance_colour_hex(LSM_PAGE_CPU), "#00adef") == 0);
 
     const LsmPresentationGridPosition user =
@@ -117,6 +118,41 @@ static void check_memory_projection(void)
 }
 
 
+static void check_summary_projection(void)
+{
+    LsmMonitor monitor;
+    memset(&monitor, 0, sizeof(monitor));
+    monitor.cpu.usage_percent = 42.0;
+    monitor.memory.usage_percent = 75.0;
+
+    monitor.disk_count = 2U;
+    monitor.disks[0].active_percent = 12.0;
+    monitor.disks[1].active_percent = 65.0;
+
+    monitor.net_count = 1U;
+    monitor.nets[0].rx_bytes_per_sec = 1000000.0;
+    monitor.nets[0].tx_bytes_per_sec = 500000.0;
+    monitor.nets[0].utilisation_available = true;
+    monitor.nets[0].utilisation_percent = 12.0;
+
+    monitor.gpu_count = 2U;
+    monitor.gpus[0].utilization_available = false;
+    monitor.gpus[1].utilization_available = true;
+    monitor.gpus[1].utilization_percent = 73.0;
+
+    LsmSummaryPerformanceView view;
+    lsm_summary_performance_view(&monitor, false, &view);
+    assert(strcmp(view.values[LSM_SUMMARY_CPU], "42%") == 0);
+    assert(strcmp(view.values[LSM_SUMMARY_MEMORY], "75%") == 0);
+    assert(strcmp(view.values[LSM_SUMMARY_DISK], "65%") == 0);
+    assert(strcmp(view.values[LSM_SUMMARY_NETWORK], "1.5 MB/s (12%)") == 0);
+    assert(strcmp(view.values[LSM_SUMMARY_GPU], "73%") == 0);
+
+    lsm_summary_performance_view(NULL, false, &view);
+    for (size_t index = 0U; index < LSM_SUMMARY_COUNT; index++)
+        assert(strcmp(view.values[index], "N/A") == 0);
+}
+
 static void check_device_projection(void)
 {
     LsmDiskInfo disk;
@@ -203,6 +239,7 @@ int main(void)
     check_contract_identity();
     check_cpu_availability_semantics();
     check_memory_projection();
+    check_summary_projection();
     check_device_projection();
     puts("Shared presentation contract smoke passed.");
     return 0;

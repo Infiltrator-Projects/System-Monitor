@@ -23,6 +23,12 @@
 #define LSM_MEMORY_MODULE_VIEW_LEN 8192
 #define LSM_DEVICE_PERFORMANCE_METRIC_COUNT 12
 #define LSM_DEVICE_PERFORMANCE_LABEL_LEN 64
+#define LSM_SUMMARY_VIEW_VALUE_LEN 128
+
+/** Canonical formatted cross-tab summary consumed by every native renderer. */
+typedef struct {
+    char values[LSM_SUMMARY_COUNT][LSM_SUMMARY_VIEW_VALUE_LEN];
+} LsmSummaryPerformanceView;
 
 /** Canonical formatted CPU presentation consumed by every native renderer. */
 typedef struct {
@@ -102,6 +108,17 @@ typedef enum {
  * @param monitor Current platform-neutral monitoring snapshot.
  * @param view Caller-owned output that is fully initialised by the function.
  */
+/**
+ * Project one monitor snapshot into the canonical cross-tab summary.
+ *
+ * @param monitor Current platform-neutral monitoring snapshot, or NULL.
+ * @param network_use_bits Present network throughput in bits when true.
+ * @param view Caller-owned output fully initialised by the function.
+ */
+void lsm_summary_performance_view(const LsmMonitor *monitor,
+                                  bool network_use_bits,
+                                  LsmSummaryPerformanceView *view);
+
 void lsm_cpu_performance_view(const LsmMonitor *monitor,
                               LsmCpuPerformanceView *view);
 

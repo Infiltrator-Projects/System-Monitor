@@ -21,6 +21,7 @@
 
 #include <infiltratr/core.h>
 #include <infiltratr/design.h>
+#include <infiltratr/format.h>
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -50,25 +51,10 @@
 #define LSM_WINDOWS_SUMMARY_HEIGHT 56
 #define LSM_WINDOWS_TAB_HEIGHT 38
 #define LSM_WINDOWS_STATUS_HEIGHT 30
-#define LSM_WINDOWS_SCREEN_PADDING 20
-#define LSM_WINDOWS_CONTENT_PADDING 16
-#define LSM_WINDOWS_SECTION_SPACING 18
-#define LSM_WINDOWS_CONTROL_SPACING 10
-#define LSM_WINDOWS_CARD_RADIUS 12
-#define LSM_WINDOWS_CONTROL_RADIUS 10
 #define LSM_WINDOWS_MESSAGE_START_BACKEND (WM_APP + 1)
-#define LSM_WINDOWS_PERFORMANCE_ITEM_GAP 6
-#define LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE \
-    (LSM_SIDE_BUTTON_HEIGHT + LSM_WINDOWS_PERFORMANCE_ITEM_GAP)
 #define LSM_WINDOWS_MAX_PERFORMANCE_ITEMS \
     (2U + LSM_MAX_DISKS + LSM_MAX_NETS + LSM_MAX_GPUS)
 #include "windows_resources.h"
-
-typedef enum {
-    LSM_WINDOWS_THEME_SYSTEM,
-    LSM_WINDOWS_THEME_DAY,
-    LSM_WINDOWS_THEME_NIGHT
-} LsmWindowsThemeMode;
 
 typedef struct {
     COLORREF background;
@@ -79,7 +65,6 @@ typedef struct {
     COLORREF border;
     COLORREF text;
     COLORREF title;
-    COLORREF muted;
     COLORREF subtle;
     COLORREF selection;
     COLORREF accent;
@@ -92,49 +77,6 @@ typedef struct {
     COLORREF card_hover;
 } LsmWindowsPalette;
 
-static const LsmWindowsPalette windows_day_palette = {
-    RGB(0xFF, 0xFF, 0xFF),
-    RGB(0xFF, 0xFF, 0xFF),
-    RGB(0xF8, 0xF9, 0xFA),
-    RGB(0xEC, 0xEF, 0xF2),
-    RGB(0xFF, 0xFF, 0xFF),
-    RGB(0xC7, 0xCD, 0xD3),
-    RGB(0x20, 0x25, 0x2B),
-    RGB(0x11, 0x14, 0x18),
-    RGB(0x59, 0x63, 0x6C),
-    RGB(0x73, 0x7D, 0x86),
-    RGB(0xDD, 0xE2, 0xE7),
-    RGB(0x00, 0xAD, 0xEF),
-    RGB(0x46, 0x7A, 0xA3),
-    RGB(0x11, 0x14, 0x18),
-    RGB(0x59, 0x63, 0x6C),
-    RGB(0x73, 0x7D, 0x86),
-    RGB(0xF8, 0xF9, 0xFA),
-    RGB(0xC7, 0xCD, 0xD3),
-    RGB(0xEE, 0xF1, 0xF3)
-};
-
-static const LsmWindowsPalette windows_night_palette = {
-    RGB(0x05, 0x06, 0x08),
-    RGB(0x10, 0x13, 0x18),
-    RGB(0x17, 0x1B, 0x20),
-    RGB(0x0D, 0x10, 0x14),
-    RGB(0x0E, 0x11, 0x15),
-    RGB(0x35, 0x3A, 0x40),
-    RGB(0xE8, 0xEC, 0xEF),
-    RGB(0xEE, 0xF1, 0xF3),
-    RGB(0xAE, 0xB6, 0xBD),
-    RGB(0x89, 0x91, 0x98),
-    RGB(0x2B, 0x31, 0x37),
-    RGB(0x00, 0xAD, 0xEF),
-    RGB(0x79, 0xCA, 0xE8),
-    RGB(0xE7, 0xEB, 0xEE),
-    RGB(0x98, 0xA1, 0xA9),
-    RGB(0x7E, 0x85, 0x8C),
-    RGB(0x0E, 0x11, 0x15),
-    RGB(0x31, 0x36, 0x3B),
-    RGB(0x22, 0x27, 0x2D)
-};
 
 typedef struct {
     LsmPageType type;
@@ -165,7 +107,8 @@ typedef struct {
     LsmTabIndex active_page;
     LsmPageType active_performance_item;
     size_t active_performance_index;
-    LsmWindowsThemeMode theme_mode;
+    InfiltratrThemeMode theme_mode;
+    const InfiltratrDesignMetrics *design;
     LsmWindowsPalette palette;
     int hovered_tab;
     int hovered_performance_item;
@@ -206,6 +149,67 @@ static LsmWindowsUiState *window_state(HWND window)
     return (LsmWindowsUiState *)GetWindowLongPtrW(window, GWLP_USERDATA);
 }
 
+static COLORREF colourref_from_common(uint32_t rgb)
+{
+    return RGB(
+        (BYTE)((rgb >> 16U) & 0xffU),
+        (BYTE)((rgb >> 8U) & 0xffU),
+        (BYTE)(rgb & 0xffU));
+}
+
+static bool common_design_supported(const InfiltratrDesignMetrics *design)
+{
+    return design &&
+           design->abi_version == INFILTRATR_DESIGN_METRICS_ABI &&
+           design->struct_size >=
+               offsetof(InfiltratrDesignMetrics, screen_padding) +
+               sizeof(design->screen_padding) &&
+           design->small_radius <= (uint32_t)INT_MAX &&
+           design->control_radius <= (uint32_t)INT_MAX &&
+           design->card_radius <= (uint32_t)INT_MAX &&
+           design->compact_spacing <= (uint32_t)INT_MAX &&
+           design->control_spacing <= (uint32_t)INT_MAX &&
+           design->section_spacing <= (uint32_t)INT_MAX &&
+           design->screen_padding <= (uint32_t)INT_MAX;
+}
+
+static bool common_palette_supported(const InfiltratrThemePalette *palette)
+{
+    return palette &&
+           palette->abi_version == INFILTRATR_THEME_PALETTE_ABI &&
+           palette->struct_size >=
+               offsetof(InfiltratrThemePalette, success_border_rgb) +
+               sizeof(palette->success_border_rgb);
+}
+
+static void project_common_palette(const InfiltratrThemePalette *source,
+                                   LsmWindowsPalette *destination)
+{
+    if (!source || !destination) return;
+    destination->background = colourref_from_common(source->background_rgb);
+    destination->panel = colourref_from_common(source->panel_rgb);
+    destination->card = colourref_from_common(source->card_rgb);
+    destination->surface = colourref_from_common(source->surface_rgb);
+    destination->input = colourref_from_common(source->input_rgb);
+    destination->border = colourref_from_common(source->border_rgb);
+    destination->text = colourref_from_common(source->text_rgb);
+    destination->title = colourref_from_common(source->title_rgb);
+    destination->subtle = colourref_from_common(source->subtle_rgb);
+    destination->selection =
+        colourref_from_common(source->selection_background_rgb);
+    destination->accent =
+        colourref_from_common(source->neutral_accent_rgb);
+    destination->selected_summary =
+        colourref_from_common(source->selected_summary_rgb);
+    destination->heading = colourref_from_common(source->heading_rgb);
+    destination->summary = colourref_from_common(source->summary_rgb);
+    destination->detail = colourref_from_common(source->detail_label_rgb);
+    destination->connection = colourref_from_common(source->connection_rgb);
+    destination->connection_border =
+        colourref_from_common(source->connection_border_rgb);
+    destination->card_hover = colourref_from_common(source->card_hover_rgb);
+}
+
 static bool system_prefers_dark(void)
 {
     DWORD light_theme = 1U;
@@ -221,24 +225,27 @@ static bool system_prefers_dark(void)
 static bool theme_is_dark(const LsmWindowsUiState *state)
 {
     if (!state) return true;
-    if (state->theme_mode == LSM_WINDOWS_THEME_NIGHT) return true;
-    if (state->theme_mode == LSM_WINDOWS_THEME_DAY) return false;
+    if (state->theme_mode == INFILTRATR_THEME_NIGHT) return true;
+    if (state->theme_mode == INFILTRATR_THEME_DAY) return false;
     return system_prefers_dark();
 }
 
-static void resolve_theme(LsmWindowsUiState *state)
+static bool resolve_theme(LsmWindowsUiState *state)
 {
-    if (!state) return;
-    state->palette = theme_is_dark(state)
-        ? windows_night_palette : windows_day_palette;
+    if (!state) return false;
+    const InfiltratrThemePalette *source =
+        infiltratr_theme_resolve(state->theme_mode, system_prefers_dark());
+    if (!common_palette_supported(source)) return false;
+    project_common_palette(source, &state->palette);
+    return true;
 }
 
-static void load_theme_preference(LsmWindowsUiState *state)
+static bool load_theme_preference(LsmWindowsUiState *state)
 {
-    if (!state) return;
+    if (!state) return false;
     /* Preserve the established black/graphite preview unless the user
      * explicitly selects Follow system or Day. */
-    state->theme_mode = LSM_WINDOWS_THEME_NIGHT;
+    state->theme_mode = INFILTRATR_THEME_NIGHT;
 
     DWORD mode = 0U;
     DWORD size = sizeof(mode);
@@ -247,9 +254,14 @@ static void load_theme_preference(LsmWindowsUiState *state)
         L"Software\\Infiltrator\\System Monitor",
         L"ThemeMode",
         RRF_RT_REG_DWORD, NULL, &mode, &size);
-    if (status == ERROR_SUCCESS && mode <= (DWORD)LSM_WINDOWS_THEME_NIGHT)
-        state->theme_mode = (LsmWindowsThemeMode)mode;
-    resolve_theme(state);
+    if (status == ERROR_SUCCESS && mode <= (DWORD)INFILTRATR_THEME_NIGHT)
+        state->theme_mode = (InfiltratrThemeMode)mode;
+    return resolve_theme(state);
+}
+
+static int performance_item_stride(const LsmWindowsUiState *state)
+{
+    return LSM_SIDE_BUTTON_HEIGHT + (int)state->design->compact_spacing;
 }
 
 static void save_theme_preference(const LsmWindowsUiState *state)
@@ -302,13 +314,9 @@ static void text_to_wide(const char *source, wchar_t *destination,
     destination[0] = L'\0';
     if (!source || !source[0] || capacity > (size_t)INT_MAX) return;
 
-    int converted = MultiByteToWideChar(
+    const int converted = MultiByteToWideChar(
         CP_UTF8, MB_ERR_INVALID_CHARS, source, -1,
         destination, (int)capacity);
-    if (converted <= 0) {
-        converted = MultiByteToWideChar(
-            CP_ACP, 0U, source, -1, destination, (int)capacity);
-    }
     if (converted <= 0) destination[0] = L'\0';
 }
 
@@ -421,7 +429,7 @@ static void paint_about_window(
     };
     draw_round_panel(
         dc, &card, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     wchar_t version[64] = L"development";
     text_to_wide(
@@ -459,7 +467,7 @@ static void paint_about_window(
     RECT button = about_ok_rect(window);
     draw_round_panel(
         dc, &button, state->palette.card_hover,
-        state->palette.accent, LSM_WINDOWS_CONTROL_RADIUS);
+        state->palette.accent, (int)state->design->control_radius);
     draw_text(
         dc, L"OK", button, state->body_bold_font,
         state->palette.heading,
@@ -611,12 +619,6 @@ static void show_about_window(LsmWindowsUiState *state)
     SetForegroundWindow(state->window);
 }
 
-static void format_percentage(wchar_t *buffer, size_t capacity, double value)
-{
-    if (!buffer || capacity == 0U) return;
-    (void)swprintf(buffer, capacity, L"%.0f%%", value);
-}
-
 static void append_history(LsmWindowsUiState *state)
 {
     if (!state || !state->monitor_ready) return;
@@ -649,13 +651,13 @@ static void draw_history_graph(LsmWindowsUiState *state, HDC dc, RECT rect,
 {
     draw_round_panel(
         dc, &rect, state->palette.surface,
-        state->palette.connection_border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.connection_border, (int)state->design->card_radius);
 
     RECT inner = {
         rect.left + 14, rect.top + 14,
         rect.right - 14, rect.bottom - 14
     };
-    HPEN grid_pen = CreatePen(PS_SOLID, 1, RGB(0x24, 0x2A, 0x30));
+    HPEN grid_pen = CreatePen(PS_SOLID, 1, state->palette.border);
     if (grid_pen) {
         HGDIOBJ previous = SelectObject(dc, grid_pen);
         for (int row = 1; row < 4; row++) {
@@ -733,34 +735,44 @@ static void draw_menu_strip(LsmWindowsUiState *state, HDC dc, int width)
 
 static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
 {
+    const int screen_padding = (int)state->design->screen_padding;
+    const int control_spacing = (int)state->design->control_spacing;
     RECT bar = {
-        LSM_WINDOWS_SCREEN_PADDING,
-        LSM_WINDOWS_MENU_HEIGHT + LSM_WINDOWS_CONTROL_SPACING,
-        width - LSM_WINDOWS_SCREEN_PADDING,
-        LSM_WINDOWS_MENU_HEIGHT + LSM_WINDOWS_CONTROL_SPACING +
+        screen_padding,
+        LSM_WINDOWS_MENU_HEIGHT + control_spacing,
+        width - screen_padding,
+        LSM_WINDOWS_MENU_HEIGHT + control_spacing +
             LSM_WINDOWS_SUMMARY_HEIGHT
     };
     draw_round_panel(
         dc, &bar, state->palette.connection,
-        state->palette.connection_border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.connection_border, (int)state->design->card_radius);
 
-    static const wchar_t *const captions[] = {
-        L"CPU", L"Memory", L"Disk", L"Network", L"GPU"
-    };
-    wchar_t values[5][64] = {
-        L"N/A", L"N/A", L"N/A", L"N/A", L"N/A"
-    };
-    if (state->monitor_ready) {
-        format_percentage(values[0], 64U, state->monitor.cpu.usage_percent);
-        format_percentage(values[1], 64U, state->monitor.memory.usage_percent);
+    LsmSummaryPerformanceView summary;
+    lsm_summary_performance_view(
+        state->monitor_ready ? &state->monitor : NULL, false, &summary);
+
+    wchar_t captions[LSM_SUMMARY_COUNT][32];
+    wchar_t values[LSM_SUMMARY_COUNT][LSM_SUMMARY_VIEW_VALUE_LEN];
+    for (size_t index = 0U; index < LSM_SUMMARY_COUNT; index++) {
+        text_to_wide(
+            lsm_summary_label((LsmSummaryField)index),
+            captions[index],
+            sizeof(captions[index]) / sizeof(captions[index][0]));
+        text_to_wide(
+            summary.values[index],
+            values[index],
+            sizeof(values[index]) / sizeof(values[index][0]));
     }
 
-    const int item_width = (bar.right - bar.left) / 5;
-    for (int index = 0; index < LSM_MEMORY_DETAIL_COUNT; index++) {
+    const int item_width =
+        (bar.right - bar.left) / (int)LSM_SUMMARY_COUNT;
+    for (size_t index = 0U; index < LSM_SUMMARY_COUNT; index++) {
+        const int item = (int)index;
         RECT caption = {
-            bar.left + index * item_width,
+            bar.left + item * item_width,
             bar.top + 10,
-            bar.left + (index + 1) * item_width,
+            bar.left + (item + 1) * item_width,
             bar.top + 30
         };
         RECT value = {
@@ -779,12 +791,12 @@ static void draw_summary_bar(LsmWindowsUiState *state, HDC dc, int width)
 static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
 {
     const int top =
-        LSM_WINDOWS_MENU_HEIGHT + LSM_WINDOWS_CONTROL_SPACING +
-        LSM_WINDOWS_SUMMARY_HEIGHT + LSM_WINDOWS_CONTROL_SPACING;
+        LSM_WINDOWS_MENU_HEIGHT + (int)state->design->control_spacing +
+        LSM_WINDOWS_SUMMARY_HEIGHT + (int)state->design->control_spacing;
     RECT strip = {0, top, width, top + LSM_WINDOWS_TAB_HEIGHT};
     fill_solid(dc, &strip, state->palette.panel);
 
-    int x = LSM_WINDOWS_SCREEN_PADDING;
+    int x = (int)state->design->screen_padding;
     select_font(dc, state->body_bold_font);
     for (int index = 0; index < LSM_TAB_COUNT; index++) {
         wchar_t page_label[64];
@@ -804,8 +816,8 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
             x + tab_width,
             top + LSM_WINDOWS_TAB_HEIGHT
         };
-        if (tab.right > width - LSM_WINDOWS_SCREEN_PADDING)
-            tab.right = width - LSM_WINDOWS_SCREEN_PADDING;
+        if (tab.right > width - (int)state->design->screen_padding)
+            tab.right = width - (int)state->design->screen_padding;
         state->page_tabs[index] = tab;
 
         const bool active = index == (int)state->active_page;
@@ -826,7 +838,7 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         x = tab.right;
-        if (x >= width - LSM_WINDOWS_SCREEN_PADDING) {
+        if (x >= width - (int)state->design->screen_padding) {
             for (int hidden = index + 1;
                  hidden < LSM_TAB_COUNT; hidden++)
                 SetRectEmpty(&state->page_tabs[hidden]);
@@ -840,18 +852,19 @@ static void draw_page_tabs(LsmWindowsUiState *state, HDC dc, int width)
     fill_solid(dc, &divider, state->palette.border);
 }
 
-static RECT content_rect_for_client(int width, int height)
+static RECT content_rect_for_client(const LsmWindowsUiState *state,
+                                    int width, int height)
 {
     const int top =
-        LSM_WINDOWS_MENU_HEIGHT + LSM_WINDOWS_CONTROL_SPACING +
-        LSM_WINDOWS_SUMMARY_HEIGHT + LSM_WINDOWS_CONTROL_SPACING +
-        LSM_WINDOWS_TAB_HEIGHT + LSM_WINDOWS_SECTION_SPACING;
+        LSM_WINDOWS_MENU_HEIGHT + (int)state->design->control_spacing +
+        LSM_WINDOWS_SUMMARY_HEIGHT + (int)state->design->control_spacing +
+        LSM_WINDOWS_TAB_HEIGHT + (int)state->design->section_spacing;
     RECT rect = {
-        LSM_WINDOWS_SCREEN_PADDING,
+        (int)state->design->screen_padding,
         top,
-        width - LSM_WINDOWS_SCREEN_PADDING,
+        width - (int)state->design->screen_padding,
         height - LSM_WINDOWS_STATUS_HEIGHT -
-            LSM_WINDOWS_SCREEN_PADDING
+            (int)state->design->screen_padding
     };
     return rect;
 }
@@ -862,7 +875,7 @@ static void draw_mini_history(
 {
     draw_round_panel(
         dc, &rect, state->palette.surface,
-        state->palette.connection_border, 6);
+        state->palette.connection_border, (int)state->design->small_radius);
 
     if (!history || state->history_count < 2U) return;
 
@@ -911,7 +924,7 @@ static void draw_performance_rail_item(
             (hovered ? state->palette.card_hover : state->palette.panel),
         active ? line_colour :
             (hovered ? state->palette.border : state->palette.panel),
-        LSM_WINDOWS_CONTROL_RADIUS);
+        (int)state->design->control_radius);
 
     RECT sparkline = {
         rect.left + 8, rect.top + 12,
@@ -1072,7 +1085,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_round_panel(
         dc, &header, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     RECT title_rect = {
         header.left + 14, header.top + 6,
@@ -1143,7 +1156,7 @@ static void draw_cpu_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_round_panel(
         dc, &details, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     const int pad = 14;
     const int metrics_width = 420;
@@ -1264,7 +1277,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_round_panel(
         dc, &header, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     RECT title_rect = {
         header.left + 14, header.top + 5,
@@ -1361,7 +1374,7 @@ static void draw_memory_page(LsmWindowsUiState *state, HDC dc, RECT content)
     };
     draw_round_panel(
         dc, &details, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     wchar_t usage_names[LSM_MEMORY_METRIC_COUNT][64];
     for (int index = 0; index < LSM_MEMORY_METRIC_COUNT; index++) {
@@ -1487,7 +1500,7 @@ static void draw_device_performance_page(
     };
     draw_round_panel(
         dc, &header, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     RECT title_rect = {
         header.left + 14, header.top + 6,
@@ -1512,7 +1525,7 @@ static void draw_device_performance_page(
     };
     draw_round_panel(
         dc, &metrics, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     const int pad = 16;
     const int gap = 18;
@@ -1598,8 +1611,8 @@ static void draw_performance_page(
     const int available_height =
         (rail.bottom - rail.top) - 16;
     const int total_height = item_count > 0U
-        ? (int)item_count * LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE -
-            LSM_WINDOWS_PERFORMANCE_ITEM_GAP
+        ? (int)item_count * performance_item_stride(state) -
+            (int)state->design->compact_spacing
         : 0;
     const int maximum_scroll =
         total_height > available_height
@@ -1639,7 +1652,7 @@ static void draw_performance_page(
             (void)IntersectRect( \
                 &state->performance_items[slot].rect, &item, &rail); \
             slot++; \
-            top += LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE; \
+            top += performance_item_stride(state); \
         } \
     } while (0)
 
@@ -1692,7 +1705,7 @@ static void draw_performance_page(
     fill_solid(dc, &separator, state->palette.border);
 
     RECT page = {
-        rail.right + LSM_WINDOWS_SECTION_SPACING,
+        rail.right + (int)state->design->section_spacing,
         content.top,
         content.right,
         content.bottom
@@ -1760,7 +1773,7 @@ static void draw_placeholder_page(
     };
     draw_round_panel(
         dc, &card, state->palette.card,
-        state->palette.border, LSM_WINDOWS_CARD_RADIUS);
+        state->palette.border, (int)state->design->card_radius);
 
     RECT message = {
         card.left + 22, card.top + 22,
@@ -1804,9 +1817,9 @@ static void draw_status_bar(
     fill_solid(dc, &line, state->palette.border);
 
     RECT status = {
-        LSM_WINDOWS_SCREEN_PADDING,
+        (int)state->design->screen_padding,
         height - LSM_WINDOWS_STATUS_HEIGHT,
-        width - LSM_WINDOWS_SCREEN_PADDING,
+        width - (int)state->design->screen_padding,
         height
     };
     draw_text(
@@ -1838,7 +1851,7 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
     draw_summary_bar(state, dc, width);
     draw_page_tabs(state, dc, width);
 
-    const RECT content = content_rect_for_client(width, height);
+    const RECT content = content_rect_for_client(state, width, height);
     if (state->active_page == LSM_TAB_PERFORMANCE)
         draw_performance_page(state, dc, content);
     else if (state->active_page == LSM_TAB_PROCESSES)
@@ -2328,19 +2341,19 @@ static void show_view_menu(LsmWindowsUiState *state)
     AppendMenuW(
         theme,
         MF_STRING |
-            (state->theme_mode == LSM_WINDOWS_THEME_SYSTEM
+            (state->theme_mode == INFILTRATR_THEME_SYSTEM
                 ? MF_CHECKED : MF_UNCHECKED),
         LSM_WINDOWS_ID_THEME_SYSTEM, L"Follow system");
     AppendMenuW(
         theme,
         MF_STRING |
-            (state->theme_mode == LSM_WINDOWS_THEME_DAY
+            (state->theme_mode == INFILTRATR_THEME_DAY
                 ? MF_CHECKED : MF_UNCHECKED),
         LSM_WINDOWS_ID_THEME_DAY, L"Day");
     AppendMenuW(
         theme,
         MF_STRING |
-            (state->theme_mode == LSM_WINDOWS_THEME_NIGHT
+            (state->theme_mode == INFILTRATR_THEME_NIGHT
                 ? MF_CHECKED : MF_UNCHECKED),
         LSM_WINDOWS_ID_THEME_NIGHT, L"Night");
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)theme, L"Theme");
@@ -2432,7 +2445,11 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
         case WM_CREATE:
             if (!state) return -1;
-            load_theme_preference(state);
+            if (!load_theme_preference(state)) {
+                if (state->startup_smoke)
+                    write_startup_smoke_status("theme_contract_failed\n");
+                return -1;
+            }
             if (!install_embedded_typography(state)) {
                 if (state->startup_smoke)
                     write_startup_smoke_status("install_fonts_failed\n");
@@ -2619,7 +2636,7 @@ static LRESULT CALLBACK lsm_windows_window_proc(
                 if (delta != 0) {
                     state->performance_scroll_y -=
                         (delta / WHEEL_DELTA) *
-                        LSM_WINDOWS_PERFORMANCE_ITEM_STRIDE;
+                        performance_item_stride(state);
                     if (state->performance_scroll_y < 0)
                         state->performance_scroll_y = 0;
                     InvalidateRect(window, NULL, FALSE);
@@ -2677,9 +2694,9 @@ static LRESULT CALLBACK lsm_windows_window_proc(
         case WM_COMMAND:
             if (LOWORD(wparam) >= LSM_WINDOWS_ID_THEME_SYSTEM &&
                 LOWORD(wparam) <= LSM_WINDOWS_ID_THEME_NIGHT) {
-                state->theme_mode = (LsmWindowsThemeMode)(
+                state->theme_mode = (InfiltratrThemeMode)(
                     LOWORD(wparam) - LSM_WINDOWS_ID_THEME_SYSTEM);
-                resolve_theme(state);
+                if (!resolve_theme(state)) return 0;
                 save_theme_preference(state);
                 apply_process_list_theme(state);
                 apply_titlebar_theme(state);
@@ -2704,8 +2721,8 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
         case WM_SETTINGCHANGE:
             if (state &&
-                state->theme_mode == LSM_WINDOWS_THEME_SYSTEM) {
-                resolve_theme(state);
+                state->theme_mode == INFILTRATR_THEME_SYSTEM) {
+                if (!resolve_theme(state)) break;
                 apply_process_list_theme(state);
                 apply_titlebar_theme(state);
                 RedrawWindow(
@@ -2795,8 +2812,30 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     }
     state->instance = instance;
     state->startup_smoke = startup_smoke;
-    state->theme_mode = LSM_WINDOWS_THEME_NIGHT;
-    state->palette = windows_night_palette;
+    state->design = infiltratr_design_metrics();
+    if (!common_design_supported(state->design)) {
+        if (startup_smoke) {
+            write_startup_smoke_status("design_contract_failed\n");
+        } else {
+            MessageBoxW(
+                NULL, L"Infiltratr Common design contract is unavailable.",
+                L"System Monitor", MB_OK | MB_ICONERROR);
+        }
+        free(state);
+        return EXIT_FAILURE;
+    }
+    state->theme_mode = INFILTRATR_THEME_NIGHT;
+    if (!resolve_theme(state)) {
+        if (startup_smoke) {
+            write_startup_smoke_status("theme_contract_failed\n");
+        } else {
+            MessageBoxW(
+                NULL, L"Infiltratr Common theme contract is unavailable.",
+                L"System Monitor", MB_OK | MB_ICONERROR);
+        }
+        free(state);
+        return EXIT_FAILURE;
+    }
     state->hovered_tab = -1;
     state->hovered_performance_item = -1;
     state->hovered_menu = -1;

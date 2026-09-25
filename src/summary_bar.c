@@ -10,10 +10,9 @@
 #include "summary_bar.h"
 
 #include "app_internal.h"
-#include "metric_format.h"
 #include "ui_helpers.h"
+#include "performance_view.h"
 
-#include <math.h>
 #include <stdio.h>
 
 static GtkWidget *summary_item(const char *caption, GtkWidget **value_out,
@@ -53,19 +52,24 @@ GtkWidget *lsm_summary_bar_build(LsmApp *app)
     gtk_widget_set_halign(grid, GTK_ALIGN_CENTER);
 
     gtk_grid_attach(GTK_GRID(grid),
-        summary_item("CPU", &app->shell.summary_cpu,
+        summary_item(lsm_summary_label(LSM_SUMMARY_CPU),
+                     &app->shell.summary_cpu,
                      "Overall processor utilisation"), 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid),
-        summary_item("Memory", &app->shell.summary_memory,
+        summary_item(lsm_summary_label(LSM_SUMMARY_MEMORY),
+                     &app->shell.summary_memory,
                      "Physical memory currently in use"), 1, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid),
-        summary_item("Disk", &app->shell.summary_disk,
+        summary_item(lsm_summary_label(LSM_SUMMARY_DISK),
+                     &app->shell.summary_disk,
                      "Highest active time across physical disks"), 2, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid),
-        summary_item("Network", &app->shell.summary_network,
+        summary_item(lsm_summary_label(LSM_SUMMARY_NETWORK),
+                     &app->shell.summary_network,
                      "Combined live send and receive rate"), 3, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid),
-        summary_item("GPU", &app->shell.summary_gpu,
+        summary_item(lsm_summary_label(LSM_SUMMARY_GPU),
+                     &app->shell.summary_gpu,
                      "Highest readable graphics-adapter utilisation"),
         4, 0, 1, 1);
     gtk_container_add(GTK_CONTAINER(frame), grid);
@@ -77,55 +81,19 @@ GtkWidget *lsm_summary_bar_build(LsmApp *app)
 void lsm_summary_bar_update(LsmApp *app)
 {
     if (!app || !app->shell.summary_bar) return;
-    const LsmMonitor *monitor = &app->monitor;
-    lsm_ui_set_label_text(app->shell.summary_cpu, "%.0f%%",
-                          monitor->cpu.usage_percent);
-    lsm_ui_set_label_text(app->shell.summary_memory, "%.0f%%",
-                          monitor->memory.usage_percent);
 
-    double disk_peak = 0.0;
-    for (size_t index = 0U; index < monitor->disk_count; index++)
-        if (monitor->disks[index].active_percent > disk_peak)
-            disk_peak = monitor->disks[index].active_percent;
-    if (monitor->disk_count > 0U)
-        lsm_ui_set_label_text(app->shell.summary_disk, "%.0f%%", disk_peak);
-    else
-        lsm_ui_set_label_text(app->shell.summary_disk, "N/A");
+    LsmSummaryPerformanceView view;
+    lsm_summary_performance_view(
+        &app->monitor, app->runtime.network_use_bits, &view);
 
-    long double network_rate = 0.0L;
-    double network_peak = 0.0;
-    for (size_t index = 0U; index < monitor->net_count; index++) {
-        network_rate += (long double)monitor->nets[index].rx_bytes_per_sec +
-                        (long double)monitor->nets[index].tx_bytes_per_sec;
-        if (monitor->nets[index].utilisation_percent > network_peak)
-            network_peak = monitor->nets[index].utilisation_percent;
-    }
-    if (monitor->net_count > 0U) {
-        char rate[64];
-        lsm_metric_format_network(network_rate, app->runtime.network_use_bits, true,
-                                  rate, sizeof(rate));
-        if (network_peak > 0.0)
-            lsm_ui_set_label_text(app->shell.summary_network, "%s (%.0f%%)",
-                                  rate, network_peak);
-        else
-            lsm_ui_set_label_text(app->shell.summary_network, "%s", rate);
-    } else {
-        lsm_ui_set_label_text(app->shell.summary_network, "N/A");
-    }
-
-    double gpu_peak = 0.0;
-    bool gpu_available = false;
-    for (size_t index = 0U; index < monitor->gpu_count; index++) {
-        const LsmGpuInfo *gpu = &monitor->gpus[index];
-        if (!gpu->utilization_available ||
-            !isfinite(gpu->utilization_percent))
-            continue;
-        if (!gpu_available || gpu->utilization_percent > gpu_peak)
-            gpu_peak = gpu->utilization_percent;
-        gpu_available = true;
-    }
-    if (gpu_available)
-        lsm_ui_set_label_text(app->shell.summary_gpu, "%.0f%%", gpu_peak);
-    else
-        lsm_ui_set_label_text(app->shell.summary_gpu, "N/A");
+    lsm_ui_set_label_text(
+        app->shell.summary_cpu, "%s", view.values[LSM_SUMMARY_CPU]);
+    lsm_ui_set_label_text(
+        app->shell.summary_memory, "%s", view.values[LSM_SUMMARY_MEMORY]);
+    lsm_ui_set_label_text(
+        app->shell.summary_disk, "%s", view.values[LSM_SUMMARY_DISK]);
+    lsm_ui_set_label_text(
+        app->shell.summary_network, "%s", view.values[LSM_SUMMARY_NETWORK]);
+    lsm_ui_set_label_text(
+        app->shell.summary_gpu, "%s", view.values[LSM_SUMMARY_GPU]);
 }
