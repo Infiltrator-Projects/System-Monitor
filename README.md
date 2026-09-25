@@ -8,7 +8,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.106 ([version file](support/VERSION))\
+**Current source version:** 1.0.108 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.27 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
@@ -25,7 +25,7 @@ The project does not equate newer with better. Proven interfaces and techniques 
 
 Competitor products are treated as evidence and idea sources, not feature checklists. System Monitor favours a coherent monitoring and diagnostic model over feature-count parity: a new capability must materially strengthen what the product already exists to do and should integrate with its measurements, navigation, actions and visual language rather than becoming an isolated feature island. The maintained admission rules live in [Design](docs/DESIGN.md) and ADR-006 in [Decisions](docs/DECISIONS.md).
 
-The graphical north star for the current UI programme is recorded in [System Monitor UI Vision](docs/design/system-monitor-ui-vision.md). The redesign is incremental: preserve native behaviour and diagnostic depth while making the approachable surfaces more visual, colourful, card-oriented and GUI-first. The Overview now uses native GTK/Cairo resource icons, radial gauges, grid-backed gradient history plots and graphical process activity rows as the first concrete dashboard implementation of that direction.
+The graphical north star for the current UI programme is recorded in [System Monitor UI Vision](docs/design/system-monitor-ui-vision.md). The redesign is incremental: preserve native behaviour and diagnostic depth while making the approachable surfaces more visual, colourful, card-oriented and GUI-first. The Overview now uses a single-viewport asymmetric dashboard, graph-integrated resource icons, visibly multicolour native Cairo gauges, grid-backed gradient history plots and graphical process activity rows as the concrete implementation of that direction.
 
 C and C++ are equal, first-class implementation languages for the project. The choice between them is made according to the needs of the component, with no general preference for one over the other. C, procedural C++ and object-oriented C++ are treated as different ways of expressing the same underlying systems work: each makes some problems easier to express and some harder. Language or paradigm purity is not a design goal.
 
