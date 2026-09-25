@@ -74,46 +74,79 @@ static double graph_maximum(const LsmGraph *graph)
     return fmax(graph->minimum_max, scale);
 }
 
+static void append_series_segment(cairo_t *cr,
+                                  const double *x, const double *y,
+                                  size_t count, bool smooth)
+{
+    if (!cr || !x || !y || count == 0U) return;
+    cairo_move_to(cr, x[0], y[0]);
+    if (!smooth || count < 3U) {
+        for (size_t i = 1U; i < count; i++)
+            cairo_line_to(cr, x[i], y[i]);
+        return;
+    }
+
+    for (size_t i = 0U; i + 1U < count; i++) {
+        const size_t p0 = i > 0U ? i - 1U : i;
+        const size_t p1 = i;
+        const size_t p2 = i + 1U;
+        const size_t p3 = i + 2U < count ? i + 2U : i + 1U;
+        for (int step = 1; step <= 5; step++) {
+            const double t = (double)step / 5.0;
+            const double t2 = t * t;
+            const double t3 = t2 * t;
+            const double px = 0.5 * (
+                (2.0 * x[p1]) +
+                (-x[p0] + x[p2]) * t +
+                (2.0 * x[p0] - 5.0 * x[p1] +
+                 4.0 * x[p2] - x[p3]) * t2 +
+                (-x[p0] + 3.0 * x[p1] -
+                 3.0 * x[p2] + x[p3]) * t3);
+            const double py = 0.5 * (
+                (2.0 * y[p1]) +
+                (-y[p0] + y[p2]) * t +
+                (2.0 * y[p0] - 5.0 * y[p1] +
+                 4.0 * y[p2] - y[p3]) * t2 +
+                (-y[p0] + 3.0 * y[p1] -
+                 3.0 * y[p2] + y[p3]) * t3);
+            cairo_line_to(cr, px, py);
+        }
+    }
+}
+
 static bool make_series_path(cairo_t *cr,
                              const LsmSampleHistory *history,
                              double maximum, double width, double height,
-                             bool close_to_baseline)
+                             bool close_to_baseline, bool smooth)
 {
     bool any = false;
-    bool in_segment = false;
-    double segment_start_x = 0.0;
-    double last_x = 0.0;
+    double x[LSM_HISTORY_LENGTH];
+    double y[LSM_HISTORY_LENGTH];
+    size_t segment_count = 0U;
 
-    for (size_t i = 0; i < history->count; i++) {
-        if (!lsm_sample_history_is_valid(history, i)) {
-            if (close_to_baseline && in_segment) {
-                cairo_line_to(cr, last_x, height);
-                cairo_line_to(cr, segment_start_x, height);
-                cairo_close_path(cr);
-            }
-            in_segment = false;
+    for (size_t i = 0U; i <= history->count; i++) {
+        const bool valid =
+            i < history->count && lsm_sample_history_is_valid(history, i);
+        if (valid) {
+            x[segment_count] = history->count > 1U
+                ? width * (double)i / (double)(history->count - 1U) : 0.0;
+            const double value =
+                fmax(0.0, lsm_sample_history_get(history, i));
+            y[segment_count] =
+                height - fmin(height, height * value / maximum);
+            segment_count++;
+            any = true;
             continue;
         }
 
-        const double x = history->count > 1
-            ? width * (double)i / (double)(history->count - 1) : 0.0;
-        const double value = fmax(0.0, lsm_sample_history_get(history, i));
-        const double y = height - fmin(height, height * value / maximum);
-        if (!in_segment) {
-            cairo_move_to(cr, x, y);
-            segment_start_x = x;
-            in_segment = true;
-        } else {
-            cairo_line_to(cr, x, y);
+        if (segment_count == 0U) continue;
+        append_series_segment(cr, x, y, segment_count, smooth);
+        if (close_to_baseline) {
+            cairo_line_to(cr, x[segment_count - 1U], height);
+            cairo_line_to(cr, x[0], height);
+            cairo_close_path(cr);
         }
-        last_x = x;
-        any = true;
-    }
-
-    if (close_to_baseline && in_segment) {
-        cairo_line_to(cr, last_x, height);
-        cairo_line_to(cr, segment_start_x, height);
-        cairo_close_path(cr);
+        segment_count = 0U;
     }
     return any;
 }
@@ -121,13 +154,13 @@ static bool make_series_path(cairo_t *cr,
 static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
                         const GdkRGBA *colour, double maximum,
                         double width, double height, gboolean fill,
-                        gboolean dashed, gboolean compact)
+                        gboolean dashed, gboolean compact, gboolean smooth)
 {
     if (history->count < 2 || maximum <= 0.0) return;
 
     if (fill) {
         cairo_new_path(cr);
-        if (make_series_path(cr, history, maximum, width, height, true)) {
+        if (make_series_path(cr, history, maximum, width, height, true, smooth)) {
             cairo_pattern_t *gradient =
                 cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
             cairo_pattern_add_color_stop_rgba(
@@ -152,7 +185,7 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
     }
 
     cairo_new_path(cr);
-    if (make_series_path(cr, history, maximum, width, height, false)) {
+    if (make_series_path(cr, history, maximum, width, height, false, smooth)) {
         cairo_set_source_rgba(
             cr, colour->red, colour->green, colour->blue,
             compact ? 0.16 : 0.20);
@@ -226,10 +259,11 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
     const double maximum = graph_maximum(graph);
     draw_series(cr, &graph->primary, &graph->primary_colour, maximum,
-                width, height, TRUE, FALSE, graph->compact);
+                width, height, TRUE, FALSE, graph->compact, graph->smooth);
     if (graph->has_secondary) {
         draw_series(cr, &graph->secondary, &graph->secondary_colour, maximum,
-                    width, height, TRUE, TRUE, graph->compact);
+                    width, height, TRUE, graph->secondary_dashed,
+                    graph->compact, graph->smooth);
     }
 
     cairo_restore(cr);
@@ -253,6 +287,7 @@ LsmGraph *lsm_graph_new(gboolean has_secondary,
     lsm_sample_history_init(&graph->secondary);
     graph->has_secondary = has_secondary;
     graph->percentage_scale = percentage_scale;
+    graph->secondary_dashed = TRUE;
     graph->fixed_max = fixed_max;
     gdk_rgba_parse(&graph->primary_colour, "#39b8e3");
     graph->secondary_colour = graph->primary_colour;
@@ -309,6 +344,20 @@ void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise)
 {
     if (!graph) return;
     graph->emphasise_midline = emphasise;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth)
+{
+    if (!graph) return;
+    graph->smooth = smooth;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_secondary_dashed(LsmGraph *graph, gboolean dashed)
+{
+    if (!graph) return;
+    graph->secondary_dashed = dashed;
     if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
 }
 

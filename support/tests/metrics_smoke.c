@@ -665,6 +665,7 @@ int main(void)
     monitor.cpu.user_percent = 17.0;
     monitor.cpu.kernel_percent = 8.0;
     monitor.memory.total_bytes = 1024U;
+    monitor.memory.available_bytes = 384U;
     monitor.memory.usage_percent = 50.0;
     monitor.disk_count = 2U;
     strcpy(monitor.disks[0].name, "sda");
@@ -700,6 +701,8 @@ int main(void)
     assert(sample.cpu_breakdown_available);
     assert(sample.cpu_user_percent == 17.0);
     assert(sample.cpu_kernel_percent == 8.0);
+    assert(sample.memory_breakdown_available);
+    assert(sample.memory_available_percent == 37.5);
     assert(sample.disk_available && sample.disk_index == SIZE_MAX);
     assert(sample.disk_percent == 46.0);
     assert(sample.disk_read_bytes_per_sec == 4000.0);
@@ -749,17 +752,21 @@ int main(void)
     assert(lsm_overview_history_count(history) ==
            LSM_OVERVIEW_HISTORY_CAPACITY);
 
-    LsmProcessInfo processes[4];
+    LsmProcessInfo processes[6];
     memset(processes, 0, sizeof(processes));
     processes[0].pid = 20U; processes[0].cpu_percent = 5.0;
     processes[1].pid = 30U; processes[1].cpu_percent = 90.0;
     processes[2].pid = 10U; processes[2].cpu_percent = 90.0;
     processes[3].pid = 40U; processes[3].cpu_percent = 20.0;
+    processes[4].pid = 50U; processes[4].cpu_percent = 12.0;
+    processes[5].pid = 60U; processes[5].cpu_percent = 1.0;
     size_t indices[LSM_OVERVIEW_TOP_PROCESS_COUNT];
-    assert(lsm_overview_top_cpu_processes(processes, 4U, indices) == 3U);
+    assert(lsm_overview_top_cpu_processes(processes, 6U, indices) == 5U);
     assert(indices[0] == 2U);
     assert(indices[1] == 1U);
     assert(indices[2] == 3U);
+    assert(indices[3] == 4U);
+    assert(indices[4] == 0U);
 
     lsm_overview_history_destroy(history);
     puts("Overview completed-history, gaps, hotplug and wraparound passed.");

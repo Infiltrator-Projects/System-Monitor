@@ -22,6 +22,8 @@ typedef struct {
     gboolean percentage_scale;
     gboolean compact;
     gboolean emphasise_midline;
+    gboolean smooth;
+    gboolean secondary_dashed;
     double fixed_max;
     double dynamic_step;
     double minimum_max;
@@ -91,6 +93,20 @@ void lsm_graph_set_compact(LsmGraph *graph, gboolean compact);
  * @param [in] emphasise TRUE to draw a stronger midpoint guide.
  */
 void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise);
+/**
+ * Select rounded spline presentation for retained history.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] smooth TRUE to join contiguous samples with a Catmull-Rom spline.
+ */
+void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth);
+/**
+ * Select whether the optional secondary trace uses a dashed stroke.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] dashed TRUE for dashed secondary presentation.
+ */
+void lsm_graph_set_secondary_dashed(LsmGraph *graph, gboolean dashed);
 /**
  * Configure quantised dynamic vertical scaling.
  *

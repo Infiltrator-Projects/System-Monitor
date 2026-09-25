@@ -25,7 +25,7 @@
 /** Maximum completed Overview samples retained in memory. */
 #define LSM_OVERVIEW_HISTORY_CAPACITY 120U
 /** Number of busiest CPU processes presented by Overview. */
-#define LSM_OVERVIEW_TOP_PROCESS_COUNT 3U
+#define LSM_OVERVIEW_TOP_PROCESS_COUNT 5U
 
 /** Overview metric cards shared by native front ends. */
 typedef enum {
@@ -62,6 +62,8 @@ typedef struct {
 
     bool memory_available;
     double memory_percent;
+    bool memory_breakdown_available;
+    double memory_available_percent;
 
     bool disk_available;
     double disk_percent;              /**< Mean active time across measured physical disks. */

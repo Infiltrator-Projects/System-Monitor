@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.111 - 2026-09-25
+
+- Replace the incorrect generic CPU gear and other Overview header glyphs with purpose-drawn neon resource icons; the CPU/GPU marks are now chip-shaped and pressure uses the waveform language from the approved reference.
+- Remove the oversized translucent resource glyphs from inside history plots so the graph itself is the visual focus.
+- Render Overview history with smooth Catmull-Rom curves rather than angular sample-to-sample polylines.
+- Make CPU user/kernel, Memory used/available and Network receive/send true solid multi-colour graphs with the reference cyan/violet, magenta/cyan and cyan/magenta pairings; keep Disk green, GPU emerald, Temperature amber, CPU pressure cyan, Memory pressure violet and I/O pressure green.
+- Increase CPU/Memory/GPU dial scale and centre-value typography so the gauges carry the same visual weight as the reference.
+- Rework CPU and Memory detail rows into icon-led metric cells, including coloured Memory composition markers.
+- Expand Top CPU processes from three to five compact rows and add a working View All button that opens Processes.
+- Reduce the Overview hero's hard cyan border to a restrained edge so the banner reads as artwork rather than another card.
+- Retain Memory available percentage in completed Overview history so its second graph series is real telemetry rather than decoration.
+
 ## 1.0.110 - 2026-09-25
 
 - Replace the legacy menubar and cross-tab summary strip on Overview with the dashboard's integrated hero chrome while retaining those global controls on technical pages and in compact-summary mode.

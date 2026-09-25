@@ -231,6 +231,12 @@ static void derive_sample(const LsmMonitor *monitor,
         sample->memory_available = true;
         sample->memory_percent =
             bounded_percent(monitor->memory.usage_percent);
+        if (monitor->memory.available_bytes <= monitor->memory.total_bytes) {
+            sample->memory_breakdown_available = true;
+            sample->memory_available_percent = bounded_percent(
+                100.0 * (double)monitor->memory.available_bytes /
+                (double)monitor->memory.total_bytes);
+        }
     }
 
     derive_disk(monitor, sample);
