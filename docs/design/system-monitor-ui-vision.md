@@ -14,7 +14,7 @@ The intended spirit is closer to Amiga/Workbench-era visual desktop thinking tra
 
 ## Reference mockup
 
-See [system-monitor-ui-vision-2026-09-25.svg](system-monitor-ui-vision-2026-09-25.svg).
+See [system-monitor-ui-vision-2026-09-25.jpg](system-monitor-ui-vision-2026-09-25.jpg).
 
 The reference is a direction, not a pixel contract. It establishes the product hierarchy: a strong graphical Overview, persistent category navigation, large live resource cards, colour-coded graphs and status, and compact technical detail beneath the primary visual signal.
 
