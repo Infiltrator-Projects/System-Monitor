@@ -19,6 +19,7 @@
 #include "common.h"
 #include "temporal_presentation.h"
 #include "history.h"
+#include "overview.h"
 #include "process_backend.h"
 #include "process_inspector.h"
 #include "process_scanner.h"
@@ -1028,6 +1029,7 @@ gboolean lsm_processes_update(gpointer user_data)
     app->process.process_snapshot_count = count;
     app->processes.processes_model_dirty = TRUE;
     app->details.details_model_dirty = TRUE;
+    lsm_overview_refresh(app);
     if (lsm_processes_page_visible(app))
         lsm_processes_present_snapshot(app);
     if (details_page_visible(app)) lsm_details_present_snapshot(app);
