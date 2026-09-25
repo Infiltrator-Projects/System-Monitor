@@ -258,10 +258,20 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     gtk_box_pack_start(GTK_BOX(main_box), app->shell.pause_indicator,
                        FALSE, FALSE, 0);
 
+    GtkWidget *workspace = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(workspace, TRUE);
+    gtk_widget_set_vexpand(workspace, TRUE);
+    gtk_box_pack_start(GTK_BOX(main_box), workspace, TRUE, TRUE, 0);
+
+    app->shell.main_navigation = lsm_app_shell_build_navigation(app);
+    gtk_box_pack_start(GTK_BOX(workspace), app->shell.main_navigation,
+                       FALSE, FALSE, 0);
+
     app->shell.notebook = gtk_notebook_new();
     gtk_notebook_set_tab_pos(GTK_NOTEBOOK(app->shell.notebook), GTK_POS_TOP);
+    gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->shell.notebook), FALSE);
     lsm_app_shell_connect_notebook(app);
-    gtk_box_pack_start(GTK_BOX(main_box), app->shell.notebook, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(workspace), app->shell.notebook, TRUE, TRUE, 0);
 
     for (gint page = 0; page < LSM_TAB_COUNT; page++) {
         GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -279,6 +289,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
                                   LSM_TAB_PERFORMANCE);
     gtk_widget_show_all(app->shell.window);
     app->runtime.shell_shown = TRUE;
+    lsm_app_shell_sync_navigation(app);
     g_object_set_data(G_OBJECT(app->shell.window), "lsm-app", app);
     gtk_window_set_keep_above(GTK_WINDOW(app->shell.window), app->runtime.always_on_top);
     lsm_app_shell_apply_compact_summary(app);

@@ -306,6 +306,9 @@ enum {
 typedef struct {
     GtkWidget *window;
     GtkWidget *notebook;
+    GtkWidget *main_navigation;
+    GtkWidget *navigation_tab_buttons[LSM_TAB_COUNT];
+    GtkWidget *navigation_resource_buttons[LSM_PAGE_COUNT];
     GtkWidget *pause_indicator;
     GtkWidget *pause_menu_item;
     GtkWidget *always_on_top_menu_item;

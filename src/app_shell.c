@@ -40,6 +40,9 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
     if (!app || !app->shell.window) return;
     if (app->shell.notebook)
         gtk_widget_set_visible(app->shell.notebook, !app->runtime.compact_summary);
+    if (app->shell.main_navigation)
+        gtk_widget_set_visible(
+            app->shell.main_navigation, !app->runtime.compact_summary);
     if (app->shell.pause_indicator)
         gtk_widget_set_visible(app->shell.pause_indicator,
                                app->runtime.paused && !app->runtime.compact_summary);
@@ -52,6 +55,242 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
                           app->runtime.window_height);
         if (app->runtime.compact_restore_maximized || app->runtime.window_maximized)
             gtk_window_maximize(GTK_WINDOW(app->shell.window));
+    }
+}
+
+
+static const char *navigation_resource_icon(LsmPageType type)
+{
+    switch (type) {
+        case LSM_PAGE_CPU: return "applications-system-symbolic";
+        case LSM_PAGE_MEMORY: return "view-grid-symbolic";
+        case LSM_PAGE_DISK: return "drive-harddisk-symbolic";
+        case LSM_PAGE_NETWORK: return "network-wireless-symbolic";
+        case LSM_PAGE_GPU: return "video-display-symbolic";
+        case LSM_PAGE_BATTERY: return "battery-good-symbolic";
+        case LSM_PAGE_BLUETOOTH: return "bluetooth-symbolic";
+        case LSM_PAGE_NPU: return "applications-engineering-symbolic";
+        case LSM_PAGE_COUNT: return "applications-system-symbolic";
+    }
+    return "applications-system-symbolic";
+}
+
+static const char *navigation_resource_class(LsmPageType type)
+{
+    switch (type) {
+        case LSM_PAGE_CPU: return "lsm-nav-cpu";
+        case LSM_PAGE_MEMORY: return "lsm-nav-memory";
+        case LSM_PAGE_DISK: return "lsm-nav-disk";
+        case LSM_PAGE_NETWORK: return "lsm-nav-network";
+        case LSM_PAGE_GPU: return "lsm-nav-gpu";
+        case LSM_PAGE_BATTERY: return "lsm-nav-battery";
+        case LSM_PAGE_BLUETOOTH: return "lsm-nav-bluetooth";
+        case LSM_PAGE_NPU: return "lsm-nav-npu";
+        case LSM_PAGE_COUNT: return "lsm-nav-neutral";
+    }
+    return "lsm-nav-neutral";
+}
+
+static GtkWidget *navigation_button(const char *label, const char *icon_name,
+                                    const char *style_class)
+{
+    GtkWidget *button = gtk_toggle_button_new();
+    gtk_widget_set_name(button, "lsm-main-nav-button");
+    gtk_widget_set_size_request(button, 196, 48);
+    if (style_class)
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(button), style_class);
+
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *icon =
+        gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(icon), "lsm-main-nav-icon");
+
+    GtkWidget *text = gtk_label_new(label);
+    gtk_widget_set_halign(text, GTK_ALIGN_START);
+    gtk_widget_set_valign(text, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(text), "lsm-main-nav-label");
+
+    gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), text, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(button), row);
+    return button;
+}
+
+static void navigation_tab_clicked(GtkButton *button, gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !app->shell.notebook) return;
+    const gint encoded = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(button), "lsm-nav-tab"));
+    const gint tab = encoded - 1;
+    if (tab < 0 || tab >= LSM_TAB_COUNT) return;
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(app->shell.notebook), tab);
+    lsm_app_shell_sync_navigation(app);
+}
+
+static void navigation_resource_clicked(GtkButton *button, gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return;
+    const gint encoded = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(button), "lsm-nav-resource"));
+    const gint type = encoded - 1;
+    if (type < LSM_PAGE_CPU || type >= LSM_PAGE_COUNT) return;
+    lsm_performance_show_resource(app, (LsmPageType)type, 0U);
+    lsm_app_shell_sync_navigation(app);
+}
+
+static GtkWidget *navigation_tab_button(LsmApp *app, LsmTabIndex tab,
+                                        const char *label,
+                                        const char *icon_name,
+                                        const char *style_class)
+{
+    GtkWidget *button = navigation_button(label, icon_name, style_class);
+    g_object_set_data(
+        G_OBJECT(button), "lsm-nav-tab", GINT_TO_POINTER((gint)tab + 1));
+    g_signal_connect(
+        button, "clicked", G_CALLBACK(navigation_tab_clicked), app);
+    app->shell.navigation_tab_buttons[tab] = button;
+    return button;
+}
+
+static GtkWidget *navigation_resource_button(LsmApp *app, LsmPageType type,
+                                             const char *label)
+{
+    GtkWidget *button = navigation_button(
+        label, navigation_resource_icon(type),
+        navigation_resource_class(type));
+    g_object_set_data(
+        G_OBJECT(button), "lsm-nav-resource",
+        GINT_TO_POINTER((gint)type + 1));
+    g_signal_connect(
+        button, "clicked", G_CALLBACK(navigation_resource_clicked), app);
+    app->shell.navigation_resource_buttons[type] = button;
+    return button;
+}
+
+GtkWidget *lsm_app_shell_build_navigation(LsmApp *app)
+{
+    if (!app) return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_name(scroller, "lsm-main-navigation");
+    gtk_widget_set_size_request(scroller, 214, -1);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+
+    GtkWidget *rail = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_container_set_border_width(GTK_CONTAINER(rail), 8);
+    gtk_container_add(GTK_CONTAINER(scroller), rail);
+
+    gtk_box_pack_start(
+        GTK_BOX(rail),
+        navigation_tab_button(
+            app, LSM_TAB_OVERVIEW, "Overview",
+            "go-home-symbolic", "lsm-nav-overview"),
+        FALSE, FALSE, 0);
+
+    GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(separator), "lsm-main-nav-separator");
+    gtk_box_pack_start(GTK_BOX(rail), separator, FALSE, FALSE, 5);
+
+    const LsmPageType resources[] = {
+        LSM_PAGE_CPU,
+        LSM_PAGE_MEMORY,
+        LSM_PAGE_DISK,
+        LSM_PAGE_NETWORK,
+        LSM_PAGE_GPU,
+        LSM_PAGE_BATTERY
+    };
+    const char *const resource_labels[] = {
+        "CPU", "Memory", "Disks", "Network", "GPU", "Battery"
+    };
+    for (guint index = 0U; index < G_N_ELEMENTS(resources); index++)
+        gtk_box_pack_start(
+            GTK_BOX(rail),
+            navigation_resource_button(
+                app, resources[index], resource_labels[index]),
+            FALSE, FALSE, 0);
+
+    separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(separator), "lsm-main-nav-separator");
+    gtk_box_pack_start(GTK_BOX(rail), separator, FALSE, FALSE, 5);
+
+    const struct {
+        LsmTabIndex tab;
+        const char *label;
+        const char *icon;
+        const char *style_class;
+    } pages[] = {
+        {LSM_TAB_PROCESSES, "Processes", "view-list-symbolic", "lsm-nav-processes"},
+        {LSM_TAB_APP_HISTORY, "App History", "document-open-recent-symbolic", "lsm-nav-history"},
+        {LSM_TAB_STARTUP, "Startup Apps", "system-run-symbolic", "lsm-nav-startup"},
+        {LSM_TAB_USERS, "Users", "system-users-symbolic", "lsm-nav-users"},
+        {LSM_TAB_DETAILS, "Details", "dialog-information-symbolic", "lsm-nav-details"},
+        {LSM_TAB_SERVICES, "Services", "emblem-system-symbolic", "lsm-nav-services"},
+        {LSM_TAB_FILESYSTEMS, "File Systems", "folder-symbolic", "lsm-nav-filesystems"}
+    };
+    for (guint index = 0U; index < G_N_ELEMENTS(pages); index++)
+        gtk_box_pack_start(
+            GTK_BOX(rail),
+            navigation_tab_button(
+                app, pages[index].tab, pages[index].label,
+                pages[index].icon, pages[index].style_class),
+            FALSE, FALSE, 0);
+
+    return scroller;
+}
+
+static LsmPageType navigation_visible_performance_type(const LsmApp *app)
+{
+    if (!app || !app->performance.performance_stack ||
+        !app->performance.device_pages)
+        return LSM_PAGE_COUNT;
+    const char *visible = gtk_stack_get_visible_child_name(
+        GTK_STACK(app->performance.performance_stack));
+    if (!visible) return LSM_PAGE_COUNT;
+
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        const LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        if (page && strcmp(page->stack_name, visible) == 0)
+            return page->type;
+    }
+    return LSM_PAGE_COUNT;
+}
+
+void lsm_app_shell_sync_navigation(LsmApp *app)
+{
+    if (!app) return;
+
+    const LsmTabIndex active =
+        app->runtime.active_tab >= 0 &&
+        app->runtime.active_tab < LSM_TAB_COUNT
+            ? (LsmTabIndex)app->runtime.active_tab
+            : LSM_TAB_COUNT;
+    const LsmPageType resource =
+        active == LSM_TAB_PERFORMANCE
+            ? navigation_visible_performance_type(app)
+            : LSM_PAGE_COUNT;
+
+    for (gint tab = 0; tab < LSM_TAB_COUNT; tab++) {
+        GtkWidget *button = app->shell.navigation_tab_buttons[tab];
+        if (button)
+            gtk_toggle_button_set_active(
+                GTK_TOGGLE_BUTTON(button), active == (LsmTabIndex)tab);
+    }
+    for (gint type = 0; type < LSM_PAGE_COUNT; type++) {
+        GtkWidget *button = app->shell.navigation_resource_buttons[type];
+        if (button)
+            gtk_toggle_button_set_active(
+                GTK_TOGGLE_BUTTON(button), resource == (LsmPageType)type);
     }
 }
 
@@ -298,6 +537,52 @@ void lsm_app_shell_apply_theme(LsmApp *app)
 
     g_string_append(
         css,
+        "#lsm-main-navigation, #lsm-main-navigation viewport {"
+        " background-image: linear-gradient(to bottom, @lsm_panel, @lsm_background);"
+        " background-color: @lsm_panel;"
+        " border-color: @lsm_connection_border;"
+        "}"
+        "#lsm-main-navigation { border-right: 1px solid @lsm_connection_border; }"
+        "#lsm-main-nav-button {"
+        " background-image: none; background-color: transparent;"
+        " color: @lsm_summary; border: 1px solid transparent;"
+        " box-shadow: none; margin: 2px 0; padding: 8px 10px;"
+        "}"
+        "#lsm-main-nav-button:hover {"
+        " background-color: @lsm_card_hover;"
+        " border-color: alpha(@lsm_neutral, 0.20);"
+        "}"
+        "#lsm-main-nav-button:checked {"
+        " background-image: linear-gradient(to right,"
+        " alpha(@lsm_neutral, 0.68), alpha(@lsm_accent_hover, 0.42));"
+        " color: @lsm_title;"
+        " border-color: alpha(@lsm_neutral, 0.92);"
+        " box-shadow: inset 3px 0 @lsm_neutral;"
+        "}"
+        "#lsm-main-nav-button .lsm-main-nav-label {"
+        " color: @lsm_summary; font-size: 15px; font-weight: 600;"
+        "}"
+        "#lsm-main-nav-button:hover .lsm-main-nav-label,"
+        "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_title; }"
+        "#lsm-main-nav-button .lsm-main-nav-icon { color: @lsm_neutral; }"
+        "#lsm-main-nav-button.lsm-nav-memory .lsm-main-nav-icon { color: #9b65ff; }"
+        "#lsm-main-nav-button.lsm-nav-disk .lsm-main-nav-icon { color: #8fd94e; }"
+        "#lsm-main-nav-button.lsm-nav-network .lsm-main-nav-icon { color: #30d9ef; }"
+        "#lsm-main-nav-button.lsm-nav-gpu .lsm-main-nav-icon { color: #de68f2; }"
+        "#lsm-main-nav-button.lsm-nav-battery .lsm-main-nav-icon { color: #6ae66a; }"
+        "#lsm-main-nav-button.lsm-nav-processes .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-history .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-startup .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-users .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-details .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-services .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-filesystems .lsm-main-nav-icon {"
+        " color: @lsm_selected_summary;"
+        "}"
+        ".lsm-main-nav-separator {"
+        " background-color: alpha(@lsm_connection_border, 0.78);"
+        " min-height: 1px;"
+        "}"
         "#lsm-performance-sidebar, #lsm-performance-sidebar viewport {"
         " background-color: @lsm_panel; border-color: @lsm_border;"
         "}"
@@ -399,7 +684,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         "button, combobox button, entry, spinbutton { border-radius: %upx; }"
         "notebook > header > tabs > tab { border-radius: %upx %upx 0 0; }"
-        "#lsm-side-button { border-radius: %upx; }",
+        "#lsm-side-button { border-radius: %upx; }"
+        "#lsm-main-nav-button { border-radius: %upx; }",
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->compact_spacing,
         (unsigned int)metrics->control_spacing,
@@ -411,7 +697,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,
-        (unsigned int)metrics->small_radius);
+        (unsigned int)metrics->small_radius,
+        (unsigned int)metrics->control_radius);
 
     gtk_css_provider_load_from_data(
         app->shell.theme_provider, css->str, (gssize)css->len, NULL);
@@ -510,6 +797,7 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             break;
     }
     restore_page_scroll(app, page_number);
+    lsm_app_shell_sync_navigation(app);
 }
 
 static gboolean reflow_after_window_restore(gpointer user_data)

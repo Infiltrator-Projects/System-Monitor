@@ -23,6 +23,7 @@
 #include "monitor.h"
 #include "overview.h"
 #include "summary_bar.h"
+#include "app_shell.h"
 #include "ui_helpers.h"
 #include "wifi_metadata.h"
 
@@ -130,6 +131,7 @@ void performance_select_side_button(LsmApp *app, LsmDevicePage *selected)
     lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
                     selected->stack_name);
     lsm_performance_selection_end(&app->performance.performance_selection);
+    lsm_app_shell_sync_navigation(app);
 }
 
 static LsmDevicePage *page_for_type_index(const LsmApp *app,

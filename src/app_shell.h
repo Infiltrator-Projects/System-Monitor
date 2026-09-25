@@ -37,6 +37,25 @@ void lsm_app_shell_connect_window(LsmApp *app);
 void lsm_app_shell_connect_notebook(LsmApp *app);
 
 /**
+ * Build the persistent graphical primary navigation rail.
+ *
+ * The rail replaces the notebook's visible text tabs while retaining the
+ * notebook as the stable internal page container. Performance resource classes
+ * are promoted into first-class destinations without changing device identity.
+ *
+ * @param [in,out] app Active application context.
+ * @return GTK widget owning the primary navigation rail.
+ */
+GtkWidget *lsm_app_shell_build_navigation(LsmApp *app);
+
+/**
+ * Synchronise the graphical rail with the active tab/resource.
+ *
+ * @param [in,out] app Active application context.
+ */
+void lsm_app_shell_sync_navigation(LsmApp *app);
+
+/**
  * Apply compact-summary visibility and window geometry policy.
  *
  * @param [in,out] app Active application context.

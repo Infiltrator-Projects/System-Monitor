@@ -138,6 +138,7 @@ typedef struct _GtkBox GtkBox;
 typedef struct _GtkButton GtkButton;
 typedef struct _GtkContainer GtkContainer;
 typedef struct _GtkGrid GtkGrid;
+typedef struct _GtkImage GtkImage;
 typedef struct _GtkLabel GtkLabel;
 typedef struct _GtkMenuItem GtkMenuItem;
 typedef struct _GtkCheckMenuItem GtkCheckMenuItem;
@@ -217,6 +218,8 @@ typedef enum { GTK_ALIGN_FILL=0, GTK_ALIGN_START=1, GTK_ALIGN_END=2, GTK_ALIGN_C
 typedef enum { GTK_POLICY_ALWAYS=0, GTK_POLICY_AUTOMATIC=1, GTK_POLICY_NEVER=2, GTK_POLICY_EXTERNAL=3 } GtkPolicyType;
 typedef enum { GTK_POS_LEFT=0, GTK_POS_RIGHT=1, GTK_POS_TOP=2, GTK_POS_BOTTOM=3 } GtkPositionType;
 typedef enum { GTK_WINDOW_TOPLEVEL=0, GTK_WINDOW_POPUP=1 } GtkWindowType;
+typedef int GtkIconSize;
+#define GTK_ICON_SIZE_BUTTON 4
 typedef enum { GTK_WIN_POS_NONE=0, GTK_WIN_POS_CENTER=1, GTK_WIN_POS_MOUSE=2, GTK_WIN_POS_CENTER_ALWAYS=3, GTK_WIN_POS_CENTER_ON_PARENT=4 } GtkWindowPosition;
 typedef enum { GTK_DIALOG_MODAL=1<<0, GTK_DIALOG_DESTROY_WITH_PARENT=1<<1, GTK_DIALOG_USE_HEADER_BAR=1<<2 } GtkDialogFlags;
 typedef enum { GTK_MESSAGE_INFO=0, GTK_MESSAGE_WARNING=1, GTK_MESSAGE_QUESTION=2, GTK_MESSAGE_ERROR=3, GTK_MESSAGE_OTHER=4 } GtkMessageType;
@@ -265,6 +268,7 @@ typedef enum { GTK_WRAP_NONE=0, GTK_WRAP_CHAR=1, GTK_WRAP_WORD=2, GTK_WRAP_WORD_
 #define GTK_CHECK_MENU_ITEM(o) ((GtkCheckMenuItem*)(o))
 #define GTK_RADIO_MENU_ITEM(o) ((GtkRadioMenuItem*)(o))
 #define GTK_MENU_SHELL(o) ((GtkMenuShell*)(o))
+#define GTK_IMAGE(o) ((GtkImage*)(o))
 #define GTK_NOTEBOOK(o) ((GtkNotebook*)(o))
 #define GTK_PANED(o) ((GtkPaned*)(o))
 #define GTK_SCROLLED_WINDOW(o) ((GtkScrolledWindow*)(o))
@@ -483,9 +487,10 @@ GtkWidget *gtk_frame_new(const gchar*);
 void gtk_grid_attach(GtkGrid*,GtkWidget*,gint,gint,gint,gint); GtkWidget *gtk_grid_new(void); void gtk_grid_set_column_spacing(GtkGrid*,guint); void gtk_grid_set_row_spacing(GtkGrid*,guint);
 GtkWidget *gtk_label_new(const gchar*); void gtk_label_set_selectable(GtkLabel*,gboolean); void gtk_label_set_attributes(GtkLabel*,PangoAttrList*); void gtk_label_set_ellipsize(GtkLabel*,PangoEllipsizeMode); void gtk_label_set_line_wrap(GtkLabel*,gboolean); void gtk_label_set_markup(GtkLabel*,const gchar*); void gtk_label_set_text(GtkLabel*,const gchar*); const gchar *gtk_label_get_text(GtkLabel*);
 void gtk_list_store_append(GtkListStore*,GtkTreeIter*); void gtk_list_store_clear(GtkListStore*); GtkListStore *gtk_list_store_new(gint n_columns,...); void gtk_list_store_set(GtkListStore*,GtkTreeIter*,...);
+GtkWidget *gtk_image_new_from_icon_name(const gchar*,GtkIconSize); void gtk_image_set_pixel_size(GtkImage*,gint);
 GtkWidget *gtk_menu_bar_new(void); void gtk_menu_popup_at_pointer(GtkMenu*,const GdkEvent*); GtkWidget *gtk_menu_item_new_with_label(const gchar*); GtkWidget *gtk_menu_item_new_with_mnemonic(const gchar*); void gtk_menu_item_set_label(GtkMenuItem*,const gchar*); void gtk_menu_item_set_submenu(GtkMenuItem*,GtkWidget*); GtkWidget *gtk_menu_new(void); void gtk_menu_shell_append(GtkMenuShell*,GtkWidget*);
 void gtk_message_dialog_format_secondary_text(GtkMessageDialog*,const gchar*,...); GtkWidget *gtk_message_dialog_new(GtkWindow*,GtkDialogFlags,GtkMessageType,GtkButtonsType,const gchar*,...);
-gint gtk_notebook_append_page(GtkNotebook*,GtkWidget*,GtkWidget*); gint gtk_notebook_get_current_page(GtkNotebook*); GtkWidget *gtk_notebook_new(void); void gtk_notebook_set_current_page(GtkNotebook*,gint); void gtk_notebook_set_tab_pos(GtkNotebook*,GtkPositionType);
+gint gtk_notebook_append_page(GtkNotebook*,GtkWidget*,GtkWidget*); gint gtk_notebook_get_current_page(GtkNotebook*); GtkWidget *gtk_notebook_new(void); void gtk_notebook_set_current_page(GtkNotebook*,gint); void gtk_notebook_set_show_tabs(GtkNotebook*,gboolean); void gtk_notebook_set_tab_pos(GtkNotebook*,GtkPositionType);
 GtkWidget *gtk_paned_new(GtkOrientation); void gtk_paned_pack1(GtkPaned*,GtkWidget*,gboolean,gboolean); void gtk_paned_pack2(GtkPaned*,GtkWidget*,gboolean,gboolean); void gtk_paned_set_position(GtkPaned*,gint);
 GSList *gtk_radio_menu_item_get_group(GtkRadioMenuItem*); GtkWidget *gtk_radio_menu_item_new_with_label(GSList*,const gchar*); GtkWidget *gtk_radio_menu_item_new_with_label_from_widget(GtkRadioMenuItem*,const gchar*);
 GtkWidget *gtk_scrolled_window_new(gpointer,gpointer); void gtk_scrolled_window_set_policy(GtkScrolledWindow*,GtkPolicyType,GtkPolicyType); void gtk_scrolled_window_set_propagate_natural_width(GtkScrolledWindow*,gboolean); void gtk_scrolled_window_set_propagate_natural_height(GtkScrolledWindow*,gboolean); GtkAdjustment *gtk_scrolled_window_get_vadjustment(GtkScrolledWindow*); double gtk_adjustment_get_value(GtkAdjustment*); void gtk_adjustment_set_value(GtkAdjustment*,double);
