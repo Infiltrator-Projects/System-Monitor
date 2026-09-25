@@ -191,6 +191,22 @@ jobs:
             exit 1
           fi
 
+      - name: Verify GTK Memory resource navigation
+        if: runner.environment == 'github-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-memory-nav \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DLSM_TEST_PERFORMANCE_RESOURCE=1"
+          cmake --build build-memory-nav --target system-monitor --parallel 2
+          status=0
+          timeout 5s xvfb-run -a ./build-memory-nav/system-monitor || status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "Memory GTK navigation smoke exited unexpectedly with status $status." >&2
+            exit 1
+          fi
+
       - name: Cross-compile experimental Windows GUI
         shell: bash
         run: |

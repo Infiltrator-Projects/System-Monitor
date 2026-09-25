@@ -190,8 +190,26 @@ void lsm_performance_show_resource(LsmApp *app, LsmPageType type,
         !app->performance.device_pages)
         return;
 
-    if (app->monitor.topology_generation !=
-        app->performance.displayed_topology_generation)
+    /*
+     * Make Performance the active shell destination before changing its inner
+     * resource. This keeps shell/navigation state coherent during the switch
+     * and avoids asking GTK to animate a hidden heavyweight page.
+     */
+    if (app->shell.notebook)
+        gtk_notebook_set_current_page(
+            GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_PERFORMANCE);
+
+    /*
+     * CPU and Memory are topology-independent singleton pages. Rebuilding the
+     * complete Performance widget tree synchronously from their navigation
+     * click is unnecessary and can race delayed hardware discovery. Device-
+     * backed resources still reconcile topology before resolving an index.
+     */
+    const gboolean device_backed =
+        type != LSM_PAGE_CPU && type != LSM_PAGE_MEMORY;
+    if (device_backed &&
+        app->monitor.topology_generation !=
+            app->performance.displayed_topology_generation)
         rebuild_for_topology_change(app);
 
     LsmDevicePage *page = page_for_type_index(app, type, index);
@@ -200,9 +218,6 @@ void lsm_performance_show_resource(LsmApp *app, LsmPageType type,
     gtk_stack_set_visible_child_name(
         GTK_STACK(app->performance.performance_stack), page->stack_name);
     performance_select_side_button(app, page);
-    if (app->shell.notebook)
-        gtk_notebook_set_current_page(
-            GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_PERFORMANCE);
 }
 
 void performance_synchronise_side_selection(LsmApp *app)
@@ -349,16 +364,30 @@ gboolean performance_draw_memory_composition(GtkWidget *widget, cairo_t *cr,
                                         gpointer user_data)
 {
     LsmApp *app = user_data;
+    if (!widget || !cr || !app) return FALSE;
     const LsmMemoryInfo *memory = &app->monitor.memory;
     GtkAllocation allocation;
     gtk_widget_get_allocation(widget, &allocation);
-    const double width = allocation.width;
-    const double height = allocation.height;
-    const double total = memory->total_bytes > 0 ? (double)memory->total_bytes : 1.0;
-    const double used_x = width * (double)memory->used_bytes / total;
-    const uint64_t reclaimable = memory->available_bytes > memory->free_bytes
-        ? memory->available_bytes - memory->free_bytes : 0;
-    const double reclaimable_x = width * (double)reclaimable / total;
+    if (allocation.width <= 0 || allocation.height <= 0) return FALSE;
+
+    const double width = (double)allocation.width;
+    const double height = (double)allocation.height;
+    const uint64_t total_bytes = memory->total_bytes;
+    const uint64_t used_bytes =
+        total_bytes > 0U && memory->used_bytes < total_bytes
+            ? memory->used_bytes : total_bytes;
+    const uint64_t reclaimable_raw =
+        memory->available_bytes > memory->free_bytes
+            ? memory->available_bytes - memory->free_bytes : 0U;
+    const uint64_t reclaimable_bytes =
+        total_bytes > used_bytes &&
+        reclaimable_raw < total_bytes - used_bytes
+            ? reclaimable_raw : (total_bytes > used_bytes
+                ? total_bytes - used_bytes : 0U);
+    const double total = total_bytes > 0U ? (double)total_bytes : 1.0;
+    const double used_x = width * (double)used_bytes / total;
+    const double reclaimable_x =
+        width * (double)reclaimable_bytes / total;
     const double middle_end = fmin(width, used_x + reclaimable_x);
 
     GdkRGBA colour;
@@ -523,9 +552,14 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     gtk_stack_set_homogeneous(GTK_STACK(app->performance.performance_stack), FALSE);
     gtk_widget_set_hexpand(app->performance.performance_stack, TRUE);
     gtk_widget_set_vexpand(app->performance.performance_stack, TRUE);
+    /*
+     * Resource pages contain live Cairo graphs, drawing areas and large detail
+     * panes. Switch them directly: cross-fading two complete live resource
+     * trees adds no diagnostic value and has proved fragile on real GTK/X11
+     * desktops during rapid resource changes.
+     */
     gtk_stack_set_transition_type(GTK_STACK(app->performance.performance_stack),
-                                  GTK_STACK_TRANSITION_TYPE_CROSSFADE);
-    gtk_stack_set_transition_duration(GTK_STACK(app->performance.performance_stack), 120);
+                                  GTK_STACK_TRANSITION_TYPE_NONE);
     GtkWidget *performance_scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_name(performance_scroller, "lsm-performance-content");
     app->runtime.page_scrollers[LSM_TAB_PERFORMANCE] = performance_scroller;

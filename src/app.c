@@ -303,6 +303,10 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 #ifdef LSM_TEST_LOGICAL
     gtk_stack_set_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack), "logical");
 #endif
+#ifdef LSM_TEST_PERFORMANCE_RESOURCE
+    lsm_performance_show_resource(
+        app, (LsmPageType)LSM_TEST_PERFORMANCE_RESOURCE, 0U);
+#endif
     /* Slow application metadata and non-visible notebook pages must never
      * hold the first paint hostage. The process scanner and native monitor
      * already work asynchronously; keep that rule at the composition layer. */

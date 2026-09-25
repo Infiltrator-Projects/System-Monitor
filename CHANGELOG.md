@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.102 - 2026-09-25
+
+- Stabilise the new icon-led primary navigation after live testing exposed a crash when switching from CPU to Memory.
+- Activate the Performance shell before changing its inner resource and avoid synchronous topology rebuilds for the topology-independent CPU and Memory singleton pages.
+- Switch heavyweight live Performance pages without GTK cross-fade animation so two graph-rich widget trees are never rendered concurrently during resource navigation.
+- Harden the Memory composition drawing path against invalid widget/context geometry and clamp retained memory segments to the current total.
+- Add a hosted Xvfb smoke that navigates directly to the Memory resource so future releases cannot regress this crash path unnoticed.
+
+
 ## 1.0.101 - 2026-09-25
 
 - Replace the visible Linux top-level notebook tab strip with a persistent left navigation rail matching the approved UI mockup direction.
