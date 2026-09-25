@@ -675,7 +675,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-overview-temperature .lsm-overview-icon { color: #ffad45; }"
         ".lsm-overview-cpu-pressure { background-image: linear-gradient(135deg, alpha(#00adef, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#00adef, 0.40); }"
         ".lsm-overview-memory-pressure { background-image: linear-gradient(135deg, alpha(#734cff, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#7c5cff, 0.40); }"
-        ".lsm-overview-io-pressure { background-image: linear-gradient(135deg, alpha(#3bd55f, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#64d946, 0.40); }"
+        ".lsm-overview-io-pressure { background-image: linear-gradient(135deg, alpha(#3bd55f, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#64d946, 0.40); }");
+
+    g_string_append(
+        css,
         "#lsm-overview-process-card {"
         " background-image: linear-gradient(to right, @lsm_card, @lsm_surface);"
         "}"
