@@ -582,7 +582,13 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-main-nav-separator {"
         " background-color: alpha(@lsm_connection_border, 0.78);"
         " min-height: 1px;"
-        "}"
+        "}");
+
+    /* Keep each concatenated CSS literal below the ISO C translation limit.
+     * Clang's documentation build deliberately enforces that portability
+     * bound with -Werror. */
+    g_string_append(
+        css,
         "#lsm-performance-sidebar, #lsm-performance-sidebar viewport {"
         " background-color: @lsm_panel; border-color: @lsm_border;"
         "}"
