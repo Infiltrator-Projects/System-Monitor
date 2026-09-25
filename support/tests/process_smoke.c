@@ -684,6 +684,17 @@ static bool exercise_process_tree_control(void)
 
 int main(void)
 {
+    uint64_t total_ticks = 0U;
+    if (!lsm_process_linux_parse_total_cpu_ticks(
+            "cpu  100 20 30 400 50 6 7 8\ncpu0 1 2 3 4\n",
+            &total_ticks) ||
+        total_ticks != 621U ||
+        lsm_process_linux_parse_total_cpu_ticks("cpu  1 2 3\n", &total_ticks) ||
+        lsm_process_linux_parse_total_cpu_ticks("intr 1 2 3 4\n", &total_ticks)) {
+        fputs("/proc/stat aggregate CPU parsing regressed\n", stderr);
+        return 1;
+    }
+
     double uptime = -1.0;
     if (!lsm_process_linux_parse_uptime_record("123.5 42.0", &uptime) ||
         uptime != 123.5 ||
