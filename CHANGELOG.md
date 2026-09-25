@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.112 - 2026-09-25
+
+- Stop the Overview plots from breathing wider and narrower as live values change by making the dashboard's twelve layout columns explicitly homogeneous.
+- Give rapidly changing non-gauge headline values fixed character allocations so transitions such as 9%→10% and KB/s→MB/s cannot feed new natural widths back into GTK layout.
+- Bound hardware/device metadata labels to a stable width while retaining end ellipsising.
+- Extend the syntax-test GTK compatibility surface for the layout APIs used by this fix.
+- Correct the README to describe the current five-row Top CPU process panel.
+
 ## 1.0.111 - 2026-09-25
 
 - Replace the incorrect generic CPU gear and other Overview header glyphs with purpose-drawn neon resource icons; the CPU/GPU marks are now chip-shaped and pressure uses the waveform language from the approved reference.

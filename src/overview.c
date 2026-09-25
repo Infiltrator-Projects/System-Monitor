@@ -717,6 +717,22 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
 
     GtkWidget *value = gtk_label_new("Initialising…");
     gtk_widget_set_halign(value, GTK_ALIGN_END);
+    /*
+     * Overview headers update every sample. Without a fixed text allocation,
+     * GTK feeds changing natural label widths back into the spanning grid,
+     * which makes neighbouring plots visibly breathe left/right. Give the
+     * non-gauge headline values a stable allocation large enough for their
+     * formatted units; CPU/Memory/GPU values live inside fixed-size gauges.
+     */
+    if (metric != LSM_OVERVIEW_CPU &&
+        metric != LSM_OVERVIEW_MEMORY &&
+        metric != LSM_OVERVIEW_GPU) {
+        const gint value_chars =
+            metric == LSM_OVERVIEW_NETWORK ? 12 : 8;
+        gtk_label_set_width_chars(GTK_LABEL(value), value_chars);
+        gtk_label_set_max_width_chars(GTK_LABEL(value), value_chars);
+        gtk_label_set_ellipsize(GTK_LABEL(value), PANGO_ELLIPSIZE_END);
+    }
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-metric-value");
     gtk_style_context_add_class(
@@ -724,6 +740,8 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
 
     GtkWidget *meta = gtk_label_new("");
     gtk_widget_set_halign(meta, GTK_ALIGN_END);
+    gtk_label_set_width_chars(GTK_LABEL(meta), 18);
+    gtk_label_set_max_width_chars(GTK_LABEL(meta), 18);
     gtk_label_set_ellipsize(GTK_LABEL(meta), PANGO_ELLIPSIZE_END);
     gtk_widget_set_size_request(meta, 120, -1);
     gtk_style_context_add_class(
@@ -1266,6 +1284,12 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     g_object_set_data(G_OBJECT(container), "lsm-overview-uptime", uptime);
 
     GtkWidget *grid = gtk_grid_new();
+    /*
+     * The dashboard is a twelve-column instrument panel, not a content-sized
+     * table. Homogeneous columns keep every card and plot width invariant when
+     * live labels change from e.g. 9% to 10% or KB/s to MB/s.
+     */
+    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_widget_set_hexpand(grid, TRUE);
