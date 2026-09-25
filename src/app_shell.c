@@ -654,6 +654,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " border-radius: 999px; padding: 6px 10px; font-weight: 700;"
         "}"
         ".lsm-overview-card {"
+        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
         " box-shadow: 0 2px 10px alpha(#000000, 0.18);"
         " border-width: 1px;"
         "}"
@@ -661,21 +662,21 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-overview-card-title { font-size: 16px; font-weight: 700; }"
         ".lsm-overview-value { color: @lsm_title; font-size: 26px; font-weight: 700; }"
         ".lsm-overview-icon { min-width: 28px; }"
-        ".lsm-overview-cpu { background-image: linear-gradient(135deg, alpha(#00adef, 0.15), @lsm_card 44%, @lsm_surface); border-color: alpha(#00adef, 0.58); }"
+        ".lsm-overview-cpu { border-color: alpha(#00adef, 0.58); }"
         ".lsm-overview-cpu .lsm-overview-icon { color: #28d7ff; }"
-        ".lsm-overview-memory { background-image: linear-gradient(135deg, alpha(#6d45ff, 0.16), @lsm_card 44%, @lsm_surface); border-color: alpha(#8a63ff, 0.58); }"
+        ".lsm-overview-memory { border-color: alpha(#8a63ff, 0.58); }"
         ".lsm-overview-memory .lsm-overview-icon { color: #a56dff; }"
-        ".lsm-overview-disk { background-image: linear-gradient(135deg, alpha(#3bd55f, 0.13), @lsm_card 44%, @lsm_surface); border-color: alpha(#72d93c, 0.50); }"
+        ".lsm-overview-disk { border-color: alpha(#72d93c, 0.50); }"
         ".lsm-overview-disk .lsm-overview-icon { color: #7ee84d; }"
-        ".lsm-overview-network { background-image: linear-gradient(135deg, alpha(#ff3fa0, 0.13), @lsm_card 44%, @lsm_surface); border-color: alpha(#ff5aa9, 0.52); }"
+        ".lsm-overview-network { border-color: alpha(#ff5aa9, 0.52); }"
         ".lsm-overview-network .lsm-overview-icon { color: #39dff0; }"
-        ".lsm-overview-gpu { background-image: linear-gradient(135deg, alpha(#de45ff, 0.15), @lsm_card 44%, @lsm_surface); border-color: alpha(#de68f2, 0.56); }"
+        ".lsm-overview-gpu { border-color: alpha(#de68f2, 0.56); }"
         ".lsm-overview-gpu .lsm-overview-icon { color: #e46dff; }"
-        ".lsm-overview-temperature { background-image: linear-gradient(135deg, alpha(#ff8f2b, 0.14), @lsm_card 44%, @lsm_surface); border-color: alpha(#ffae42, 0.56); }"
+        ".lsm-overview-temperature { border-color: alpha(#ffae42, 0.56); }"
         ".lsm-overview-temperature .lsm-overview-icon { color: #ffad45; }"
-        ".lsm-overview-cpu-pressure { background-image: linear-gradient(135deg, alpha(#00adef, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#00adef, 0.40); }"
-        ".lsm-overview-memory-pressure { background-image: linear-gradient(135deg, alpha(#734cff, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#7c5cff, 0.40); }"
-        ".lsm-overview-io-pressure { background-image: linear-gradient(135deg, alpha(#3bd55f, 0.10), @lsm_card 46%, @lsm_surface); border-color: alpha(#64d946, 0.40); }");
+        ".lsm-overview-cpu-pressure { border-color: alpha(#00adef, 0.40); }"
+        ".lsm-overview-memory-pressure { border-color: alpha(#7c5cff, 0.40); }"
+        ".lsm-overview-io-pressure { border-color: alpha(#64d946, 0.40); }");
 
     g_string_append(
         css,

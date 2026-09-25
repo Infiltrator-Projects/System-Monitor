@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.107 - 2026-09-25
+
+- Reshape Overview to the approved asymmetric dashboard geometry instead of nine same-sized tiles: CPU and Memory are the wide primary row, Disk/Network/GPU form the device row, and Temperature/pressure cards form a compact diagnostic row.
+- Give primary and secondary cards deliberately different graph heights so the hierarchy reads visually rather than procedurally.
+- Keep every Overview card on one coherent shared panel background; resource identity now comes from icon, border, graph and dial accents rather than unrelated card fills.
+- Increase resource-icon presence and replace the single-colour CPU/Memory/GPU rings with native Cairo three-stop gradient dials.
+- Compress the diagnostic row and retain scrolling only as a small-window fallback so the normal 1080-line Overview fills the available page rather than extending below it.
+- Carry forward the 1.0.106 Linux process-CPU accounting repair, which fixes the Top CPU processes rows previously appearing as 0.0% despite real CPU use.
+
 ## 1.0.106 - 2026-09-25
 
 - Fix Overview Top CPU processes reporting 0.0% by repairing Linux process CPU accounting: the strict bounded text helper correctly rejected the truncated 512-byte read of /proc/stat, leaving the aggregate CPU denominator at zero. Read the complete procfs snapshot and explicitly parse the aggregate cpu row instead.
