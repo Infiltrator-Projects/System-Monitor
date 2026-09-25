@@ -9,6 +9,7 @@
 - Replace the textual Top CPU process chips with graphical rows containing process name, live CPU activity bar, CPU percentage and resident-memory value.
 - Add native Cairo radial utilisation gauges to CPU, Memory and GPU Overview cards and give those primary resources more visual weight than the secondary diagnostic cards.
 - Keep the presentation native GTK/Cairo and data-driven; no generated decorative artwork is embedded in the application.
+- Keep the richer dashboard CSS split into ISO-portable literals and extend the strict GTK/Cairo test shim so the graphical code remains covered by canonical builds.
 
 
 ## 1.0.105 - 2026-09-25
