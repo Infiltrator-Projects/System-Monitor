@@ -26,7 +26,13 @@
  */
 bool lsm_process_linux_parse_uptime_record(const char *text, double *uptime);
 
-/** Parse the aggregate cpu row at the start of Linux /proc/stat. */
+/**
+ * Parse the aggregate cpu row at the start of Linux /proc/stat.
+ *
+ * @param [in] text Complete /proc/stat text beginning with the aggregate cpu row.
+ * @param [out] total Receives the saturating sum of aggregate CPU tick fields.
+ * @return true when at least the four required aggregate fields were parsed.
+ */
 bool lsm_process_linux_parse_total_cpu_ticks(const char *text, uint64_t *total);
 
 #endif
