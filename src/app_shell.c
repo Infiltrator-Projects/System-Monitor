@@ -397,7 +397,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-overview-hero {"
         " border-radius: %upx; padding: %upx;"
         "}"
-        "button, combobox button, entry, spinbutton { border-radius: %upx; }
+        "button, combobox button, entry, spinbutton { border-radius: %upx; }"
         "notebook > header > tabs > tab { border-radius: %upx %upx 0 0; }"
         "#lsm-side-button { border-radius: %upx; }",
         (unsigned int)metrics->card_radius,
