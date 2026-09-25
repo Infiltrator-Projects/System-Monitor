@@ -462,7 +462,12 @@ void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);
 void pango_attr_list_unref(PangoAttrList *list);
 PangoAttribute *pango_attr_size_new(gint size);
 PangoAttribute *pango_attr_weight_new(int weight);
-void cairo_new_path(cairo_t *cr); void cairo_move_to(cairo_t *cr,double x,double y); void cairo_line_to(cairo_t *cr,double x,double y); void cairo_arc(cairo_t *cr,double xc,double yc,double radius,double angle1,double angle2); void cairo_close_path(cairo_t *cr); void cairo_fill(cairo_t *cr); void cairo_stroke(cairo_t *cr); void cairo_rectangle(cairo_t *cr,double x,double y,double width,double height); void cairo_save(cairo_t *cr); void cairo_restore(cairo_t *cr); void cairo_clip(cairo_t *cr); void cairo_set_dash(cairo_t *cr,const double *dashes,int num_dashes,double offset); void cairo_set_line_width(cairo_t *cr,double width); void cairo_set_source_rgba(cairo_t *cr,double red,double green,double blue,double alpha);
+typedef struct _cairo_pattern cairo_pattern_t;
+#ifndef G_PI
+#define G_PI 3.14159265358979323846
+#endif
+#define CAIRO_LINE_CAP_ROUND 1
+void cairo_new_path(cairo_t *cr); void cairo_move_to(cairo_t *cr,double x,double y); void cairo_line_to(cairo_t *cr,double x,double y); void cairo_arc(cairo_t *cr,double xc,double yc,double radius,double angle1,double angle2); void cairo_close_path(cairo_t *cr); void cairo_fill(cairo_t *cr); void cairo_stroke(cairo_t *cr); void cairo_stroke_preserve(cairo_t *cr); void cairo_rectangle(cairo_t *cr,double x,double y,double width,double height); void cairo_save(cairo_t *cr); void cairo_restore(cairo_t *cr); void cairo_clip(cairo_t *cr); void cairo_set_dash(cairo_t *cr,const double *dashes,int num_dashes,double offset); void cairo_set_line_width(cairo_t *cr,double width); void cairo_set_line_cap(cairo_t *cr,int line_cap); void cairo_set_source_rgba(cairo_t *cr,double red,double green,double blue,double alpha); void cairo_set_source(cairo_t *cr,cairo_pattern_t *source); cairo_pattern_t *cairo_pattern_create_linear(double x0,double y0,double x1,double y1); void cairo_pattern_add_color_stop_rgba(cairo_pattern_t *pattern,double offset,double red,double green,double blue,double alpha); void cairo_pattern_destroy(cairo_pattern_t *pattern);
 
 /* GTK */
 GtkSettings *gtk_settings_get_default(void);
@@ -490,7 +495,7 @@ void gtk_grid_attach(GtkGrid*,GtkWidget*,gint,gint,gint,gint); GtkWidget *gtk_gr
 GtkWidget *gtk_label_new(const gchar*); void gtk_label_set_selectable(GtkLabel*,gboolean); void gtk_label_set_attributes(GtkLabel*,PangoAttrList*); void gtk_label_set_ellipsize(GtkLabel*,PangoEllipsizeMode); void gtk_label_set_line_wrap(GtkLabel*,gboolean); void gtk_label_set_markup(GtkLabel*,const gchar*); void gtk_label_set_text(GtkLabel*,const gchar*); const gchar *gtk_label_get_text(GtkLabel*);
 void gtk_list_store_append(GtkListStore*,GtkTreeIter*); void gtk_list_store_clear(GtkListStore*); GtkListStore *gtk_list_store_new(gint n_columns,...); void gtk_list_store_set(GtkListStore*,GtkTreeIter*,...);
 GtkWidget *gtk_image_new_from_icon_name(const gchar*,GtkIconSize); void gtk_image_set_pixel_size(GtkImage*,gint);
-GtkWidget *gtk_progress_bar_new(void); void gtk_progress_bar_set_fraction(GtkProgressBar*,gdouble); void gtk_progress_bar_set_show_text(GtkProgressBar*,gboolean);
+GtkWidget *gtk_progress_bar_new(void); void gtk_progress_bar_set_fraction(GtkProgressBar*,double); void gtk_progress_bar_set_show_text(GtkProgressBar*,gboolean);
 GtkWidget *gtk_menu_bar_new(void); void gtk_menu_popup_at_pointer(GtkMenu*,const GdkEvent*); GtkWidget *gtk_menu_item_new_with_label(const gchar*); GtkWidget *gtk_menu_item_new_with_mnemonic(const gchar*); void gtk_menu_item_set_label(GtkMenuItem*,const gchar*); void gtk_menu_item_set_submenu(GtkMenuItem*,GtkWidget*); GtkWidget *gtk_menu_new(void); void gtk_menu_shell_append(GtkMenuShell*,GtkWidget*);
 void gtk_message_dialog_format_secondary_text(GtkMessageDialog*,const gchar*,...); GtkWidget *gtk_message_dialog_new(GtkWindow*,GtkDialogFlags,GtkMessageType,GtkButtonsType,const gchar*,...);
 gint gtk_notebook_append_page(GtkNotebook*,GtkWidget*,GtkWidget*); gint gtk_notebook_get_current_page(GtkNotebook*); GtkWidget *gtk_notebook_new(void); void gtk_notebook_set_current_page(GtkNotebook*,gint); void gtk_notebook_set_show_tabs(GtkNotebook*,gboolean); void gtk_notebook_set_tab_pos(GtkNotebook*,GtkPositionType);
