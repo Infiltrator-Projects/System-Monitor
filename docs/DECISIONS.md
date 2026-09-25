@@ -41,3 +41,11 @@ This file records durable architectural choices for System Monitor.
 **Rationale.** One reference-quality implementation reduces drift without accepting lowest-common-denominator abstractions.
 
 **Consequence.** Strong local code may temporarily lead Common, but the intended end state is one shared implementation.
+
+## ADR-006 — Coherent product over feature accumulation
+
+**Decision.** System Monitor admits features according to product purpose and integration quality rather than feature-count parity. External products may supply useful ideas, including genuinely distinctive features, but those ideas are adopted only when they strengthen the existing monitoring and diagnostic model and can be integrated consistently with established architecture and presentation.
+
+**Rationale.** A monitoring product becomes harder to understand when adjacent utilities, duplicated views and isolated capabilities accumulate without reinforcing one mental model. Conversely, a smaller set of measurements, relationships and actions can be more useful when they work together coherently. Competitor comparison is therefore most valuable as evidence about stronger approaches, not as a backlog generator.
+
+**Consequence.** New work must identify the user problem and the established product quality it improves. Prefer improvements that connect existing measurements, navigation or actions over independent feature islands. Reject technically possible additions that do not materially strengthen System Monitor's purpose. On approachable monitoring surfaces, prefer visual hierarchy, graphs, compact status/value treatment and meaningful grouping over explanatory prose; retain dense tables and exact text where the task is intentionally technical.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.98 - 2026-09-25
+
+- Define System Monitor explicitly as a coherent monitoring and diagnostic product rather than a feature-count exercise.
+- Treat competitor implementations as evidence and idea sources instead of parity backlogs; distinctive features are admitted only when they materially strengthen the established product purpose and integrate with its architecture, navigation and presentation.
+- Establish a presentation rule that approachable monitoring surfaces favour visual hierarchy, graphs, compact state/value treatment and meaningful grouping over explanatory prose, while deliberately technical surfaces retain exact text and dense tables where that density serves the task.
+- Add the product-coherence gate to Design, Decisions and Roadmap so future feature work has one maintained admission standard.
+
 ## 1.0.97 - 2026-09-25
 
 - Add an appended Overview tab without renumbering the existing eight persisted tab identities.

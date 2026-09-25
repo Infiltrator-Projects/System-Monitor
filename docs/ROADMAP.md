@@ -23,6 +23,20 @@ UI responsiveness take priority over new features. Fixed defects should gain the
 narrowest useful permanent regression. Tests completely subsumed by stronger
 coverage should be consolidated instead of preserved as historical ceremony.
 
+## Product-coherence gate
+
+Optional work is filtered through the product-admission policy in [Design](DESIGN.md)
+and ADR-006 in [Decisions](DECISIONS.md). Competitor features are not a parity
+backlog. A new capability should solve an existing monitoring or diagnostic
+problem, strengthen an established product quality, and fit the existing
+navigation and presentation model. Prefer deeper integration of existing
+measurements and actions over additional independent surfaces.
+
+Presentation maintenance follows the same standard. Summary and monitoring
+surfaces should favour visual hierarchy, graphs, compact state/value treatment
+and meaningful grouping when those communicate faster than prose. Dense textual
+tables remain appropriate where the surface is deliberately technical.
+
 ## Optional expansion
 
 Additional devices, telemetry, native platform backends or presentation work are

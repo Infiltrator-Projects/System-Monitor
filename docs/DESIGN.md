@@ -11,6 +11,16 @@ System Monitor starts from the behaviour the product must own, studies standards
 - represent unavailable information explicitly rather than guessing
 - keep reusable mechanics in Common while product/hardware policy stays local
 
+## Product identity and feature admission
+
+System Monitor is a coherent diagnostic instrument, not a catalogue of every system utility feature that could be implemented. Its product question is: **what is the computer doing, where are the resources going, and what trustworthy information does the user need to understand or act on that state?**
+
+Competitor applications, operating-system tools and research implementations are evidence and idea sources, not feature checklists. A particularly strong feature may be adopted when it materially improves System Monitor's existing purpose, but the implementation must fit System Monitor's architecture, interaction model and presentation instead of arriving as an isolated imitation.
+
+A feature or expansion should have a clear connection to at least one established product quality: measurement correctness, diagnostic usefulness, responsiveness, resource efficiency, reliability, platform completeness, interaction clarity or maintainability. Integration matters more than count: strengthening the relationship between measurements, navigation and actions is preferable to accumulating independent panels or tools.
+
+Presentation follows the same rule. The interface should communicate state through hierarchy, graphs, compact status/value treatments, colour and spatial grouping where those forms are clearer than prose. Text remains appropriate for names, exact values, technical tables, explanations and exceptional states, but ordinary monitoring surfaces should not narrate information that can be understood more quickly from the visual structure itself. Technical density is intentional on explicitly technical surfaces such as Details; it should not leak into approachable summary surfaces without a diagnostic reason.
+
 ## Non-goals and limits
 
 The project does not promise that every metric exists on every machine, and it does not treat command-line utility output as a stable API when a stronger native interface is available.

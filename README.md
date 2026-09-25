@@ -8,7 +8,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.97 ([version file](support/VERSION))\
+**Current source version:** 1.0.98 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.27 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
@@ -22,6 +22,8 @@ The cross-tab summary is projected once in the platform-neutral presentation lay
 System Monitor is built from first principles: establish what the operating system or hardware interface actually guarantees, then implement the required behaviour directly where practical. It deliberately avoids depending on the output or behaviour of external monitoring utilities when an authoritative native interface is available, because those dependencies can change independently of this project. External libraries are used when their documented contract is the stronger solution; important product behaviour remains owned by System Monitor.
 
 The project does not equate newer with better. Proven interfaces and techniques remain when they are the strongest solution, and newer ones replace them when they are demonstrably better. Age, popularity, fashion, convenience and implementation effort do not decide the architecture: the strongest practical implementation does. System Monitor should not knowingly accept a weaker solution merely because it is easier, quicker, more conventional or more portable.
+
+Competitor products are treated as evidence and idea sources, not feature checklists. System Monitor favours a coherent monitoring and diagnostic model over feature-count parity: a new capability must materially strengthen what the product already exists to do and should integrate with its measurements, navigation, actions and visual language rather than becoming an isolated feature island. The maintained admission rules live in [Design](docs/DESIGN.md) and ADR-006 in [Decisions](docs/DECISIONS.md).
 
 C and C++ are equal, first-class implementation languages for the project. The choice between them is made according to the needs of the component, with no general preference for one over the other. C, procedural C++ and object-oriented C++ are treated as different ways of expressing the same underlying systems work: each makes some problems easier to express and some harder. Language or paradigm purity is not a design goal.
 
