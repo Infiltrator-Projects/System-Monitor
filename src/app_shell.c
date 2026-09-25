@@ -124,7 +124,7 @@ static GtkWidget *navigation_button(const char *label, const char *icon_name,
 static void navigation_tab_clicked(GtkButton *button, gpointer user_data)
 {
     LsmApp *app = user_data;
-    if (!app || !app->shell.notebook) return;
+    if (!app || app->shell.navigation_syncing || !app->shell.notebook) return;
     const gint encoded = GPOINTER_TO_INT(
         g_object_get_data(G_OBJECT(button), "lsm-nav-tab"));
     const gint tab = encoded - 1;
@@ -136,7 +136,7 @@ static void navigation_tab_clicked(GtkButton *button, gpointer user_data)
 static void navigation_resource_clicked(GtkButton *button, gpointer user_data)
 {
     LsmApp *app = user_data;
-    if (!app) return;
+    if (!app || app->shell.navigation_syncing) return;
     const gint encoded = GPOINTER_TO_INT(
         g_object_get_data(G_OBJECT(button), "lsm-nav-resource"));
     const gint type = encoded - 1;
@@ -268,7 +268,8 @@ static LsmPageType navigation_visible_performance_type(const LsmApp *app)
 
 void lsm_app_shell_sync_navigation(LsmApp *app)
 {
-    if (!app) return;
+    if (!app || app->shell.navigation_syncing) return;
+    app->shell.navigation_syncing = TRUE;
 
     const LsmTabIndex active =
         app->runtime.active_tab >= 0 &&
@@ -292,6 +293,7 @@ void lsm_app_shell_sync_navigation(LsmApp *app)
             gtk_toggle_button_set_active(
                 GTK_TOGGLE_BUTTON(button), resource == (LsmPageType)type);
     }
+    app->shell.navigation_syncing = FALSE;
 }
 
 static gboolean lsm_system_prefers_dark(void)
