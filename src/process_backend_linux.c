@@ -568,12 +568,11 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
     return false;
 }
 
-static uint64_t read_total_cpu_ticks(void)
+bool lsm_process_linux_parse_total_cpu_ticks(const char *text,
+                                             uint64_t *total)
 {
-    char text[512];
-    if (!lsm_read_text_file("/proc/stat", text, sizeof(text)) ||
-        !lsm_string_starts_with(text, "cpu"))
-        return 0U;
+    if (!text || !total || !lsm_string_starts_with(text, "cpu"))
+        return false;
 
     const char *cursor = text + 3U;
     uint64_t fields[8] = {0U};
@@ -581,12 +580,30 @@ static uint64_t read_total_cpu_ticks(void)
     while (count < LSM_ARRAY_LENGTH(fields) &&
            lsm_parse_u64_token(&cursor, 10U, &fields[count]))
         count++;
-    if (count < 4U) return 0U;
+    if (count < 4U) return false;
+
+    uint64_t sum = 0U;
+    for (size_t index = 0U; index < count; index++)
+        sum = lsm_u64_add_saturating(sum, fields[index]);
+    *total = sum;
+    return true;
+}
+
+static uint64_t read_total_cpu_ticks(void)
+{
+    char *text = NULL;
+    size_t length = 0U;
+    if (lsm_read_text_file_alloc("/proc/stat", &text, &length) !=
+        INFILTRATR_IO_OK)
+        return 0U;
 
     uint64_t total = 0U;
-    for (size_t index = 0U; index < count; index++)
-        total = lsm_u64_add_saturating(total, fields[index]);
-    return total;
+    const bool valid_text = memchr(text, '\0', length) == NULL;
+    const bool okay =
+        valid_text &&
+        lsm_process_linux_parse_total_cpu_ticks(text, &total);
+    free(text);
+    return okay ? total : 0U;
 }
 
 static int64_t read_boot_time(void)
