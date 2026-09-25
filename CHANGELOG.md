@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.108 - 2026-09-25
+
+- Recompose Overview as a single-viewport dashboard: remove its document-style scroller and fixed card heights so the normal window is filled rather than extending below the page.
+- Make the dashboard genuinely asymmetric instead of merely grouping equal tiles: CPU, Memory, Disk, Network, GPU and the compact diagnostic cards now use deliberately different column spans and graph heights.
+- Move each resource icon into its live plot as a translucent instrument watermark instead of consuming a separate header slot.
+- Keep every Overview plot/card on one shared visual surface; resource identity comes from graph, icon, border and dial accents rather than different background treatments.
+- Replace the circular gauge's spatial linear gradient with a segmented three-stop colour interpolation around the arc, making CPU, Memory and GPU dials visibly multicolour.
+- Extend the no-GTK syntax compatibility header for GtkOverlay so the new graph composition remains covered by the existing build checks.
+
 ## 1.0.107 - 2026-09-25
 
 - Reshape Overview to the approved asymmetric dashboard geometry instead of nine same-sized tiles: CPU and Memory are the wide primary row, Disk/Network/GPU form the device row, and Temperature/pressure cards form a compact diagnostic row.
