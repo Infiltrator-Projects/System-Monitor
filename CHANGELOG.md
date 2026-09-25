@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.104 - 2026-09-25
+
+- Fix the category device rail after live 1.0.103 testing showed the correct empty rail width but no visible device buttons for multi-device categories.
+- Remove GTK no-show-all suppression from Performance device rows and the device scroller; the suppression prevented wanted Disk, Network, GPU/NPU and Battery rows from ever being mapped.
+- Show the newly built Performance tree first and apply the category filter afterwards, so GTK cannot undo the filter and the filter cannot suppress legitimate device rows.
+- Keep CPU and Memory full-width with no redundant secondary rail while restoring every device selector for categories that contain two or more pages.
+
+
 ## 1.0.103 - 2026-09-25
 
 - Remove the duplicate all-resources Performance rail introduced by the first primary-sidebar pass.

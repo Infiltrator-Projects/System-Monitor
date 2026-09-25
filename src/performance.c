@@ -296,7 +296,6 @@ static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
                                    const char *value)
 {
     GtkWidget *button = gtk_toggle_button_new();
-    gtk_widget_set_no_show_all(button, TRUE);
     gtk_widget_set_size_request(button, LSM_SIDE_BUTTON_WIDTH,
                                 LSM_SIDE_BUTTON_HEIGHT);
     gtk_widget_set_name(button, "lsm-side-button");
@@ -584,7 +583,6 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
 
     GtkWidget *side_scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_name(side_scroller, "lsm-performance-sidebar");
-    gtk_widget_set_no_show_all(side_scroller, TRUE);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_widget_set_size_request(side_scroller, LSM_SIDEBAR_WIDTH, -1);
@@ -648,8 +646,16 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     }
     gtk_stack_set_visible_child_name(GTK_STACK(app->performance.performance_stack),
                                      selected->stack_name);
-    performance_select_side_button(app, selected);
+
+    /*
+     * Realise/show the complete freshly built tree first, then apply the
+     * category filter. gtk_widget_show_all() is intentionally broad and would
+     * otherwise undo per-category visibility. The previous no-show-all
+     * workaround prevented even the wanted disk/network/GPU/battery device
+     * buttons from becoming mapped, leaving an empty 220px rail.
+     */
     gtk_widget_show_all(app->performance.performance_root);
+    performance_select_side_button(app, selected);
     performance_synchronise_side_selection(app);
     for (guint index = 0; index < app->performance.device_pages->len; index++) {
         LsmDevicePage *page = g_ptr_array_index(app->performance.device_pages, index);
