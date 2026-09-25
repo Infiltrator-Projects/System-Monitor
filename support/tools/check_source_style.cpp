@@ -157,6 +157,7 @@ static bool maintained_markdown_path(const char *path)
         "./docs/VALIDATION.md",
         "./docs/PORTABILITY.md",
         "./docs/HARDWARE.md",
+        "./docs/design/system-monitor-ui-vision.md",
         "./.github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
@@ -198,6 +199,7 @@ static void check_markdown_policy(void)
         "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
         "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
         "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        "docs/design/system-monitor-ui-vision.md",
         ".github/CODE_OF_CONDUCT.md"
     };
     check_markdown_tree(".");
@@ -728,6 +730,7 @@ static void check_licensing_contract(void)
     static const char *const markdown_header_files[] = {
         "README.md", "CONTRIBUTING.md", "SECURITY.md",
         "docs/ARCHITECTURE.md", "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        "docs/design/system-monitor-ui-vision.md",
         ".github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
