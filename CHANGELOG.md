@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.103 - 2026-09-25
+
+- Remove the duplicate all-resources Performance rail introduced by the first primary-sidebar pass.
+- Treat the left application rail as the resource category selector: CPU shows CPU only, Memory shows Memory only, Disks shows disk devices only, Network shows network/Bluetooth devices only, GPU shows GPU/NPU devices only, and Battery shows battery/peripheral-battery devices only.
+- Collapse the secondary device rail entirely when the selected category has a single page, eliminating redundant CPU and Memory rows and giving the selected page the full content width.
+- Preserve per-device selection where a category genuinely has multiple devices, including multiple disks, interfaces, accelerators or batteries.
+- Keep Bluetooth reachable through Network and NPU through GPU while keeping the primary rail selection synchronised with those grouped detail pages.
+- Add presentation-contract regression coverage for the primary resource grouping semantics.
+
+
 ## 1.0.102 - 2026-09-25
 
 - Stabilise the new icon-led primary navigation after live testing exposed a crash when switching from CPU to Memory.
