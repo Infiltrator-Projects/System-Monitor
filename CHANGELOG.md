@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.106 - 2026-09-25
+
+- Fix Overview Top CPU processes reporting 0.0% by repairing Linux process CPU accounting: the strict bounded text helper correctly rejected the truncated 512-byte read of /proc/stat, leaving the aggregate CPU denominator at zero. Read the complete procfs snapshot and explicitly parse the aggregate cpu row instead.
+- Add deterministic /proc/stat aggregate CPU parsing coverage and refresh Overview immediately when a completed process snapshot is published.
+- Push Overview materially closer to the approved graphical north star while preserving its real information architecture: add coloured resource icons, richer per-resource gradient cards, a graphical brand mark, stronger value hierarchy and full dashboard graph grids.
+- Upgrade the native Cairo history renderer with vertical gradient fills and restrained line glow so charts read as instrumentation instead of flat procedural plots.
+- Replace the textual Top CPU process chips with graphical rows containing process name, live CPU activity bar, CPU percentage and resident-memory value.
+- Keep the presentation native GTK/Cairo and data-driven; no generated decorative artwork is embedded in the application.
+
+
 ## 1.0.105 - 2026-09-25
 
 - Make the Overview Disk activity card system-wide instead of silently changing identity to whichever physical disk is busiest in each sample.
