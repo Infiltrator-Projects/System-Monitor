@@ -119,7 +119,7 @@ int main(void)
     lsm_temporal_presentation_reset_cache_for_test();
     CHECK(lsm_temporal_format_duration_seconds(
         UINT64_C(7200), text, sizeof(text)));
-    CHECK(strcmp(text, "時辰 01/12") == 0);
+    CHECK(strcmp(text, "1時辰") == 0);
 
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "chinese-ke");
     CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
