@@ -46,8 +46,8 @@ static void configure_graphical_scale(void)
      * process-local and must be set before GTK/GDK initialisation so the
      * application's restored and minimum geometry is not doubled.
      */
-    (void)g_setenv("GDK_SCALE", "1", TRUE);
-    (void)g_setenv("GDK_DPI_SCALE", "1", TRUE);
+    (void)setenv("GDK_SCALE", "1", 1);
+    (void)setenv("GDK_DPI_SCALE", "1", 1);
 }
 
 int main(int argc, char **argv)
