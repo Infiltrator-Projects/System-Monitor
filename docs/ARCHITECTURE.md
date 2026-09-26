@@ -45,7 +45,7 @@ The first dependency-reduction sequence is complete: BlueZ development headers, 
                                   ↑
                          platform contracts
 
-                         Common 1.19.27
+                         Common 1.19.28
                                   ↓
               shared portable formatting / parsing /
                 arithmetic / timing / design primitives
@@ -97,7 +97,7 @@ Malformed external data is rejected or skipped at the narrowest practical bounda
 
 `src/infiltratr-common` is pinned to one exact Common release commit. Common is the authoritative home for reusable project mechanisms; System Monitor owns application, Linux and hardware policy that is genuinely specific to this product.
 
-Common's target is reference-quality, leading-edge and complete reusable code, not merely a lowest-common-denominator helper set. Common 1.19.27 owns the toolkit-neutral POSIX user/XDG path and recursive-directory contracts, deterministic ASCII classification/case-matching/ordering, stable non-cryptographic FNV-1a mixing, monotonic unsigned-counter delta/rate mechanics and normalized absolute POSIX-clock deadline conversion used by System Monitor. Signature composition, Linux counter identity/reset/wrap policy, pthread synchronization policy, GTK/GLib-specific presentation and object-lifecycle policy remain local. If System Monitor contains a stronger implementation of a capability that is fundamentally generic, the correct direction is to improve Common so that its generic contract preserves the local implementation's correctness, performance, resilience and useful capabilities. Once Common is at least as strong, System Monitor should use Common and remove the duplicate implementation.
+Common's target is reference-quality, leading-edge and complete reusable code, not merely a lowest-common-denominator helper set. Common 1.19.28 owns the toolkit-neutral POSIX user/XDG path and recursive-directory contracts, deterministic ASCII classification/case-matching/ordering, stable non-cryptographic FNV-1a mixing, monotonic unsigned-counter delta/rate mechanics and normalized absolute POSIX-clock deadline conversion used by System Monitor. Signature composition, Linux counter identity/reset/wrap policy, pthread synchronization policy, GTK/GLib-specific presentation and object-lifecycle policy remain local. If System Monitor contains a stronger implementation of a capability that is fundamentally generic, the correct direction is to improve Common so that its generic contract preserves the local implementation's correctness, performance, resilience and useful capabilities. Once Common is at least as strong, System Monitor should use Common and remove the duplicate implementation.
 
 Do not weaken specialised code merely to increase reuse. Equally, do not leave generic custom code permanently duplicated when its advantages can be incorporated into Common. Changes to Common are made in the Common repository and consumed here through a new exact pin; this repository does not edit the submodule in place.
 

@@ -148,14 +148,22 @@ int main(void)
     CHECK(strstr(text, "Hora") != NULL || strstr(text, "Vigilia") != NULL);
     CHECK(lsm_temporal_format_duration_seconds(
         UINT64_C(3661), text, sizeof(text)));
-    CHECK(strcmp(text, "01:01:01") == 0);
+    CHECK(strcmp(text, "01:01:01 SI") == 0);
+    CHECK(lsm_temporal_format_elapsed_seconds(
+        UINT64_C(3661), text, sizeof(text)));
+    CHECK(strstr(text, "hora") != NULL || strstr(text, "vigilia") != NULL);
+    CHECK(strchr(text, ':') == NULL);
 
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "japanese-temporal");
     CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
     lsm_temporal_presentation_reset_cache_for_test();
     CHECK(lsm_temporal_format_duration_seconds(
         UINT64_C(3661), text, sizeof(text)));
-    CHECK(strcmp(text, "01:01:01") == 0);
+    CHECK(strcmp(text, "01:01:01 SI") == 0);
+    CHECK(lsm_temporal_format_elapsed_seconds(
+        UINT64_C(3661), text, sizeof(text)));
+    CHECK(strstr(text, "刻") != NULL);
+    CHECK(strchr(text, ':') == NULL);
 
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "solar");
     CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);

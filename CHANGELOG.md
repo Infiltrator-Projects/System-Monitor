@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.115 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.28 at `e7e035d73474c3188cc6abb479702d43dd45710d`.
+- Correct Roman temporal uptime and process-age presentation so anchored elapsed intervals are integrated across the real local seasonal daylight horae and night vigiliae instead of being disguised modern H:M:S; fractional precision uses Roman unciae.
+- Correct Edo Japanese seasonal uptime and process-age presentation so anchored elapsed intervals integrate the six daytime and six nighttime koku/toki and use the historically attested half-period marker instead of fabricated modern minutes or seconds.
+- Keep accumulated quantities without a civil interval, such as CPU-time totals, explicitly labelled SI because applying a seasonal unit without an anchor would be false precision.
+- Preserve all collectors, scheduling, persisted timestamps and monotonic accounting in canonical Unix/SI time; only human-facing presentation changes.
+- Replace the old Roman/Edo regression that enforced `01:01:01` with coverage proving anchored native-unit output and explicit-SI unanchored fallback.
+
 ## 1.0.114 - 2026-09-26
 
 - Separate completed-sample graph retention from GTK Performance presentation: every device keeps accurate history, while hidden pages no longer reformat and relayout their full widget trees every timer tick.
