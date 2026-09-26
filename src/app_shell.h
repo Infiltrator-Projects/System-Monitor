@@ -23,6 +23,18 @@
 void lsm_app_shell_apply_theme(LsmApp *app);
 
 /**
+ * Build the branded System Settings-style client-side title bar.
+ *
+ * The header is installed as the real GTK window titlebar so window dragging,
+ * title-bar double-click maximise/restore and native window-manager geometry
+ * semantics remain intact while the product chrome is visually consistent.
+ *
+ * @param [in,out] app Active application context with a constructed window.
+ * @return GTK header bar owned by the window after installation.
+ */
+GtkWidget *lsm_app_shell_build_header(LsmApp *app);
+
+/**
  * Connect top-level window state, keyboard and close handlers.
  *
  * @param [in,out] app Application whose toplevel window is already constructed.

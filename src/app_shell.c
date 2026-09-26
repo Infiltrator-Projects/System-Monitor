@@ -35,6 +35,105 @@
 
 #include <string.h>
 
+static void minimize_window(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    gtk_window_iconify(GTK_WINDOW(user_data));
+}
+
+static void toggle_maximize_window(GtkButton *button, gpointer user_data)
+{
+    GtkWindow *window = GTK_WINDOW(user_data);
+
+    (void)button;
+    if (gtk_window_is_maximized(window))
+        gtk_window_unmaximize(window);
+    else
+        gtk_window_maximize(window);
+}
+
+static void close_window(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    gtk_window_close(GTK_WINDOW(user_data));
+}
+
+static GtkWidget *make_window_control(const char *icon_name,
+                                      const char *tooltip,
+                                      const char *css_class)
+{
+    GtkWidget *button =
+        gtk_button_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    GtkStyleContext *context = gtk_widget_get_style_context(button);
+
+    gtk_style_context_add_class(context, "lsm-window-control");
+    if (css_class)
+        gtk_style_context_add_class(context, css_class);
+    gtk_widget_set_tooltip_text(button, tooltip);
+    return button;
+}
+
+GtkWidget *lsm_app_shell_build_header(LsmApp *app)
+{
+    if (!app || !app->shell.window)
+        return gtk_header_bar_new();
+
+    GtkWindow *window = GTK_WINDOW(app->shell.window);
+    GtkWidget *header = gtk_header_bar_new();
+    GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *icon_wrap = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *icon = gtk_image_new_from_icon_name(
+        LSM_EXECUTABLE_NAME, GTK_ICON_SIZE_BUTTON);
+    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *title = gtk_label_new(LSM_PROGRAM_NAME);
+    GtkWidget *subtitle = gtk_label_new("Infiltrator OS");
+    GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *minimize = make_window_control(
+        "window-minimize-symbolic", "Minimize", NULL);
+    GtkWidget *maximize = make_window_control(
+        "window-maximize-symbolic", "Maximize / Restore", NULL);
+    GtkWidget *close = make_window_control(
+        "window-close-symbolic", "Close", "lsm-window-control-close");
+    GtkWidget *empty_title = gtk_label_new("");
+
+    gtk_widget_set_name(header, "lsm-shell-header");
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), FALSE);
+    gtk_header_bar_set_custom_title(GTK_HEADER_BAR(header), empty_title);
+
+    gtk_widget_set_name(brand, "lsm-header-brand");
+    gtk_widget_set_name(icon_wrap, "lsm-header-brand-icon");
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 28);
+    gtk_box_pack_start(GTK_BOX(icon_wrap), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(brand), icon_wrap, FALSE, FALSE, 0);
+
+    gtk_widget_set_name(title, "lsm-header-brand-title");
+    gtk_widget_set_halign(title, GTK_ALIGN_START);
+    gtk_widget_set_name(subtitle, "lsm-header-brand-subtitle");
+    gtk_widget_set_halign(subtitle, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(copy), title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(copy), subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(brand), copy, FALSE, FALSE, 0);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
+
+    gtk_widget_set_name(header_end, "lsm-header-end");
+    g_signal_connect(
+        minimize, "clicked", G_CALLBACK(minimize_window), window);
+    g_signal_connect(
+        maximize, "clicked", G_CALLBACK(toggle_maximize_window), window);
+    g_signal_connect(
+        close, "clicked", G_CALLBACK(close_window), window);
+    gtk_box_pack_start(GTK_BOX(header_end), minimize, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header_end), maximize, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header_end), close, FALSE, FALSE, 0);
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
+
+    g_object_set_data(G_OBJECT(window), "lsm-shell-header", header);
+    g_object_set_data(G_OBJECT(window), "lsm-minimize-button", minimize);
+    g_object_set_data(G_OBJECT(window), "lsm-maximize-button", maximize);
+    g_object_set_data(G_OBJECT(window), "lsm-close-button", close);
+    return header;
+}
+
 static void sync_integrated_overview_chrome(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
@@ -430,6 +529,32 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "headerbar, .titlebar {"
         " min-height: 44px; background-image: none; background-color: @lsm_titlebar;"
         " color: @lsm_title; border-bottom: 1px solid @lsm_border;"
+        "}"
+        "#lsm-shell-header {"
+        " min-height: 58px; padding: 6px 10px;"
+        " background-image: linear-gradient(to right, #06131f, #08263a);"
+        " background-color: #06131f; border-bottom: 1px solid @lsm_border;"
+        "}"
+        "#lsm-header-brand { padding: 2px 4px; }"
+        "#lsm-header-brand-icon {"
+        " background-color: @lsm_card; border: 1px solid @lsm_border;"
+        " border-radius: 12px; padding: 7px;"
+        " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
+        "}"
+        "#lsm-header-brand-icon image { color: @lsm_neutral; }"
+        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
+        "#lsm-header-brand-subtitle { color: @lsm_muted; font-size: 11px; }"
+        "#lsm-header-end { margin-left: 10px; }"
+        ".lsm-window-control {"
+        " min-width: 30px; min-height: 30px; padding: 4px;"
+        " background-image: none; background-color: transparent;"
+        " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
+        "}"
+        ".lsm-window-control:hover {"
+        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
+        "}"
+        ".lsm-window-control-close:hover {"
+        " background-color: @lsm_fault; color: @lsm_accent_foreground;"
         "}"
         "#lsm-summary-bar {"
         " background-image: none; background-color: @lsm_connection;"

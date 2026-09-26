@@ -164,6 +164,7 @@ typedef struct _GtkMessageDialog GtkMessageDialog;
 typedef struct _GtkFileChooser GtkFileChooser;
 typedef struct _GtkFileFilter GtkFileFilter;
 typedef struct _GtkCssProvider GtkCssProvider;
+typedef struct _GtkHeaderBar GtkHeaderBar;
 typedef struct _GtkStyleProvider GtkStyleProvider;
 typedef struct _GtkStyleContext GtkStyleContext;
 typedef struct _GtkDrawingArea GtkDrawingArea;
@@ -266,6 +267,7 @@ typedef enum { GTK_WRAP_NONE=0, GTK_WRAP_CHAR=1, GTK_WRAP_WORD=2, GTK_WRAP_WORD_
 #define GTK_BUTTON(o) ((GtkButton*)(o))
 #define GTK_CONTAINER(o) ((GtkContainer*)(o))
 #define GTK_GRID(o) ((GtkGrid*)(o))
+#define GTK_HEADER_BAR(o) ((GtkHeaderBar*)(o))
 #define GTK_LABEL(o) ((GtkLabel*)(o))
 #define GTK_MENU_ITEM(o) ((GtkMenuItem*)(o))
 #define GTK_CHECK_MENU_ITEM(o) ((GtkCheckMenuItem*)(o))
@@ -501,6 +503,7 @@ void gtk_grid_attach(GtkGrid*,GtkWidget*,gint,gint,gint,gint); GtkWidget *gtk_gr
 GtkWidget *gtk_label_new(const gchar*); void gtk_label_set_selectable(GtkLabel*,gboolean); void gtk_label_set_attributes(GtkLabel*,PangoAttrList*); void gtk_label_set_ellipsize(GtkLabel*,PangoEllipsizeMode); void gtk_label_set_line_wrap(GtkLabel*,gboolean); void gtk_label_set_markup(GtkLabel*,const gchar*); void gtk_label_set_text(GtkLabel*,const gchar*); const gchar *gtk_label_get_text(GtkLabel*);
 void gtk_list_store_append(GtkListStore*,GtkTreeIter*); void gtk_list_store_clear(GtkListStore*); GtkListStore *gtk_list_store_new(gint n_columns,...); void gtk_list_store_set(GtkListStore*,GtkTreeIter*,...);
 GtkWidget *gtk_image_new_from_icon_name(const gchar*,GtkIconSize); void gtk_image_set_pixel_size(GtkImage*,gint);
+GtkWidget *gtk_header_bar_new(void); void gtk_header_bar_set_show_close_button(GtkHeaderBar*,gboolean); void gtk_header_bar_set_custom_title(GtkHeaderBar*,GtkWidget*); void gtk_header_bar_pack_start(GtkHeaderBar*,GtkWidget*); void gtk_header_bar_pack_end(GtkHeaderBar*,GtkWidget*);
 GtkWidget *gtk_progress_bar_new(void); void gtk_progress_bar_set_fraction(GtkProgressBar*,double); void gtk_progress_bar_set_show_text(GtkProgressBar*,gboolean);
 GtkWidget *gtk_menu_bar_new(void); void gtk_menu_popup_at_pointer(GtkMenu*,const GdkEvent*); GtkWidget *gtk_menu_item_new_with_label(const gchar*); GtkWidget *gtk_menu_item_new_with_mnemonic(const gchar*); void gtk_menu_item_set_label(GtkMenuItem*,const gchar*); void gtk_menu_item_set_submenu(GtkMenuItem*,GtkWidget*); GtkWidget *gtk_menu_new(void); void gtk_menu_shell_append(GtkMenuShell*,GtkWidget*);
 void gtk_message_dialog_format_secondary_text(GtkMessageDialog*,const gchar*,...); GtkWidget *gtk_message_dialog_new(GtkWindow*,GtkDialogFlags,GtkMessageType,GtkButtonsType,const gchar*,...);
@@ -527,6 +530,8 @@ GtkTreeStore *gtk_tree_store_new(gint n_columns,...); void gtk_tree_store_append
 GtkTreeSelection *gtk_tree_view_get_selection(GtkTreeView*); GtkWidget *gtk_tree_view_new_with_model(GtkTreeModel*); void gtk_tree_view_set_enable_search(GtkTreeView*,gboolean); void gtk_tree_view_set_headers_clickable(GtkTreeView*,gboolean);
 void gtk_widget_add_events(GtkWidget*,gint); void gtk_widget_destroy(GtkWidget*); void gtk_widget_get_allocation(GtkWidget*,GtkAllocation*); GtkWidget *gtk_widget_get_parent(GtkWidget*); void gtk_widget_queue_resize(GtkWidget*); gboolean gtk_widget_get_mapped(GtkWidget*); GtkStyleContext *gtk_widget_get_style_context(GtkWidget*); void gtk_widget_grab_focus(GtkWidget*); void gtk_widget_queue_draw(GtkWidget*); void gtk_widget_set_halign(GtkWidget*,GtkAlign); void gtk_widget_set_valign(GtkWidget*,GtkAlign); void gtk_widget_set_hexpand(GtkWidget*,gboolean); void gtk_widget_set_margin_bottom(GtkWidget*,gint); void gtk_widget_set_margin_start(GtkWidget*,gint); void gtk_widget_set_margin_top(GtkWidget*,gint); void gtk_widget_set_name(GtkWidget*,const gchar*); void gtk_widget_set_no_show_all(GtkWidget*,gboolean); void gtk_widget_set_sensitive(GtkWidget*,gboolean); void gtk_widget_set_size_request(GtkWidget*,gint,gint); void gtk_widget_set_tooltip_text(GtkWidget*,const gchar*); void gtk_widget_set_vexpand(GtkWidget*,gboolean); void gtk_widget_set_visible(GtkWidget*,gboolean); void gtk_widget_show_all(GtkWidget*);
 GtkWidget *gtk_window_get_focus(GtkWindow*); void gtk_window_get_size(GtkWindow*,gint*,gint*); gboolean gtk_window_is_maximized(GtkWindow*); void gtk_window_maximize(GtkWindow*); void gtk_window_unmaximize(GtkWindow*); void gtk_window_resize(GtkWindow*,gint,gint); void gtk_window_set_keep_above(GtkWindow*,gboolean); GtkWidget *gtk_window_new(GtkWindowType); void gtk_window_present(GtkWindow*); void gtk_window_set_default_size(GtkWindow*,gint,gint); void gtk_window_set_icon_name(GtkWindow*,const gchar*); void gtk_window_set_position(GtkWindow*,GtkWindowPosition); void gtk_window_set_title(GtkWindow*,const gchar*); void gtk_window_set_transient_for(GtkWindow*,GtkWindow*); void gtk_window_set_destroy_with_parent(GtkWindow*,gboolean);
+
+void gtk_window_iconify(GtkWindow*); void gtk_window_close(GtkWindow*); void gtk_window_set_titlebar(GtkWindow*,GtkWidget*);
 
 #ifdef __cplusplus
 }

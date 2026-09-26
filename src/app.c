@@ -276,6 +276,8 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
                                 app->runtime.window_width, app->runtime.window_height);
     gtk_window_set_position(GTK_WINDOW(app->shell.window), GTK_WIN_POS_CENTER);
     gtk_window_set_icon_name(GTK_WINDOW(app->shell.window), LSM_EXECUTABLE_NAME);
+    gtk_window_set_titlebar(
+        GTK_WINDOW(app->shell.window), lsm_app_shell_build_header(app));
     lsm_app_shell_connect_window(app);
     if (app->runtime.window_maximized) gtk_window_maximize(GTK_WINDOW(app->shell.window));
 

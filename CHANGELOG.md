@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.127 - 2026-09-26
+
+- Replace the generic Linux window decoration with the same branded client-side title-bar language used by System Settings: dark blue shell gradient, application icon block, product title/subtitle and explicit window controls.
+- Install the new GtkHeaderBar as the real window titlebar so dragging and title-bar double-click maximise/restore remain window-manager operations rather than a fake in-content imitation.
+- Keep existing System Monitor menus and page behaviour intact; this is a shell-chrome consistency change rather than a new feature surface.
+
 ## 1.0.126 - 2026-09-26
 
 - Carry the 1.0.123-1.0.125 Linux UI fixes into one publishable release: System Monitor uses process-local 1x GTK rendering on a 2x Cinnamon desktop, restored geometry is bounded to the usable work area, and Overview can scroll internally on short displays.
