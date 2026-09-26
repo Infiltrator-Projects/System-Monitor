@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.117 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.30 at `9a9fae5b3f0d133d400310cdd316b21129631429`.
+- Distinguish the historical sunset-origin Italian clock from modern Italian civil time and the Renaissance European sunrise-origin "Babylonian hours" from genuinely ancient Babylonian seasonal hours.
+- Add Ancient Babylonian seasonal time to System Monitor's shared temporal presentation path, including anchored elapsed presentation in day/night simānu and explicit SI fallback for unanchored accumulated quantities.
+- Correct Nuremberg presentation to the discrete Wendetag allocation of equal hours between daylight and night instead of resetting at every actual sunrise and sunset.
+- Keep all sampling, scheduling, CPU accounting and persisted timestamps canonical SI/Unix; these changes affect presentation only.
+
 ## 1.0.116 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.29 at `13b824e4c4e266426590d86597249a89d18ec2f0`.
