@@ -485,6 +485,7 @@ GtkWidget *gtk_box_new(GtkOrientation orientation, gint spacing);
 void gtk_box_pack_start(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
 void gtk_box_pack_end(GtkBox *box, GtkWidget *child, gboolean expand, gboolean fill, guint padding);
 GtkWidget *gtk_button_new(void); GtkWidget *gtk_button_new_with_label(const gchar *label); void gtk_button_set_label(GtkButton*, const gchar*);
+GtkWidget *gtk_button_new_from_icon_name(const gchar *icon_name, GtkIconSize size);
 GtkWidget *gtk_check_button_new_with_label(const gchar *label);
 GtkCellRenderer *gtk_cell_renderer_pixbuf_new(void);
 GtkCellRenderer *gtk_cell_renderer_text_new(void);

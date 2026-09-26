@@ -530,32 +530,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " min-height: 44px; background-image: none; background-color: @lsm_titlebar;"
         " color: @lsm_title; border-bottom: 1px solid @lsm_border;"
         "}"
-        "#lsm-shell-header {"
-        " min-height: 58px; padding: 6px 10px;"
-        " background-image: linear-gradient(to right, #06131f, #08263a);"
-        " background-color: #06131f; border-bottom: 1px solid @lsm_border;"
-        "}"
-        "#lsm-header-brand { padding: 2px 4px; }"
-        "#lsm-header-brand-icon {"
-        " background-color: @lsm_card; border: 1px solid @lsm_border;"
-        " border-radius: 12px; padding: 7px;"
-        " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
-        "}"
-        "#lsm-header-brand-icon image { color: @lsm_neutral; }"
-        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
-        "#lsm-header-brand-subtitle { color: @lsm_muted; font-size: 11px; }"
-        "#lsm-header-end { margin-left: 10px; }"
-        ".lsm-window-control {"
-        " min-width: 30px; min-height: 30px; padding: 4px;"
-        " background-image: none; background-color: transparent;"
-        " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
-        "}"
-        ".lsm-window-control:hover {"
-        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
-        "}"
-        ".lsm-window-control-close:hover {"
-        " background-color: @lsm_fault; color: @lsm_accent_foreground;"
-        "}"
         "#lsm-summary-bar {"
         " background-image: none; background-color: @lsm_connection;"
         " color: @lsm_text; border: 1px solid @lsm_connection_border;"
@@ -643,6 +617,37 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->success_rgb,
         (unsigned int)palette->accent_foreground_rgb,
         (unsigned int)palette->accent_hover_rgb);
+
+    /* Keep branded window chrome in a separate literal so the strict
+     * ISO C documentation build remains below the 4095-byte literal floor. */
+    g_string_append(
+        css,
+        "#lsm-shell-header {"
+        " min-height: 58px; padding: 6px 10px;"
+        " background-image: linear-gradient(to right, #06131f, #08263a);"
+        " background-color: #06131f; border-bottom: 1px solid @lsm_border;"
+        "}"
+        "#lsm-header-brand { padding: 2px 4px; }"
+        "#lsm-header-brand-icon {"
+        " background-color: @lsm_card; border: 1px solid @lsm_border;"
+        " border-radius: 12px; padding: 7px;"
+        " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
+        "}"
+        "#lsm-header-brand-icon image { color: @lsm_neutral; }"
+        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
+        "#lsm-header-brand-subtitle { color: @lsm_muted; font-size: 11px; }"
+        "#lsm-header-end { margin-left: 10px; }"
+        ".lsm-window-control {"
+        " min-width: 30px; min-height: 30px; padding: 4px;"
+        " background-image: none; background-color: transparent;"
+        " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
+        "}"
+        ".lsm-window-control:hover {"
+        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
+        "}"
+        ".lsm-window-control-close:hover {"
+        " background-color: @lsm_fault; color: @lsm_accent_foreground;"
+        "}");
 
     g_string_append(
         css,
