@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.126 - 2026-09-26
+
+- Carry the 1.0.123-1.0.125 Linux UI fixes into one publishable release: System Monitor uses process-local 1x GTK rendering on a 2x Cinnamon desktop, restored geometry is bounded to the usable work area, and Overview can scroll internally on short displays.
+- Remove the redundant five-metric summary strip from normal technical pages while retaining it for Compact Summary mode.
+- Restore release identity consistency by advancing README and support/VERSION together so the immutable publication gate validates the release.
+
 ## 1.0.125 - 2026-09-26
 
 - Remove the redundant CPU, Memory, Disk, Network and GPU summary strip from normal technical pages now that Overview is the authoritative whole-system summary.
