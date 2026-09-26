@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.120 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.34 at `1467755d088d740b873660a8f0c9a515e9a39046`.
+- Consume the audited temporal catalogue, including the distinct early-Edo sunrise/sunset and late-Edo 1797 twilight models and clearer model/range labels.
+- Keep internal sampling, rates, counters and stored timestamps in canonical SI/Unix units; historical systems remain presentation only.
+
 ## 1.0.119 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.32 at `ba9386fad1944d3e575a28346a46f85108326051`.
