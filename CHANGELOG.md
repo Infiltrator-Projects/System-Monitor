@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.124 - 2026-09-26
+
+- Clamp restored Linux window geometry to the active monitor work area with decoration headroom so a persisted tall window cannot start underneath the desktop panel or title-bar boundary.
+- Restore an internal vertical-scroll fallback for Overview without propagating its natural height to the top-level window; normal-height displays retain the single-dashboard composition while shorter work areas remain fully usable.
+- Keep the 1.0.123 process-local 1x GTK policy, leaving Cinnamon desktop, panel, menu and icon scaling unchanged.
+
 ## 1.0.123 - 2026-09-26
 
 - Keep Cinnamon and desktop HiDPI scaling untouched while forcing the Linux GTK System Monitor process itself to 1x rendering before GTK/GDK initialisation.

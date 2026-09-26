@@ -1231,16 +1231,31 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     if (!app->overview.history)
         app->overview.history = lsm_overview_history_create();
 
-    /* Overview is a dashboard, not a document.  It must consume the available
-     * viewport as one composition rather than growing a scrollable canvas. */
-    app->runtime.page_scrollers[LSM_TAB_OVERVIEW] = NULL;
+    /*
+     * Keep the normal Overview as a single dashboard, but put it behind a
+     * non-propagating viewport so a short work area can scroll internally
+     * instead of turning the dashboard's natural height into a top-level
+     * minimum-size demand.
+     */
+    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_name(scroller, "lsm-overview-scroller");
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_width(
+        GTK_SCROLLED_WINDOW(scroller), FALSE);
+    gtk_scrolled_window_set_propagate_natural_height(
+        GTK_SCROLLED_WINDOW(scroller), FALSE);
+    gtk_widget_set_hexpand(scroller, TRUE);
+    gtk_widget_set_vexpand(scroller, TRUE);
+    app->runtime.page_scrollers[LSM_TAB_OVERVIEW] = scroller;
+    gtk_box_pack_start(GTK_BOX(container), scroller, TRUE, TRUE, 0);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_name(root, "lsm-overview-root");
     gtk_widget_set_hexpand(root, TRUE);
     gtk_widget_set_vexpand(root, TRUE);
     gtk_container_set_border_width(GTK_CONTAINER(root), 10);
-    gtk_box_pack_start(GTK_BOX(container), root, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(scroller), root);
 
     GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_set_name(hero, "lsm-overview-hero");

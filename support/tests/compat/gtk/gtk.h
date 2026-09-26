@@ -181,6 +181,7 @@ typedef struct _GtkTreeStore GtkTreeStore;
 typedef struct _GtkTextView GtkTextView;
 typedef struct _GtkTextBuffer GtkTextBuffer;
 typedef struct _GdkScreen GdkScreen;
+typedef struct _GdkRectangle { gint x, y, width, height; } GdkRectangle;
 typedef struct _GdkEventButton {
     int type; void *window; int8_t send_event; guint32 time; double x, y;
     void *axes; unsigned int state; unsigned int button; void *device; double x_root, y_root;
@@ -458,6 +459,9 @@ void g_variant_unref(GVariant *value);
 /* GDK/Pango/Cairo */
 gboolean gdk_rgba_parse(GdkRGBA *rgba, const gchar *spec);
 GdkScreen *gdk_screen_get_default(void);
+gint gdk_screen_get_primary_monitor(GdkScreen *screen);
+void gdk_screen_get_monitor_workarea(GdkScreen *screen, gint monitor_num,
+                                     GdkRectangle *dest);
 GdkAtom gdk_atom_intern_static_string(const gchar *atom_name);
 PangoAttrList *pango_attr_list_new(void);
 void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);

@@ -38,6 +38,41 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static void constrain_initial_window_geometry(LsmApp *app)
+{
+    if (!app) return;
+
+    GdkScreen *screen = gdk_screen_get_default();
+    if (!screen) return;
+
+    gint monitor = gdk_screen_get_primary_monitor(screen);
+    if (monitor < 0) monitor = 0;
+
+    GdkRectangle workarea = {0, 0, 0, 0};
+    gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+    if (workarea.width <= 0 || workarea.height <= 0) return;
+
+    /*
+     * gtk_window_set_default_size() specifies the client allocation, while the
+     * window manager still needs room for server-side decorations. Treat a
+     * persisted size as a preference and reserve a small decoration margin so
+     * a previously large window cannot start underneath the panel/title bar.
+     */
+    const gint width_margin = 32;
+    const gint height_margin = 80;
+    const gint maximum_width =
+        workarea.width > width_margin ? workarea.width - width_margin
+                                      : workarea.width;
+    const gint maximum_height =
+        workarea.height > height_margin ? workarea.height - height_margin
+                                        : workarea.height;
+
+    if (app->runtime.window_width > maximum_width)
+        app->runtime.window_width = maximum_width;
+    if (app->runtime.window_height > maximum_height)
+        app->runtime.window_height = maximum_height;
+}
+
 static bool app_paths_initialise(LsmApp *app)
 {
     if (!app) return false;
@@ -230,6 +265,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 #endif
 
     lsm_preferences_load(app);
+    constrain_initial_window_geometry(app);
     app->runtime.initial_tab_after_paint = app->runtime.last_tab;
     lsm_process_filters_load(app);
     lsm_app_shell_apply_theme(app);
