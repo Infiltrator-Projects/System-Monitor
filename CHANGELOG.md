@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.123 - 2026-09-26
+
+- Keep Cinnamon and desktop HiDPI scaling untouched while forcing the Linux GTK System Monitor process itself to 1x rendering before GTK/GDK initialisation.
+- Prevent a 2x Cinnamon session from doubling restored/minimum System Monitor geometry (for example 1463x998 becoming 2926x1996), restoring a window size that can fit a 1920x1080 display without changing desktop icon or menu scaling.
+
 ## 1.0.122 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.36 at `5e129851bbd7ac0b94bd8c2f48f32924016bdbda`.

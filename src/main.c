@@ -38,6 +38,18 @@ static int installer_capability_mode(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 
+static void configure_graphical_scale(void)
+{
+    /*
+     * Keep System Monitor at one application pixel per display pixel even
+     * when Cinnamon uses 2x HiDPI scaling for the desktop shell. This is
+     * process-local and must be set before GTK/GDK initialisation so the
+     * application's restored and minimum geometry is not doubled.
+     */
+    (void)g_setenv("GDK_SCALE", "1", TRUE);
+    (void)g_setenv("GDK_DPI_SCALE", "1", TRUE);
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 2 && strcmp(argv[1], "--pgo-train") == 0)
@@ -45,6 +57,8 @@ int main(int argc, char **argv)
 
     const int capability_mode = installer_capability_mode(argc, argv);
     if (capability_mode >= 0) return capability_mode;
+
+    configure_graphical_scale();
 
     const LsmBluetoothTrafficStartResult bluetooth_traffic =
         lsm_bluetooth_traffic_start();
