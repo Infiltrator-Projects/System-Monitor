@@ -126,7 +126,7 @@ int main(void)
     lsm_temporal_presentation_reset_cache_for_test();
     CHECK(lsm_temporal_format_duration_seconds(
         UINT64_C(864), text, sizeof(text)));
-    CHECK(strcmp(text, "刻 01/100") == 0);
+    CHECK(strcmp(text, "1刻") == 0);
 
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "indian-ghati");
     policy.location_configured = true;

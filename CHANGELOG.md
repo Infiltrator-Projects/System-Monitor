@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.116 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.29 at `13b824e4c4e266426590d86597249a89d18ec2f0`.
+- Normalize Roman seasonal elapsed presentation into complete `dies` plus residual horae, vigiliae and unciae, so uptime no longer accumulates opaque totals across complete day/night cycles.
+- Present Chinese hundred-kè elapsed time with native 日/刻 hierarchy instead of hybrid modern `d` prefixes and redundant `/100` notation.
+- Preserve the historical clock policy in Common while keeping internal sampling and monotonic accounting in canonical SI time.
+
 ## 1.0.115 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.28 at `e7e035d73474c3188cc6abb479702d43dd45710d`.
