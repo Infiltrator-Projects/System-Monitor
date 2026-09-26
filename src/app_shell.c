@@ -45,8 +45,14 @@ static void sync_integrated_overview_chrome(LsmApp *app)
         G_OBJECT(app->shell.window), "lsm-main-menu-bar");
     if (menu_bar)
         gtk_widget_set_visible(menu_bar, !integrated);
+    /*
+     * Overview now owns the normal whole-system headline summary. Keep the
+     * five-metric strip only for Compact Summary mode; showing it above every
+     * technical page duplicates Overview and wastes vertical space.
+     */
     if (app->shell.summary_bar)
-        gtk_widget_set_visible(app->shell.summary_bar, !integrated);
+        gtk_widget_set_visible(
+            app->shell.summary_bar, app->runtime.compact_summary);
 }
 
 void lsm_app_shell_apply_compact_summary(LsmApp *app)

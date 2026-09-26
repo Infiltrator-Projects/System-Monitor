@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file summary_bar.c
- * @brief Low-cost cross-tab presentation of headline resource usage.
+ * @brief Low-cost headline resource presentation for Compact Summary mode.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.125 - 2026-09-26
+
+- Remove the redundant CPU, Memory, Disk, Network and GPU summary strip from normal technical pages now that Overview is the authoritative whole-system summary.
+- Retain the five-metric strip only for Compact Summary mode, where it remains the purpose-built lightweight presentation.
+- Avoid hidden summary formatting on technical pages through the existing mapped-widget refresh guard.
+
 ## 1.0.124 - 2026-09-26
 
 - Clamp restored Linux window geometry to the active monitor work area with decoration headroom so a persisted tall window cannot start underneath the desktop panel or title-bar boundary.

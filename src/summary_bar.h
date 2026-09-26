@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file summary_bar.h
- * @brief Persistent whole-system summary visible above every application tab.
+ * @brief Whole-system headline strip used by Compact Summary mode.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -15,7 +15,7 @@
 typedef struct LsmApp LsmApp;
 
 /**
- * Build the persistent CPU, memory, disk, network and GPU summary.
+ * Build the CPU, memory, disk, network and GPU Compact Summary strip.
  *
  * @param [in,out] app Application receiving the summary widget references.
  * @return Newly created summary widget, or NULL for an invalid application.
