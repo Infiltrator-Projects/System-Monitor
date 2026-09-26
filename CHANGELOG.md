@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.119 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.32 at `ba9386fad1944d3e575a28346a46f85108326051`.
+- Remove the redundant Modern Italian clock choice; ordinary modern Italian civil time is already the existing standard 24-hour clock.
+- Keep Historical Italian hours only for the genuinely distinct sunset-origin historical system.
+
 ## 1.0.118 - 2026-09-26
 
 - Pin System Monitor to Infiltratr Common 1.19.31 at `fd51905f3cea1f051e1163fbdeea8b62b7069833`.
