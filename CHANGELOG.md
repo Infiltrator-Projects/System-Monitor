@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.118 - 2026-09-26
+
+- Pin System Monitor to Infiltratr Common 1.19.31 at `fd51905f3cea1f051e1163fbdeea8b62b7069833`.
+- Separate modern Italian 24-hour civil time from historical sunset-origin Italian hours in the clock catalogue.
+- Correct ancient Babylonian presentation to fixed bēru/UŠ units from a sunset-start civil day, distinct from Renaissance European sunrise-origin “Babylonian hours”.
+- Use the fixed historical Nürnberg Wendetag schedule for the Nuremberg Great Clock and keep the location-aware solar reconstruction as a separate mode.
+
 ## 1.0.117 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.30 at `9a9fae5b3f0d133d400310cdd316b21129631429`.
