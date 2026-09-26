@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.122 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.36 at `5e129851bbd7ac0b94bd8c2f48f32924016bdbda`.
+- Consume the completed temporal readability audit so selected ancient/historical clock systems identify their real units, boundaries and reconstruction assumptions instead of relying on specialist shorthand.
+- Preserve sampling, accounting and persisted timestamps in canonical SI/Unix units; historical systems remain presentation only.
+
 ## 1.0.121 - 2026-09-26
 
 - Pin System Monitor to released Infiltratr Common 1.19.35 at `7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f`.
