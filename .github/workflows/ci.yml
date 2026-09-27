@@ -349,7 +349,9 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           installer="infiltrator-system-monitor-${version}-native-installer.run"
           test -x "$installer"
-          sudo ./"$installer" --profile aggressive --system-package-mode --dry-run >/dev/null
+          sudo ./"$installer" --profile aggressive --system-package-mode
+          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" = "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" = "$version"
           pgo_log=$(mktemp)
           ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
           if grep -Fq 'stringop-overread' "$pgo_log"; then
