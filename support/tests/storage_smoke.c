@@ -798,7 +798,7 @@ int main(void)
                        "/sys/class/net/eth0/statistics/tx_bytes") ||
         !write_text(path, "42\n") ||
         lsm_sources_read_network_counters(sources, counters, 4U) != 1U ||
-        strcmp(counters[0].instance_identity, "ifindex:7") != 0 ||
+        strcmp(counters[0].instance_identity, "ifindex:7|mac:00:11:22:33:44:55") != 0 ||
         counters[0].rx_bytes != 0U || counters[0].tx_bytes != 42U)
         return 9;
     if (!write_text(path, "invalid\n") ||
@@ -809,7 +809,7 @@ int main(void)
     bool hyperv_network = false;
     for (size_t index = 0U; index < network_count; index++) {
         if (strcmp(networks[index].name, "eth0") == 0 &&
-            strcmp(networks[index].instance_identity, "ifindex:7") == 0 &&
+            strcmp(networks[index].instance_identity, "ifindex:7|mac:00:11:22:33:44:55") == 0 &&
             strcmp(networks[index].product, "N/A") != 0)
             physical_network = true;
         if (strcmp(networks[index].name, "eth1") == 0 &&

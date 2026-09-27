@@ -49,6 +49,7 @@
 #define LSM_WINDOWS_VOLUME_BUFFER 4096U
 #define LSM_WINDOWS_STORAGE_DESCRIPTOR_BUFFER 2048U
 #define LSM_WINDOWS_EXTENTS_BUFFER 4096U
+#define LSM_WINDOWS_EXTENTS_BUFFER_MAX (1024U * 1024U)
 #define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
 
 /*
@@ -774,6 +775,44 @@ static void append_volume_to_disk(
         disk->system_disk = true;
 }
 
+static VOLUME_DISK_EXTENTS *query_volume_disk_extents(
+    HANDLE volume, DWORD *bytes_returned)
+{
+    if (volume == INVALID_HANDLE_VALUE || !bytes_returned) return NULL;
+    *bytes_returned = 0U;
+
+    DWORD capacity = LSM_WINDOWS_EXTENTS_BUFFER;
+    while (capacity <= LSM_WINDOWS_EXTENTS_BUFFER_MAX) {
+        VOLUME_DISK_EXTENTS *extents =
+            (VOLUME_DISK_EXTENTS *)calloc(1U, (size_t)capacity);
+        if (!extents) return NULL;
+
+        DWORD bytes = 0U;
+        if (DeviceIoControl(
+                volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                NULL, 0U, extents, capacity, &bytes, NULL)) {
+            const DWORD extent_offset =
+                (DWORD)FIELD_OFFSET(VOLUME_DISK_EXTENTS, Extents);
+            if (bytes < extent_offset) {
+                free(extents);
+                return NULL;
+            }
+            *bytes_returned = bytes;
+            return extents;
+        }
+
+        const DWORD error = GetLastError();
+        free(extents);
+        if (error != ERROR_MORE_DATA &&
+            error != ERROR_INSUFFICIENT_BUFFER)
+            return NULL;
+        if (capacity > LSM_WINDOWS_EXTENTS_BUFFER_MAX / 2U)
+            break;
+        capacity *= 2U;
+    }
+    return NULL;
+}
+
 static void enumerate_disk_volumes(LsmMonitor *monitor)
 {
     if (!monitor || monitor->disk_count == 0U) return;
@@ -795,16 +834,10 @@ static void enumerate_disk_volumes(LsmMonitor *monitor)
             volume_path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL, OPEN_EXISTING, 0U, NULL);
         if (volume != INVALID_HANDLE_VALUE) {
-            unsigned char extents_buffer[LSM_WINDOWS_EXTENTS_BUFFER];
-            memset(extents_buffer, 0, sizeof(extents_buffer));
             DWORD bytes = 0U;
-            if (DeviceIoControl(
-                    volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
-                    NULL, 0U, extents_buffer,
-                    (DWORD)sizeof(extents_buffer), &bytes, NULL) &&
-                bytes >= sizeof(VOLUME_DISK_EXTENTS)) {
-                const VOLUME_DISK_EXTENTS *extents =
-                    (const VOLUME_DISK_EXTENTS *)extents_buffer;
+            VOLUME_DISK_EXTENTS *extents =
+                query_volume_disk_extents(volume, &bytes);
+            if (extents) {
                 const DWORD extent_offset =
                     (DWORD)FIELD_OFFSET(VOLUME_DISK_EXTENTS, Extents);
                 const DWORD extent_capacity =
@@ -855,6 +888,7 @@ static void enumerate_disk_volumes(LsmMonitor *monitor)
                         monitor, index, volume_name, display_mount,
                         filesystem, total_bytes, used_bytes, usage_known);
                 }
+                free(extents);
             }
             CloseHandle(volume);
         }

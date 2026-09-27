@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.137 - 2026-09-27
+
+- Finish the remaining forensic device-identity hardening: Linux network identities now pair the kernel ifindex with the link-layer address when available, so a recycled interface index cannot inherit a removed NIC's retained rate baseline.
+- Make the sysfs fallback use the same identity policy for both inventory and counter samples, preserving coherent matching when rtnetlink is unavailable.
+- Replace the fixed Windows volume-extent query buffer with bounded dynamic growth for `ERROR_MORE_DATA` / `ERROR_INSUFFICIENT_BUFFER`, while retaining payload-length validation before every extent access.
+- Extend the storage/network smoke contract to require the stronger Linux interface identity.
+
 ## 1.0.136 - 2026-09-27
 
 - Fix the self-extracting native `.run` wrapper so the explicit `--system-package-mode` argument reaches the root-capable bootstrap instead of being rejected before extraction.

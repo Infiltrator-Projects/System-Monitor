@@ -443,14 +443,42 @@ static void format_mac(const unsigned char *bytes, size_t length,
                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]);
 }
 
+static bool network_mac_identity_usable(const char *mac)
+{
+    return mac && mac[0] &&
+           strcmp(mac, "00:00:00:00:00:00") != 0;
+}
+
 static void network_instance_identity(unsigned ifindex, const char *name,
+                                      const char *mac,
                                       char *destination, size_t destination_size)
 {
     if (!destination || destination_size == 0U) return;
     destination[0] = '\0';
+
+    /*
+     * Linux interface indices identify a live interface instance, but the
+     * kernel may recycle an ifindex after device removal. Pair it with the
+     * link-layer address when available so a replacement NIC cannot inherit
+     * the previous device's retained counters merely because both its name and
+     * recycled ifindex happen to match.
+     */
+    if (ifindex > 0U && network_mac_identity_usable(mac)) {
+        const int written = snprintf(
+            destination, destination_size, "ifindex:%u|mac:%s",
+            ifindex, mac);
+        if (written >= 0 && (size_t)written < destination_size) return;
+        destination[0] = '\0';
+    }
     if (ifindex > 0U) {
         const int written = snprintf(
             destination, destination_size, "ifindex:%u", ifindex);
+        if (written >= 0 && (size_t)written < destination_size) return;
+        destination[0] = '\0';
+    }
+    if (network_mac_identity_usable(mac)) {
+        const int written = snprintf(
+            destination, destination_size, "mac:%s", mac);
         if (written >= 0 && (size_t)written < destination_size) return;
         destination[0] = '\0';
     }
@@ -1025,11 +1053,12 @@ static size_t list_networks_sysfs(LsmSystemSources *sources,
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
-        network_instance_identity(
-            network_ifindex_sysfs(root, entry->d_name), entry->d_name,
-            record->instance_identity, sizeof(record->instance_identity));
         if (child_path(path, sizeof(path), root, entry->d_name, "/address"))
             (void)lsm_read_text_file(path, record->mac, sizeof(record->mac));
+        network_instance_identity(
+            network_ifindex_sysfs(root, entry->d_name), entry->d_name,
+            record->mac, record->instance_identity,
+            sizeof(record->instance_identity));
         record->wireless = wireless_interface(record->name);
 
         char class_device[LSM_PATH_LEN];
@@ -1070,8 +1099,11 @@ static size_t network_counters_sysfs(LsmSystemSources *sources,
             !lsm_read_u64_file(path, &tx_bytes))
             continue;
         lsm_copy_string(records[count].name, sizeof(records[count].name), entry->d_name);
+        char mac[32] = "";
+        if (child_path(path, sizeof(path), root, entry->d_name, "/address"))
+            (void)lsm_read_text_file(path, mac, sizeof(mac));
         network_instance_identity(
-            network_ifindex_sysfs(root, entry->d_name), entry->d_name,
+            network_ifindex_sysfs(root, entry->d_name), entry->d_name, mac,
             records[count].instance_identity,
             sizeof(records[count].instance_identity));
         records[count].rx_bytes = rx_bytes;
@@ -1107,7 +1139,7 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), links[index].name);
         network_instance_identity(
-            links[index].ifindex, links[index].name,
+            links[index].ifindex, links[index].name, links[index].mac,
             record->instance_identity, sizeof(record->instance_identity));
         lsm_copy_string(record->mac, sizeof(record->mac), links[index].mac);
         record->wireless = wireless_interface(record->name);
@@ -1141,7 +1173,7 @@ size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
         lsm_copy_string(records[count].name, sizeof(records[count].name),
                         links[index].name);
         network_instance_identity(
-            links[index].ifindex, links[index].name,
+            links[index].ifindex, links[index].name, links[index].mac,
             records[count].instance_identity,
             sizeof(records[count].instance_identity));
         records[count].rx_bytes = links[index].rx_bytes;
