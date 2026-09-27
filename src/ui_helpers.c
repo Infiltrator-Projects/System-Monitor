@@ -132,13 +132,13 @@ void lsm_ui_set_workarea_default_size(GtkWindow *window,
 
     gint width = requested_width;
     gint height = requested_height;
-    GdkScreen *screen = gdk_screen_get_default();
-    if (screen) {
-        gint monitor = gdk_screen_get_primary_monitor(screen);
-        if (monitor < 0) monitor = 0;
-
+    GdkDisplay *display = gdk_display_get_default();
+    GdkMonitor *monitor = display ? gdk_display_get_primary_monitor(display) : NULL;
+    if (!monitor && display && gdk_display_get_n_monitors(display) > 0)
+        monitor = gdk_display_get_monitor(display, 0);
+    if (monitor) {
         GdkRectangle workarea = {0, 0, 0, 0};
-        gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+        gdk_monitor_get_workarea(monitor, &workarea);
         if (workarea.width > 0) {
             const gint maximum_width =
                 workarea.width > 32 ? workarea.width - 32 : workarea.width;
