@@ -347,9 +347,12 @@ void lsm_details_save_layout(const LsmApp *app)
             sort_column,
             sort_order == GTK_SORT_DESCENDING ? "descending" : "ascending");
     }
-    (void)lsm_atomic_file_write_bytes(app->paths.column_path,
-                                      LSM_ATOMIC_FILE_PRIVATE,
-                                      text->str, text->len);
+    const int failure = lsm_atomic_file_write_bytes(
+        app->paths.column_path, LSM_ATOMIC_FILE_PRIVATE,
+        text->str, text->len);
+    if (failure != 0)
+        fprintf(stderr, "Unable to save process column layout: %s\n",
+                strerror(failure));
     g_string_free(text, TRUE);
 }
 
