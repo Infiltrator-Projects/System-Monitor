@@ -47,18 +47,34 @@ static void rounded_rectangle(cairo_t *cr, double x, double y,
     cairo_close_path(cr);
 }
 
+static void visible_history_range(const LsmGraph *graph,
+                                  const LsmSampleHistory *history,
+                                  size_t *start, size_t *end)
+{
+    const size_t points =
+        graph->visible_points > 0U && graph->visible_points < history->count
+            ? graph->visible_points : history->count;
+    *start = graph->newer_on_right && history->count > points
+        ? history->count - points : 0U;
+    *end = !graph->newer_on_right && history->count > points
+        ? points : history->count;
+}
+
 static double graph_maximum(const LsmGraph *graph)
 {
     if (graph->percentage_scale) return 100.0;
     if (graph->fixed_max > 0.0) return graph->fixed_max;
     double maximum = 1.0;
-    for (size_t i = 0; i < graph->primary.count; i++) {
+    size_t start = 0U, end = 0U;
+    visible_history_range(graph, &graph->primary, &start, &end);
+    for (size_t i = start; i < end; i++) {
         if (lsm_sample_history_is_valid(&graph->primary, i))
             maximum = fmax(maximum,
                            lsm_sample_history_get(&graph->primary, i));
     }
     if (graph->has_secondary) {
-        for (size_t i = 0; i < graph->secondary.count; i++) {
+        visible_history_range(graph, &graph->secondary, &start, &end);
+        for (size_t i = start; i < end; i++) {
             if (lsm_sample_history_is_valid(&graph->secondary, i))
                 maximum = fmax(maximum,
                                lsm_sample_history_get(&graph->secondary, i));
@@ -353,10 +369,8 @@ void lsm_graph_set_compact(LsmGraph *graph, gboolean compact)
 {
     if (!graph) return;
     graph->compact = compact;
-    if (compact) {
-        gtk_widget_set_hexpand(graph->area, FALSE);
-        gtk_widget_set_vexpand(graph->area, FALSE);
-    }
+    gtk_widget_set_hexpand(graph->area, !compact);
+    gtk_widget_set_vexpand(graph->area, !compact);
 }
 
 void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise)
