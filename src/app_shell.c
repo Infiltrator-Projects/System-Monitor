@@ -167,13 +167,17 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
                                app->runtime.paused && !app->runtime.compact_summary);
     sync_integrated_overview_chrome(app);
     if (app->runtime.compact_summary) {
-        if (app->runtime.window_maximized) app->runtime.compact_restore_maximized = TRUE;
+        app->runtime.compact_restore_maximized =
+            gtk_window_is_maximized(GTK_WINDOW(app->shell.window));
         gtk_window_unmaximize(GTK_WINDOW(app->shell.window));
         gtk_window_resize(GTK_WINDOW(app->shell.window), 760, 150);
     } else {
+        const gboolean restore_maximized =
+            app->runtime.compact_restore_maximized;
+        app->runtime.compact_restore_maximized = FALSE;
         gtk_window_resize(GTK_WINDOW(app->shell.window), app->runtime.window_width,
                           app->runtime.window_height);
-        if (app->runtime.compact_restore_maximized || app->runtime.window_maximized)
+        if (restore_maximized)
             gtk_window_maximize(GTK_WINDOW(app->shell.window));
     }
 }
@@ -1001,6 +1005,7 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
     lsm_app_shell_save_page_scroll(app, app->runtime.active_tab);
     app->runtime.active_tab = (gint)page_number;
     app->runtime.last_tab = (gint)page_number;
+    lsm_app_runtime_navigation_changed(app);
     const gboolean page_was_built = app->runtime.page_built[page_number];
     lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
     switch ((LsmTabIndex)page_number) {
@@ -1120,8 +1125,10 @@ static gboolean on_window_configure(GtkWidget *widget, GdkEventConfigure *event,
         event->width > 0 && event->height > 0) {
         app->runtime.window_width = event->width;
         app->runtime.window_height = event->height;
-        const gboolean compact =
-            event->width < LSM_COMPACT_LAYOUT_THRESHOLD;
+        const gint compact_limit = app->runtime.compact_layout
+            ? LSM_COMPACT_LAYOUT_THRESHOLD + LSM_COMPACT_LAYOUT_HYSTERESIS
+            : LSM_COMPACT_LAYOUT_THRESHOLD;
+        const gboolean compact = event->width < compact_limit;
         if (compact != app->runtime.compact_layout) {
             app->runtime.compact_layout = compact;
             apply_navigation_density(app);
