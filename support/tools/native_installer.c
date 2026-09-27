@@ -552,7 +552,7 @@ int main(int argc, char **argv)
     const char *compiler_option = NULL;
     const char *bootstrap_compiler = getenv("LSM_BOOTSTRAP_CC");
     int jobs = 0;
-    bool run_tests = true;
+    bool run_tests = !system_package_mode;
     bool strip_binary = true;
     bool dry_run = false;
 
@@ -732,7 +732,10 @@ int main(int argc, char **argv)
 
     if (jobs == 0) {
         const long processors = sysconf(_SC_NPROCESSORS_ONLN);
-        jobs = processors > 0L && processors <= INT_MAX ? (int)processors : 1;
+        if (processors > 1L && processors <= INT_MAX)
+            jobs = (int)processors - 1;
+        else
+            jobs = 1;
     }
 
     printf("System Monitor %s hardware-native build\n", version);
