@@ -15,18 +15,32 @@
 typedef struct LsmNvmlContext LsmNvmlContext;
 
 /**
- * Refresh NVIDIA-only optional metrics through a dynamically loaded NVML ABI.
+ * Create an independent optional NVML runtime context.
+ *
+ * The context owns the dynamically loaded NVML library state for one monitor.
+ * Failure to allocate the context leaves optional NVIDIA telemetry unavailable
+ * without affecting generic DRM discovery.
+ *
+ * @return Newly allocated NVML context, or NULL on allocation failure.
+ */
+LsmNvmlContext *lsm_nvml_create(void);
+
+/**
+ * Refresh NVIDIA-only optional metrics through one monitor-owned NVML context.
  *
  * Failure to load NVML or match a PCI identity leaves NVIDIA extension fields
  * unavailable without affecting generic DRM discovery.
  *
+ * @param [in,out] context Monitor-owned NVML runtime context.
  * @param [in,out] monitor Snapshot containing enumerated graphics adapters.
  */
-/** Create an independent optional NVML runtime context. */
-LsmNvmlContext *lsm_nvml_create(void);
-/** Refresh metrics through one monitor-owned NVML context. */
 void lsm_nvml_refresh(LsmNvmlContext *context, LsmMonitor *monitor);
-/** Release one NVML runtime context and its driver state. */
+
+/**
+ * Release one NVML runtime context and its driver state.
+ *
+ * @param [in,out] context Context to destroy, or NULL.
+ */
 void lsm_nvml_destroy(LsmNvmlContext *context);
 
 #endif

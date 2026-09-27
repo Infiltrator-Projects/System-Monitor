@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.134 - 2026-09-27
+
+- Repair the 1.0.133 canonical verification failure without weakening any gate: restore final newlines to the files touched by the monitor-ownership/window-fitting pass.
+- Complete Doxygen contracts for the monitor-owned NVML context lifecycle so create, refresh and destroy document return and parameter ownership explicitly.
+- Preserve the 1.0.132/1.0.133 functional repairs unchanged while making the exact release candidate pass the repository's source-style contract.
+
 ## 1.0.133 - 2026-09-27
 
 - Move the optional NVML library/API lifetime out of process-global mutable storage and into each Linux monitor's hardware state, so one monitor instance cannot tear down another monitor's NVIDIA provider.
