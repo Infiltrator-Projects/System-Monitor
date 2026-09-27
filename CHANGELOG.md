@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.136 - 2026-09-27
+
+- Fix the self-extracting native `.run` wrapper so the explicit `--system-package-mode` argument reaches the root-capable bootstrap instead of being rejected before extraction.
+- Keep ordinary interactive root execution refused; only the explicit OS package integration path is allowed through the wrapper.
+- Add CI coverage that executes the generated `.run` as root in system-package dry-run mode so this integration boundary cannot regress silently.
+
+
 ## 1.0.135 - 2026-09-27
 
 - Add explicit `--system-package-mode` support so Infiltrator OS can invoke the released native `.run` from a package-manager root context while ordinary interactive root builds remain refused.
