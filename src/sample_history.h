@@ -16,7 +16,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define LSM_HISTORY_LENGTH 100
+#define LSM_HISTORY_LENGTH 600
 
 /**
  * Fixed-capacity circular history backing one performance graph series.

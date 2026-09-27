@@ -105,23 +105,40 @@ static void append_series_segment(cairo_t *cr,
 static bool make_series_path(cairo_t *cr,
                              const LsmSampleHistory *history,
                              double maximum, double width, double height,
-                             bool close_to_baseline, bool smooth)
+                             bool close_to_baseline, bool smooth,
+                             size_t visible_points, bool newer_on_right,
+                             bool logarithmic)
 {
     bool any = false;
     double x[LSM_HISTORY_LENGTH];
     double y[LSM_HISTORY_LENGTH];
     size_t segment_count = 0U;
+    const size_t points =
+        visible_points > 0U && visible_points < history->count
+            ? visible_points : history->count;
+    const size_t start =
+        newer_on_right && history->count > points
+            ? history->count - points : 0U;
+    const size_t end =
+        !newer_on_right && history->count > points
+            ? points : history->count;
 
-    for (size_t i = 0U; i <= history->count; i++) {
+    for (size_t logical = start; logical <= end; logical++) {
         const bool valid =
-            i < history->count && lsm_sample_history_is_valid(history, i);
+            logical < end && lsm_sample_history_is_valid(history, logical);
         if (valid) {
-            x[segment_count] = history->count > 1U
-                ? width * (double)i / (double)(history->count - 1U) : 0.0;
+            const size_t display_index = logical - start;
+            const size_t display_count = end - start;
+            x[segment_count] = display_count > 1U
+                ? width * (double)display_index /
+                    (double)(display_count - 1U) : 0.0;
             const double value =
-                fmax(0.0, lsm_sample_history_get(history, i));
+                fmax(0.0, lsm_sample_history_get(history, logical));
+            const double fraction = logarithmic
+                ? log1p(value) / log1p(maximum)
+                : value / maximum;
             y[segment_count] =
-                height - fmin(height, height * value / maximum);
+                height - fmin(height, height * fraction);
             segment_count++;
             any = true;
             continue;
@@ -142,13 +159,16 @@ static bool make_series_path(cairo_t *cr,
 static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
                         const GdkRGBA *colour, double maximum,
                         double width, double height, gboolean fill,
-                        gboolean dashed, gboolean compact, gboolean smooth)
+                        gboolean dashed, gboolean compact, gboolean smooth,
+                        size_t visible_points, gboolean newer_on_right,
+                        gboolean logarithmic)
 {
     if (history->count < 2 || maximum <= 0.0) return;
 
     if (fill) {
         cairo_new_path(cr);
-        if (make_series_path(cr, history, maximum, width, height, true, smooth)) {
+        if (make_series_path(cr, history, maximum, width, height, true, smooth,
+                             visible_points, newer_on_right, logarithmic)) {
             cairo_pattern_t *gradient =
                 cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
             cairo_pattern_add_color_stop_rgba(
@@ -173,7 +193,8 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
     }
 
     cairo_new_path(cr);
-    if (make_series_path(cr, history, maximum, width, height, false, smooth)) {
+    if (make_series_path(cr, history, maximum, width, height, false, smooth,
+                             visible_points, newer_on_right, logarithmic)) {
         cairo_set_source_rgba(
             cr, colour->red, colour->green, colour->blue,
             compact ? 0.16 : 0.20);
@@ -247,11 +268,17 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
     const double maximum = graph_maximum(graph);
     draw_series(cr, &graph->primary, &graph->primary_colour, maximum,
-                width, height, TRUE, FALSE, graph->compact, graph->smooth);
-    if (graph->has_secondary) {
+                width, height, TRUE, FALSE, graph->compact, graph->smooth,
+                graph->visible_points, graph->newer_on_right,
+                graph->logarithmic);
+    if (graph->has_secondary &&
+        (graph->secondary_visible || graph->stacked)) {
         draw_series(cr, &graph->secondary, &graph->secondary_colour, maximum,
-                    width, height, TRUE, graph->secondary_dashed,
-                    graph->compact, graph->smooth);
+                    width, height, TRUE,
+                    graph->stacked ? FALSE : graph->secondary_dashed,
+                    graph->compact, graph->smooth,
+                    graph->visible_points, graph->newer_on_right,
+                    graph->logarithmic);
     }
 
     cairo_restore(cr);
@@ -276,6 +303,9 @@ LsmGraph *lsm_graph_new(gboolean has_secondary,
     graph->has_secondary = has_secondary;
     graph->percentage_scale = percentage_scale;
     graph->secondary_dashed = TRUE;
+    graph->secondary_visible = has_secondary;
+    graph->newer_on_right = TRUE;
+    graph->visible_points = 100U;
     graph->fixed_max = fixed_max;
     gdk_rgba_parse(&graph->primary_colour, "#39b8e3");
     graph->secondary_colour = graph->primary_colour;
@@ -296,6 +326,7 @@ void lsm_graph_push(LsmGraph *graph, double primary, double secondary,
                     gboolean newer_on_right)
 {
     if (!graph) return;
+    graph->newer_on_right = newer_on_right;
     lsm_sample_history_push(&graph->primary, primary, newer_on_right);
     if (graph->has_secondary)
         lsm_sample_history_push(&graph->secondary, secondary, newer_on_right);
@@ -339,6 +370,36 @@ void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth)
 {
     if (!graph) return;
     graph->smooth = smooth;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_visible_points(LsmGraph *graph, size_t points)
+{
+    if (!graph) return;
+    if (points < 2U) points = 2U;
+    if (points > LSM_HISTORY_LENGTH) points = LSM_HISTORY_LENGTH;
+    graph->visible_points = points;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_logarithmic(LsmGraph *graph, gboolean logarithmic)
+{
+    if (!graph) return;
+    graph->logarithmic = logarithmic;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_secondary_visible(LsmGraph *graph, gboolean visible)
+{
+    if (!graph) return;
+    graph->secondary_visible = visible;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_stacked(LsmGraph *graph, gboolean stacked)
+{
+    if (!graph) return;
+    graph->stacked = stacked;
     if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
 }
 

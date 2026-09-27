@@ -24,6 +24,11 @@ typedef struct {
     gboolean emphasise_midline;
     gboolean smooth;
     gboolean secondary_dashed;
+    gboolean secondary_visible;
+    gboolean stacked;
+    gboolean logarithmic;
+    gboolean newer_on_right;
+    size_t visible_points;
     double fixed_max;
     double dynamic_step;
     double minimum_max;
@@ -100,6 +105,10 @@ void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise);
  * @param [in] smooth TRUE to join contiguous samples with a Catmull-Rom spline.
  */
 void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth);
+void lsm_graph_set_visible_points(LsmGraph *graph, size_t points);
+void lsm_graph_set_logarithmic(LsmGraph *graph, gboolean logarithmic);
+void lsm_graph_set_secondary_visible(LsmGraph *graph, gboolean visible);
+void lsm_graph_set_stacked(LsmGraph *graph, gboolean stacked);
 /**
  * Select whether the optional secondary trace uses a dashed stroke.
  *
