@@ -211,17 +211,24 @@ static const char *navigation_resource_class(LsmPageType type)
     return "lsm-nav-neutral";
 }
 
-static GtkWidget *navigation_button(const char *label, const char *icon_name,
+static GtkWidget *navigation_button(LsmApp *app, const char *label,
+                                    const char *icon_name,
                                     const char *style_class)
 {
+    const gboolean compact = app && app->runtime.compact_layout;
     GtkWidget *button = gtk_toggle_button_new();
     gtk_widget_set_name(button, "lsm-main-nav-button");
-    gtk_widget_set_size_request(button, 196, 48);
+    gtk_widget_set_size_request(
+        button,
+        compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
+                : LSM_MAIN_NAV_BUTTON_WIDTH,
+        48);
     if (style_class)
         gtk_style_context_add_class(
             gtk_widget_get_style_context(button), style_class);
 
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *row = gtk_box_new(
+        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 12);
     GtkWidget *icon =
         gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
     gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
@@ -232,8 +239,12 @@ static GtkWidget *navigation_button(const char *label, const char *icon_name,
     GtkWidget *text = gtk_label_new(label);
     gtk_widget_set_halign(text, GTK_ALIGN_START);
     gtk_widget_set_valign(text, GTK_ALIGN_CENTER);
+    gtk_widget_set_no_show_all(text, TRUE);
+    gtk_widget_set_visible(text, !compact);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(text), "lsm-main-nav-label");
+    g_object_set_data(G_OBJECT(button), "lsm-nav-label-widget", text);
+    if (compact) gtk_widget_set_tooltip_text(button, label);
 
     gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), text, TRUE, TRUE, 0);
@@ -270,7 +281,8 @@ static GtkWidget *navigation_tab_button(LsmApp *app, LsmTabIndex tab,
                                         const char *icon_name,
                                         const char *style_class)
 {
-    GtkWidget *button = navigation_button(label, icon_name, style_class);
+    GtkWidget *button = navigation_button(
+        app, label, icon_name, style_class);
     g_object_set_data(
         G_OBJECT(button), "lsm-nav-tab", GINT_TO_POINTER((gint)tab + 1));
     g_signal_connect(
@@ -283,7 +295,7 @@ static GtkWidget *navigation_resource_button(LsmApp *app, LsmPageType type,
                                              const char *label)
 {
     GtkWidget *button = navigation_button(
-        label, navigation_resource_icon(type),
+        app, label, navigation_resource_icon(type),
         navigation_resource_class(type));
     g_object_set_data(
         G_OBJECT(button), "lsm-nav-resource",
@@ -300,7 +312,11 @@ GtkWidget *lsm_app_shell_build_navigation(LsmApp *app)
 
     GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_name(scroller, "lsm-main-navigation");
-    gtk_widget_set_size_request(scroller, 214, -1);
+    gtk_widget_set_size_request(
+        scroller,
+        app->runtime.compact_layout
+            ? LSM_MAIN_NAV_COMPACT_WIDTH : LSM_MAIN_NAV_WIDTH,
+        -1);
     gtk_scrolled_window_set_policy(
         GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
@@ -1060,6 +1076,41 @@ static void schedule_window_restore_reflow(LsmApp *app)
         g_idle_add(reflow_after_window_restore, app);
 }
 
+static void apply_navigation_density(LsmApp *app)
+{
+    if (!app) return;
+    const gboolean compact = app->runtime.compact_layout;
+    if (app->shell.main_navigation)
+        gtk_widget_set_size_request(
+            app->shell.main_navigation,
+            compact ? LSM_MAIN_NAV_COMPACT_WIDTH : LSM_MAIN_NAV_WIDTH, -1);
+
+    for (gint tab = 0; tab < LSM_TAB_COUNT; tab++) {
+        GtkWidget *button = app->shell.navigation_tab_buttons[tab];
+        if (!button) continue;
+        gtk_widget_set_size_request(
+            button,
+            compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
+                    : LSM_MAIN_NAV_BUTTON_WIDTH,
+            48);
+        GtkWidget *label = g_object_get_data(
+            G_OBJECT(button), "lsm-nav-label-widget");
+        if (label) gtk_widget_set_visible(label, !compact);
+    }
+    for (gint type = 0; type < LSM_PAGE_COUNT; type++) {
+        GtkWidget *button = app->shell.navigation_resource_buttons[type];
+        if (!button) continue;
+        gtk_widget_set_size_request(
+            button,
+            compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
+                    : LSM_MAIN_NAV_BUTTON_WIDTH,
+            48);
+        GtkWidget *label = g_object_get_data(
+            G_OBJECT(button), "lsm-nav-label-widget");
+        if (label) gtk_widget_set_visible(label, !compact);
+    }
+}
+
 static gboolean on_window_configure(GtkWidget *widget, GdkEventConfigure *event,
                                     gpointer user_data)
 {
@@ -1069,6 +1120,13 @@ static gboolean on_window_configure(GtkWidget *widget, GdkEventConfigure *event,
         event->width > 0 && event->height > 0) {
         app->runtime.window_width = event->width;
         app->runtime.window_height = event->height;
+        const gboolean compact =
+            event->width < LSM_COMPACT_LAYOUT_THRESHOLD;
+        if (compact != app->runtime.compact_layout) {
+            app->runtime.compact_layout = compact;
+            apply_navigation_density(app);
+            lsm_performance_reflow(app);
+        }
     }
     return FALSE;
 }

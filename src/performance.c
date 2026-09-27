@@ -338,13 +338,17 @@ static void switch_page(GtkButton *button, gpointer user_data)
     performance_select_side_button(app, page);
 }
 
-static GtkWidget *make_side_button(LsmDevicePage *page, GtkWidget *stack,
-                                   const char *title, const char *identifier,
-                                   const char *value)
+static GtkWidget *make_side_button(LsmApp *app, LsmDevicePage *page,
+                                   GtkWidget *stack, const char *title,
+                                   const char *identifier, const char *value)
 {
     GtkWidget *button = gtk_toggle_button_new();
-    gtk_widget_set_size_request(button, LSM_SIDE_BUTTON_WIDTH,
-                                LSM_SIDE_BUTTON_HEIGHT);
+    gtk_widget_set_size_request(
+        button,
+        app && app->runtime.compact_layout
+            ? LSM_PERFORMANCE_SIDE_BUTTON_COMPACT_WIDTH
+            : LSM_SIDE_BUTTON_WIDTH,
+        LSM_SIDE_BUTTON_HEIGHT);
     gtk_widget_set_name(button, "lsm-side-button");
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
@@ -416,9 +420,9 @@ LsmDevicePage *performance_new_page(LsmApp *app, LsmPageType type, size_t index,
         button_identifier && *button_identifier ? button_identifier : stack_name);
     page->page = performance_new_vertical_box(7);
     gtk_container_set_border_width(GTK_CONTAINER(page->page), 10);
-    GtkWidget *button = make_side_button(page, app->performance.performance_stack,
-                                         button_title, button_identifier,
-                                         "Initialising…");
+    GtkWidget *button = make_side_button(
+        app, page, app->performance.performance_stack,
+        button_title, button_identifier, "Initialising…");
     g_object_set_data(G_OBJECT(button), "lsm-app", app);
     gtk_box_pack_start(GTK_BOX(app->performance.sidepane), button, FALSE, FALSE, 0);
     gtk_stack_add_named(GTK_STACK(app->performance.performance_stack), page->page, page->stack_name);
@@ -632,7 +636,11 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     gtk_widget_set_name(side_scroller, "lsm-performance-sidebar");
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_size_request(side_scroller, LSM_SIDEBAR_WIDTH, -1);
+    gtk_widget_set_size_request(
+        side_scroller,
+        app->runtime.compact_layout
+            ? LSM_PERFORMANCE_SIDEBAR_COMPACT_WIDTH : LSM_SIDEBAR_WIDTH,
+        -1);
     app->performance.side_scroller = side_scroller;
     app->performance.sidepane = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_container_set_border_width(GTK_CONTAINER(app->performance.sidepane), 3);
@@ -734,6 +742,28 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
 void lsm_performance_reflow(LsmApp *app)
 {
     if (!app || !app->performance.performance_root) return;
+
+    if (app->performance.side_scroller)
+        gtk_widget_set_size_request(
+            app->performance.side_scroller,
+            app->runtime.compact_layout
+                ? LSM_PERFORMANCE_SIDEBAR_COMPACT_WIDTH
+                : LSM_SIDEBAR_WIDTH,
+            -1);
+    if (app->performance.device_pages) {
+        for (guint index = 0U;
+             index < app->performance.device_pages->len; index++) {
+            LsmDevicePage *page =
+                g_ptr_array_index(app->performance.device_pages, index);
+            if (page && page->button)
+                gtk_widget_set_size_request(
+                    page->button,
+                    app->runtime.compact_layout
+                        ? LSM_PERFORMANCE_SIDE_BUTTON_COMPACT_WIDTH
+                        : LSM_SIDE_BUTTON_WIDTH,
+                    LSM_SIDE_BUTTON_HEIGHT);
+        }
+    }
 
     GtkWidget *scroller = app->runtime.page_scrollers[LSM_TAB_PERFORMANCE];
     if (app->performance.performance_stack) {
