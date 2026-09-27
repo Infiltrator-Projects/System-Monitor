@@ -560,7 +560,7 @@ portability-check: $(PORTABILITY_CHECKER)
 	REQUIRE_I386=$(REQUIRE_I386) CC=$(CC) CXX=$(CXX) ./$(PORTABILITY_CHECKER) --root .
 
 
-nvml-smoke: | $(BUILD_DIR)
+nvml-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -shared -fPIC -std=c17 $(STRICT_WARNINGS) support/tests/mock_nvml.c \
 		-o $(BUILD_DIR)/libnvidia-ml-test.so
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
