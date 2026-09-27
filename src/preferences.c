@@ -250,10 +250,19 @@ static bool write_preferences(FILE *file, const void *user_data)
 void lsm_preferences_save(const LsmApp *app)
 {
     if (!app || !app->paths.preferences_path[0]) return;
-    if (lsm_mkdir_parents(app->paths.config_dir, 0700U) != 0) return;
-    (void)lsm_atomic_file_write(app->paths.preferences_path,
-                                LSM_ATOMIC_FILE_PRIVATE,
-                                write_preferences, app);
+    const int directory_failure =
+        lsm_mkdir_parents(app->paths.config_dir, 0700U);
+    if (directory_failure != 0) {
+        fprintf(stderr, "Unable to create System Monitor config directory: %s\n",
+                strerror(directory_failure));
+        return;
+    }
+    const int failure = lsm_atomic_file_write(
+        app->paths.preferences_path, LSM_ATOMIC_FILE_PRIVATE,
+        write_preferences, app);
+    if (failure != 0)
+        fprintf(stderr, "Unable to save System Monitor preferences: %s\n",
+                strerror(failure));
 }
 
 static void attach_preference(GtkGrid *grid, int row, const char *name,
