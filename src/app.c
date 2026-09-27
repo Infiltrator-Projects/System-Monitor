@@ -38,18 +38,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static GdkMonitor *primary_monitor(void)
+{
+    GdkDisplay *display = gdk_display_get_default();
+    if (!display) return NULL;
+    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    if (!monitor && gdk_display_get_n_monitors(display) > 0)
+        monitor = gdk_display_get_monitor(display, 0);
+    return monitor;
+}
+
 static void constrain_initial_window_geometry(LsmApp *app)
 {
     if (!app) return;
 
-    GdkScreen *screen = gdk_screen_get_default();
-    if (!screen) return;
-
-    gint monitor = gdk_screen_get_primary_monitor(screen);
-    if (monitor < 0) monitor = 0;
+    GdkMonitor *monitor = primary_monitor();
+    if (!monitor) return;
 
     GdkRectangle workarea = {0, 0, 0, 0};
-    gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+    gdk_monitor_get_workarea(monitor, &workarea);
     if (workarea.width <= 0 || workarea.height <= 0) return;
 
     /*
@@ -139,11 +146,9 @@ static gboolean prepare_overview_geometry_test(gpointer user_data)
         !app->runtime.page_built[LSM_TAB_OVERVIEW])
         return G_SOURCE_CONTINUE;
 
-    GdkScreen *screen = gtk_window_get_screen(GTK_WINDOW(app->shell.window));
-    gint monitor = screen ? gdk_screen_get_primary_monitor(screen) : -1;
-    if (screen && monitor < 0) monitor = 0;
+    GdkMonitor *monitor = primary_monitor();
     GdkRectangle workarea = {0, 0, 0, 0};
-    if (screen) gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+    if (monitor) gdk_monitor_get_workarea(monitor, &workarea);
     gint width = 0;
     gint height = 0;
     gtk_window_get_size(GTK_WINDOW(app->shell.window), &width, &height);
