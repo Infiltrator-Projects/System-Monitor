@@ -1209,16 +1209,16 @@ static void overview_set_latest_values(LsmApp *app,
                 fault_c = thermal_policy.fault_c;
             }
         }
-        if (sample->temperature_available &&
-            sample->temperature_c >= fault_c) {
+        if (!sample->temperature_available) {
+            lsm_ui_set_label_text(status, "●  Thermal Data Unavailable");
+        } else if (sample->temperature_c >= fault_c) {
             lsm_ui_set_label_text(status, "●  Thermal Fault");
             gtk_style_context_add_class(style, "lsm-status-fault");
-        } else if (sample->temperature_available &&
-                   sample->temperature_c >= warning_c) {
+        } else if (sample->temperature_c >= warning_c) {
             lsm_ui_set_label_text(status, "●  Thermal Warning");
             gtk_style_context_add_class(style, "lsm-status-warning");
         } else {
-            lsm_ui_set_label_text(status, "●  All Systems Nominal");
+            lsm_ui_set_label_text(status, "●  Thermal Status Nominal");
         }
     }
 }
