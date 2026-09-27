@@ -82,19 +82,20 @@ bool lsm_cpu_thermal_policy(const LsmCpuInfo *cpu, LsmThermalPolicy *policy)
         cpu->temperature_critical_available &&
         valid_limit(cpu->temperature_critical_c);
 
-    if (have_sensor_warning) {
+    if (have_sensor_warning && have_sensor_critical) {
         warning = cpu->temperature_warning_c;
-        source = LSM_THERMAL_POLICY_SENSOR;
-    }
-    if (have_sensor_critical) {
         fault = cpu->temperature_critical_c;
-        if (!have_sensor_warning)
-            warning = fault - LSM_THERMAL_WARNING_MARGIN_C;
         source = LSM_THERMAL_POLICY_SENSOR;
-    } else if (have_sensor_warning && warning >= fault) {
+    } else if (have_sensor_warning) {
+        warning = cpu->temperature_warning_c;
         fault = warning + LSM_THERMAL_WARNING_MARGIN_C;
         if (fault > LSM_THERMAL_MAX_LIMIT_C)
             fault = LSM_THERMAL_MAX_LIMIT_C;
+        source = LSM_THERMAL_POLICY_SENSOR;
+    } else if (have_sensor_critical) {
+        fault = cpu->temperature_critical_c;
+        warning = fault - LSM_THERMAL_WARNING_MARGIN_C;
+        source = LSM_THERMAL_POLICY_SENSOR;
     }
 
     if (warning >= fault)
