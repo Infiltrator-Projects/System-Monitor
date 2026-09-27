@@ -476,6 +476,7 @@ PangoAttrList *pango_attr_list_new(void);
 void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);
 void pango_attr_list_unref(PangoAttrList *list);
 PangoAttribute *pango_attr_size_new(gint size);
+PangoAttribute *pango_attr_font_features_new(const gchar *features);
 PangoAttribute *pango_attr_weight_new(int weight);
 typedef struct _cairo_pattern cairo_pattern_t;
 #ifndef G_PI
