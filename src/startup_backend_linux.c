@@ -49,7 +49,7 @@ static char *desktop_string(GKeyFile *file, const char *key)
 static gboolean current_desktop_matches(const char *candidate)
 {
     if (!candidate || !candidate[0]) return FALSE;
-    const char *current = g_getenv("XDG_CURRENT_DESKTOP");
+    const char *current = getenv("XDG_CURRENT_DESKTOP");
     if (!current || !current[0]) return FALSE;
     gchar **desktops = g_strsplit(current, ":", -1);
     gboolean matches = FALSE;
@@ -67,63 +67,68 @@ static gboolean desktop_environment_allows(GKeyFile *file)
 {
     if (!file) return FALSE;
 
-    GError *error = NULL;
-    gsize count = 0U;
-    gchar **only = g_key_file_get_string_list(
-        file, "Desktop Entry", "OnlyShowIn", &count, &error);
-    if (!error && only && count > 0U) {
+    char *only_text = desktop_string(file, "OnlyShowIn");
+    if (only_text[0]) {
+        gchar **only = g_strsplit(only_text, ";", -1);
         gboolean matched = FALSE;
-        for (gsize index = 0U; index < count; index++)
-            matched = matched || current_desktop_matches(only[index]);
+        for (gchar **item = only; item && *item; item++)
+            if ((*item)[0])
+                matched = matched || current_desktop_matches(*item);
         g_strfreev(only);
+        g_free(only_text);
         if (!matched) return FALSE;
     } else {
-        if (error) g_error_free(error);
-        g_strfreev(only);
+        g_free(only_text);
     }
 
-    error = NULL;
-    count = 0U;
-    gchar **not_show = g_key_file_get_string_list(
-        file, "Desktop Entry", "NotShowIn", &count, &error);
-    if (!error && not_show) {
-        for (gsize index = 0U; index < count; index++) {
-            if (current_desktop_matches(not_show[index])) {
+    char *not_show_text = desktop_string(file, "NotShowIn");
+    if (not_show_text[0]) {
+        gchar **not_show = g_strsplit(not_show_text, ";", -1);
+        for (gchar **item = not_show; item && *item; item++) {
+            if ((*item)[0] && current_desktop_matches(*item)) {
                 g_strfreev(not_show);
+                g_free(not_show_text);
                 return FALSE;
             }
         }
         g_strfreev(not_show);
-    } else {
-        if (error) g_error_free(error);
-        g_strfreev(not_show);
     }
+    g_free(not_show_text);
     return TRUE;
+}
+
+static gboolean executable_in_path(const char *name)
+{
+    if (!name || !name[0]) return FALSE;
+    if (strchr(name, '/')) return access(name, X_OK) == 0;
+
+    const char *path = getenv("PATH");
+    if (!path || !path[0]) return FALSE;
+    char *copy = strdup(path);
+    if (!copy) return FALSE;
+
+    gboolean found = FALSE;
+    char *save = NULL;
+    for (char *directory = strtok_r(copy, ":", &save); directory;
+         directory = strtok_r(NULL, ":", &save)) {
+        const char *base = directory[0] ? directory : ".";
+        char candidate[LSM_PATH_LEN];
+        if (lsm_join_path(candidate, sizeof(candidate), base, name) &&
+            access(candidate, X_OK) == 0) {
+            found = TRUE;
+            break;
+        }
+    }
+    free(copy);
+    return found;
 }
 
 static gboolean try_exec_available(GKeyFile *file)
 {
     if (!file) return FALSE;
-    GError *error = NULL;
-    char *try_exec = g_key_file_get_string(
-        file, "Desktop Entry", "TryExec", &error);
-    if (error) {
-        g_error_free(error);
-        return TRUE;
-    }
-    if (!try_exec || !try_exec[0]) {
-        g_free(try_exec);
-        return TRUE;
-    }
-
-    gboolean available = FALSE;
-    if (strchr(try_exec, '/')) {
-        available = g_file_test(try_exec, G_FILE_TEST_IS_EXECUTABLE);
-    } else {
-        char *resolved = g_find_program_in_path(try_exec);
-        available = resolved != NULL;
-        g_free(resolved);
-    }
+    char *try_exec = desktop_string(file, "TryExec");
+    const gboolean available =
+        !try_exec[0] || executable_in_path(try_exec);
     g_free(try_exec);
     return available;
 }

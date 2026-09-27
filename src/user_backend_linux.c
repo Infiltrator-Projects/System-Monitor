@@ -189,8 +189,8 @@ static LsmLinuxSessionRecord *collect_sessions(GDBusConnection *bus,
     LsmLinuxSessionRecord *sessions = parse_session_list(reply, out_count);
     g_variant_unref(reply);
     if (!sessions && *out_count == 0U && errno == ENOMEM) {
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
-                            "Unable to allocate the complete session inventory");
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
+                    "%s", "Unable to allocate the complete session inventory");
         return NULL;
     }
     for (size_t index = 0U; index < *out_count; index++) {

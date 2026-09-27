@@ -322,16 +322,16 @@ static void history_save_request_free(gpointer data)
 {
     LsmHistorySaveRequest *request = data;
     if (!request) return;
-    g_free(request->strings);
-    g_free(request->entries);
+    free(request->strings);
+    free(request->entries);
     history_coordinator_release(request->coordinator);
-    g_free(request);
+    free(request);
 }
 
 static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
 {
     if (!app || !app->history.app_history) return NULL;
-    LsmHistorySaveRequest *request = g_try_new0(LsmHistorySaveRequest, 1U);
+    LsmHistorySaveRequest *request = calloc(1U, sizeof(*request));
     if (!request) return NULL;
     lsm_copy_string(request->config_dir, sizeof(request->config_dir), app->paths.config_dir);
     lsm_copy_string(request->path, sizeof(request->path), app->history.history_path);
@@ -359,14 +359,14 @@ static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
     }
 
     if (request->count > 0U) {
-        request->entries = g_try_new0(LsmHistoryPersistEntry, request->count);
+        request->entries = calloc(request->count, sizeof(*request->entries));
         if (!request->entries) {
             history_save_request_free(request);
             return NULL;
         }
     }
     if (string_bytes > 0U) {
-        request->strings = g_try_malloc(string_bytes);
+        request->strings = malloc(string_bytes);
         if (!request->strings) {
             history_save_request_free(request);
             return NULL;

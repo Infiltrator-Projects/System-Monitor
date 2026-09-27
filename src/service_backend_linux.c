@@ -16,6 +16,7 @@
 #include "app_config.h"
 #include "common.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -150,8 +151,8 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
     if (!merge_loaded_units(units, &entries, &count, &capacity)) {
         g_variant_unref(units);
         free(entries);
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
-                            "Unable to allocate the complete service inventory");
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
+                    "%s", "Unable to allocate the complete service inventory");
         return NULL;
     }
     g_variant_unref(units);
@@ -165,8 +166,8 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
             g_variant_unref(files);
             if (files_error) g_error_free(files_error);
             free(entries);
-            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
-                                "Unable to allocate the complete service inventory");
+            g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
+                        "%s", "Unable to allocate the complete service inventory");
             return NULL;
         }
         g_variant_unref(files);
