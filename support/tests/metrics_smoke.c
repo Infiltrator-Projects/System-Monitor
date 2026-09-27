@@ -1034,6 +1034,26 @@ int main(void)
         fabs(policy.fault_c - 89.0) > 0.01)
         return 2;
 
+    memset(&cpu, 0, sizeof(cpu));
+    lsm_copy_string(
+        cpu.model, sizeof(cpu.model),
+        "Intel(R) Core(TM) Ultra 7 165U");
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_MODEL_TABLE ||
+        fabs(policy.warning_c - 100.0) > 0.01 ||
+        fabs(policy.fault_c - 110.0) > 0.01)
+        return 7;
+
+    memset(&cpu, 0, sizeof(cpu));
+    lsm_copy_string(
+        cpu.model, sizeof(cpu.model),
+        "AMD Ryzen 7 9800X3D 8-Core Processor");
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_MODEL_TABLE ||
+        fabs(policy.warning_c - 85.0) > 0.01 ||
+        fabs(policy.fault_c - 95.0) > 0.01)
+        return 8;
+
     cpu.temperature_warning_available = true;
     cpu.temperature_warning_c = 83.0;
     cpu.temperature_critical_available = true;
