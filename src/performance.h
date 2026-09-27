@@ -45,6 +45,12 @@ gboolean lsm_performance_update(gpointer user_data);
  */
 void lsm_performance_refresh(LsmApp *app);
 /**
+ * Apply graph-presentation preferences without discarding retained history.
+ *
+ * @param [in,out] app Application whose existing graphs are reconfigured.
+ */
+void lsm_performance_apply_graph_preferences(LsmApp *app);
+/**
  * Navigate to one concrete Performance resource.
  *
  * The Performance tab is constructed lazily if required. Device indices are

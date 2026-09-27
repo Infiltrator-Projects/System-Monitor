@@ -61,8 +61,11 @@ LsmDevicePage *performance_build_cpu_page(LsmApp *app)
     gtk_widget_set_vexpand(app->performance.cpu_graph_stack, TRUE);
 
     GtkWidget *overall = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    page->graph = performance_new_primary_graph(FALSE, TRUE, 100.0);
-    lsm_graph_set_colours(page->graph, performance_page_colour(LSM_PAGE_CPU), NULL);
+    page->graph = performance_new_primary_graph(TRUE, TRUE, 100.0);
+    lsm_graph_set_colours(page->graph, performance_page_colour(LSM_PAGE_CPU),
+                         "#a66bff");
+    lsm_graph_set_secondary_visible(page->graph, FALSE);
+    lsm_graph_set_secondary_dashed(page->graph, FALSE);
     performance_enable_cpu_graph_context_menu(page->graph->area, app);
     gtk_box_pack_start(GTK_BOX(overall), page->graph->area, TRUE, TRUE, 0);
     gtk_stack_add_named(GTK_STACK(app->performance.cpu_graph_stack), overall, "overall");

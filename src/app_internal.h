@@ -349,6 +349,12 @@ typedef struct {
     gboolean paused;
     gboolean newer_on_right;
     gboolean network_use_bits;
+    gboolean network_total_separate;
+    gboolean network_total_use_bits;
+    gboolean graph_smooth;
+    gboolean cpu_stacked;
+    gboolean memory_logarithmic;
+    guint graph_data_points;
     gboolean process_cpu_per_core;
     gboolean confirm_process_actions;
     gboolean show_all_filesystems;

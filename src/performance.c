@@ -50,6 +50,53 @@ LsmGraph *performance_new_primary_graph(gboolean has_secondary,
                          LSM_PRIMARY_GRAPH_MIN_HEIGHT);
 }
 
+static void configure_graph_preferences(
+    const LsmApp *app, LsmGraph *graph, LsmPageType type, gboolean primary)
+{
+    if (!app || !graph) return;
+    lsm_graph_set_smooth(graph, app->runtime.graph_smooth);
+    lsm_graph_set_visible_points(graph, app->runtime.graph_data_points);
+    lsm_graph_set_logarithmic(
+        graph, primary && type == LSM_PAGE_MEMORY
+            ? app->runtime.memory_logarithmic : FALSE);
+    if (primary && type == LSM_PAGE_CPU) {
+        lsm_graph_set_secondary_visible(graph, FALSE);
+        lsm_graph_set_stacked(graph, app->runtime.cpu_stacked);
+    } else {
+        lsm_graph_set_stacked(graph, FALSE);
+    }
+}
+
+void lsm_performance_apply_graph_preferences(LsmApp *app)
+{
+    if (!app || !app->performance.device_pages) return;
+    for (guint index = 0U; index < app->performance.device_pages->len; index++) {
+        LsmDevicePage *page =
+            g_ptr_array_index(app->performance.device_pages, index);
+        if (!page) continue;
+        configure_graph_preferences(app, page->graph, page->type, TRUE);
+        configure_graph_preferences(app, page->secondary_graph, page->type, FALSE);
+        configure_graph_preferences(app, page->side_graph, page->type, FALSE);
+        if (page->type == LSM_PAGE_GPU) {
+            LsmGpuPageWidgets *gpu = &page->widgets.gpu;
+            configure_graph_preferences(
+                app, gpu->single_engine_graph.graph, page->type, FALSE);
+            for (size_t slot = 0U; slot < LSM_GPU_GRAPH_SLOT_COUNT; slot++)
+                configure_graph_preferences(
+                    app, gpu->engine_graphs[slot].graph, page->type, FALSE);
+            configure_graph_preferences(
+                app, gpu->memory_graph, page->type, FALSE);
+        }
+    }
+    if (app->performance.cpu_core_graphs) {
+        for (unsigned index = 0U;
+             index < app->monitor.cpu.logical_cores; index++)
+            configure_graph_preferences(
+                app, app->performance.cpu_core_graphs[index],
+                LSM_PAGE_CPU, FALSE);
+    }
+}
+
 static uint64_t stable_identity_hash(const char *identity)
 {
     return lsm_fnv1a64_mix_text(LSM_FNV1A64_OFFSET_BASIS, identity);
@@ -632,6 +679,7 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
     for (size_t i = 0; i < app->monitor.battery_count; i++) performance_build_battery_page(app, i);
     for (size_t i = 0; i < app->monitor.npu_count; i++) performance_build_npu_page(app, i);
     app->performance.displayed_topology_generation = app->monitor.topology_generation;
+    lsm_performance_apply_graph_preferences(app);
 
     LsmDevicePage *selected = g_ptr_array_index(app->performance.device_pages, 0);
     if (visible_page && *visible_page) {

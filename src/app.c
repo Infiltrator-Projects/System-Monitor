@@ -235,6 +235,12 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.theme_mode = INFILTRATR_THEME_SYSTEM;
     app->runtime.newer_on_right = TRUE;
     app->runtime.network_use_bits = FALSE;
+    app->runtime.network_total_separate = FALSE;
+    app->runtime.network_total_use_bits = FALSE;
+    app->runtime.graph_smooth = TRUE;
+    app->runtime.cpu_stacked = FALSE;
+    app->runtime.memory_logarithmic = FALSE;
+    app->runtime.graph_data_points = 100U;
     app->runtime.process_cpu_per_core = FALSE;
     app->runtime.confirm_process_actions = TRUE;
     app->runtime.show_all_filesystems = FALSE;
