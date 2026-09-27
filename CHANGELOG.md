@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.139 - 2026-09-28
+
+- Preserve the last complete process snapshot when Linux process enumeration fails, distinguish a valid zero-process result from backend failure, and keep aggregate CPU baselines unchanged across failed /proc/stat reads.
+- Reduce Linux sampler publication traffic by copying only populated device ranges instead of every fixed-capacity disk, partition, network, Bluetooth, GPU, battery and NPU slot.
+- Stop fully formatting every hidden Performance resource page each sample; update compact rail summaries independently and fully present only the selected page.
+- Scale dynamic graphs from the history range actually visible on screen, restore graph expansion symmetrically after compact mode, and stabilise live metric geometry with tabular digits.
+- Add compact-layout hysteresis, make Compact Summary maximise restoration transaction-scoped, and reschedule process polling to the actual foreground/background cadence.
+- Keep thermal warning/fault pairs on one provenance, distinguish unavailable thermal telemetry from a nominal reading, and expand the documented fallback table for additional Intel Core Ultra U and AMD Ryzen 9000 processors.
+- Report durable preference and column-layout write failures instead of silently discarding them, remove the remaining bounded GPU-name concatenation, and remove a redundant Overview refresh from the global refresh path.
+- Extend deterministic thermal regression coverage for warning-only, critical-only and newly covered processor-table cases.
+
 ## 1.0.138 - 2026-09-27
 
 - Make `--system-package-mode` a production installation path instead of running the complete developer smoke suite on the target machine before compiling. Interactive native builds keep their existing test default; the OS-managed install now goes straight to the aggressive local build and PGO path.
