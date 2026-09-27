@@ -182,6 +182,8 @@ typedef struct _GtkTreeStore GtkTreeStore;
 typedef struct _GtkTextView GtkTextView;
 typedef struct _GtkTextBuffer GtkTextBuffer;
 typedef struct _GdkScreen GdkScreen;
+typedef struct _GdkDisplay GdkDisplay;
+typedef struct _GdkMonitor GdkMonitor;
 typedef struct _GdkRectangle { gint x, y, width, height; } GdkRectangle;
 typedef struct _GdkEventButton {
     int type; void *window; int8_t send_event; guint32 time; double x, y;
@@ -464,6 +466,11 @@ GdkScreen *gdk_screen_get_default(void);
 gint gdk_screen_get_primary_monitor(GdkScreen *screen);
 void gdk_screen_get_monitor_workarea(GdkScreen *screen, gint monitor_num,
                                      GdkRectangle *dest);
+GdkDisplay *gdk_display_get_default(void);
+GdkMonitor *gdk_display_get_primary_monitor(GdkDisplay *display);
+gint gdk_display_get_n_monitors(GdkDisplay *display);
+GdkMonitor *gdk_display_get_monitor(GdkDisplay *display, gint monitor_num);
+void gdk_monitor_get_workarea(GdkMonitor *monitor, GdkRectangle *dest);
 GdkAtom gdk_atom_intern_static_string(const gchar *atom_name);
 PangoAttrList *pango_attr_list_new(void);
 void pango_attr_list_insert(PangoAttrList *list, PangoAttribute *attr);
