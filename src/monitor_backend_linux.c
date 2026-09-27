@@ -56,7 +56,63 @@ static void copy_public_snapshot(LsmMonitor *destination,
     if (!destination || !source) return;
     const unsigned process_count = destination->cpu.process_count;
     const unsigned thread_count = destination->cpu.thread_count;
-    *destination = *source;
+
+    destination->cpu = source->cpu;
+    destination->memory = source->memory;
+    destination->cpu_pressure = source->cpu_pressure;
+    destination->memory_pressure = source->memory_pressure;
+    destination->io_pressure = source->io_pressure;
+
+    destination->disk_count =
+        source->disk_count < LSM_MAX_DISKS ? source->disk_count : LSM_MAX_DISKS;
+    if (destination->disk_count > 0U)
+        memcpy(destination->disks, source->disks,
+               destination->disk_count * sizeof(destination->disks[0]));
+    destination->disk_generation = source->disk_generation;
+    destination->topology_generation = source->topology_generation;
+
+    destination->net_count =
+        source->net_count < LSM_MAX_NETS ? source->net_count : LSM_MAX_NETS;
+    if (destination->net_count > 0U)
+        memcpy(destination->nets, source->nets,
+               destination->net_count * sizeof(destination->nets[0]));
+
+    destination->bluetooth_count =
+        source->bluetooth_count < LSM_MAX_BLUETOOTH
+            ? source->bluetooth_count : LSM_MAX_BLUETOOTH;
+    if (destination->bluetooth_count > 0U)
+        memcpy(destination->bluetooth, source->bluetooth,
+               destination->bluetooth_count * sizeof(destination->bluetooth[0]));
+
+    destination->bluetooth_device_count =
+        source->bluetooth_device_count < LSM_MAX_BLUETOOTH_DEVICES
+            ? source->bluetooth_device_count : LSM_MAX_BLUETOOTH_DEVICES;
+    if (destination->bluetooth_device_count > 0U)
+        memcpy(destination->bluetooth_devices, source->bluetooth_devices,
+               destination->bluetooth_device_count *
+                   sizeof(destination->bluetooth_devices[0]));
+
+    destination->gpu_count =
+        source->gpu_count < LSM_MAX_GPUS ? source->gpu_count : LSM_MAX_GPUS;
+    if (destination->gpu_count > 0U)
+        memcpy(destination->gpus, source->gpus,
+               destination->gpu_count * sizeof(destination->gpus[0]));
+
+    destination->battery_count =
+        source->battery_count < LSM_MAX_BATTERIES
+            ? source->battery_count : LSM_MAX_BATTERIES;
+    if (destination->battery_count > 0U)
+        memcpy(destination->batteries, source->batteries,
+               destination->battery_count * sizeof(destination->batteries[0]));
+
+    destination->npu_count =
+        source->npu_count < LSM_MAX_NPUS ? source->npu_count : LSM_MAX_NPUS;
+    if (destination->npu_count > 0U)
+        memcpy(destination->npus, source->npus,
+               destination->npu_count * sizeof(destination->npus[0]));
+
+    destination->sample_generation = source->sample_generation;
+    destination->sample_monotonic_seconds = source->sample_monotonic_seconds;
     destination->backend_state = backend_state;
     if (preserve_process_totals) {
         destination->cpu.process_count = process_count;
@@ -162,8 +218,8 @@ static void *sampler_thread_main(void *user_data)
         (void)pthread_mutex_lock(&sampler->mutex);
         sampler->sample_in_progress = false;
         if (sampled && !sampler->stop_requested) {
-            sampler->completed = sampler->sample;
-            sampler->completed.backend_state = NULL;
+            copy_public_snapshot(
+                &sampler->completed, &sampler->sample, NULL, false);
             sampler->sample_ready = true;
         }
         (void)pthread_mutex_unlock(&sampler->mutex);
