@@ -711,7 +711,6 @@ static bool count_process_fds(pid_t pid, unsigned *count)
     if (!directory) return false;
 
     unsigned value = 0U;
-    bool scan_failed = false;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         if (strcmp(entry->d_name, ".") == 0 ||
@@ -900,6 +899,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     const double uptime = read_uptime_seconds();
     const double sampled_at = lsm_monotonic_seconds();
 
+    bool scan_failed = false;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         pid_t pid = 0;
