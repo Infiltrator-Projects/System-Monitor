@@ -74,9 +74,69 @@ typedef struct {
     uint64_t bytes;
 } LsmSeenCache;
 
+static int compare_cpu_ids(const void *left, const void *right)
+{
+    const unsigned a = *(const unsigned *)left;
+    const unsigned b = *(const unsigned *)right;
+    return a > b ? 1 : a < b ? -1 : 0;
+}
+
+/* Kernel CPU identifiers are not guaranteed to be dense after hotplug or on
+ * systems that expose sparse topology. Enumerate the actual online cpuN
+ * directories instead of assuming the IDs are 0..logical_cores-1. */
+static size_t read_online_cpu_ids(unsigned ids[LSM_MAX_CPUS])
+{
+    if (!ids) return 0U;
+    DIR *directory = opendir("/sys/devices/system/cpu");
+    if (!directory) return 0U;
+
+    size_t count = 0U;
+    struct dirent *entry = NULL;
+    while (count < LSM_MAX_CPUS && (entry = readdir(directory))) {
+        if (!lsm_string_starts_with(entry->d_name, "cpu") ||
+            !lsm_ascii_is_digit((unsigned char)entry->d_name[3]))
+            continue;
+        uint64_t parsed = 0U;
+        if (!lsm_parse_u64(entry->d_name + 3U, 10U, &parsed) ||
+            parsed > UINT_MAX)
+            continue;
+
+        char online_path[LSM_PATH_LEN];
+        const int written = snprintf(
+            online_path, sizeof(online_path),
+            "/sys/devices/system/cpu/%s/online", entry->d_name);
+        int64_t online = 1;
+        if (written >= 0 && (size_t)written < sizeof(online_path)) {
+            int64_t reported = 0;
+            if (infiltratr_read_i64_file(online_path, &reported))
+                online = reported;
+        }
+        if (online == 0) continue;
+        ids[count++] = (unsigned)parsed;
+    }
+    closedir(directory);
+    if (count > 1U)
+        qsort(ids, count, sizeof(ids[0]), compare_cpu_ids);
+    return count;
+}
+
+static size_t cpu_ids_or_dense_fallback(const LsmCpuInfo *cpu,
+                                        unsigned ids[LSM_MAX_CPUS])
+{
+    size_t count = read_online_cpu_ids(ids);
+    if (count > 0U) return count;
+    const unsigned logical =
+        cpu && cpu->logical_cores > 0U && cpu->logical_cores <= LSM_MAX_CPUS
+            ? cpu->logical_cores : 1U;
+    for (unsigned index = 0U; index < logical; index++) ids[index] = index;
+    return logical;
+}
+
 static void read_cpu_cache_totals(LsmCpuInfo *cpu)
 {
-    const size_t capacity = (size_t)cpu->logical_cores * 16U + 16U;
+    unsigned cpu_ids[LSM_MAX_CPUS];
+    const size_t cpu_count = cpu_ids_or_dense_fallback(cpu, cpu_ids);
+    const size_t capacity = cpu_count * 16U + 16U;
     LsmSeenCache *seen = calloc(capacity, sizeof(*seen));
     if (!seen) {
         snprintf(cpu->cache_l1, sizeof(cpu->cache_l1), "N/A");
@@ -89,7 +149,8 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
     uint64_t totals[4] = {0, 0, 0, 0};
     unsigned instances[4] = {0, 0, 0, 0};
 
-    for (unsigned cpu_index = 0; cpu_index < cpu->logical_cores; cpu_index++) {
+    for (size_t cpu_position = 0U; cpu_position < cpu_count; cpu_position++) {
+        const unsigned cpu_index = cpu_ids[cpu_position];
         for (int index = 0; index < 32; index++) {
             char path[LSM_PATH_LEN], type[32] = "", size_text[32] = "";
             char shared[128] = "";
@@ -208,13 +269,14 @@ static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
 {
     int packages[LSM_MAX_CPUS];
     size_t count = 0U;
-    const unsigned logical = cpu && cpu->logical_cores <= LSM_MAX_CPUS
-        ? cpu->logical_cores : LSM_MAX_CPUS;
-    for (unsigned index = 0U; index < logical; index++) {
+    unsigned cpu_ids[LSM_MAX_CPUS];
+    const size_t cpu_count = cpu_ids_or_dense_fallback(cpu, cpu_ids);
+    for (size_t position = 0U; position < cpu_count; position++) {
+        const unsigned cpu_id = cpu_ids[position];
         char path[LSM_PATH_LEN];
         (void)snprintf(path, sizeof(path),
                        "/sys/devices/system/cpu/cpu%u/topology/physical_package_id",
-                       index);
+                       cpu_id);
         int64_t package = 0;
         if (!infiltratr_read_i64_file(path, &package) ||
             package < INT_MIN || package > INT_MAX)
