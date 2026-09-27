@@ -10,6 +10,7 @@
 - Keep thermal warning/fault pairs on one provenance, distinguish unavailable thermal telemetry from a nominal reading, and expand the documented fallback table for additional Intel Core Ultra U and AMD Ryzen 9000 processors.
 - Report durable preference and column-layout write failures instead of silently discarding them, remove the remaining bounded GPU-name concatenation, and remove a redundant Overview refresh from the global refresh path.
 - Extend deterministic thermal regression coverage for warning-only, critical-only and newly covered processor-table cases.
+- Keep the process-scan failure flag scoped to the authoritative `/proc` enumeration path so the hardened failure contract builds cleanly under strict C17 warnings.
 
 ## 1.0.138 - 2026-09-27
 
