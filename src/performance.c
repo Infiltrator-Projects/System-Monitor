@@ -141,8 +141,14 @@ static void make_large_value(GtkWidget *label)
 {
     PangoAttrList *attributes = pango_attr_list_new();
     pango_attr_list_insert(attributes, pango_attr_size_new(16 * PANGO_SCALE));
+    PangoAttribute *features = pango_attr_font_features_new("tnum=1");
+    if (features) pango_attr_list_insert(attributes, features);
     gtk_label_set_attributes(GTK_LABEL(label), attributes);
     pango_attr_list_unref(attributes);
+
+    /* Live numeric text must not change the surrounding page requisition every
+     * sample merely because proportional digit glyphs have different widths. */
+    gtk_label_set_width_chars(GTK_LABEL(label), 11);
 }
 
 const char *performance_page_colour(LsmPageType type)
