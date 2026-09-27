@@ -17,6 +17,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void rounded_rectangle(cairo_t *cr, double x, double y,
                               double width, double height, double radius)
@@ -122,17 +123,24 @@ static void append_series_segment(cairo_t *cr,
     }
 }
 
-static bool make_series_path(cairo_t *cr,
-                             const LsmSampleHistory *history,
-                             double maximum, double width, double height,
-                             bool close_to_baseline, bool smooth,
-                             size_t visible_points, bool newer_on_right,
-                             bool logarithmic)
-{
-    bool any = false;
+typedef struct {
     double x[LSM_HISTORY_LENGTH];
     double y[LSM_HISTORY_LENGTH];
-    size_t segment_count = 0U;
+    size_t segment_offset[LSM_HISTORY_LENGTH];
+    size_t segment_length[LSM_HISTORY_LENGTH];
+    size_t point_count;
+    size_t segment_count;
+} LsmSeriesGeometry;
+
+static bool build_series_geometry(const LsmSampleHistory *history,
+                                  double maximum, double width, double height,
+                                  size_t visible_points,
+                                  bool newer_on_right, bool logarithmic,
+                                  LsmSeriesGeometry *geometry)
+{
+    if (!history || !geometry || maximum <= 0.0) return false;
+    memset(geometry, 0, sizeof(*geometry));
+
     const size_t points =
         visible_points > 0U && visible_points < history->count
             ? visible_points : history->count;
@@ -142,38 +150,67 @@ static bool make_series_path(cairo_t *cr,
     const size_t end =
         !newer_on_right && history->count > points
             ? points : history->count;
+    const size_t display_count = end - start;
+    size_t active_offset = 0U;
+    size_t active_length = 0U;
 
-    for (size_t logical = start; logical <= end; logical++) {
-        const bool valid =
-            logical < end && lsm_sample_history_is_valid(history, logical);
-        if (valid) {
-            const size_t display_index = logical - start;
-            const size_t display_count = end - start;
-            x[segment_count] = display_count > 1U
-                ? width * (double)display_index /
-                    (double)(display_count - 1U) : 0.0;
-            const double value =
-                fmax(0.0, lsm_sample_history_get(history, logical));
-            const double fraction = logarithmic
-                ? log1p(value) / log1p(maximum)
-                : value / maximum;
-            y[segment_count] =
-                height - fmin(height, height * fraction);
-            segment_count++;
-            any = true;
+    for (size_t logical = start; logical < end; logical++) {
+        if (!lsm_sample_history_is_valid(history, logical)) {
+            if (active_length > 0U) {
+                geometry->segment_offset[geometry->segment_count] =
+                    active_offset;
+                geometry->segment_length[geometry->segment_count++] =
+                    active_length;
+                active_length = 0U;
+            }
             continue;
         }
 
-        if (segment_count == 0U) continue;
-        append_series_segment(cr, x, y, segment_count, smooth);
+        if (active_length == 0U)
+            active_offset = geometry->point_count;
+        const size_t display_index = logical - start;
+        const size_t point = geometry->point_count++;
+        geometry->x[point] = display_count > 1U
+            ? width * (double)display_index /
+                (double)(display_count - 1U) : 0.0;
+        const double value =
+            fmax(0.0, lsm_sample_history_get(history, logical));
+        const double fraction = logarithmic
+            ? log1p(value) / log1p(maximum)
+            : value / maximum;
+        geometry->y[point] =
+            height - fmin(height, height * fraction);
+        active_length++;
+    }
+
+    if (active_length > 0U) {
+        geometry->segment_offset[geometry->segment_count] = active_offset;
+        geometry->segment_length[geometry->segment_count++] = active_length;
+    }
+    return geometry->point_count > 0U;
+}
+
+static void append_geometry_path(cairo_t *cr,
+                                 const LsmSeriesGeometry *geometry,
+                                 double height, bool close_to_baseline,
+                                 bool smooth)
+{
+    if (!cr || !geometry) return;
+    for (size_t segment = 0U;
+         segment < geometry->segment_count; segment++) {
+        const size_t offset = geometry->segment_offset[segment];
+        const size_t length = geometry->segment_length[segment];
+        if (length == 0U) continue;
+        append_series_segment(
+            cr, geometry->x + offset, geometry->y + offset,
+            length, smooth);
         if (close_to_baseline) {
-            cairo_line_to(cr, x[segment_count - 1U], height);
-            cairo_line_to(cr, x[0], height);
+            cairo_line_to(
+                cr, geometry->x[offset + length - 1U], height);
+            cairo_line_to(cr, geometry->x[offset], height);
             cairo_close_path(cr);
         }
-        segment_count = 0U;
     }
-    return any;
 }
 
 static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
@@ -185,24 +222,28 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
 {
     if (history->count < 2 || maximum <= 0.0) return;
 
+    LsmSeriesGeometry geometry;
+    if (!build_series_geometry(
+            history, maximum, width, height, visible_points,
+            newer_on_right, logarithmic, &geometry))
+        return;
+
     if (fill) {
         cairo_new_path(cr);
-        if (make_series_path(cr, history, maximum, width, height, true, smooth,
-                             visible_points, newer_on_right, logarithmic)) {
-            cairo_pattern_t *gradient =
-                cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 0.0, colour->red, colour->green, colour->blue,
-                compact ? 0.22 : 0.38);
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 0.58, colour->red, colour->green, colour->blue,
-                compact ? 0.14 : 0.20);
-            cairo_pattern_add_color_stop_rgba(
-                gradient, 1.0, colour->red, colour->green, colour->blue, 0.025);
-            cairo_set_source(cr, gradient);
-            cairo_fill(cr);
-            cairo_pattern_destroy(gradient);
-        }
+        append_geometry_path(cr, &geometry, height, true, smooth);
+        cairo_pattern_t *gradient =
+            cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 0.0, colour->red, colour->green, colour->blue,
+            compact ? 0.22 : 0.38);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 0.58, colour->red, colour->green, colour->blue,
+            compact ? 0.14 : 0.20);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 1.0, colour->red, colour->green, colour->blue, 0.025);
+        cairo_set_source(cr, gradient);
+        cairo_fill(cr);
+        cairo_pattern_destroy(gradient);
     }
 
     if (dashed) {
@@ -213,17 +254,15 @@ static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
     }
 
     cairo_new_path(cr);
-    if (make_series_path(cr, history, maximum, width, height, false, smooth,
-                             visible_points, newer_on_right, logarithmic)) {
-        cairo_set_source_rgba(
-            cr, colour->red, colour->green, colour->blue,
-            compact ? 0.16 : 0.20);
-        cairo_set_line_width(cr, compact ? 5.0 : 7.0);
-        cairo_stroke_preserve(cr);
-        cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
-        cairo_set_line_width(cr, compact ? 1.55 : 1.85);
-        cairo_stroke(cr);
-    }
+    append_geometry_path(cr, &geometry, height, false, smooth);
+    cairo_set_source_rgba(
+        cr, colour->red, colour->green, colour->blue,
+        compact ? 0.16 : 0.20);
+    cairo_set_line_width(cr, compact ? 5.0 : 7.0);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
+    cairo_set_line_width(cr, compact ? 1.55 : 1.85);
+    cairo_stroke(cr);
     cairo_set_dash(cr, NULL, 0, 0.0);
 }
 
