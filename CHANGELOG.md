@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.135 - 2026-09-27
+
+- Add explicit `--system-package-mode` support so Infiltrator OS can invoke the released native `.run` from a package-manager root context while ordinary interactive root builds remain refused.
+- In that mode, missing Debian-family build prerequisites are installed directly with `apt-get` and the locally built package is installed directly with `dpkg`, avoiding a redundant sudo boundary.
+- Preserve the aggressive local-build contract: target-machine ISA/tuning, `-O3`, LTO and measured two-pass PGO.
+
 ## 1.0.134 - 2026-09-27
 
 - Repair the 1.0.133 canonical verification failure without weakening any gate: restore final newlines to the files touched by the monitor-ownership/window-fitting pass.
