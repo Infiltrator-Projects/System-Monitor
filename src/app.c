@@ -73,6 +73,106 @@ static void constrain_initial_window_geometry(LsmApp *app)
         app->runtime.window_height = maximum_height;
 }
 
+#ifdef LSM_TEST_OVERVIEW_GEOMETRY
+static GtkAllocation overview_geometry_baseline[LSM_OVERVIEW_METRIC_COUNT];
+
+static gboolean verify_overview_geometry_stability(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !app->shell.window) exit(EXIT_FAILURE);
+
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        LsmGraph *graph = app->overview.graphs[metric];
+        if (!graph || !graph->area) exit(EXIT_FAILURE);
+        GtkAllocation current;
+        gtk_widget_get_allocation(graph->area, &current);
+        if (current.width != overview_geometry_baseline[metric].width ||
+            current.height != overview_geometry_baseline[metric].height) {
+            fprintf(
+                stderr,
+                "Overview graph %zu changed allocation from %dx%d to %dx%d\n",
+                metric,
+                overview_geometry_baseline[metric].width,
+                overview_geometry_baseline[metric].height,
+                current.width, current.height);
+            exit(EXIT_FAILURE);
+        }
+    }
+    g_application_quit(G_APPLICATION(app->application));
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean capture_overview_geometry_and_expand_labels(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !app->runtime.page_built[LSM_TAB_OVERVIEW])
+        return G_SOURCE_CONTINUE;
+
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        LsmGraph *graph = app->overview.graphs[metric];
+        if (!graph || !graph->area || !app->overview.values[metric] ||
+            !app->overview.details[metric])
+            return G_SOURCE_CONTINUE;
+        gtk_widget_get_allocation(
+            graph->area, &overview_geometry_baseline[metric]);
+        if (overview_geometry_baseline[metric].width <= 0 ||
+            overview_geometry_baseline[metric].height <= 0)
+            return G_SOURCE_CONTINUE;
+    }
+
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        gtk_label_set_text(
+            GTK_LABEL(app->overview.values[metric]),
+            "999.99 GB/s — deliberately long live metric");
+        gtk_label_set_text(
+            GTK_LABEL(app->overview.details[metric]),
+            "Long availability and telemetry detail used to verify stable card geometry");
+    }
+    g_timeout_add(180U, verify_overview_geometry_stability, app);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean prepare_overview_geometry_test(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || !app->shell.window ||
+        !app->runtime.page_built[LSM_TAB_OVERVIEW])
+        return G_SOURCE_CONTINUE;
+
+    GdkScreen *screen = gtk_window_get_screen(GTK_WINDOW(app->shell.window));
+    gint monitor = screen ? gdk_screen_get_primary_monitor(screen) : -1;
+    if (screen && monitor < 0) monitor = 0;
+    GdkRectangle workarea = {0, 0, 0, 0};
+    if (screen) gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+    gint width = 0;
+    gint height = 0;
+    gtk_window_get_size(GTK_WINDOW(app->shell.window), &width, &height);
+    if (workarea.width > 0 && workarea.height > 0 &&
+        (width > workarea.width || height > workarea.height)) {
+        fprintf(
+            stderr, "Window %dx%d exceeds work area %dx%d\n",
+            width, height, workarea.width, workarea.height);
+        exit(EXIT_FAILURE);
+    }
+    if (workarea.width > 0 &&
+        workarea.width < LSM_COMPACT_LAYOUT_THRESHOLD &&
+        !app->runtime.compact_layout) {
+        fputs("Compact layout was not selected for the narrow work area\n",
+              stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
+        if (!app->overview.values[metric] || !app->overview.details[metric])
+            return G_SOURCE_CONTINUE;
+        gtk_label_set_text(GTK_LABEL(app->overview.values[metric]), "1%");
+        gtk_label_set_text(GTK_LABEL(app->overview.details[metric]), "Idle");
+    }
+    g_timeout_add(180U, capture_overview_geometry_and_expand_labels, app);
+    return G_SOURCE_REMOVE;
+}
+#endif
+
 static bool app_paths_initialise(LsmApp *app)
 {
     if (!app) return false;
@@ -352,6 +452,9 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 #endif
 #ifdef LSM_TEST_PAGE_INDEX
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->shell.notebook), LSM_TEST_PAGE_INDEX);
+#endif
+#ifdef LSM_TEST_OVERVIEW_GEOMETRY
+    g_timeout_add(120U, prepare_overview_geometry_test, app);
 #endif
 #ifdef LSM_TEST_LOGICAL
     gtk_stack_set_visible_child_name(GTK_STACK(app->performance.cpu_graph_stack), "logical");

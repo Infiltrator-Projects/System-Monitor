@@ -196,6 +196,23 @@ jobs:
             exit 1
           fi
 
+      - name: Verify GTK Overview geometry at 1024x768
+        if: runner.environment == 'github-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-overview-geometry \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DLSM_TEST_PAGE_INDEX=8 -DLSM_TEST_OVERVIEW_GEOMETRY=1"
+          cmake --build build-overview-geometry --target system-monitor --parallel 2
+          status=0
+          timeout 10s xvfb-run -a -s "-screen 0 1024x768x24" \
+            ./build-overview-geometry/system-monitor || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Overview geometry regression failed with status $status." >&2
+            exit 1
+          fi
+
       - name: Verify GTK Memory resource navigation
         if: runner.environment == 'github-hosted'
         shell: bash
