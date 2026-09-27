@@ -745,7 +745,7 @@ process-export-smoke: | $(BUILD_DIR)
 # Instrument deterministic accounting, parsing, selection, formatting and
 # cadence modules. The consolidated subsystem runners exercise the same case
 # bodies while four executables replace seventeen one-case coverage programs.
-COVERAGE_METRICS_SOURCES := src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c
+COVERAGE_METRICS_SOURCES := src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c src/thermal_policy.c
 COVERAGE_STORAGE_SOURCES := src/mountinfo.c src/storage_metadata.c src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c src/smbios_memory.c src/system_sources.c
 COVERAGE_PROCESS_SOURCES := src/process_model.c src/process_grouping.c src/process_gpu.c src/process_inspection.c src/process_backend_linux.c
 COVERAGE_ACCELERATOR_SOURCES := src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
