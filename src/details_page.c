@@ -207,7 +207,7 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
             } else {
                 guint value = 0;
                 gtk_tree_model_get(model, iter, column, &value, -1);
-                if (column == PROC_COL_HANDLE_COUNT && value == G_MAXUINT)
+                if (column == PROC_COL_HANDLE_COUNT && value == UINT_MAX)
                     snprintf(text, sizeof(text), "N/A");
                 else
                     snprintf(text, sizeof(text), "%u", value);
@@ -630,7 +630,7 @@ static void set_process_row(GtkTreeStore *store, GtkTreeIter *iter,
         PROC_COL_WRITE_TOTAL, process->io_totals_available
             ? process->write_bytes : UINT64_MAX,
         PROC_COL_HANDLE_COUNT, process->handle_count_available
-            ? process->handle_count : G_MAXUINT,
+            ? process->handle_count : UINT_MAX,
         PROC_COL_CONTEXT_SWITCHES, process->context_switches,
         PROC_COL_PAGE_FAULTS, process->page_faults,
         PROC_COL_PRIORITY, (gint)process->priority,

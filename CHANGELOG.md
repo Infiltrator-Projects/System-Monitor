@@ -4,6 +4,7 @@
 
 - Bind Linux network counter baselines and topology changes to interface instance identity, reject truncated/interrupted rtnetlink dumps, and make IPv4 selection deterministic.
 - Preserve process I/O and handle-count availability across permission/read gaps so missing telemetry is shown as unavailable and recovery cannot create false rate spikes.
+- Use the portable C UINT_MAX sentinel in the GTK Details model so strict C17 verification and the real GTK build share the same unavailable-handle representation.
 - Bound Windows volume extent parsing by the actual IOCTL payload and use adapter LUID identity for topology changes.
 - Enumerate the actual online Linux cpuN identifiers for cache/socket topology instead of assuming dense CPU numbering.
 - Add narrow-window layout policy: compact Linux navigation rails below the responsive breakpoint, shrink the Performance device rail with them, and clamp native Windows startup/minimum geometry to the desktop work area.
