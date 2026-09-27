@@ -77,6 +77,13 @@ typedef struct {
     char device_syspath[LSM_PATH_LEN]; /**< Canonical backing-device path. */
 } LsmGpuRecord;
 
+/** One CPU thermal sample and its native limit metadata. */
+typedef struct {
+    double temperature_c;
+    double warning_c;
+    double critical_c;
+} LsmCpuThermalSample;
+
 /**
  * Create the native Linux source context and its rtnetlink sockets.
  *
@@ -167,7 +174,17 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
                              size_t capacity);
 
 /**
- * Read the best available CPU/package temperature from native sensor paths.
+ * Read the best available CPU/package temperature and native limits.
+ *
+ * @param [in,out] sources Native-source context supplying the sysfs root.
+ * @param [out] sample Current temperature and optional native thresholds.
+ * @return true when a valid current CPU temperature was found.
+ */
+bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
+                                  LsmCpuThermalSample *sample);
+
+/**
+ * Read only the best available CPU/package temperature.
  *
  * @param [in,out] sources Native-source context supplying the sysfs root.
  * @return Temperature in degrees Celsius, or NAN when unavailable.

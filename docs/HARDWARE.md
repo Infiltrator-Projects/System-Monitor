@@ -35,6 +35,8 @@ CPU and memory data comes from Linux procfs/sysfs, CPUID where applicable, `sysi
 
 Missing frequency or temperature data must not invalidate independently collected CPU utilisation or memory values. Memory quantities derived from Linux `kB` interfaces use exactly 1024 bytes per KB.
 
+CPU thermal status is processor-aware. The Linux collector prefers the selected CPU/package hwmon channel's native `temp*_max`/Tcontrol warning point and `temp*_crit`/Tjmax critical point; explicitly CPU-labelled thermal-zone hot/critical trip points are the fallback native source. If Linux exposes no threshold, a manufacturer-documented SKU table supplies Tjmax and derives warning at 10 °C below it. Unknown processors retain the conservative 80 °C warning / 95 °C fault fallback. Overview and the CPU Performance page consume the same resolved policy so they cannot disagree about the same CPU temperature.
+
 ## Storage and filesystems
 
 Disk inventory, activity and filesystem state use native Linux metadata. Retained accounting state is separate from public snapshots and is reconciled against current device identity.

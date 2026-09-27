@@ -14,6 +14,7 @@
 #include "performance_internal.h"
 #include "performance_view.h"
 #include "temporal_presentation.h"
+#include "thermal_policy.h"
 
 #include "common.h"
 #include "metric_format.h"
@@ -94,10 +95,13 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
             metric_widgets[index], "%s", view.metrics[index]);
     }
 
+    LsmThermalPolicy thermal_policy;
+    (void)lsm_cpu_thermal_policy(cpu, &thermal_policy);
     performance_present_set_temperature_state(
         widgets->temperature,
         cpu->temperature_available && isfinite(cpu->temperature_c),
-        cpu->temperature_c, 80.0, 95.0);
+        cpu->temperature_c,
+        thermal_policy.warning_c, thermal_policy.fault_c);
 
     GtkWidget *detail_widgets[LSM_CPU_DETAIL_COUNT] = {
         widgets->cores,

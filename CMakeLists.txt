@@ -332,7 +332,8 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/sample_history.c
         src/overview_history.c
         src/gpu_metrics.c
-        src/performance_selection.c)
+        src/performance_selection.c
+        src/thermal_policy.c)
 
     add_executable(lsm-storage-suite-smoke
         support/tests/storage_smoke.c

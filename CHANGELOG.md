@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.128 - 2026-09-27
+
+- Replace the Overview and CPU-page hard-coded 80/95 °C thermal thresholds with one processor-aware policy.
+- Prefer native Linux hwmon Tcontrol/max and Tjmax/critical limits from the same selected CPU/package sensor; accept explicitly CPU-labelled thermal-zone hot/critical trip points as the native fallback.
+- Add an internal manufacturer-documented CPU limit table for systems that expose temperature but not thresholds, including the 110 °C Core Ultra 5 125U limit and thermally distinct 89 °C Ryzen X3D examples; unknown CPUs retain the conservative 80/95 °C fallback.
+- Keep Overview and CPU Performance warning/fault colours on the same resolved thresholds and add deterministic sensor/table/fallback regression coverage.
+
 ## 1.0.127 - 2026-09-26
 
 - Replace the generic Linux window decoration with the same branded client-side title-bar language used by System Settings: dark blue shell gradient, application icon block, product title/subtitle and explicit window controls.

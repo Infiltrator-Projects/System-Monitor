@@ -65,6 +65,10 @@ typedef struct {
     double max_frequency_ghz;
     double temperature_c;
     bool temperature_available;       /**< CPU temperature is a valid sampled value. */
+    double temperature_warning_c;    /**< Native Tcontrol/max warning threshold when exposed. */
+    bool temperature_warning_available; /**< Native warning threshold is valid. */
+    double temperature_critical_c;    /**< Native critical/Tjmax threshold when exposed. */
+    bool temperature_critical_available; /**< Native critical threshold is valid. */
     unsigned process_count;
     unsigned thread_count;
     uint64_t uptime_seconds;          /**< Seconds elapsed since the current boot. */

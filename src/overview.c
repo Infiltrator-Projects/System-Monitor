@@ -20,6 +20,7 @@
 #include "performance.h"
 #include "presentation_contract.h"
 #include "temporal_presentation.h"
+#include "thermal_policy.h"
 #include "ui_helpers.h"
 
 #include <math.h>
@@ -1164,11 +1165,21 @@ static void overview_set_latest_values(LsmApp *app,
         GtkStyleContext *style = gtk_widget_get_style_context(status);
         gtk_style_context_remove_class(style, "lsm-status-warning");
         gtk_style_context_remove_class(style, "lsm-status-fault");
-        if (sample->temperature_available && sample->temperature_c >= 95.0) {
+        double warning_c = 80.0;
+        double fault_c = 95.0;
+        if (sample->temperature_source == LSM_OVERVIEW_TEMPERATURE_CPU) {
+            LsmThermalPolicy thermal_policy;
+            if (lsm_cpu_thermal_policy(&app->monitor.cpu, &thermal_policy)) {
+                warning_c = thermal_policy.warning_c;
+                fault_c = thermal_policy.fault_c;
+            }
+        }
+        if (sample->temperature_available &&
+            sample->temperature_c >= fault_c) {
             lsm_ui_set_label_text(status, "●  Thermal Fault");
             gtk_style_context_add_class(style, "lsm-status-fault");
         } else if (sample->temperature_available &&
-                   sample->temperature_c >= 80.0) {
+                   sample->temperature_c >= warning_c) {
             lsm_ui_set_label_text(status, "●  Thermal Warning");
             gtk_style_context_add_class(style, "lsm-status-warning");
         } else {

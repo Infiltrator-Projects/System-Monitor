@@ -19,6 +19,7 @@ int smoke_case_sample_history(void);
 int smoke_case_overview_history(void);
 int smoke_case_gpu_metrics(void);
 int smoke_case_performance_navigation(void);
+int smoke_case_thermal_policy(void);
 
 /* ---- cpu_accounting ---- */
 #define main smoke_case_cpu_accounting
@@ -997,6 +998,64 @@ int main(void)
 #undef TEST_BUTTON_COUNT
 #undef TEST_SWITCH_COUNT
 
+/* ---- thermal_policy ---- */
+#define main smoke_case_thermal_policy
+/**
+ * @file thermal_policy_smoke.c
+ * @brief Processor-aware thermal threshold regression coverage.
+ */
+#include "common.h"
+#include "thermal_policy.h"
+
+#include <math.h>
+#include <string.h>
+
+int main(void)
+{
+    LsmCpuInfo cpu;
+    LsmThermalPolicy policy;
+    memset(&cpu, 0, sizeof(cpu));
+
+    lsm_copy_string(
+        cpu.model, sizeof(cpu.model),
+        "Intel(R) Core(TM) Ultra 5 125U");
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_MODEL_TABLE ||
+        fabs(policy.warning_c - 100.0) > 0.01 ||
+        fabs(policy.fault_c - 110.0) > 0.01)
+        return 1;
+
+    memset(&cpu, 0, sizeof(cpu));
+    lsm_copy_string(
+        cpu.model, sizeof(cpu.model),
+        "AMD Ryzen 7 7800X3D 8-Core Processor");
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        fabs(policy.warning_c - 79.0) > 0.01 ||
+        fabs(policy.fault_c - 89.0) > 0.01)
+        return 2;
+
+    cpu.temperature_warning_available = true;
+    cpu.temperature_warning_c = 83.0;
+    cpu.temperature_critical_available = true;
+    cpu.temperature_critical_c = 91.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 83.0) > 0.01 ||
+        fabs(policy.fault_c - 91.0) > 0.01)
+        return 3;
+
+    memset(&cpu, 0, sizeof(cpu));
+    lsm_copy_string(cpu.model, sizeof(cpu.model), "Unknown Future Processor");
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_FALLBACK ||
+        fabs(policy.warning_c - 80.0) > 0.01 ||
+        fabs(policy.fault_c - 95.0) > 0.01)
+        return 4;
+
+    return 0;
+}
+#undef main
+
 typedef int (*LsmMergedSmokeCaseFunction)(void);
 typedef struct { const char *name; LsmMergedSmokeCaseFunction function; } LsmMergedSmokeCase;
 
@@ -1013,6 +1072,7 @@ int main(void)
         {"overview_history", smoke_case_overview_history},
         {"gpu_metrics", smoke_case_gpu_metrics},
         {"performance_navigation", smoke_case_performance_navigation},
+        {"thermal_policy", smoke_case_thermal_policy},
     };
     const size_t count = sizeof(cases) / sizeof(cases[0]);
     for (size_t i = 0U; i < count; ++i) {

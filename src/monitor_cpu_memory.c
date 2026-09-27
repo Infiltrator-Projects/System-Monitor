@@ -371,11 +371,28 @@ static double read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum)
     return 0.0;
 }
 
-static double read_temperature_c(LsmMonitor *monitor)
+static void read_cpu_thermal(LsmMonitor *monitor)
 {
+    if (!monitor) return;
+    LsmCpuInfo *cpu = &monitor->cpu;
+    cpu->temperature_c = NAN;
+    cpu->temperature_available = false;
+    cpu->temperature_warning_c = NAN;
+    cpu->temperature_warning_available = false;
+    cpu->temperature_critical_c = NAN;
+    cpu->temperature_critical_available = false;
+
     LsmSystemSources *sources = monitor_system_sources(monitor);
-    if (!sources) return NAN;
-    return lsm_sources_read_cpu_temperature(sources);
+    LsmCpuThermalSample sample;
+    if (!sources || !lsm_sources_read_cpu_thermal(sources, &sample))
+        return;
+
+    cpu->temperature_c = sample.temperature_c;
+    cpu->temperature_available = isfinite(sample.temperature_c);
+    cpu->temperature_warning_c = sample.warning_c;
+    cpu->temperature_warning_available = isfinite(sample.warning_c);
+    cpu->temperature_critical_c = sample.critical_c;
+    cpu->temperature_critical_available = isfinite(sample.critical_c);
 }
 
 
@@ -470,9 +487,7 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
     monitor->cpu.frequency_ghz = read_cpu_frequency_ghz(monitor, false);
     if (monitor->cpu.max_frequency_ghz <= 0.0)
         monitor->cpu.max_frequency_ghz = read_cpu_frequency_ghz(monitor, true);
-    monitor->cpu.temperature_c = read_temperature_c(monitor);
-    monitor->cpu.temperature_available =
-        isfinite(monitor->cpu.temperature_c);
+    read_cpu_thermal(monitor);
     const double now = lsm_monotonic_seconds();
     const bool refresh_memory_details = lsm_refresh_interval_due(
         now, state->last_memory_detail_monotonic, 10.0);

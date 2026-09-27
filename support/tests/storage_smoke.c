@@ -692,6 +692,8 @@ static bool setup_fixture(char *root, size_t root_size)
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/name", "coretemp\n");
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_input", "42000\n");
     FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_label", "Package id 0\n");
+    FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_max", "100000\n");
+    FIXTURE_FILE("/sys/class/hwmon/hwmon0/temp1_crit", "110000\n");
     /* A generic ACPI zone can describe a board/chassis sensor. It must not
      * outrank an explicitly identified CPU package source merely because its
      * label contains CPU or its temperature is higher. */
@@ -732,6 +734,9 @@ int main(void)
     const size_t network_count = lsm_sources_list_networks(sources, networks, 4);
     const size_t gpu_count = lsm_sources_list_gpus(sources, gpus, 4);
     const double temperature = lsm_sources_read_cpu_temperature(sources);
+    LsmCpuThermalSample thermal = {0};
+    const bool thermal_available =
+        lsm_sources_read_cpu_thermal(sources, &thermal);
 
     if (!lsm_join_path(path, sizeof(path), root, "/sys/block/sda/diskseq") ||
         !write_text(path, "303\n"))
@@ -846,7 +851,11 @@ int main(void)
         unmounted_fat12 && unmounted_fat16 && unmounted_fat32 && microsoft_reserved &&
         network_count == 2 && physical_network && hyperv_network &&
         gpu_count == 2 && physical_gpu && hyperv_gpu &&
-        isfinite(temperature) && fabs(temperature - 42.0) < 0.01;
+        isfinite(temperature) && fabs(temperature - 42.0) < 0.01 &&
+        thermal_available &&
+        fabs(thermal.temperature_c - 42.0) < 0.01 &&
+        fabs(thermal.warning_c - 100.0) < 0.01 &&
+        fabs(thermal.critical_c - 110.0) < 0.01;
 
     printf("native disks=%zu mounts=%zu partitions=%zu networks=%zu gpus=%zu temp=%.1f\n",
            disk_count, mount_count, partition_count, network_count, gpu_count,

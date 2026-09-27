@@ -24,6 +24,7 @@ overview_history.c
 overview.c
 performance_selection.c
 presentation_contract.c
+thermal_policy.c
 performance_view.c
 gpu_metrics.c
 performance.c
