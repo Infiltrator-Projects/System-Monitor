@@ -157,6 +157,7 @@ static bool maintained_markdown_path(const char *path)
         "./docs/VALIDATION.md",
         "./docs/PORTABILITY.md",
         "./docs/HARDWARE.md",
+        "./docs/LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md",
         "./docs/design/system-monitor-ui-vision.md",
         "./.github/CODE_OF_CONDUCT.md"
     };
@@ -199,6 +200,7 @@ static void check_markdown_policy(void)
         "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
         "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
         "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        "docs/LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md",
         "docs/design/system-monitor-ui-vision.md",
         ".github/CODE_OF_CONDUCT.md"
     };
