@@ -72,6 +72,7 @@ static void *scanner_thread_main(void *user_data)
         LsmProcessInfo *processes = NULL;
         const size_t count = lsm_process_scan(
             scanner->backend, &processes, flags);
+        const bool scan_succeeded = processes != NULL;
 
         (void)pthread_mutex_lock(&scanner->mutex);
         scanner->scan_in_progress = false;
@@ -80,10 +81,16 @@ static void *scanner_thread_main(void *user_data)
             lsm_process_list_free(processes);
             break;
         }
-        lsm_process_list_free(scanner->completed);
-        scanner->completed = processes;
-        scanner->completed_count = count;
-        scanner->result_ready = true;
+        if (scan_succeeded) {
+            lsm_process_list_free(scanner->completed);
+            scanner->completed = processes;
+            scanner->completed_count = count;
+            scanner->result_ready = true;
+        } else {
+            /* Keep the last completed snapshot authoritative. A backend failure
+             * is not the same thing as a valid machine with zero processes. */
+            lsm_process_list_free(processes);
+        }
         (void)pthread_mutex_unlock(&scanner->mutex);
     }
 
