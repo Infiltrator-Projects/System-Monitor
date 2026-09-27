@@ -39,13 +39,17 @@ int main(void)
     process.instance_id = UINT64_C(9876543210);
     process.priority = LSM_PROCESS_PRIORITY_ABOVE_NORMAL;
     process.handle_count = 42U;
+    process.handle_count_available = true;
+    process.io_totals_available = true;
+    process.io_rate_available = true;
     (void)snprintf(process.account_identity, sizeof(process.account_identity),
                    "%s", "opaque-account-identity");
 
     if (process.pid != UINT64_C(4294967297) ||
         process.ppid != UINT64_C(4294967296) ||
         process.instance_id != UINT64_C(9876543210) ||
-        process.handle_count != 42U ||
+        process.handle_count != 42U || !process.handle_count_available ||
+        !process.io_totals_available || !process.io_rate_available ||
         strcmp(process.account_identity, "opaque-account-identity") != 0 ||
         strcmp(lsm_process_priority_name(process.priority), "Above normal") != 0) {
         fputs("Platform-neutral process model failed.\n", stderr);
@@ -83,6 +87,7 @@ int main(void)
         .rss_bytes = 28ULL * 1024ULL * 1024ULL * 1024ULL,
         .read_bytes_per_sec = 1024.0,
         .write_bytes_per_sec = 1048576.0,
+        .io_rate_available = true,
         .gpu_percent = 18.0,
         .gpu_available = true,
         .efficiency_mode = true
@@ -95,7 +100,7 @@ int main(void)
         metrics.memory_bytes != 30064771072ULL ||
         fabs(metrics.disk_bytes_per_sec - 1049600.0) > 0.0001 ||
         fabs(metrics.gpu_percent - 18.0) > 0.0001 ||
-        !metrics.gpu_available ||
+        !metrics.gpu_available || !metrics.disk_available ||
         strcmp(metrics.gpu_engine, "render") != 0 ||
         !metrics.all_stopped || !metrics.all_efficient)
         return 1;
@@ -105,6 +110,7 @@ int main(void)
         .rss_bytes = UINT64_MAX,
         .read_bytes_per_sec = INFINITY,
         .write_bytes_per_sec = -5.0,
+        .io_rate_available = true,
         .efficiency_mode = false
     };
     strcpy(second.state, "Running");

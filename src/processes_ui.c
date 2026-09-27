@@ -53,6 +53,7 @@ enum {
     GROUPED_COL_CPU,
     GROUPED_COL_MEMORY,
     GROUPED_COL_DISK,
+    GROUPED_COL_DISK_AVAILABLE,
     GROUPED_COL_GPU,
     GROUPED_COL_GPU_ENGINE,
     GROUPED_COL_GPU_AVAILABLE,
@@ -453,10 +454,17 @@ static void grouped_cell_data(GtkTreeViewColumn *column,
             heat_value = value;
         }
     } else {
+        gboolean available = FALSE;
         double value = 0.0;
-        gtk_tree_model_get(model, iter, model_column, &value, -1);
-        lsm_format_rate(value, text, sizeof(text));
-        heat_value = fmin(log10(value + 1.0) / 9.0 * 100.0, 100.0);
+        gtk_tree_model_get(model, iter,
+                           GROUPED_COL_DISK, &value,
+                           GROUPED_COL_DISK_AVAILABLE, &available, -1);
+        if (!available) {
+            snprintf(text, sizeof(text), "N/A");
+        } else {
+            lsm_format_rate(value, text, sizeof(text));
+            heat_value = fmin(log10(value + 1.0) / 9.0 * 100.0, 100.0);
+        }
     }
     g_object_set(renderer, "text", text, NULL);
     if (!app->details.process_heatmap || heat_value <= 0.0) {
@@ -593,6 +601,7 @@ static void set_process_child_row(LsmApp *app,
         GROUPED_COL_CPU, process->cpu_percent,
         GROUPED_COL_MEMORY, process->rss_bytes,
         GROUPED_COL_DISK, isfinite(disk) && disk > 0.0 ? disk : 0.0,
+        GROUPED_COL_DISK_AVAILABLE, process->io_rate_available,
         GROUPED_COL_GPU, process->gpu_percent,
         GROUPED_COL_GPU_ENGINE,
             process->gpu_available && process->gpu_engine[0]
@@ -624,6 +633,7 @@ static void set_group_row(LsmApp *app, const ProcessGroup *group,
         GROUPED_COL_CPU, group->metrics.cpu_percent,
         GROUPED_COL_MEMORY, group->metrics.memory_bytes,
         GROUPED_COL_DISK, group->metrics.disk_bytes_per_sec,
+        GROUPED_COL_DISK_AVAILABLE, group->metrics.disk_available,
         GROUPED_COL_GPU, group->metrics.gpu_percent,
         GROUPED_COL_GPU_ENGINE,
             group->metrics.gpu_available && group->metrics.gpu_engine[0]
@@ -833,6 +843,7 @@ static void rebuild_grouped_model(LsmApp *app, GPtrArray *groups)
             GROUPED_COL_CPU, 0.0,
             GROUPED_COL_MEMORY, (guint64)0U,
             GROUPED_COL_DISK, 0.0,
+            GROUPED_COL_DISK_AVAILABLE, FALSE,
             GROUPED_COL_GPU_ENGINE, "",
             GROUPED_COL_PID, 0,
             GROUPED_COL_KIND, PROCESS_ROW_CATEGORY,
@@ -1107,8 +1118,8 @@ void lsm_processes_build(LsmApp *app, GtkWidget *container)
 
     app->processes.processes_store = gtk_tree_store_new(GROUPED_N_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_DOUBLE,
-        G_TYPE_UINT64, G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_STRING,
-        G_TYPE_BOOLEAN,
+        G_TYPE_UINT64, G_TYPE_DOUBLE, G_TYPE_BOOLEAN, G_TYPE_DOUBLE,
+        G_TYPE_STRING, G_TYPE_BOOLEAN,
         G_TYPE_UINT64, G_TYPE_INT, G_TYPE_STRING);
     app->processes.processes_tree = gtk_tree_view_new_with_model(
         GTK_TREE_MODEL(app->processes.processes_store));

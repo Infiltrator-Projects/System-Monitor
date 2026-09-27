@@ -61,6 +61,7 @@ typedef struct {
     GtkWidget *family_status;
     char executable[LSM_PATH_LEN];
     unsigned descriptor_count;
+    gboolean descriptor_count_available;
     LsmGraph *performance_graph;
     guint refresh_timer;
     gboolean inventory_pending;
@@ -79,6 +80,7 @@ typedef struct {
     gboolean identity_valid; /**< Whether the original process instance still exists. */
     char executable[LSM_PATH_LEN];
     unsigned descriptor_count;
+    gboolean descriptor_count_available;
     LsmProcessInfo details;
     gboolean details_valid;
     LsmOpenFileInfo *open_files;
@@ -411,6 +413,7 @@ static void process_inventory_worker(GTask *task, gpointer source_object,
         lsm_copy_string(result->executable, sizeof(result->executable),
                         details.executable);
         result->descriptor_count = details.handle_count;
+        result->descriptor_count_available = details.handle_count_available;
         result->details = details;
         result->details_valid = TRUE;
     }
@@ -450,6 +453,7 @@ static void process_inventory_complete(GObject *source_object,
     lsm_copy_string(inspector->executable, sizeof(inspector->executable),
                     result->executable);
     inspector->descriptor_count = result->descriptor_count;
+    inspector->descriptor_count_available = result->descriptor_count_available;
     inspector->technical_details_valid = result->details_valid;
     if (result->details_valid)
         inspector->technical_details = result->details;
@@ -508,6 +512,7 @@ static gboolean inspector_update(gpointer user_data)
     lsm_copy_string(process.executable, sizeof(process.executable),
                     inspector->executable);
     process.handle_count = inspector->descriptor_count;
+    process.handle_count_available = inspector->descriptor_count_available;
     if (inspector->technical_details_valid &&
         inspector->technical_details.pid == process.pid &&
         inspector->technical_details.instance_id == process.instance_id) {
@@ -604,8 +609,13 @@ static gboolean inspector_update(gpointer user_data)
     const double cpu_value = displayed_cpu(inspector->app, process.cpu_percent);
     snprintf(cpu, sizeof(cpu), "%.1f%%", cpu_value);
     snprintf(memory, sizeof(memory), "%.1f%%", process.memory_percent);
-    lsm_format_rate(process.read_bytes_per_sec, read_rate, sizeof(read_rate));
-    lsm_format_rate(process.write_bytes_per_sec, write_rate, sizeof(write_rate));
+    if (process.io_rate_available) {
+        lsm_format_rate(process.read_bytes_per_sec, read_rate, sizeof(read_rate));
+        lsm_format_rate(process.write_bytes_per_sec, write_rate, sizeof(write_rate));
+    } else {
+        lsm_copy_string(read_rate, sizeof(read_rate), "N/A");
+        lsm_copy_string(write_rate, sizeof(write_rate), "N/A");
+    }
     set_large_metric(inspector->cpu_value, cpu);
     set_large_metric(inspector->memory_value, memory);
     set_large_metric(inspector->read_value, read_rate);

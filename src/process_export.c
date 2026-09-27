@@ -117,14 +117,20 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
     char gpu_percent[64];
     if (!infiltratr_format_fixed_ascii(
             process->cpu_percent, 3U, cpu_percent, sizeof(cpu_percent)) ||
-        !infiltratr_format_fixed_ascii(
-            process->read_bytes_per_sec, 3U, read_rate, sizeof(read_rate)) ||
-        !infiltratr_format_fixed_ascii(
-            process->write_bytes_per_sec, 3U, write_rate, sizeof(write_rate)) ||
+        (process->io_rate_available &&
+         (!infiltratr_format_fixed_ascii(
+              process->read_bytes_per_sec, 3U, read_rate, sizeof(read_rate)) ||
+          !infiltratr_format_fixed_ascii(
+              process->write_bytes_per_sec, 3U, write_rate,
+              sizeof(write_rate)))) ||
         (process->gpu_available &&
          !infiltratr_format_fixed_ascii(
              process->gpu_percent, 3U, gpu_percent, sizeof(gpu_percent))))
         return false;
+    if (!process->io_rate_available) {
+        read_rate[0] = '\0';
+        write_rate[0] = '\0';
+    }
     if (!csv_field(file, process->name)) return false;
     fprintf(file, ",%llu,%llu,",
             (unsigned long long)process->pid,
@@ -141,10 +147,18 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
     fputc(',', file);
     if (!csv_field(file, process->gpu_engine[0] ? process->gpu_engine : "N/A"))
         return false;
-    fprintf(file, ",%llu,%llu,%llu,%u,%llu,%llu,",
-            (unsigned long long)process->gpu_memory_bytes,
-            (unsigned long long)process->read_bytes,
-            (unsigned long long)process->write_bytes, process->handle_count,
+    fprintf(file, ",%llu,", (unsigned long long)process->gpu_memory_bytes);
+    if (process->io_totals_available)
+        fprintf(file, "%llu,%llu,",
+                (unsigned long long)process->read_bytes,
+                (unsigned long long)process->write_bytes);
+    else
+        fputs(",,", file);
+    if (process->handle_count_available)
+        fprintf(file, "%u,", process->handle_count);
+    else
+        fputc(',', file);
+    fprintf(file, "%llu,%llu,",
             (unsigned long long)process->context_switches,
             (unsigned long long)process->page_faults);
     if (!csv_field(file, lsm_process_priority_name(process->priority)))

@@ -207,7 +207,10 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
             } else {
                 guint value = 0;
                 gtk_tree_model_get(model, iter, column, &value, -1);
-                snprintf(text, sizeof(text), "%u", value);
+                if (column == PROC_COL_HANDLE_COUNT && value == G_MAXUINT)
+                    snprintf(text, sizeof(text), "N/A");
+                else
+                    snprintf(text, sizeof(text), "%u", value);
             }
             break;
         }
@@ -239,6 +242,10 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_RATE: {
             double value = 0.0;
             gtk_tree_model_get(model, iter, column, &value, -1);
+            if (!isfinite(value)) {
+                snprintf(text, sizeof(text), "N/A");
+                break;
+            }
             lsm_format_rate(value, text, sizeof(text));
             heat_value = value;
             break;
@@ -609,16 +616,21 @@ static void set_process_row(GtkTreeStore *store, GtkTreeIter *iter,
         PROC_COL_SHARED_MEMORY, process->shared_memory_available
             ? process->shared_memory_bytes : UINT64_MAX,
         PROC_COL_THREADS, process->threads,
-        PROC_COL_READ_RATE, process->read_bytes_per_sec,
-        PROC_COL_WRITE_RATE, process->write_bytes_per_sec,
+        PROC_COL_READ_RATE, process->io_rate_available
+            ? process->read_bytes_per_sec : NAN,
+        PROC_COL_WRITE_RATE, process->io_rate_available
+            ? process->write_bytes_per_sec : NAN,
         PROC_COL_GPU, process->gpu_available ? process->gpu_percent : NAN,
         PROC_COL_GPU_ENGINE, process->gpu_available && process->gpu_engine[0]
             ? process->gpu_engine : "N/A",
         PROC_COL_GPU_MEMORY, process->gpu_memory_available
             ? process->gpu_memory_bytes : UINT64_MAX,
-        PROC_COL_READ_TOTAL, process->read_bytes,
-        PROC_COL_WRITE_TOTAL, process->write_bytes,
-        PROC_COL_HANDLE_COUNT, process->handle_count,
+        PROC_COL_READ_TOTAL, process->io_totals_available
+            ? process->read_bytes : UINT64_MAX,
+        PROC_COL_WRITE_TOTAL, process->io_totals_available
+            ? process->write_bytes : UINT64_MAX,
+        PROC_COL_HANDLE_COUNT, process->handle_count_available
+            ? process->handle_count : G_MAXUINT,
         PROC_COL_CONTEXT_SWITCHES, process->context_switches,
         PROC_COL_PAGE_FAULTS, process->page_faults,
         PROC_COL_PRIORITY, (gint)process->priority,
