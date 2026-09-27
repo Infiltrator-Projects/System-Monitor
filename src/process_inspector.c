@@ -33,7 +33,7 @@
 #include <string.h>
 #include <time.h>
 
-#define INSPECTOR_OVERVIEW_LABELS 16U
+#define INSPECTOR_OVERVIEW_LABELS 28U
 
 /** Runtime state owned by one non-modal Process Inspector window. */
 typedef struct {
@@ -48,6 +48,9 @@ typedef struct {
     GtkWidget *read_value;
     GtkWidget *write_value;
     GtkWidget *priority_combo;
+    GtkWidget *nice_entry;
+    LsmProcessInfo technical_details;
+    gboolean technical_details_valid;
     GtkListStore *open_files_store;
     GtkListStore *maps_store;
     GtkListStore *threads_store;
@@ -76,6 +79,8 @@ typedef struct {
     gboolean identity_valid; /**< Whether the original process instance still exists. */
     char executable[LSM_PATH_LEN];
     unsigned descriptor_count;
+    LsmProcessInfo details;
+    gboolean details_valid;
     LsmOpenFileInfo *open_files;
     size_t open_file_count;
     LsmMemoryMapInfo *maps;
@@ -166,7 +171,10 @@ static GtkWidget *build_overview_page(ProcessInspector *inspector)
     static const char *captions[INSPECTOR_OVERVIEW_LABELS] = {
         "Name", "PID", "Parent PID", "User", "State", "Executable",
         "Command", "Started", "Elapsed", "Threads", "Handles",
-        "Priority", "CPU time", "GPU", "GPU engine", "GPU memory"
+        "Priority", "Nice", "CPU time", "Virtual memory",
+        "Resident memory", "Writable memory", "Shared memory",
+        "Security context", "Waiting channel", "Control group", "Unit",
+        "Session", "Seat", "Owner", "GPU", "GPU engine", "GPU memory"
     };
     for (size_t index = 0U; index < G_N_ELEMENTS(captions); index++)
         attach_detail(GTK_GRID(grid), (int)index, captions[index],
@@ -375,11 +383,15 @@ static void process_inventory_worker(GTask *task, gpointer source_object,
 
     LsmProcessInfo details = {0};
     details.pid = request->pid;
+    details.instance_id = request->instance_id;
     if (lsm_process_enrich(details.pid, &details,
-            LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT)) {
+            LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT |
+            LSM_PROCESS_SCAN_CGROUP | LSM_PROCESS_SCAN_TECHNICAL)) {
         lsm_copy_string(result->executable, sizeof(result->executable),
                         details.executable);
         result->descriptor_count = details.handle_count;
+        result->details = details;
+        result->details_valid = TRUE;
     }
     result->open_file_count = lsm_process_inspection_open_files(
         request->pid, &result->open_files);
@@ -417,6 +429,9 @@ static void process_inventory_complete(GObject *source_object,
     lsm_copy_string(inspector->executable, sizeof(inspector->executable),
                     result->executable);
     inspector->descriptor_count = result->descriptor_count;
+    inspector->technical_details_valid = result->details_valid;
+    if (result->details_valid)
+        inspector->technical_details = result->details;
     present_open_files(inspector, result->open_files, result->open_file_count);
     present_maps(inspector, result->maps, result->map_count);
     present_threads(inspector, result->threads, result->thread_count);
@@ -472,9 +487,30 @@ static gboolean inspector_update(gpointer user_data)
     lsm_copy_string(process.executable, sizeof(process.executable),
                     inspector->executable);
     process.handle_count = inspector->descriptor_count;
+    if (inspector->technical_details_valid &&
+        inspector->technical_details.pid == process.pid &&
+        inspector->technical_details.instance_id == process.instance_id) {
+        const LsmProcessInfo *technical = &inspector->technical_details;
+        process.writable_memory_bytes = technical->writable_memory_bytes;
+        process.writable_memory_available = technical->writable_memory_available;
+        lsm_copy_string(process.cgroup_path, sizeof(process.cgroup_path),
+                        technical->cgroup_path);
+        process.cgroup_v2 = technical->cgroup_v2;
+        lsm_copy_string(process.waiting_channel, sizeof(process.waiting_channel),
+                        technical->waiting_channel);
+        lsm_copy_string(process.security_context, sizeof(process.security_context),
+                        technical->security_context);
+        lsm_copy_string(process.unit, sizeof(process.unit), technical->unit);
+        lsm_copy_string(process.session, sizeof(process.session), technical->session);
+        lsm_copy_string(process.seat, sizeof(process.seat), technical->seat);
+        lsm_copy_string(process.owner, sizeof(process.owner), technical->owner);
+    }
     char pid[32], ppid[32], started[64], elapsed[64], threads[32], handles[32];
-    char priority[64], cpu[32], memory[32], read_rate[64], write_rate[64];
+    char priority[64], nice_value[32], cpu[32], memory[32];
+    char read_rate[64], write_rate[64];
     char cpu_time[64], gpu[32], gpu_memory[64];
+    char virtual_memory[64], resident_memory[64];
+    char writable_memory[64], shared_memory[64];
     snprintf(pid, sizeof(pid), "%llu",
              (unsigned long long)process.pid);
     snprintf(ppid, sizeof(ppid), "%llu",
@@ -491,8 +527,29 @@ static gboolean inspector_update(gpointer user_data)
     snprintf(handles, sizeof(handles), "%u", process.handle_count);
     lsm_copy_string(priority, sizeof(priority),
                     lsm_process_priority_name(process.priority));
+    if (process.nice_value_available)
+        snprintf(nice_value, sizeof(nice_value), "%d", process.nice_value);
+    else
+        snprintf(nice_value, sizeof(nice_value), "N/A");
     (void)lsm_temporal_format_duration_seconds(
         process.cpu_time_seconds, cpu_time, sizeof(cpu_time));
+    if (process.virtual_memory_available)
+        lsm_format_bytes(process.virtual_memory_bytes,
+                         virtual_memory, sizeof(virtual_memory));
+    else
+        snprintf(virtual_memory, sizeof(virtual_memory), "N/A");
+    lsm_format_bytes(process.rss_bytes, resident_memory,
+                     sizeof(resident_memory));
+    if (process.writable_memory_available)
+        lsm_format_bytes(process.writable_memory_bytes,
+                         writable_memory, sizeof(writable_memory));
+    else
+        snprintf(writable_memory, sizeof(writable_memory), "N/A");
+    if (process.shared_memory_available)
+        lsm_format_bytes(process.shared_memory_bytes,
+                         shared_memory, sizeof(shared_memory));
+    else
+        snprintf(shared_memory, sizeof(shared_memory), "N/A");
     if (process.gpu_available)
         snprintf(gpu, sizeof(gpu), "%.1f%%", process.gpu_percent);
     else
@@ -505,7 +562,16 @@ static gboolean inspector_update(gpointer user_data)
     const char *values[INSPECTOR_OVERVIEW_LABELS] = {
         process.name, pid, ppid, process.user, process.state,
         process.executable, process.command, started, elapsed, threads, handles,
-        priority, cpu_time, gpu,
+        priority, nice_value, cpu_time, virtual_memory, resident_memory,
+        writable_memory, shared_memory,
+        process.security_context[0] ? process.security_context : "N/A",
+        process.waiting_channel[0] ? process.waiting_channel : "N/A",
+        process.cgroup_path[0] ? process.cgroup_path : "N/A",
+        process.unit[0] ? process.unit : "N/A",
+        process.session[0] ? process.session : "N/A",
+        process.seat[0] ? process.seat : "N/A",
+        process.owner[0] ? process.owner : "N/A",
+        gpu,
         process.gpu_available && process.gpu_engine[0]
             ? process.gpu_engine : "N/A",
         gpu_memory
@@ -570,6 +636,30 @@ static void apply_priority(GtkButton *button, gpointer user_data)
         lsm_process_error_message(error, sizeof(error));
         lsm_ui_show_error(GTK_WINDOW(inspector->window),
                           "Unable to change process priority", "%s", error);
+    }
+}
+
+
+static void apply_nice(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    ProcessInspector *inspector = user_data;
+    if (!require_current_identity(inspector, "Unable to change process nice value"))
+        return;
+    const char *text = gtk_entry_get_text(GTK_ENTRY(inspector->nice_entry));
+    int64_t parsed = 0;
+    if (!lsm_parse_i64_range(text, 10U, -20, 19, &parsed)) {
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Invalid nice value",
+                          "Enter a whole number from -20 through 19.");
+        return;
+    }
+    if (!lsm_process_set_nice(inspector->pid, inspector->instance_id,
+                              (int)parsed)) {
+        char error[160];
+        lsm_process_error_message(error, sizeof(error));
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Unable to change process nice value", "%s", error);
     }
 }
 
@@ -655,6 +745,16 @@ static void end_process_clicked(GtkButton *button, gpointer user_data)
     (void)button;
     ProcessInspector *inspector = user_data;
     if (!require_current_identity(inspector, "Unable to end process")) return;
+    if (!inspector->app->runtime.confirm_process_actions) {
+        if (!lsm_process_control(inspector->pid, inspector->instance_id,
+                                 LSM_PROCESS_CONTROL_TERMINATE)) {
+            char error[160];
+            lsm_process_error_message(error, sizeof(error));
+            lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                              "Unable to end the process", "%s", error);
+        }
+        return;
+    }
     GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(inspector->window),
         GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE,
         "End process %llu?", (unsigned long long)inspector->pid);
@@ -696,15 +796,24 @@ static GtkWidget *build_control_bar(ProcessInspector *inspector)
         process ? priority_index(process->priority) :
                   (int)LSM_PROCESS_PRIORITY_NORMAL);
     GtkWidget *apply = gtk_button_new_with_label("Apply priority");
+    inspector->nice_entry = gtk_entry_new();
+    char nice_text[16];
+    snprintf(nice_text, sizeof(nice_text), "%d",
+             process && process->nice_value_available ? process->nice_value : 0);
+    gtk_entry_set_text(GTK_ENTRY(inspector->nice_entry), nice_text);
+    GtkWidget *apply_nice_button = gtk_button_new_with_label("Apply nice");
     gtk_box_pack_start(GTK_BOX(bar), refresh, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bar), gtk_separator_new(GTK_ORIENTATION_VERTICAL),
                        FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bar), inspector->priority_combo, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bar), apply, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), inspector->nice_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), apply_nice_button, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bar), affinity, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(bar), end, FALSE, FALSE, 0);
     g_signal_connect(refresh, "clicked", G_CALLBACK(refresh_clicked), inspector);
     g_signal_connect(apply, "clicked", G_CALLBACK(apply_priority), inspector);
+    g_signal_connect(apply_nice_button, "clicked", G_CALLBACK(apply_nice), inspector);
     g_signal_connect(affinity, "clicked", G_CALLBACK(affinity_clicked), inspector);
     g_signal_connect(end, "clicked", G_CALLBACK(end_process_clicked), inspector);
     return bar;

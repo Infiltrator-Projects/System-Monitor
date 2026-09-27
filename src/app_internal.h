@@ -283,6 +283,9 @@ enum {
     PROC_COL_CPU_TIME,
     PROC_COL_MEMORY,
     PROC_COL_RSS,
+    PROC_COL_VIRTUAL_MEMORY,
+    PROC_COL_WRITABLE_MEMORY,
+    PROC_COL_SHARED_MEMORY,
     PROC_COL_THREADS,
     PROC_COL_READ_RATE,
     PROC_COL_WRITE_RATE,
@@ -295,6 +298,14 @@ enum {
     PROC_COL_CONTEXT_SWITCHES,
     PROC_COL_PAGE_FAULTS,
     PROC_COL_PRIORITY,
+    PROC_COL_NICE,
+    PROC_COL_SECURITY_CONTEXT,
+    PROC_COL_WCHAN,
+    PROC_COL_CGROUP,
+    PROC_COL_UNIT,
+    PROC_COL_SESSION,
+    PROC_COL_SEAT,
+    PROC_COL_OWNER,
     PROC_COL_START_TIME,
     PROC_COL_ELAPSED,
     PROC_COL_EXECUTABLE,
@@ -338,6 +349,7 @@ typedef struct {
     gboolean newer_on_right;
     gboolean network_use_bits;
     gboolean process_cpu_per_core;
+    gboolean confirm_process_actions;
     gboolean show_all_filesystems;
     gboolean always_on_top;
     gboolean compact_summary;
@@ -433,12 +445,14 @@ typedef struct {
     GtkTreeModel *details_sort_model;
     GtkTreeViewColumn *details_columns[PROC_N_COLUMNS];
     GtkWidget *details_search;
+    GtkWidget *details_scope_combo;
     GtkWidget *details_view_combo;
     GtkWidget *details_inspect_button;
     GtkWidget *details_end_button;
     GtkWidget *process_record_menu_item;
     GtkWidget *details_count_label;
     gboolean details_tree_mode;
+    gint details_scope;
     gboolean details_tree_initialized;
     gboolean details_model_dirty;
     gboolean details_structure_valid;

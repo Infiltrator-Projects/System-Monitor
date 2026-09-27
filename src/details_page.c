@@ -59,31 +59,42 @@ typedef struct {
 } ProcessColumnSpec;
 
 static const ProcessColumnSpec column_specs[PROC_N_COLUMNS] = {
-    {PROC_COL_NAME,             "name",       "Name",             CELL_TEXT,     TRUE,  TRUE,  170},
-    {PROC_COL_PID,              "pid",        "PID",              CELL_INTEGER,  TRUE,  FALSE, 70},
-    {PROC_COL_PPID,             "ppid",       "Parent PID",       CELL_INTEGER,  FALSE, FALSE, 85},
-    {PROC_COL_USER,             "user",       "User",             CELL_TEXT,     TRUE,  FALSE, 95},
-    {PROC_COL_STATE,            "status",     "Status",           CELL_TEXT,     TRUE,  FALSE, 90},
-    {PROC_COL_CPU,              "cpu",        "CPU",              CELL_PERCENT,  TRUE,  FALSE, 70},
-    {PROC_COL_CPU_TIME,         "cpu_time",   "CPU time",         CELL_DURATION, FALSE, FALSE, 95},
-    {PROC_COL_MEMORY,           "memory",     "Memory %",         CELL_PERCENT,  TRUE,  FALSE, 80},
-    {PROC_COL_RSS,              "rss",        "RAM",              CELL_BYTES,    TRUE,  FALSE, 90},
-    {PROC_COL_THREADS,          "threads",    "Threads",          CELL_INTEGER,  FALSE, FALSE, 70},
-    {PROC_COL_READ_RATE,        "read_rate",  "Read/s",           CELL_RATE,     TRUE,  FALSE, 90},
-    {PROC_COL_WRITE_RATE,       "write_rate", "Write/s",          CELL_RATE,     TRUE,  FALSE, 90},
-    {PROC_COL_GPU,              "gpu",        "GPU",              CELL_PERCENT,  TRUE,  FALSE, 70},
-    {PROC_COL_GPU_ENGINE,       "gpu_engine", "GPU engine",       CELL_TEXT,     FALSE, FALSE, 105},
-    {PROC_COL_GPU_MEMORY,       "gpu_memory", "GPU memory",       CELL_BYTES,    FALSE, FALSE, 105},
-    {PROC_COL_READ_TOTAL,       "read_total", "Read total",       CELL_BYTES,    FALSE, FALSE, 95},
-    {PROC_COL_WRITE_TOTAL,      "write_total","Written total",    CELL_BYTES,    FALSE, FALSE, 105},
-    {PROC_COL_HANDLE_COUNT,         "handles",    "Handles",          CELL_INTEGER,  FALSE, FALSE, 105},
-    {PROC_COL_CONTEXT_SWITCHES, "contexts",   "Context switches", CELL_INTEGER,  FALSE, FALSE, 110},
-    {PROC_COL_PAGE_FAULTS,      "faults",     "Page faults",      CELL_INTEGER,  FALSE, FALSE, 90},
-    {PROC_COL_PRIORITY,             "priority",   "Priority",         CELL_PRIORITY, FALSE, FALSE, 105},
-    {PROC_COL_START_TIME,       "started",    "Start time",       CELL_TIME,     FALSE, FALSE, 145},
-    {PROC_COL_ELAPSED,          "elapsed",    "Elapsed",          CELL_DURATION, FALSE, FALSE, 100},
-    {PROC_COL_EXECUTABLE,       "executable", "Executable",       CELL_TEXT,     FALSE, TRUE,  260},
-    {PROC_COL_COMMAND,          "command",    "Command",          CELL_TEXT,     FALSE, TRUE,  280}
+    {PROC_COL_NAME,             "name",       "Name",              CELL_TEXT,     TRUE,  TRUE,  170},
+    {PROC_COL_PID,              "pid",        "PID",               CELL_INTEGER,  TRUE,  FALSE, 70},
+    {PROC_COL_PPID,             "ppid",       "Parent PID",        CELL_INTEGER,  FALSE, FALSE, 85},
+    {PROC_COL_USER,             "user",       "User",              CELL_TEXT,     TRUE,  FALSE, 95},
+    {PROC_COL_STATE,            "status",     "Status",            CELL_TEXT,     TRUE,  FALSE, 90},
+    {PROC_COL_CPU,              "cpu",        "CPU",               CELL_PERCENT,  TRUE,  FALSE, 70},
+    {PROC_COL_CPU_TIME,         "cpu_time",   "CPU time",          CELL_DURATION, FALSE, FALSE, 95},
+    {PROC_COL_MEMORY,           "memory",     "Memory %",          CELL_PERCENT,  TRUE,  FALSE, 80},
+    {PROC_COL_RSS,              "rss",        "Resident memory",   CELL_BYTES,    TRUE,  FALSE, 110},
+    {PROC_COL_VIRTUAL_MEMORY,   "virtual",    "Virtual memory",    CELL_BYTES,    FALSE, FALSE, 110},
+    {PROC_COL_WRITABLE_MEMORY,  "writable",   "Writable memory",   CELL_BYTES,    FALSE, FALSE, 115},
+    {PROC_COL_SHARED_MEMORY,    "shared",     "Shared memory",     CELL_BYTES,    FALSE, FALSE, 110},
+    {PROC_COL_THREADS,          "threads",    "Threads",           CELL_INTEGER,  FALSE, FALSE, 70},
+    {PROC_COL_READ_RATE,        "read_rate",  "Read/s",            CELL_RATE,     TRUE,  FALSE, 90},
+    {PROC_COL_WRITE_RATE,       "write_rate", "Write/s",           CELL_RATE,     TRUE,  FALSE, 90},
+    {PROC_COL_GPU,              "gpu",        "GPU",               CELL_PERCENT,  TRUE,  FALSE, 70},
+    {PROC_COL_GPU_ENGINE,       "gpu_engine", "GPU engine",        CELL_TEXT,     FALSE, FALSE, 105},
+    {PROC_COL_GPU_MEMORY,       "gpu_memory", "GPU memory",        CELL_BYTES,    FALSE, FALSE, 105},
+    {PROC_COL_READ_TOTAL,       "read_total", "Read total",        CELL_BYTES,    FALSE, FALSE, 95},
+    {PROC_COL_WRITE_TOTAL,      "write_total","Written total",     CELL_BYTES,    FALSE, FALSE, 105},
+    {PROC_COL_HANDLE_COUNT,     "handles",    "Handles",           CELL_INTEGER,  FALSE, FALSE, 105},
+    {PROC_COL_CONTEXT_SWITCHES, "contexts",   "Context switches",  CELL_INTEGER,  FALSE, FALSE, 110},
+    {PROC_COL_PAGE_FAULTS,      "faults",     "Page faults",       CELL_INTEGER,  FALSE, FALSE, 90},
+    {PROC_COL_PRIORITY,         "priority",   "Priority",          CELL_PRIORITY, FALSE, FALSE, 105},
+    {PROC_COL_NICE,             "nice",       "Nice",              CELL_INTEGER,  FALSE, FALSE, 65},
+    {PROC_COL_SECURITY_CONTEXT, "security",   "Security context",  CELL_TEXT,     FALSE, TRUE,  180},
+    {PROC_COL_WCHAN,            "wchan",      "Waiting channel",   CELL_TEXT,     FALSE, TRUE,  145},
+    {PROC_COL_CGROUP,           "cgroup",     "Control group",     CELL_TEXT,     FALSE, TRUE,  220},
+    {PROC_COL_UNIT,             "unit",       "Unit",              CELL_TEXT,     FALSE, TRUE,  170},
+    {PROC_COL_SESSION,          "session",    "Session",           CELL_TEXT,     FALSE, FALSE, 85},
+    {PROC_COL_SEAT,             "seat",       "Seat",              CELL_TEXT,     FALSE, FALSE, 85},
+    {PROC_COL_OWNER,            "owner",      "Owner",             CELL_TEXT,     FALSE, FALSE, 105},
+    {PROC_COL_START_TIME,       "started",    "Start time",        CELL_TIME,     FALSE, FALSE, 145},
+    {PROC_COL_ELAPSED,          "elapsed",    "Elapsed",           CELL_DURATION, FALSE, FALSE, 100},
+    {PROC_COL_EXECUTABLE,       "executable", "Executable",        CELL_TEXT,     FALSE, TRUE,  260},
+    {PROC_COL_COMMAND,          "command",    "Command",           CELL_TEXT,     FALSE, TRUE,  280}
 };
 
 typedef struct {
@@ -97,14 +108,35 @@ typedef struct {
     GHashTable *pid_to_index;
 } ProcessBuildContext;
 
+enum {
+    PROCESS_SCOPE_ALL = 0,
+    PROCESS_SCOPE_ACTIVE,
+    PROCESS_SCOPE_MINE
+};
+
 /* Filtering and rendering operate only on the retained backend snapshot. */
 static gboolean process_directly_visible(const LsmApp *app, const LsmProcessInfo *process)
 {
+    gboolean scope_visible = TRUE;
+    if (app->details.details_scope == PROCESS_SCOPE_MINE)
+        scope_visible = process->owned_by_current_user;
+    else if (app->details.details_scope == PROCESS_SCOPE_ACTIVE)
+        scope_visible =
+            strcmp(process->state, "Sleeping") != 0 &&
+            strcmp(process->state, "Stopped") != 0 &&
+            strcmp(process->state, "Zombie") != 0 &&
+            strcmp(process->state, "Idle") != 0 &&
+            strcmp(process->state, "Dead") != 0;
+
+    char pid_text[32];
+    snprintf(pid_text, sizeof(pid_text), "%llu",
+             (unsigned long long)process->pid);
     const char *search = gtk_entry_get_text(GTK_ENTRY(app->details.details_search));
-    gboolean visible = !search || !*search ||
+    gboolean visible = scope_visible && (!search || !*search ||
         lsm_ui_text_matches(process->name, search) ||
         lsm_ui_text_matches(process->user, search) ||
-        lsm_ui_text_matches(process->command, search);
+        lsm_ui_text_matches(process->command, search) ||
+        lsm_ui_text_matches(pid_text, search));
 
     if (visible) {
         for (guint i = 0; i < app->process.filters->len; i++) {
@@ -161,7 +193,11 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
             break;
         }
         case CELL_INTEGER: {
-            if (column == PROC_COL_PID || column == PROC_COL_PPID ||
+            if (column == PROC_COL_NICE) {
+                gint value = 0;
+                gtk_tree_model_get(model, iter, column, &value, -1);
+                snprintf(text, sizeof(text), "%d", value);
+            } else if (column == PROC_COL_PID || column == PROC_COL_PPID ||
                 column == PROC_COL_CONTEXT_SWITCHES ||
                 column == PROC_COL_PAGE_FAULTS) {
                 guint64 value = 0;
@@ -194,7 +230,7 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
         case CELL_BYTES: {
             guint64 value = 0;
             gtk_tree_model_get(model, iter, column, &value, -1);
-            if (column == PROC_COL_GPU_MEMORY && value == UINT64_MAX)
+            if (value == UINT64_MAX)
                 snprintf(text, sizeof(text), "N/A");
             else
                 lsm_format_bytes(value, text, sizeof(text));
@@ -281,8 +317,10 @@ void lsm_details_save_layout(const LsmApp *app)
     g_list_free(columns);
 
     GString *text = g_string_new(NULL);
-    g_string_append_printf(text, "layout_version=4\ntree=%d\nheatmap=%d\n",
+    g_string_append_printf(text,
+                           "layout_version=5\ntree=%d\nscope=%d\nheatmap=%d\n",
                            app->details.details_tree_mode ? 1 : 0,
+                           app->details.details_scope,
                            app->details.process_heatmap ? 1 : 0);
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         g_string_append_printf(text, "%s=%d\n", column_specs[i].key,
@@ -333,6 +371,7 @@ static void process_columns_load(LsmApp *app)
     int layout_version = 0;
 
     app->details.details_tree_mode = TRUE;
+    app->details.details_scope = PROCESS_SCOPE_ALL;
     app->details.process_heatmap = TRUE;
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         visible[i] = column_specs[i].default_visible;
@@ -359,6 +398,10 @@ static void process_columns_load(LsmApp *app)
             else if (strcmp(key, "tree") == 0)
                 app->details.details_tree_mode = layout_boolean(
                     value, app->details.details_tree_mode);
+            else if (strcmp(key, "scope") == 0)
+                app->details.details_scope = layout_integer(
+                    value, PROCESS_SCOPE_ALL, PROCESS_SCOPE_MINE,
+                    app->details.details_scope);
             else if (strcmp(key, "heatmap") == 0)
                 app->details.process_heatmap = layout_boolean(
                     value, app->details.process_heatmap);
@@ -414,6 +457,13 @@ static void process_columns_load(LsmApp *app)
         if (sort_column >= PROC_COL_GPU_ENGINE) sort_column++;
         for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
     }
+    if (layout_version < 5) {
+        /* Version 5 inserts the Mint-parity technical fields. Keyed visibility
+         * and widths still migrate correctly, but numeric order/sort indexes
+         * from older layouts cannot be trusted after the insertion. */
+        sort_column = -1;
+        for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
+    }
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         gtk_tree_view_column_set_visible(app->details.details_columns[i], visible[i]);
         gtk_tree_view_column_set_sizing(app->details.details_columns[i],
@@ -457,6 +507,23 @@ static unsigned process_scan_flags(const LsmApp *app)
         if (gtk_tree_view_column_get_visible(
                 app->details.details_columns[PROC_COL_HANDLE_COUNT]))
             flags |= LSM_PROCESS_SCAN_HANDLE_COUNT;
+        if (gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_WRITABLE_MEMORY]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_SECURITY_CONTEXT]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_WCHAN]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_CGROUP]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_UNIT]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_SESSION]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_SEAT]) ||
+            gtk_tree_view_column_get_visible(
+                app->details.details_columns[PROC_COL_OWNER]))
+            flags |= LSM_PROCESS_SCAN_TECHNICAL | LSM_PROCESS_SCAN_CGROUP;
     }
 
     if (current == LSM_TAB_PROCESSES) {
@@ -535,6 +602,12 @@ static void set_process_row(GtkTreeStore *store, GtkTreeIter *iter,
         PROC_COL_CPU_TIME, process->cpu_time_seconds,
         PROC_COL_MEMORY, process->memory_percent,
         PROC_COL_RSS, process->rss_bytes,
+        PROC_COL_VIRTUAL_MEMORY, process->virtual_memory_available
+            ? process->virtual_memory_bytes : UINT64_MAX,
+        PROC_COL_WRITABLE_MEMORY, process->writable_memory_available
+            ? process->writable_memory_bytes : UINT64_MAX,
+        PROC_COL_SHARED_MEMORY, process->shared_memory_available
+            ? process->shared_memory_bytes : UINT64_MAX,
         PROC_COL_THREADS, process->threads,
         PROC_COL_READ_RATE, process->read_bytes_per_sec,
         PROC_COL_WRITE_RATE, process->write_bytes_per_sec,
@@ -549,6 +622,17 @@ static void set_process_row(GtkTreeStore *store, GtkTreeIter *iter,
         PROC_COL_CONTEXT_SWITCHES, process->context_switches,
         PROC_COL_PAGE_FAULTS, process->page_faults,
         PROC_COL_PRIORITY, (gint)process->priority,
+        PROC_COL_NICE, process->nice_value,
+        PROC_COL_SECURITY_CONTEXT, process->security_context[0]
+            ? process->security_context : "N/A",
+        PROC_COL_WCHAN, process->waiting_channel[0]
+            ? process->waiting_channel : "N/A",
+        PROC_COL_CGROUP, process->cgroup_path[0]
+            ? process->cgroup_path : "N/A",
+        PROC_COL_UNIT, process->unit[0] ? process->unit : "N/A",
+        PROC_COL_SESSION, process->session[0] ? process->session : "N/A",
+        PROC_COL_SEAT, process->seat[0] ? process->seat : "N/A",
+        PROC_COL_OWNER, process->owner[0] ? process->owner : "N/A",
         PROC_COL_START_TIME, process->start_time_epoch,
         PROC_COL_ELAPSED, process->elapsed_seconds,
         PROC_COL_EXECUTABLE, process->executable,
@@ -887,6 +971,20 @@ static void details_clicked(GtkButton *button, gpointer user_data)
     lsm_processes_show_selected_details(user_data);
 }
 
+static void process_scope_changed(GtkComboBox *combo, gpointer user_data)
+{
+    LsmApp *app = user_data;
+    const gint scope = gtk_combo_box_get_active(combo);
+    if (scope < PROCESS_SCOPE_ALL || scope > PROCESS_SCOPE_MINE ||
+        scope == app->details.details_scope)
+        return;
+    app->details.details_scope = scope;
+    app->details.details_structure_valid = FALSE;
+    app->details.details_model_dirty = TRUE;
+    lsm_details_save_layout(app);
+    lsm_details_present_snapshot(app);
+}
+
 static void process_view_changed(GtkComboBox *combo, gpointer user_data)
 {
     LsmApp *app = user_data;
@@ -914,6 +1012,13 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     gtk_entry_set_placeholder_text(GTK_ENTRY(app->details.details_search),
         "Search process name, owner, or command");
     gtk_widget_set_hexpand(app->details.details_search, TRUE);
+    app->details.details_scope_combo = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(
+        GTK_COMBO_BOX_TEXT(app->details.details_scope_combo), "All processes");
+    gtk_combo_box_text_append_text(
+        GTK_COMBO_BOX_TEXT(app->details.details_scope_combo), "Active processes");
+    gtk_combo_box_text_append_text(
+        GTK_COMBO_BOX_TEXT(app->details.details_scope_combo), "My processes");
     app->details.details_view_combo = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Process tree");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Flat list");
@@ -923,6 +1028,8 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     app->details.details_end_button = gtk_button_new_with_label("End process");
     gtk_widget_set_tooltip_text(app->details.details_search,
         "Filter the technical process table (Ctrl+F)");
+    gtk_widget_set_tooltip_text(app->details.details_scope_combo,
+        "Show all processes, only active work, or processes owned by your account");
     gtk_widget_set_tooltip_text(app->details.details_view_combo,
         "Choose a parent/child tree or a sortable flat process list");
     gtk_widget_set_tooltip_text(app->details.details_inspect_button,
@@ -932,18 +1039,49 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     gtk_widget_set_sensitive(app->details.details_end_button, FALSE);
 
     gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_search, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_scope_combo, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_view_combo, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_inspect_button, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_end_button, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(outer), toolbar, FALSE, FALSE, 0);
 
     app->details.details_store = gtk_tree_store_new(PROC_N_COLUMNS,
-        G_TYPE_STRING, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_DOUBLE, G_TYPE_UINT64, G_TYPE_DOUBLE, G_TYPE_UINT64,
-        G_TYPE_UINT, G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_DOUBLE,
-        G_TYPE_STRING, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT,
-        G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_INT, G_TYPE_INT64,
-        G_TYPE_UINT64, G_TYPE_STRING, G_TYPE_STRING);
+        G_TYPE_STRING,  /* Name */
+        G_TYPE_UINT64,  /* PID */
+        G_TYPE_UINT64,  /* Parent PID */
+        G_TYPE_STRING,  /* User */
+        G_TYPE_STRING,  /* Status */
+        G_TYPE_DOUBLE,  /* CPU */
+        G_TYPE_UINT64,  /* CPU time */
+        G_TYPE_DOUBLE,  /* Memory % */
+        G_TYPE_UINT64,  /* Resident memory */
+        G_TYPE_UINT64,  /* Virtual memory */
+        G_TYPE_UINT64,  /* Writable memory */
+        G_TYPE_UINT64,  /* Shared memory */
+        G_TYPE_UINT,    /* Threads */
+        G_TYPE_DOUBLE,  /* Read/s */
+        G_TYPE_DOUBLE,  /* Write/s */
+        G_TYPE_DOUBLE,  /* GPU */
+        G_TYPE_STRING,  /* GPU engine */
+        G_TYPE_UINT64,  /* GPU memory */
+        G_TYPE_UINT64,  /* Read total */
+        G_TYPE_UINT64,  /* Write total */
+        G_TYPE_UINT,    /* Handles */
+        G_TYPE_UINT64,  /* Context switches */
+        G_TYPE_UINT64,  /* Page faults */
+        G_TYPE_INT,     /* Priority */
+        G_TYPE_INT,     /* Nice */
+        G_TYPE_STRING,  /* Security context */
+        G_TYPE_STRING,  /* Waiting channel */
+        G_TYPE_STRING,  /* Control group */
+        G_TYPE_STRING,  /* Unit */
+        G_TYPE_STRING,  /* Session */
+        G_TYPE_STRING,  /* Seat */
+        G_TYPE_STRING,  /* Owner */
+        G_TYPE_INT64,   /* Start time */
+        G_TYPE_UINT64,  /* Elapsed */
+        G_TYPE_STRING,  /* Executable */
+        G_TYPE_STRING); /* Command */
     app->details.details_sort_model = gtk_tree_model_sort_new_with_model(GTK_TREE_MODEL(app->details.details_store));
     app->details.details_tree = gtk_tree_view_new_with_model(app->details.details_sort_model);
     gtk_widget_set_tooltip_text(app->details.details_tree,
@@ -956,12 +1094,16 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     for (int i = 0; i < PROC_N_COLUMNS; i++)
         app->details.details_columns[i] = add_process_column(app, &column_specs[i]);
     process_columns_load(app);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(app->details.details_scope_combo),
+                             app->details.details_scope);
     gtk_combo_box_set_active(GTK_COMBO_BOX(app->details.details_view_combo),
                              app->details.details_tree_mode ? 0 : 1);
 
     GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->details.details_tree));
     g_signal_connect(selection, "changed", G_CALLBACK(selected_process_changed), app);
     g_signal_connect(app->details.details_search, "changed", G_CALLBACK(refilter_processes), app);
+    g_signal_connect(app->details.details_scope_combo, "changed",
+                     G_CALLBACK(process_scope_changed), app);
     g_signal_connect(app->details.details_view_combo, "changed", G_CALLBACK(process_view_changed), app);
     g_signal_connect(app->details.details_inspect_button, "clicked", G_CALLBACK(details_clicked), app);
     g_signal_connect(app->details.details_end_button, "clicked", G_CALLBACK(kill_selected_process), app);

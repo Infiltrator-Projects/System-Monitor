@@ -114,6 +114,9 @@ void lsm_preferences_load(LsmApp *app)
         else if (strcmp(key, "process_cpu_per_core") == 0)
             app->runtime.process_cpu_per_core = parse_boolean(
                 value, app->runtime.process_cpu_per_core);
+        else if (strcmp(key, "confirm_process_actions") == 0)
+            app->runtime.confirm_process_actions = parse_boolean(
+                value, app->runtime.confirm_process_actions);
         else if (strcmp(key, "show_all_filesystems") == 0)
             app->runtime.show_all_filesystems = parse_boolean(
                 value, app->runtime.show_all_filesystems);
@@ -164,6 +167,7 @@ static bool write_preferences(FILE *file, const void *user_data)
         "newer_on_right=%d\n"
         "network_use_bits=%d\n"
         "process_cpu_per_core=%d\n"
+        "confirm_process_actions=%d\n"
         "show_all_filesystems=%d\n"
         "process_heatmap=%d\n"
         "always_on_top=%d\n"
@@ -177,6 +181,7 @@ static bool write_preferences(FILE *file, const void *user_data)
         app->runtime.newer_on_right ? 1 : 0,
         app->runtime.network_use_bits ? 1 : 0,
         app->runtime.process_cpu_per_core ? 1 : 0,
+        app->runtime.confirm_process_actions ? 1 : 0,
         app->runtime.show_all_filesystems ? 1 : 0,
         app->details.process_heatmap ? 1 : 0,
         app->runtime.always_on_top ? 1 : 0,
@@ -297,32 +302,38 @@ void lsm_preferences_show(LsmApp *app)
                              app->runtime.newer_on_right ? 0 : 1);
     attach_preference(GTK_GRID(grid), 3, "Graph direction", direction);
 
+    GtkWidget *confirm_process = gtk_check_button_new_with_label(
+        "Confirm before ending or force-terminating processes");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm_process),
+                                 app->runtime.confirm_process_actions);
+    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 4, 2, 1);
+
     GtkWidget *show_all = gtk_check_button_new_with_label(
         "Show virtual and system filesystems by default");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(show_all),
                                  app->runtime.show_all_filesystems);
-    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 4, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 5, 2, 1);
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Shade busy resource cells in Processes and Details");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap),
                                  app->details.process_heatmap);
-    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 6, 2, 1);
     GtkWidget *always_on_top = gtk_check_button_new_with_label(
         "Keep the monitor above other windows");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(always_on_top),
                                  app->runtime.always_on_top);
-    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 6, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 7, 2, 1);
     GtkWidget *compact_summary = gtk_check_button_new_with_label(
         "Open in compact summary mode");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_summary),
                                  app->runtime.compact_summary);
-    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 7, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 8, 2, 1);
     GtkWidget *cadence_note = gtk_label_new(
         "Performance graphs can refresh every 0.5 seconds. Process and "
         "management lists refresh no faster than once per second.");
     gtk_label_set_line_wrap(GTK_LABEL(cadence_note), TRUE);
     gtk_widget_set_halign(cadence_note, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 8, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 9, 2, 1);
 
     gtk_widget_show_all(dialog);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
@@ -334,6 +345,8 @@ void lsm_preferences_show(LsmApp *app)
             gtk_combo_box_get_active(GTK_COMBO_BOX(cpu_mode)) == 1;
         app->runtime.newer_on_right =
             gtk_combo_box_get_active(GTK_COMBO_BOX(direction)) == 0;
+        app->runtime.confirm_process_actions =
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(confirm_process));
         app->runtime.show_all_filesystems =
             gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(show_all));
         app->details.process_heatmap =

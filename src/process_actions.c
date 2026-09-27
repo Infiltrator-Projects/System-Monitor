@@ -39,6 +39,7 @@ typedef enum {
     ACTION_DETAILS,
     ACTION_END,
     ACTION_END_TREE,
+    ACTION_FORCE_TERMINATE,
     ACTION_SUSPEND,
     ACTION_RESUME,
     ACTION_EFFICIENCY,
@@ -382,6 +383,7 @@ static void show_affinity_dialog(LsmApp *app)
 
 static gboolean confirm_end(LsmApp *app, gboolean tree)
 {
+    if (app && !app->runtime.confirm_process_actions) return TRUE;
     const gboolean group =
         !tree && app->process.selected_group_count > 1U &&
         app->process.selected_group_name[0] != '\0';
@@ -417,6 +419,24 @@ static gboolean confirm_end(LsmApp *app, gboolean tree)
                            group ? "End task" : "End process",
                            GTK_RESPONSE_ACCEPT, NULL);
     gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    return response == GTK_RESPONSE_ACCEPT;
+}
+
+
+static gboolean confirm_force_terminate(LsmApp *app)
+{
+    if (!app || !app->runtime.confirm_process_actions) return TRUE;
+    GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(app->shell.window),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE,
+        "Force terminate process %llu?",
+        (unsigned long long)app->process.selected_pid);
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+        "This sends an immediate kill request. The process cannot save state "
+        "or perform normal shutdown cleanup.");
+    gtk_dialog_add_buttons(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL,
+                           "Force terminate", GTK_RESPONSE_ACCEPT, NULL);
+    const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     return response == GTK_RESPONSE_ACCEPT;
 }
@@ -485,6 +505,12 @@ static void process_action_activate(GtkMenuItem *item, gpointer user_data)
                                           LSM_PROCESS_CONTROL_TERMINATE))
                 show_process_backend_error(app, "Unable to end the process tree");
             break;
+        case ACTION_FORCE_TERMINATE:
+            if (pid > 1 && confirm_force_terminate(app) &&
+                !lsm_process_control(pid, instance_id,
+                                     LSM_PROCESS_CONTROL_FORCE_TERMINATE))
+                show_process_backend_error(app, "Unable to force terminate the process");
+            break;
         case ACTION_SUSPEND:
             if (!lsm_process_control(pid, instance_id,
                                      LSM_PROCESS_CONTROL_SUSPEND))
@@ -547,6 +573,51 @@ static void priority_activate(GtkMenuItem *item, gpointer user_data)
     }
 }
 
+
+static void custom_nice_activate(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    LsmApp *app = user_data;
+    const LsmProcessInfo *process = action_snapshot_process(
+        app, app->process.selected_pid, app->process.selected_instance_id);
+    if (!process) return;
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "Set exact nice value", GTK_WINDOW(app->shell.window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+    GtkWidget *label = gtk_label_new(
+        "Unix nice value (-20 highest priority, 19 lowest priority)");
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    GtkWidget *entry = gtk_entry_new();
+    char current[16];
+    snprintf(current, sizeof(current), "%d",
+             process->nice_value_available ? process->nice_value : 0);
+    gtk_entry_set_text(GTK_ENTRY(entry), current);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(content), box);
+    gtk_widget_show_all(dialog);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        int64_t parsed = 0;
+        const char *value = gtk_entry_get_text(GTK_ENTRY(entry));
+        if (!lsm_parse_i64_range(value, 10U, -20, 19, &parsed)) {
+            lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+                              "Invalid nice value",
+                              "Enter a whole number from -20 through 19.");
+        } else if (!lsm_process_set_nice(
+                       app->process.selected_pid,
+                       app->process.selected_instance_id, (int)parsed)) {
+            show_process_backend_error(app, "Unable to change process nice value");
+        }
+    }
+    gtk_widget_destroy(dialog);
+}
+
 static GtkWidget *action_menu_item(const char *label, ProcessAction action, LsmApp *app)
 {
     GtkWidget *item = gtk_menu_item_new_with_label(label);
@@ -594,17 +665,22 @@ GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns)
         app->process.selected_group_count > 1U ? "End task" : "End process",
         ACTION_END, app);
     GtkWidget *end_tree = action_menu_item("End process tree", ACTION_END_TREE, app);
+    GtkWidget *force_terminate =
+        action_menu_item("Force terminate", ACTION_FORCE_TERMINATE, app);
     GtkWidget *suspend = action_menu_item("Suspend", ACTION_SUSPEND, app);
     GtkWidget *resume = action_menu_item("Resume", ACTION_RESUME, app);
     gtk_widget_set_sensitive(end, app->process.selected_pid > 1);
     gtk_widget_set_sensitive(end_tree, app->process.selected_pid > 1 &&
                                       app->process.selected_group_count == 0U);
+    gtk_widget_set_sensitive(force_terminate,
+                             !grouped && app->process.selected_pid > 1);
     gtk_widget_set_sensitive(suspend, !grouped && app->process.selected_pid > 1 &&
         (!process || strcmp(process->state, "Stopped") != 0));
     gtk_widget_set_sensitive(resume, !grouped && app->process.selected_pid > 1 && process &&
         strcmp(process->state, "Stopped") == 0);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), end);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), end_tree);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), force_terminate);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), suspend);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), resume);
     GtkWidget *efficiency = gtk_check_menu_item_new_with_label("Efficiency mode");
@@ -632,6 +708,13 @@ GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns)
         g_signal_connect(item, "activate", G_CALLBACK(priority_activate), app);
         gtk_menu_shell_append(GTK_MENU_SHELL(priority_menu), item);
     }
+    gtk_menu_shell_append(GTK_MENU_SHELL(priority_menu),
+                          gtk_separator_menu_item_new());
+    GtkWidget *custom_nice =
+        gtk_menu_item_new_with_label("Custom nice value…");
+    g_signal_connect(custom_nice, "activate",
+                     G_CALLBACK(custom_nice_activate), app);
+    gtk_menu_shell_append(GTK_MENU_SHELL(priority_menu), custom_nice);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(priority_root), priority_menu);
     gtk_widget_set_sensitive(priority_root, !grouped && app->process.selected_pid > 1);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), priority_root);
