@@ -3013,8 +3013,24 @@ static LRESULT CALLBACK lsm_windows_window_proc(
 
         case WM_GETMINMAXINFO: {
             MINMAXINFO *limits = (MINMAXINFO *)lparam;
-            limits->ptMinTrackSize.x = 980;
-            limits->ptMinTrackSize.y = 680;
+            LONG minimum_width = 760;
+            LONG minimum_height = 560;
+            RECT workarea;
+            if (SystemParametersInfoW(
+                    SPI_GETWORKAREA, 0U, &workarea, 0U)) {
+                const LONG available_width =
+                    workarea.right - workarea.left;
+                const LONG available_height =
+                    workarea.bottom - workarea.top;
+                if (available_width > 64 &&
+                    minimum_width > available_width - 32)
+                    minimum_width = available_width - 32;
+                if (available_height > 96 &&
+                    minimum_height > available_height - 64)
+                    minimum_height = available_height - 64;
+            }
+            limits->ptMinTrackSize.x = minimum_width;
+            limits->ptMinTrackSize.y = minimum_height;
             return 0;
         }
 
@@ -3316,10 +3332,24 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     state->hovered_overview_item = -1;
     state->hovered_menu = -1;
 
+    int initial_width = 1180;
+    int initial_height = 760;
+    RECT workarea;
+    if (SystemParametersInfoW(SPI_GETWORKAREA, 0U, &workarea, 0U)) {
+        const int available_width = (int)(workarea.right - workarea.left);
+        const int available_height = (int)(workarea.bottom - workarea.top);
+        const int maximum_width =
+            available_width > 64 ? available_width - 32 : available_width;
+        const int maximum_height =
+            available_height > 96 ? available_height - 64 : available_height;
+        if (initial_width > maximum_width) initial_width = maximum_width;
+        if (initial_height > maximum_height) initial_height = maximum_height;
+    }
+
     HWND window = CreateWindowExW(
         0U, class_name, L"System Monitor",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1180, 760,
+        CW_USEDEFAULT, CW_USEDEFAULT, initial_width, initial_height,
         NULL, NULL, instance, state);
     if (!window) {
         if (startup_smoke) {
