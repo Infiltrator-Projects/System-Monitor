@@ -650,6 +650,7 @@ static bool setup_fixture(char *root, size_t root_size)
                  "37 25 8:6 / /mnt/fat rw,relatime - vfat /dev/sda6 rw\n");
 
     FIXTURE_FILE("/sys/class/net/eth0/operstate", "up\n");
+    FIXTURE_FILE("/sys/class/net/eth0/ifindex", "7\n");
     FIXTURE_FILE("/sys/class/net/eth0/address", "00:11:22:33:44:55\n");
     FIXTURE_LINK("../../../devices/pci0000:00/0000:00:01.0",
                  "/sys/class/net/eth0/device");
@@ -670,6 +671,7 @@ static bool setup_fixture(char *root, size_t root_size)
                  "/sys/devices/pci0000:00/0000:00:02.0/driver");
 
     FIXTURE_FILE("/sys/class/net/eth1/operstate", "up\n");
+    FIXTURE_FILE("/sys/class/net/eth1/ifindex", "11\n");
     FIXTURE_FILE("/sys/class/net/eth1/address", "00:15:5d:00:00:01\n");
     FIXTURE_LINK("../../../devices/vmbus/net0",
                  "/sys/class/net/eth1/device");
@@ -796,6 +798,7 @@ int main(void)
                        "/sys/class/net/eth0/statistics/tx_bytes") ||
         !write_text(path, "42\n") ||
         lsm_sources_read_network_counters(sources, counters, 4U) != 1U ||
+        strcmp(counters[0].instance_identity, "ifindex:7") != 0 ||
         counters[0].rx_bytes != 0U || counters[0].tx_bytes != 42U)
         return 9;
     if (!write_text(path, "invalid\n") ||
@@ -806,6 +809,7 @@ int main(void)
     bool hyperv_network = false;
     for (size_t index = 0U; index < network_count; index++) {
         if (strcmp(networks[index].name, "eth0") == 0 &&
+            strcmp(networks[index].instance_identity, "ifindex:7") == 0 &&
             strcmp(networks[index].product, "N/A") != 0)
             physical_network = true;
         if (strcmp(networks[index].name, "eth1") == 0 &&

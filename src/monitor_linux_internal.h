@@ -37,6 +37,7 @@ typedef struct {
 /** Retained Linux network baselines keyed independently of the public snapshot. */
 typedef struct {
     char name[64];
+    char instance_identity[LSM_IDENTITY_LEN];
     uint64_t previous_rx;
     uint64_t previous_tx;
     bool initialized;

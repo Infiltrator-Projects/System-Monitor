@@ -425,6 +425,7 @@ static bool wireless_interface(const char *name)
 typedef struct {
     char name[64];
     char mac[32];
+    unsigned ifindex;
     uint64_t rx_bytes;
     uint64_t tx_bytes;
     unsigned char operstate;
@@ -440,6 +441,32 @@ static void format_mac(const unsigned char *bytes, size_t length,
     (void)snprintf(destination, destination_size,
                    "%02x:%02x:%02x:%02x:%02x:%02x",
                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]);
+}
+
+static void network_instance_identity(unsigned ifindex, const char *name,
+                                      char *destination, size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (ifindex > 0U) {
+        const int written = snprintf(
+            destination, destination_size, "ifindex:%u", ifindex);
+        if (written >= 0 && (size_t)written < destination_size) return;
+        destination[0] = '\0';
+    }
+    if (name && name[0])
+        (void)snprintf(destination, destination_size, "name:%s", name);
+}
+
+static unsigned network_ifindex_sysfs(const char *root, const char *name)
+{
+    if (!root || !name || !name[0]) return 0U;
+    char path[LSM_PATH_LEN];
+    uint64_t value = 0U;
+    if (!child_path(path, sizeof(path), root, name, "/ifindex") ||
+        !lsm_read_u64_file(path, &value) || value == 0U || value > UINT_MAX)
+        return 0U;
+    return (unsigned)value;
 }
 
 
@@ -519,36 +546,65 @@ static size_t route_link_dump(LsmSystemSources *sources,
 
     size_t count = 0U;
     bool complete = false;
-    while (!complete) {
+    bool failed = false;
+    while (!complete && !failed) {
         _Alignas(struct nlmsghdr) unsigned char buffer[32768];
-        const ssize_t received = recv(sources->network_request_fd, buffer, sizeof(buffer), 0);
+        struct iovec vector = {
+            .iov_base = buffer,
+            .iov_len = sizeof(buffer)
+        };
+        struct msghdr message;
+        memset(&message, 0, sizeof(message));
+        message.msg_iov = &vector;
+        message.msg_iovlen = 1U;
+
+        const ssize_t received =
+            recvmsg(sources->network_request_fd, &message, 0);
         if (received < 0) {
             if (errno == EINTR) continue;
+            failed = true;
             break;
         }
-        if (received == 0) break;
+        if (received == 0 || (message.msg_flags & MSG_TRUNC) != 0) {
+            failed = true;
+            break;
+        }
 
         int remaining = (int)received;
         for (struct nlmsghdr *header = (struct nlmsghdr *)(void *)buffer;
              netlink_message_ok(header, remaining);
              header = NLMSG_NEXT(header, remaining)) {
             if (header->nlmsg_seq != request.header.nlmsg_seq) continue;
+            if ((header->nlmsg_flags & NLM_F_DUMP_INTR) != 0U) {
+                failed = true;
+                break;
+            }
             if (header->nlmsg_type == NLMSG_DONE) {
                 complete = true;
                 break;
             }
             if (header->nlmsg_type == NLMSG_ERROR) {
-                complete = true;
-                break;
+                if (header->nlmsg_len <
+                    NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
+                    failed = true;
+                    break;
+                }
+                struct nlmsgerr error;
+                memcpy(&error, NLMSG_DATA(header), sizeof(error));
+                if (error.error != 0) failed = true;
+                continue;
             }
-            if (header->nlmsg_type != RTM_NEWLINK || count >= capacity ||
-                header->nlmsg_len < NLMSG_LENGTH(sizeof(struct ifinfomsg)))
+            if (header->nlmsg_type != RTM_NEWLINK ||
+                header->nlmsg_len <
+                    NLMSG_LENGTH(sizeof(struct ifinfomsg)))
                 continue;
 
             struct ifinfomsg *information = NLMSG_DATA(header);
             if ((information->ifi_flags & IFF_LOOPBACK) != 0U) continue;
             LsmRouteLink record;
             memset(&record, 0, sizeof(record));
+            record.ifindex = information->ifi_index > 0
+                ? (unsigned)information->ifi_index : 0U;
             record.flags = information->ifi_flags;
             record.operstate = IF_OPER_UNKNOWN;
 
@@ -557,11 +613,13 @@ static size_t route_link_dump(LsmSystemSources *sources,
                  RTA_OK(attribute, attribute_length);
                  attribute = RTA_NEXT(attribute, attribute_length))
                 apply_route_link_attribute(&record, attribute);
-            if (!record.name[0]) continue;
+            if (!record.name[0] || count >= capacity) continue;
             records[count++] = record;
         }
+        if (!complete && !failed && remaining != 0)
+            failed = true;
     }
-    return count;
+    return complete && !failed ? count : 0U;
 }
 
 bool lsm_sources_init(LsmSystemSources **out)
@@ -967,6 +1025,9 @@ static size_t list_networks_sysfs(LsmSystemSources *sources,
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
+        network_instance_identity(
+            network_ifindex_sysfs(root, entry->d_name), entry->d_name,
+            record->instance_identity, sizeof(record->instance_identity));
         if (child_path(path, sizeof(path), root, entry->d_name, "/address"))
             (void)lsm_read_text_file(path, record->mac, sizeof(record->mac));
         record->wireless = wireless_interface(record->name);
@@ -1009,6 +1070,10 @@ static size_t network_counters_sysfs(LsmSystemSources *sources,
             !lsm_read_u64_file(path, &tx_bytes))
             continue;
         lsm_copy_string(records[count].name, sizeof(records[count].name), entry->d_name);
+        network_instance_identity(
+            network_ifindex_sysfs(root, entry->d_name), entry->d_name,
+            records[count].instance_identity,
+            sizeof(records[count].instance_identity));
         records[count].rx_bytes = rx_bytes;
         records[count].tx_bytes = tx_bytes;
         count++;
@@ -1041,6 +1106,9 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), links[index].name);
+        network_instance_identity(
+            links[index].ifindex, links[index].name,
+            record->instance_identity, sizeof(record->instance_identity));
         lsm_copy_string(record->mac, sizeof(record->mac), links[index].mac);
         record->wireless = wireless_interface(record->name);
 
@@ -1072,6 +1140,10 @@ size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
             continue;
         lsm_copy_string(records[count].name, sizeof(records[count].name),
                         links[index].name);
+        network_instance_identity(
+            links[index].ifindex, links[index].name,
+            records[count].instance_identity,
+            sizeof(records[count].instance_identity));
         records[count].rx_bytes = links[index].rx_bytes;
         records[count].tx_bytes = links[index].tx_bytes;
         count++;
@@ -1086,13 +1158,23 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
     bool changed = false;
     for (;;) {
         _Alignas(struct nlmsghdr) unsigned char buffer[8192];
-        const ssize_t received = recv(sources->network_event_fd, buffer, sizeof(buffer), 0);
+        struct iovec vector = {
+            .iov_base = buffer,
+            .iov_len = sizeof(buffer)
+        };
+        struct msghdr message;
+        memset(&message, 0, sizeof(message));
+        message.msg_iov = &vector;
+        message.msg_iovlen = 1U;
+        const ssize_t received =
+            recvmsg(sources->network_event_fd, &message, 0);
         if (received < 0) {
             if (errno == EINTR) continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             return true;
         }
         if (received == 0) break;
+        if ((message.msg_flags & MSG_TRUNC) != 0) return true;
         int remaining = (int)received;
         for (struct nlmsghdr *header = (struct nlmsghdr *)(void *)buffer;
              netlink_message_ok(header, remaining);

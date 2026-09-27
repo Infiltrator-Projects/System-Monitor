@@ -164,6 +164,7 @@ typedef struct {
 /** Current counters, addresses and identity for one network interface. */
 typedef struct {
     char name[64];
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Opaque stable interface instance identity supplied by the backend. */
     char ipv4[64];
     char ipv6[128];
     char mac[32];

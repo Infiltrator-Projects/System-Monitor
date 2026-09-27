@@ -313,13 +313,27 @@ static int compare_network_names(const void *left, const void *right)
     return strcmp(a->name, b->name);
 }
 
+static bool network_instance_matches(const char *left_identity,
+                                     const char *left_name,
+                                     const char *right_identity,
+                                     const char *right_name)
+{
+    if (left_identity && right_identity &&
+        left_identity[0] && right_identity[0])
+        return strcmp(left_identity, right_identity) == 0;
+    return left_name && right_name && strcmp(left_name, right_name) == 0;
+}
+
 static LsmLinuxNetworkState *find_network_state(LsmMonitor *monitor,
-                                                const char *name)
+                                                const LsmNetInfo *net)
 {
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
-    if (!state || !name) return NULL;
+    if (!state || !net) return NULL;
     for (size_t index = 0U; index < state->network_count; index++)
-        if (strcmp(state->networks[index].name, name) == 0)
+        if (network_instance_matches(
+                state->networks[index].instance_identity,
+                state->networks[index].name,
+                net->instance_identity, net->name))
             return &state->networks[index];
     return NULL;
 }
@@ -331,20 +345,27 @@ static void reconcile_network_states(LsmMonitor *monitor,
     if (!state) return;
     LsmLinuxNetworkState next[LSM_MAX_NETS] = {0};
     for (size_t index = 0U; index < count && index < LSM_MAX_NETS; index++) {
-        LsmLinuxNetworkState *old = find_network_state(monitor, nets[index].name);
+        LsmLinuxNetworkState *old = find_network_state(monitor, &nets[index]);
         if (old) next[index] = *old;
         lsm_copy_string(next[index].name, sizeof(next[index].name),
                         nets[index].name);
+        lsm_copy_string(next[index].instance_identity,
+                        sizeof(next[index].instance_identity),
+                        nets[index].instance_identity);
     }
     memcpy(state->networks, next, sizeof(next));
     state->network_count = count < LSM_MAX_NETS ? count : LSM_MAX_NETS;
 }
 
 static const LsmNetInfo *find_old_network(const LsmMonitor *monitor,
-                                          const char *name)
+                                          const LsmNetInfo *net)
 {
+    if (!monitor || !net) return NULL;
     for (size_t index = 0; index < monitor->net_count; index++)
-        if (strcmp(monitor->nets[index].name, name) == 0)
+        if (network_instance_matches(
+                monitor->nets[index].instance_identity,
+                monitor->nets[index].name,
+                net->instance_identity, net->name))
             return &monitor->nets[index];
     return NULL;
 }
@@ -362,6 +383,9 @@ static bool refresh_networks(LsmMonitor *monitor)
     for (size_t index = 0; index < count; index++) {
         LsmNetInfo *net = &discovered[discovered_count++];
         lsm_copy_string(net->name, sizeof(net->name), records[index].name);
+        lsm_copy_string(net->instance_identity,
+                        sizeof(net->instance_identity),
+                        records[index].instance_identity);
         lsm_copy_string(net->mac, sizeof(net->mac), records[index].mac);
         lsm_copy_string(net->product, sizeof(net->product), records[index].product);
         lsm_copy_string(net->vendor, sizeof(net->vendor), records[index].vendor);
@@ -370,10 +394,13 @@ static bool refresh_networks(LsmMonitor *monitor)
 
     for (size_t index = 0; index < discovered_count; index++) {
         LsmNetInfo identity = discovered[index];
-        const LsmNetInfo *old = find_old_network(monitor, identity.name);
+        const LsmNetInfo *old = find_old_network(monitor, &identity);
         if (!old) continue;
         discovered[index] = *old;
         lsm_copy_string(discovered[index].name, sizeof(discovered[index].name), identity.name);
+        lsm_copy_string(discovered[index].instance_identity,
+                        sizeof(discovered[index].instance_identity),
+                        identity.instance_identity);
         lsm_copy_string(discovered[index].mac, sizeof(discovered[index].mac), identity.mac);
         lsm_copy_string(discovered[index].product, sizeof(discovered[index].product),
                         identity.product);
@@ -387,7 +414,11 @@ static bool refresh_networks(LsmMonitor *monitor)
     bool changed = discovered_count != monitor->net_count;
     if (!changed) {
         for (size_t index = 0; index < discovered_count; index++) {
-            if (strcmp(discovered[index].name, monitor->nets[index].name) != 0) {
+            if (!network_instance_matches(
+                    discovered[index].instance_identity,
+                    discovered[index].name,
+                    monitor->nets[index].instance_identity,
+                    monitor->nets[index].name)) {
                 changed = true;
                 break;
             }
@@ -421,7 +452,7 @@ static void update_interface_addresses(LsmMonitor *monitor)
             void *address = NULL;
             char *destination = NULL;
             size_t size = 0;
-            if (family == AF_INET) {
+            if (family == AF_INET && net->ipv4[0] == '\0') {
                 address = &((struct sockaddr_in *)it->ifa_addr)->sin_addr;
                 destination = net->ipv4; size = sizeof(net->ipv4);
             } else if (family == AF_INET6 && net->ipv6[0] == '\0') {
@@ -471,13 +502,17 @@ static void update_networks(LsmMonitor *monitor, double elapsed,
         uint64_t tx = net->tx_bytes_total;
         bool counters_available = false;
         for (size_t index = 0; index < counter_count; index++) {
-            if (strcmp(net->name, counters[index].name) != 0) continue;
+            if (strcmp(net->name, counters[index].name) != 0 ||
+                !network_instance_matches(
+                    net->instance_identity, net->name,
+                    counters[index].instance_identity, counters[index].name))
+                continue;
             rx = counters[index].rx_bytes;
             tx = counters[index].tx_bytes;
             counters_available = true;
             break;
         }
-        LsmLinuxNetworkState *state = find_network_state(monitor, net->name);
+        LsmLinuxNetworkState *state = find_network_state(monitor, net);
         net->rx_bytes_per_sec = 0.0;
         net->tx_bytes_per_sec = 0.0;
         if (counters_available && state && state->initialized) {

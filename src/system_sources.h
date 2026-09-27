@@ -55,6 +55,7 @@ typedef struct {
 /** One active non-loopback network interface. */
 typedef struct {
     char name[64];                  /**< Kernel interface name. */
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Kernel interface instance identity. */
     char mac[32];                   /**< Link-layer address. */
     char product[LSM_NAME_LEN];     /**< Friendly adapter model. */
     char vendor[LSM_NAME_LEN];      /**< Friendly adapter vendor. */
@@ -64,6 +65,7 @@ typedef struct {
 /** One rtnetlink interface-counter sample. */
 typedef struct {
     char name[64];
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Interface instance that supplied these counters. */
     uint64_t rx_bytes;
     uint64_t tx_bytes;
 } LsmNetworkCounterRecord;
