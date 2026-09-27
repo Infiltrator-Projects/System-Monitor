@@ -331,6 +331,8 @@ static bool read_process_stat(pid_t pid, LsmProcessInfo *process,
     if (!have_ppid || !have_start) return false;
     native_stat->cpu_ticks = lsm_u64_add_saturating(utime, stime);
     native_stat->nice_value = nice_value;
+    process->nice_value = nice_value;
+    process->nice_value_available = true;
     process->page_faults = lsm_u64_add_saturating(minflt, majflt);
     snprintf(process->state, sizeof(process->state), "%s", state_name(state));
     return true;
@@ -415,6 +417,10 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
 
     uint64_t voluntary = 0U;
     uint64_t involuntary = 0U;
+    uint64_t rss_file_kib = 0U;
+    uint64_t rss_shmem_kib = 0U;
+    bool have_rss_file = false;
+    bool have_rss_shmem = false;
     char *line = text;
     while (*line) {
         char *next = strchr(line, '\n');
@@ -424,10 +430,22 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
         if (parse_prefixed_u64(line, "Uid:", &value)) {
             native_status->uid = (uid_t)value;
             native_status->uid_available = true;
+        } else if (parse_prefixed_u64(line, "VmSize:", &value)) {
+            uint64_t bytes = 0U;
+            if (lsm_u64_multiply_checked(value, 1024U, &bytes)) {
+                process->virtual_memory_bytes = bytes;
+                process->virtual_memory_available = true;
+            }
         } else if (parse_prefixed_u64(line, "VmRSS:", &value)) {
             uint64_t rss_bytes = 0U;
             process->rss_bytes = lsm_u64_multiply_checked(
                 value, 1024U, &rss_bytes) ? rss_bytes : 0U;
+        } else if (parse_prefixed_u64(line, "RssFile:", &value)) {
+            rss_file_kib = value;
+            have_rss_file = true;
+        } else if (parse_prefixed_u64(line, "RssShmem:", &value)) {
+            rss_shmem_kib = value;
+            have_rss_shmem = true;
         } else if (parse_prefixed_u64(line, "Threads:", &value))
             process->threads = value <= UINT_MAX ? (unsigned)value : UINT_MAX;
         else if (parse_prefixed_u64(line, "voluntary_ctxt_switches:", &value))
@@ -440,6 +458,15 @@ static void read_process_status(LsmProcessBackend *backend, pid_t pid,
     }
     process->context_switches =
         lsm_u64_add_saturating(voluntary, involuntary);
+    if (have_rss_file || have_rss_shmem) {
+        const uint64_t shared_kib =
+            lsm_u64_add_saturating(rss_file_kib, rss_shmem_kib);
+        uint64_t shared_bytes = 0U;
+        if (lsm_u64_multiply_checked(shared_kib, 1024U, &shared_bytes)) {
+            process->shared_memory_bytes = shared_bytes;
+            process->shared_memory_available = true;
+        }
+    }
     if (native_status->uid_available)
         resolve_process_user(backend, native_status->uid, process);
 }
@@ -505,6 +532,132 @@ static void read_process_cgroup(pid_t pid, LsmProcessInfo *process)
     }
 }
 
+
+static void trim_kernel_text(char *text)
+{
+    if (!text) return;
+    size_t length = strlen(text);
+    while (length > 0U &&
+           (text[length - 1U] == '\n' || text[length - 1U] == '\r' ||
+            text[length - 1U] == ' ' || text[length - 1U] == '\t'))
+        text[--length] = '\0';
+    char *start = text;
+    while (*start == ' ' || *start == '\t') start++;
+    if (start != text) memmove(text, start, strlen(start) + 1U);
+}
+
+static bool read_process_text_field(pid_t pid, const char *field,
+                                    char *output, size_t output_size)
+{
+    if (!field || !output || output_size == 0U) return false;
+    output[0] = '\0';
+    char path[160];
+    const int written = snprintf(path, sizeof(path), "/proc/%d/%s", pid, field);
+    if (written < 0 || (size_t)written >= sizeof(path)) return false;
+    if (infiltratr_read_text_file_ex(path, output, output_size, NULL) !=
+        INFILTRATR_IO_OK)
+        return false;
+    trim_kernel_text(output);
+    return output[0] != '\0';
+}
+
+static void read_process_writable_memory(pid_t pid, LsmProcessInfo *process)
+{
+    if (!process) return;
+    char path[128];
+    char text[16384];
+    (void)snprintf(path, sizeof(path), "/proc/%d/smaps_rollup", pid);
+    if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
+        INFILTRATR_IO_OK)
+        return;
+
+    char *line = text;
+    while (*line) {
+        char *next = strchr(line, '\n');
+        if (next) *next = '\0';
+        uint64_t value = 0U;
+        if (parse_prefixed_u64(line, "Private_Dirty:", &value)) {
+            uint64_t bytes = 0U;
+            if (lsm_u64_multiply_checked(value, 1024U, &bytes)) {
+                process->writable_memory_bytes = bytes;
+                process->writable_memory_available = true;
+            }
+            break;
+        }
+        if (!next) break;
+        line = next + 1;
+    }
+}
+
+static bool safe_session_identifier(const char *session)
+{
+    if (!session || !*session) return false;
+    for (const unsigned char *cursor = (const unsigned char *)session;
+         *cursor; cursor++) {
+        if (!lsm_ascii_is_alnum(*cursor) && *cursor != '-' && *cursor != '_')
+            return false;
+    }
+    return true;
+}
+
+static void derive_systemd_process_identity(LsmProcessInfo *process)
+{
+    if (!process || !process->cgroup_path[0]) return;
+
+    const char *last = strrchr(process->cgroup_path, '/');
+    last = last ? last + 1 : process->cgroup_path;
+    if (*last && strlen(last) < sizeof(process->unit))
+        lsm_copy_string(process->unit, sizeof(process->unit), last);
+
+    const char *session = strstr(process->cgroup_path, "/session-");
+    if (session) {
+        session += strlen("/session-");
+        const char *end = strstr(session, ".scope");
+        if (end && end > session) {
+            const size_t length = (size_t)(end - session);
+            if (length < sizeof(process->session)) {
+                memcpy(process->session, session, length);
+                process->session[length] = '\0';
+            }
+        }
+    }
+
+    if (process->user[0])
+        lsm_copy_string(process->owner, sizeof(process->owner), process->user);
+
+    if (!safe_session_identifier(process->session)) return;
+    char path[192];
+    const int written = snprintf(path, sizeof(path), "/run/systemd/sessions/%s",
+                                 process->session);
+    if (written < 0 || (size_t)written >= sizeof(path)) return;
+    char text[4096];
+    if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
+        INFILTRATR_IO_OK)
+        return;
+    char *save = NULL;
+    for (char *line = strtok_r(text, "\n", &save); line;
+         line = strtok_r(NULL, "\n", &save)) {
+        if (lsm_string_starts_with(line, "SEAT="))
+            lsm_copy_string(process->seat, sizeof(process->seat), line + 5U);
+        else if (lsm_string_starts_with(line, "USER="))
+            lsm_copy_string(process->owner, sizeof(process->owner), line + 5U);
+    }
+}
+
+static void read_process_technical(pid_t pid, LsmProcessInfo *process)
+{
+    if (!process) return;
+    (void)read_process_text_field(pid, "wchan", process->waiting_channel,
+                                  sizeof(process->waiting_channel));
+    if (strcmp(process->waiting_channel, "0") == 0)
+        process->waiting_channel[0] = '\0';
+    (void)read_process_text_field(pid, "attr/current",
+                                  process->security_context,
+                                  sizeof(process->security_context));
+    read_process_writable_memory(pid, process);
+    derive_systemd_process_identity(process);
+}
+
 static void read_process_io(pid_t pid, LsmProcessInfo *process)
 {
     char path[128];
@@ -566,8 +719,12 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
         read_process_executable(pid, process);
     if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT)
         process->handle_count = count_process_fds(pid);
-    if (scan_flags & LSM_PROCESS_SCAN_CGROUP)
+    if ((scan_flags & LSM_PROCESS_SCAN_CGROUP) != 0U ||
+        ((scan_flags & LSM_PROCESS_SCAN_TECHNICAL) != 0U &&
+         !process->cgroup_path[0]))
         read_process_cgroup(pid, process);
+    if (scan_flags & LSM_PROCESS_SCAN_TECHNICAL)
+        read_process_technical(pid, process);
     if (process_identity_pid(process_id, process->instance_id, &pid))
         return true;
     if (scan_flags & LSM_PROCESS_SCAN_EXECUTABLE)
@@ -577,6 +734,16 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
     if (scan_flags & LSM_PROCESS_SCAN_CGROUP) {
         process->cgroup_path[0] = '\0';
         process->cgroup_v2 = false;
+    }
+    if (scan_flags & LSM_PROCESS_SCAN_TECHNICAL) {
+        process->waiting_channel[0] = '\0';
+        process->security_context[0] = '\0';
+        process->unit[0] = '\0';
+        process->session[0] = '\0';
+        process->seat[0] = '\0';
+        process->owner[0] = '\0';
+        process->writable_memory_bytes = 0U;
+        process->writable_memory_available = false;
     }
     return false;
 }
@@ -925,6 +1092,23 @@ bool lsm_process_set_priority(LsmProcessId process_id,
         return false;
     }
     const int nice_value = nice_from_priority(priority);
+    return setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
+}
+
+bool lsm_process_set_nice(LsmProcessId process_id,
+                          LsmProcessInstanceId instance_id,
+                          int nice_value)
+{
+    pid_t pid = 0;
+    if (nice_value < -20 || nice_value > 19) {
+        errno = EINVAL;
+        return false;
+    }
+    if (!process_identity_pid(process_id, instance_id, &pid)) return false;
+    if (pid <= 1) {
+        errno = EINVAL;
+        return false;
+    }
     return setpriority(PRIO_PROCESS, (id_t)pid, nice_value) == 0;
 }
 

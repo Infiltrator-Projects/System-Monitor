@@ -98,6 +98,21 @@ bool lsm_process_set_priority(LsmProcessId pid,
                               LsmProcessPriority priority);
 
 /**
+ * Set the exact native Unix nice value where the active backend supports it.
+ *
+ * This is deliberately separate from the portable priority enum: a Unix nice
+ * value has no faithful representation on every supported platform.
+ *
+ * @param pid Target process identifier.
+ * @param instance_id Opaque instance token captured with @p pid.
+ * @param nice_value Requested value in the inclusive Unix range -20..19.
+ * @return true when the active platform accepted the exact value.
+ */
+bool lsm_process_set_nice(LsmProcessId pid,
+                          LsmProcessInstanceId instance_id,
+                          int nice_value);
+
+/**
  * Apply or remove the application's efficiency scheduling policy.
  *
  * @param pid Target process identifier.

@@ -545,6 +545,16 @@ bool lsm_process_set_priority(LsmProcessId pid,
     return unsupported_process_operation();
 }
 
+bool lsm_process_set_nice(LsmProcessId pid,
+                          LsmProcessInstanceId instance_id,
+                          int nice_value)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)nice_value;
+    return unsupported_process_operation();
+}
+
 bool lsm_process_set_efficiency(LsmProcessId pid,
                                 LsmProcessInstanceId instance_id,
                                 bool enabled)

@@ -56,7 +56,14 @@ typedef enum {
     LSM_PROCESS_SCAN_EXECUTABLE = 1u << 0,
     LSM_PROCESS_SCAN_HANDLE_COUNT = 1u << 1,
     LSM_PROCESS_SCAN_GPU = 1u << 2,
-    LSM_PROCESS_SCAN_CGROUP = 1u << 3
+    LSM_PROCESS_SCAN_CGROUP = 1u << 3,
+    /**
+     * Linux-native technical process metadata used only by advanced views.
+     *
+     * This flag may require additional procfs/systemd metadata reads and is
+     * therefore requested only while technical columns or an Inspector need it.
+     */
+    LSM_PROCESS_SCAN_TECHNICAL = 1u << 4
 } LsmProcessScanFlags;
 
 /** One process row supplied by the active process backend. */
@@ -73,15 +80,29 @@ typedef struct {
     char command[1024];
     char cgroup_path[LSM_PATH_LEN]; /**< Unified cgroup-v2 path when requested by the caller. */
     bool cgroup_v2;                /**< True when cgroup_path came from hierarchy ID 0. */
+    char waiting_channel[64];      /**< Linux kernel wait channel, or empty when unavailable. */
+    char security_context[256];    /**< Active Linux security context/profile, or empty. */
+    char unit[128];                /**< Owning systemd unit inferred from the unified cgroup. */
+    char session[64];              /**< Owning login session identifier, when available. */
+    char seat[64];                 /**< Login seat associated with @ref session, when available. */
+    char owner[64];                /**< Unit/session owner when it differs conceptually from User. */
     unsigned threads;
     unsigned handle_count;
     LsmProcessPriority priority;
+    int nice_value;                /**< Native Unix nice value when @ref nice_value_available. */
+    bool nice_value_available;
     bool efficiency_mode;
     double cpu_percent;
     double memory_percent;
     double read_bytes_per_sec;
     double write_bytes_per_sec;
     uint64_t rss_bytes;
+    uint64_t virtual_memory_bytes;
+    uint64_t writable_memory_bytes;
+    uint64_t shared_memory_bytes;
+    bool virtual_memory_available;
+    bool writable_memory_available;
+    bool shared_memory_available;
     uint64_t read_bytes;
     uint64_t write_bytes;
     uint64_t context_switches;
