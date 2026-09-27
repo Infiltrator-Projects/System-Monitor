@@ -711,6 +711,7 @@ static bool count_process_fds(pid_t pid, unsigned *count)
     if (!directory) return false;
 
     unsigned value = 0U;
+    bool scan_failed = false;
     struct dirent *entry;
     while ((entry = readdir(directory))) {
         if (strcmp(entry->d_name, ".") == 0 ||
@@ -787,21 +788,24 @@ bool lsm_process_linux_parse_total_cpu_ticks(const char *text,
     return true;
 }
 
-static uint64_t read_total_cpu_ticks(void)
+static bool read_total_cpu_ticks(uint64_t *total)
 {
+    if (!total) return false;
     char *text = NULL;
     size_t length = 0U;
     if (lsm_read_text_file_alloc("/proc/stat", &text, &length) !=
         INFILTRATR_IO_OK)
-        return 0U;
+        return false;
 
-    uint64_t total = 0U;
+    uint64_t parsed = 0U;
     const bool valid_text = memchr(text, '\0', length) == NULL;
     const bool okay =
         valid_text &&
-        lsm_process_linux_parse_total_cpu_ticks(text, &total);
+        lsm_process_linux_parse_total_cpu_ticks(text, &parsed);
     free(text);
-    return okay ? total : 0U;
+    if (!okay) return false;
+    *total = parsed;
+    return true;
 }
 
 static int64_t read_boot_time(void)
@@ -870,11 +874,12 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     if (!backend || !out_processes) return 0;
     *out_processes = NULL;
 
-    const uint64_t current_total_ticks = read_total_cpu_ticks();
+    uint64_t current_total_ticks = 0U;
+    if (!read_total_cpu_ticks(&current_total_ticks)) return 0;
+
     uint64_t total_delta = 0U;
     (void)lsm_u64_counter_delta(
         current_total_ticks, backend->previous_total_cpu_ticks, &total_delta);
-    backend->previous_total_cpu_ticks = current_total_ticks;
 
     DIR *directory = opendir("/proc");
     if (!directory) return 0;
@@ -901,8 +906,10 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         if (!parse_proc_pid(entry->d_name, &pid)) continue;
 
         if (!lsm_array_reserve((void **)&processes, &capacity,
-                               sizeof(*processes), count + 1U, 512U))
+                               sizeof(*processes), count + 1U, 512U)) {
+            scan_failed = true;
             break;
+        }
 
         LsmProcessInfo process = {0};
         LinuxProcessStat native_stat = {0};
@@ -1069,6 +1076,14 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         processes[count++] = process;
     }
     closedir(directory);
+    if (scan_failed) {
+        free(processes);
+        return 0U;
+    }
+
+    /* Commit the aggregate CPU baseline only after a complete process scan.
+     * A transient /proc or allocation failure must not poison the next delta. */
+    backend->previous_total_cpu_ticks = current_total_ticks;
 
     /* Removing entries from a sorted prefix preserves its ordering. A qsort is
      * required only when newly observed PIDs were appended during this scan. */
