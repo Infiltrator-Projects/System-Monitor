@@ -10,6 +10,7 @@
 - Add permanent regression coverage for narrow-screen behaviour and Overview graph allocation stability.
 - Remove the Overview graphs' fixed horizontal minimum so the asymmetric grid can contract to small work areas without changing graph height or refresh stability.
 - Reflow CPU and Memory primary statistics from four columns to a 2×2 grid in compact layout so those cards no longer impose desktop-sized minimum widths.
+- Permit an internal horizontal Overview scrollbar only in compact layout; standard desktop layouts remain horizontally fixed, while narrow work areas can no longer force the top-level window wider than the screen.
 
 ## 1.0.131 - 2026-09-27
 

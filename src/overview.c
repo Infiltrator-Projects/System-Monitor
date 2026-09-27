@@ -1286,7 +1286,9 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
     GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_name(scroller, "lsm-overview-scroller");
     gtk_scrolled_window_set_policy(
-        GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+        GTK_SCROLLED_WINDOW(scroller),
+        app->runtime.compact_layout ? GTK_POLICY_AUTOMATIC : GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_propagate_natural_width(
         GTK_SCROLLED_WINDOW(scroller), FALSE);
     gtk_scrolled_window_set_propagate_natural_height(
