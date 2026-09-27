@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.138 - 2026-09-27
+
+- Make `--system-package-mode` a production installation path instead of running the complete developer smoke suite on the target machine before compiling. Interactive native builds keep their existing test default; the OS-managed install now goes straight to the aggressive local build and PGO path.
+- Change automatic build parallelism to logical processors minus one, leaving one CPU free for the desktop/system.
+- Make the NVML smoke target explicitly depend on the pinned Common archive instead of relying on another parallel target to have produced it first.
+- Replace the previous system-package dry-run CI coverage with a real root `.run --profile aggressive --system-package-mode` build/install and verify the installed package version afterward.
+
+
 ## 1.0.137 - 2026-09-27
 
 - Finish the remaining forensic device-identity hardening: Linux network identities now pair the kernel ifindex with the link-layer address when available, so a recycled interface index cannot inherit a removed NIC's retained rate baseline.
