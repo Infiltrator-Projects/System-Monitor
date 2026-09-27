@@ -373,8 +373,10 @@ static void enumerate_gpus(LsmMonitor *monitor)
             lsm_copy_string(gpu->name, sizeof(gpu->name), records[index].product);
         else if (records[index].vendor[0] &&
                  strcmp(records[index].vendor, "N/A") != 0) {
-            lsm_copy_string(gpu->name, sizeof(gpu->name), records[index].vendor);
-            strncat(gpu->name, " graphics", sizeof(gpu->name) - strlen(gpu->name) - 1U);
+            (void)snprintf(
+                gpu->name, sizeof(gpu->name), "%.*s graphics",
+                (int)(sizeof(gpu->name) - sizeof(" graphics")),
+                records[index].vendor);
         } else {
             snprintf(gpu->name, sizeof(gpu->name), "GPU %zu", index);
         }
