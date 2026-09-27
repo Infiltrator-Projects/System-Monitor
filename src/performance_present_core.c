@@ -283,11 +283,13 @@ static void update_network_page(LsmApp *app, LsmDevicePage *page)
     char total_received[64], total_sent[64];
     char scale[64], mid_scale[64], frequency[64];
 
+    const gboolean total_bits = app->runtime.network_total_separate
+        ? app->runtime.network_total_use_bits : app->runtime.network_use_bits;
     lsm_metric_format_network(
-        (long double)net->rx_bytes_total, app->runtime.network_use_bits, false,
+        (long double)net->rx_bytes_total, total_bits, false,
         total_received, sizeof(total_received));
     lsm_metric_format_network(
-        (long double)net->tx_bytes_total, app->runtime.network_use_bits, false,
+        (long double)net->tx_bytes_total, total_bits, false,
         total_sent, sizeof(total_sent));
     const double graph_maximum = lsm_graph_get_maximum(page->graph);
     lsm_metric_format_network(
@@ -348,7 +350,7 @@ bool performance_record_core_page_sample(
     switch (page->type) {
         case LSM_PAGE_CPU: {
             const LsmCpuInfo *cpu = &app->monitor.cpu;
-            lsm_graph_push(page->graph, cpu->usage_percent, 0.0,
+            lsm_graph_push(page->graph, cpu->usage_percent, cpu->user_percent,
                            app->runtime.newer_on_right);
             lsm_graph_push(page->side_graph, cpu->usage_percent, 0.0,
                            app->runtime.newer_on_right);

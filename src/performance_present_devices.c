@@ -70,13 +70,15 @@ static void update_bluetooth_page(LsmApp *app, LsmDevicePage *page)
             (long double)device->tx_bytes_per_sec,
             app->runtime.network_use_bits, true,
             send, sizeof(send));
+        const gboolean total_bits = app->runtime.network_total_separate
+            ? app->runtime.network_total_use_bits : app->runtime.network_use_bits;
         lsm_metric_format_network(
             (long double)device->rx_bytes_total,
-            app->runtime.network_use_bits, false,
+            total_bits, false,
             received, sizeof(received));
         lsm_metric_format_network(
             (long double)device->tx_bytes_total,
-            app->runtime.network_use_bits, false,
+            total_bits, false,
             sent, sizeof(sent));
         lsm_metric_format_network_pair(
             (long double)device->tx_bytes_per_sec,
