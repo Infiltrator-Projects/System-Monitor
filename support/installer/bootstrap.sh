@@ -4,7 +4,9 @@
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 
+system_package_mode=0
 for argument in "$@"; do
+    [[ "$argument" == --system-package-mode ]] && system_package_mode=1
     case "$argument" in
         -h|--help)
             cat <<'USAGE'
@@ -16,6 +18,7 @@ Usage: ./support/installer/bootstrap.sh [options]
   --skip-tests
   --no-strip
   --dry-run
+  --system-package-mode
   -h, --help
 USAGE
             exit 0
@@ -23,8 +26,12 @@ USAGE
     esac
 done
 
-if ((EUID == 0)); then
+if ((EUID == 0 && system_package_mode == 0)); then
     printf 'Error: do not run this builder with sudo or as root\n' >&2
+    exit 1
+fi
+if ((EUID != 0 && system_package_mode != 0)); then
+    printf 'Error: --system-package-mode requires root\n' >&2
     exit 1
 fi
 
@@ -93,8 +100,8 @@ if ((${#missing[@]})); then
     apt_get=/usr/bin/apt-get
     [[ -x "$sudo_path" ]] || sudo_path=
     [[ -x "$apt_get" ]] || apt_get=
-    if [[ -z "$sudo_path" || -z "$apt_get" ]]; then
-        printf '\nAutomatic prerequisite installation requires sudo and apt-get.\n' >&2
+    if [[ -z "$apt_get" || ( "$system_package_mode" == 0 && -z "$sudo_path" ) ]]; then
+        printf '\nAutomatic prerequisite installation requires apt-get and, for user installs, sudo.\n' >&2
         printf 'Nothing was installed or changed.\n' >&2
         exit 1
     fi
@@ -110,9 +117,17 @@ if ((${#missing[@]})); then
     esac
 
     printf '\nUpdating package metadata...\n'
-    "$sudo_path" -- "$apt_get" update
+    if ((system_package_mode)); then
+        "$apt_get" update
+    else
+        "$sudo_path" -- "$apt_get" update
+    fi
     printf '\nInstalling missing build requirements...\n'
-    "$sudo_path" -- "$apt_get" install -y "${packages[@]}"
+    if ((system_package_mode)); then
+        "$apt_get" install -y "${packages[@]}"
+    else
+        "$sudo_path" -- "$apt_get" install -y "${packages[@]}"
+    fi
     export LSM_BOOTSTRAP_PASS=1
     exec "$ROOT/support/installer/bootstrap.sh" "$@"
 fi
