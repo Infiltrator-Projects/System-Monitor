@@ -15,9 +15,12 @@
 #include "performance_present.h"
 #include "performance_present_internal.h"
 #include "performance_internal.h"
+#include "performance_view.h"
+#include "metric_format.h"
 #include "ui_helpers.h"
 
 #include <math.h>
+#include <stdio.h>
 
 const char *performance_present_preferred_hardware_name(
     const char *product, const char *vendor)
@@ -88,4 +91,98 @@ void lsm_performance_present_page(LsmApp *app, LsmDevicePage *page)
     if (!app || !page) return;
     if (!performance_present_core_page(app, page))
         performance_present_device_page(app, page);
+}
+
+void lsm_performance_present_rail(LsmApp *app, LsmDevicePage *page)
+{
+    if (!app || !page || !page->button_value) return;
+
+    switch (page->type) {
+        case LSM_PAGE_CPU: {
+            LsmCpuPerformanceView view;
+            lsm_cpu_performance_view(&app->monitor, &view);
+            lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+            return;
+        }
+        case LSM_PAGE_MEMORY: {
+            LsmMemoryPerformanceView view;
+            lsm_memory_performance_view(&app->monitor, &view);
+            lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+            return;
+        }
+        case LSM_PAGE_DISK: {
+            if (page->index >= app->monitor.disk_count) return;
+            LsmDevicePerformanceView view;
+            lsm_disk_performance_view(
+                &app->monitor.disks[page->index], page->index, &view);
+            lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+            return;
+        }
+        case LSM_PAGE_NETWORK: {
+            if (page->index >= app->monitor.net_count) return;
+            LsmDevicePerformanceView view;
+            lsm_network_performance_view(
+                &app->monitor.nets[page->index], page->index,
+                app->runtime.network_use_bits, &view);
+            lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+            return;
+        }
+        case LSM_PAGE_BLUETOOTH: {
+            if (page->index >= app->monitor.bluetooth_device_count) return;
+            const LsmBluetoothDeviceInfo *device =
+                &app->monitor.bluetooth_devices[page->index];
+            if (!device->traffic_available) {
+                lsm_ui_set_label_text(page->button_value, "Traffic N/A");
+                return;
+            }
+            char rates[64];
+            lsm_metric_format_network_pair(
+                (long double)device->tx_bytes_per_sec,
+                (long double)device->rx_bytes_per_sec,
+                app->runtime.network_use_bits, rates, sizeof(rates));
+            lsm_ui_set_label_text(page->button_value, "%s", rates);
+            return;
+        }
+        case LSM_PAGE_GPU: {
+            if (page->index >= app->monitor.gpu_count) return;
+            LsmDevicePerformanceView view;
+            lsm_gpu_performance_view(
+                &app->monitor.gpus[page->index], page->index, &view);
+            lsm_ui_set_label_text(page->button_value, "%s", view.rail_value);
+            return;
+        }
+        case LSM_PAGE_BATTERY: {
+            if (page->index >= app->monitor.battery_count) return;
+            const LsmBatteryInfo *battery =
+                &app->monitor.batteries[page->index];
+            char charge[32];
+            if (isfinite(battery->capacity_percent))
+                snprintf(charge, sizeof(charge), "%.0f%%",
+                         battery->capacity_percent);
+            else if (battery->capacity_level[0])
+                snprintf(charge, sizeof(charge), "%s",
+                         battery->capacity_level);
+            else
+                snprintf(charge, sizeof(charge), "N/A");
+            lsm_ui_set_label_text(
+                page->button_value, "%s — %s", charge,
+                battery->status[0] ? battery->status : "N/A");
+            return;
+        }
+        case LSM_PAGE_NPU: {
+            if (page->index >= app->monitor.npu_count) return;
+            const LsmNpuInfo *npu = &app->monitor.npus[page->index];
+            if (!npu->utilization_available)
+                lsm_ui_set_label_text(page->button_value, "Detected");
+            else if (npu->utilization_percent < 0.5)
+                lsm_ui_set_label_text(page->button_value, "Idle");
+            else
+                lsm_ui_set_label_text(
+                    page->button_value, "%.0f%% active",
+                    npu->utilization_percent);
+            return;
+        }
+        case LSM_PAGE_COUNT:
+            return;
+    }
 }
