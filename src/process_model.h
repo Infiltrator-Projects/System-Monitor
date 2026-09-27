@@ -89,7 +89,7 @@ typedef struct {
     unsigned threads;
     unsigned handle_count;
     LsmProcessPriority priority;
-    int nice_value;                /**< Native Unix nice value when @ref nice_value_available. */
+    int nice_value;                /**< Native Unix nice value when nice_value_available is true. */
     bool nice_value_available;
     bool efficiency_mode;
     double cpu_percent;
