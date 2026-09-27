@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Minimal pre-compilation bootstrap for the hardware-native installer.
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 
@@ -8,26 +7,12 @@ system_package_mode=0
 for argument in "$@"; do
     [[ "$argument" == --system-package-mode ]] && system_package_mode=1
     case "$argument" in
-        -h|--help)
-            cat <<'USAGE'
-System Monitor hardware-native installer
-Usage: ./support/installer/bootstrap.sh [options]
-  --profile native|aggressive|portable
-  --compiler PATH
-  --jobs NUMBER
-  --skip-tests
-  --no-strip
-  --dry-run
-  --system-package-mode
-  -h, --help
-USAGE
-            exit 0
-            ;;
+        -h|--help) printf 'System Monitor hardware-native installer\n'; exit 0 ;;
     esac
 done
 
 if ((EUID == 0 && system_package_mode == 0)); then
-    printf 'Error: do not run this builder with sudo or as root\n' >&2
+    printf 'Error: root requires --system-package-mode\n' >&2
     exit 1
 fi
 if ((EUID != 0 && system_package_mode != 0)); then
@@ -85,8 +70,7 @@ if ((dpkg_missing)); then
 fi
 
 if ((${#missing[@]})); then
-    printf 'Missing build requirements:\n' >&2
-    printf '  - %s\n' "${missing[@]}" >&2
+    printf 'Missing build requirements.\n' >&2
     if ((dry_run)); then
         printf '\nDry run: nothing was installed or changed.\n' >&2
         exit 1
@@ -101,7 +85,7 @@ if ((${#missing[@]})); then
     [[ -x "$sudo_path" ]] || sudo_path=
     [[ -x "$apt_get" ]] || apt_get=
     if [[ -z "$apt_get" || ( "$system_package_mode" == 0 && -z "$sudo_path" ) ]]; then
-        printf '\nAutomatic prerequisite installation requires apt-get and, for user installs, sudo.\n' >&2
+        printf '\nMissing apt-get or sudo.\n' >&2
         printf 'Nothing was installed or changed.\n' >&2
         exit 1
     fi
@@ -109,20 +93,20 @@ if ((${#missing[@]})); then
     printf '\nThe installer can install the required packages: %s\n' "${packages[*]}"
     answer=${LSM_AUTO_INSTALL_BUILD_REQUIREMENTS:-}
     if [[ -z "$answer" && -t 0 ]]; then
-        read -r -p 'Install the missing build requirements now? [Y/n] ' answer || answer=
+        read -r -p 'Install build requirements? [Y/n] ' answer || answer=
     fi
     case "$answer" in
         ""|y|Y|yes|YES|Yes) ;;
         *) printf 'Nothing was installed or changed.\n' >&2; exit 1 ;;
     esac
 
-    printf '\nUpdating package metadata...\n'
+    printf '\nUpdating packages...\n'
     if ((system_package_mode)); then
         "$apt_get" -o DPkg::Lock::Timeout=300 update
     else
         "$sudo_path" -- "$apt_get" update
     fi
-    printf '\nInstalling missing build requirements...\n'
+    printf '\nInstalling build requirements...\n'
     if ((system_package_mode)); then
         "$apt_get" -o DPkg::Lock::Timeout=300 install -y "${packages[@]}"
     else
