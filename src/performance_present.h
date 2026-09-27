@@ -26,6 +26,14 @@ typedef struct LsmDevicePage LsmDevicePage;
 void lsm_performance_present_page(LsmApp *app, LsmDevicePage *page);
 
 /**
+ * Update only the compact side-rail value for one resource page.
+ *
+ * @param [in,out] app Application containing the current retained snapshot.
+ * @param [in,out] page Page whose compact rail label is updated.
+ */
+void lsm_performance_present_rail(LsmApp *app, LsmDevicePage *page);
+
+/**
  * Append one completed monitor sample to a Performance page's retained graphs.
  *
  * This is deliberately separate from widget presentation so hidden pages retain
