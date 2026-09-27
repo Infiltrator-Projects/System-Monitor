@@ -656,7 +656,7 @@ static GtkWidget *overview_make_stat_cell(
 }
 
 static GtkWidget *overview_make_primary_stats(
-    GtkWidget *button, LsmOverviewMetric metric)
+    LsmApp *app, GtkWidget *button, LsmOverviewMetric metric)
 {
     if (!button ||
         (metric != LSM_OVERVIEW_CPU && metric != LSM_OVERVIEW_MEMORY))
@@ -674,14 +674,19 @@ static GtkWidget *overview_make_primary_stats(
     gtk_style_context_add_class(
         gtk_widget_get_style_context(row), "lsm-overview-stat-row");
     gtk_grid_set_column_spacing(GTK_GRID(row), 10);
+    gtk_grid_set_row_spacing(GTK_GRID(row), 6);
     gtk_widget_set_hexpand(row, TRUE);
-    for (gint column = 0; column < 4; column++) {
+    const gint columns =
+        app && app->runtime.compact_layout ? 2 : 4;
+    for (gint item = 0; item < 4; item++) {
         GtkWidget *cell = overview_make_stat_cell(
-            metric, column, captions[column]);
+            metric, item, captions[item]);
         gtk_widget_set_hexpand(cell, TRUE);
-        gtk_grid_attach(GTK_GRID(row), cell, column, 0, 1, 1);
+        gtk_grid_attach(
+            GTK_GRID(row), cell,
+            item % columns, item / columns, 1, 1);
         g_object_set_data(
-            G_OBJECT(button), overview_stat_key(column),
+            G_OBJECT(button), overview_stat_key(item),
             g_object_get_data(G_OBJECT(cell), "lsm-overview-stat-value"));
     }
     return row;
@@ -871,7 +876,7 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     gtk_box_pack_start(GTK_BOX(box), visual, TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(box), detail, FALSE, FALSE, 0);
-    GtkWidget *stats = overview_make_primary_stats(button, metric);
+    GtkWidget *stats = overview_make_primary_stats(app, button, metric);
     if (stats)
         gtk_box_pack_start(GTK_BOX(box), stats, FALSE, FALSE, 0);
     gtk_container_add(GTK_CONTAINER(button), box);
