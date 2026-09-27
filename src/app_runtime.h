@@ -36,6 +36,13 @@ void lsm_app_refresh_all(LsmApp *app);
 void lsm_app_preferences_changed(LsmApp *app);
 
 /**
+ * Re-evaluate the process timer after navigation changes foreground cadence.
+ *
+ * @param [in,out] app Active application context.
+ */
+void lsm_app_runtime_navigation_changed(LsmApp *app);
+
+/**
  * Activate any recurring source owned by a page after that page is first built.
  *
  * Hidden pages that have never been visited do not wake the main loop merely
