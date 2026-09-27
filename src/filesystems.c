@@ -184,9 +184,12 @@ static void filesystem_columns_save(const LsmApp *app)
             sort_column,
             sort_order == GTK_SORT_DESCENDING ? "descending" : "ascending");
     }
-    (void)lsm_atomic_file_write_bytes(
+    const int failure = lsm_atomic_file_write_bytes(
         app->paths.filesystem_column_path, LSM_ATOMIC_FILE_PRIVATE,
         text->str, text->len);
+    if (failure != 0)
+        fprintf(stderr, "Unable to save filesystem column layout: %s\n",
+                strerror(failure));
     g_string_free(text, TRUE);
 }
 
