@@ -130,8 +130,10 @@ void lsm_app_preferences_changed(LsmApp *app)
         return;
     if (app->runtime.performance_timer)
         g_source_remove(app->runtime.performance_timer);
-    if (app->runtime.process_timer)
+    if (app->runtime.process_timer) {
         g_source_remove(app->runtime.process_timer);
+        app->runtime.process_timer = 0U;
+    }
     app->runtime.performance_timer = g_timeout_add(
         app->runtime.update_interval_ms, lsm_performance_update, app);
     reschedule_process_timer(app);
