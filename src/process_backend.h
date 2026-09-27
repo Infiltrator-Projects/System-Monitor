@@ -53,9 +53,12 @@ double lsm_process_cpu_total_percent(uint64_t process_delta,
  * Enumerate processes and calculate per-process CPU and I/O rates.
  *
  * @param backend Retained-sample context owned by the caller.
- * @param out_processes Receives the caller-owned process array.
+ * @param out_processes Receives the caller-owned process array. A successful
+ *        scan always returns a non-NULL array, even when the row count is zero;
+ *        NULL therefore unambiguously reports that no complete snapshot exists.
  * @param scan_flags Bitwise OR of LSM_PROCESS_SCAN_* enrichment flags.
- * @return Number of valid rows in @p out_processes; zero on failure or no rows.
+ * @return Number of valid rows in @p out_processes; zero may be a valid empty
+ *         scan, distinguished from failure by the output-pointer contract.
  */
 size_t lsm_process_scan(LsmProcessBackend *backend,
                         LsmProcessInfo **out_processes,
