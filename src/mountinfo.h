@@ -48,6 +48,13 @@ size_t lsm_mountinfo_visit_file(const char *path,
 /**
  * Parse a mountinfo stream while preserving the distinction between a valid
  * empty namespace and an I/O failure.
+ *
+ * @param [in] path Mountinfo file to parse.
+ * @param [in] visitor Callback invoked once for each valid record.
+ * @param [in,out] user_data Opaque value forwarded to @p visitor.
+ * @param [out] out_count Number of valid records delivered to the visitor.
+ * @return true when the file was opened and read to completion; false on
+ *         stream, close, or argument failure.
  */
 bool lsm_mountinfo_visit_file_checked(const char *path,
                                       LsmMountInfoVisitor visitor,
