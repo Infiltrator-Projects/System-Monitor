@@ -1045,12 +1045,30 @@ int main(void)
         return 3;
 
     memset(&cpu, 0, sizeof(cpu));
+    cpu.temperature_warning_available = true;
+    cpu.temperature_warning_c = 84.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 84.0) > 0.01 ||
+        fabs(policy.fault_c - 94.0) > 0.01)
+        return 4;
+
+    memset(&cpu, 0, sizeof(cpu));
+    cpu.temperature_critical_available = true;
+    cpu.temperature_critical_c = 97.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 87.0) > 0.01 ||
+        fabs(policy.fault_c - 97.0) > 0.01)
+        return 5;
+
+    memset(&cpu, 0, sizeof(cpu));
     lsm_copy_string(cpu.model, sizeof(cpu.model), "Unknown Future Processor");
     if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
         policy.source != LSM_THERMAL_POLICY_FALLBACK ||
         fabs(policy.warning_c - 80.0) > 0.01 ||
         fabs(policy.fault_c - 95.0) > 0.01)
-        return 4;
+        return 6;
 
     return 0;
 }
