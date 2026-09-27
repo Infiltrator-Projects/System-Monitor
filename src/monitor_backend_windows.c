@@ -805,6 +805,16 @@ static void enumerate_disk_volumes(LsmMonitor *monitor)
                 bytes >= sizeof(VOLUME_DISK_EXTENTS)) {
                 const VOLUME_DISK_EXTENTS *extents =
                     (const VOLUME_DISK_EXTENTS *)extents_buffer;
+                const DWORD extent_offset =
+                    (DWORD)FIELD_OFFSET(VOLUME_DISK_EXTENTS, Extents);
+                const DWORD extent_capacity =
+                    bytes >= extent_offset
+                        ? (bytes - extent_offset) /
+                            (DWORD)sizeof(extents->Extents[0])
+                        : 0U;
+                const DWORD extent_count =
+                    extents->NumberOfDiskExtents <= extent_capacity
+                        ? extents->NumberOfDiskExtents : 0U;
 
                 char mount_points[LSM_WINDOWS_VOLUME_BUFFER];
                 DWORD required = 0U;
@@ -837,7 +847,7 @@ static void enumerate_disk_volumes(LsmMonitor *monitor)
                 const char *display_mount =
                     mount_points[0] ? mount_points : volume_name;
                 for (DWORD extent = 0U;
-                     extent < extents->NumberOfDiskExtents;
+                     extent < extent_count;
                      extent++) {
                     const int index = physical_disk_index(
                         monitor, extents->Extents[extent].DiskNumber);
@@ -936,8 +946,15 @@ static bool network_identity_changed(
 {
     if (old_count != new_count) return true;
     for (size_t index = 0U; index < new_count; index++) {
-        if (strcmp(old_nets[index].name, new_nets[index].name) != 0)
+        if (old_nets[index].instance_identity[0] &&
+            new_nets[index].instance_identity[0]) {
+            if (strcmp(old_nets[index].instance_identity,
+                       new_nets[index].instance_identity) != 0)
+                return true;
+        } else if (strcmp(old_nets[index].name,
+                          new_nets[index].name) != 0) {
             return true;
+        }
     }
     return false;
 }
@@ -1017,6 +1034,9 @@ static void enumerate_networks(
         net->tx_bytes_total = row.OutOctets;
 
         const uint64_t key = adapter->Luid.Value;
+        (void)snprintf(
+            net->instance_identity, sizeof(net->instance_identity),
+            "luid:%016llx", (unsigned long long)key);
         LsmWindowsNetBaseline *baseline = net_baseline(state, key);
         if (baseline) {
             if (baseline->valid && elapsed > 0.0) {
