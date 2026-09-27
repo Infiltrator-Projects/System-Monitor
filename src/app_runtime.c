@@ -71,6 +71,16 @@ static gboolean process_timer_update(gpointer user_data)
     return lsm_app_refresh_processes_if_due(user_data, FALSE);
 }
 
+static void reschedule_process_timer(LsmApp *app)
+{
+    if (!app || !app->shell.window || app->runtime.shutting_down)
+        return;
+    if (app->runtime.process_timer)
+        g_source_remove(app->runtime.process_timer);
+    app->runtime.process_timer = g_timeout_add(
+        effective_process_refresh_interval(app), process_timer_update, app);
+}
+
 static gboolean services_timer_update(gpointer user_data)
 {
     LsmApp *app = user_data;
@@ -105,7 +115,6 @@ void lsm_app_refresh_all(LsmApp *app)
     app->runtime.paused = FALSE;
     (void)lsm_app_refresh_processes_if_due(app, TRUE);
     lsm_performance_refresh(app);
-    lsm_overview_refresh(app);
     lsm_history_refresh(app);
     lsm_filesystems_refresh(app);
     lsm_startup_refresh(app);
@@ -125,14 +134,19 @@ void lsm_app_preferences_changed(LsmApp *app)
         g_source_remove(app->runtime.process_timer);
     app->runtime.performance_timer = g_timeout_add(
         app->runtime.update_interval_ms, lsm_performance_update, app);
-    app->runtime.process_timer = g_timeout_add(
-        process_refresh_interval(app), process_timer_update, app);
+    reschedule_process_timer(app);
     if (app->runtime.filesystem_timer) {
         g_source_remove(app->runtime.filesystem_timer);
         app->runtime.filesystem_timer = g_timeout_add(
             app->runtime.filesystem_update_interval_ms,
             filesystem_timer_update, app);
     }
+}
+
+void lsm_app_runtime_navigation_changed(LsmApp *app)
+{
+    if (!app || !app->runtime.process_timer) return;
+    reschedule_process_timer(app);
 }
 
 void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
@@ -173,8 +187,7 @@ void lsm_app_runtime_start(LsmApp *app)
     if (!app) return;
     app->runtime.performance_timer = g_timeout_add(
         app->runtime.update_interval_ms, lsm_performance_update, app);
-    app->runtime.process_timer = g_timeout_add(
-        process_refresh_interval(app), process_timer_update, app);
+    reschedule_process_timer(app);
     for (gint page = 0; page < LSM_TAB_COUNT; page++) {
         if (app->runtime.page_built[page])
             lsm_app_runtime_page_built(app, (LsmTabIndex)page);
