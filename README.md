@@ -8,7 +8,7 @@
 
 System Monitor is a native C17/GTK 3 desktop system manager for Linux. It provides Task-Manager-style process, performance, hardware, service and user views while collecting data directly from native operating-system interfaces wherever practical.
 
-**Current source version:** 1.0.134 ([version file](support/VERSION))\
+**Current source version:** 1.0.135 ([version file](support/VERSION))\
 **Shared foundation:** exact Common 1.19.35 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
@@ -103,7 +103,7 @@ Each numbered release publishes:
 - `infiltrator-system-monitor-<version>-native-installer.run`
 - `system-monitor-<version>-windows.exe`
 
-The Windows `.exe` is the current native GUI preview: Performance and Processes are live and read-only, while the remaining product pages are visible placeholders. The `.deb` is the generic amd64 package. Its sole Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. The `.run` performs a native local build/test/install. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
+The Windows `.exe` is the current native GUI preview: Performance and Processes are live and read-only, while the remaining product pages are visible placeholders. The `.deb` is the generic amd64 package. Its sole Debian/APT identity is `infiltrator-system-monitor`; the user-facing application and executable remain **System Monitor** and `system-monitor`. The `.run` performs a native local build/test/install. The explicit `--system-package-mode` path is reserved for Infiltrator OS package integration: it permits the package manager's root context while retaining the normal refusal of interactive root builds. Its `native` profile uses machine-specific ISA/tuning at `-O2`; `aggressive` uses `-O3`, the same machine-specific ISA/tuning and LTO, then performs a two-pass profile-guided rebuild trained on System Monitor's real native collector and process-scan paths on the target machine. The PGO pass uses partial-training semantics so unvisited code keeps normal optimisation instead of being penalised. `portable` avoids machine-specific ISA selection.
 
 ## Repository policy
 
