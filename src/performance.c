@@ -1077,8 +1077,10 @@ void lsm_performance_refresh(LsmApp *app)
                 visible && strcmp(page->stack_name, visible) == 0;
             const gboolean rail_visible =
                 page->button && gtk_widget_get_mapped(page->button);
-            if (selected || rail_visible)
+            if (selected)
                 lsm_performance_present_page(app, page);
+            else if (rail_visible)
+                lsm_performance_present_rail(app, page);
         }
         performance_synchronise_side_selection(app);
     }
