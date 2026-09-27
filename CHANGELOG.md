@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.131 - 2026-09-27
+
+- Fix the Overview graph-geometry regression where telemetry refreshes could make the middle dashboard graphs grow and shrink on every pulse.
+- Make live card headline, metadata, detail and primary-stat labels layout-inert: text updates now ellipsize inside their existing allocations instead of changing GTK preferred widths and renegotiating the shared twelve-column grid.
+- Preserve normal responsive resizing when the user changes the window size; only sample-driven layout movement is suppressed.
+
 ## 1.0.130 - 2026-09-27
 
 - Close the remaining Linux Mint System Monitor 45.0.2 inspection-detail gaps identified by the maintained forensic coverage ledger.

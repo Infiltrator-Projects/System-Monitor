@@ -629,7 +629,17 @@ static GtkWidget *overview_make_stat_cell(
 
     GtkWidget *text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *value = gtk_label_new("N/A");
-    gtk_widget_set_halign(value, GTK_ALIGN_START);
+    /*
+     * Live text must consume the cell allocation without contributing its
+     * changing natural width back into the shared twelve-column dashboard.
+     * Otherwise one extra digit in a stat can resize unrelated graphs.
+     */
+    gtk_widget_set_halign(value, GTK_ALIGN_FILL);
+    gtk_widget_set_hexpand(value, TRUE);
+    gtk_label_set_xalign(GTK_LABEL(value), 0.0f);
+    gtk_label_set_ellipsize(GTK_LABEL(value), PANGO_ELLIPSIZE_END);
+    gtk_label_set_width_chars(GTK_LABEL(value), 1);
+    gtk_label_set_max_width_chars(GTK_LABEL(value), 1);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-overview-stat-value");
     GtkWidget *caption_label = gtk_label_new(caption);
@@ -733,6 +743,8 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
             metric == LSM_OVERVIEW_TEMPERATURE ? 76 : 72;
         gtk_widget_set_size_request(value, value_width, -1);
         gtk_label_set_ellipsize(GTK_LABEL(value), PANGO_ELLIPSIZE_END);
+        gtk_label_set_width_chars(GTK_LABEL(value), 1);
+        gtk_label_set_max_width_chars(GTK_LABEL(value), 1);
     }
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-metric-value");
@@ -742,6 +754,8 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     GtkWidget *meta = gtk_label_new("");
     gtk_widget_set_halign(meta, GTK_ALIGN_END);
     gtk_label_set_ellipsize(GTK_LABEL(meta), PANGO_ELLIPSIZE_END);
+    gtk_label_set_width_chars(GTK_LABEL(meta), 1);
+    gtk_label_set_max_width_chars(GTK_LABEL(meta), 1);
     if (metric == LSM_OVERVIEW_CPU ||
         metric == LSM_OVERVIEW_MEMORY ||
         metric == LSM_OVERVIEW_DISK ||
@@ -767,8 +781,17 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     g_object_set_data(G_OBJECT(button), "lsm-overview-meta", meta);
 
     GtkWidget *detail = gtk_label_new("");
-    gtk_widget_set_halign(detail, GTK_ALIGN_START);
+    /*
+     * Detail text changes every sample (disk rates are the most visible
+     * example). Fill the card width, but advertise a one-character preferred
+     * width so those textual changes cannot renegotiate grid columns.
+     */
+    gtk_widget_set_halign(detail, GTK_ALIGN_FILL);
+    gtk_widget_set_hexpand(detail, TRUE);
+    gtk_label_set_xalign(GTK_LABEL(detail), 0.0f);
     gtk_label_set_ellipsize(GTK_LABEL(detail), PANGO_ELLIPSIZE_END);
+    gtk_label_set_width_chars(GTK_LABEL(detail), 1);
+    gtk_label_set_max_width_chars(GTK_LABEL(detail), 1);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(detail), "lsm-performance-summary");
 
