@@ -118,13 +118,13 @@ if ((${#missing[@]})); then
 
     printf '\nUpdating package metadata...\n'
     if ((system_package_mode)); then
-        "$apt_get" update
+        "$apt_get" -o DPkg::Lock::Timeout=300 update
     else
         "$sudo_path" -- "$apt_get" update
     fi
     printf '\nInstalling missing build requirements...\n'
     if ((system_package_mode)); then
-        "$apt_get" install -y "${packages[@]}"
+        "$apt_get" -o DPkg::Lock::Timeout=300 install -y "${packages[@]}"
     else
         "$sudo_path" -- "$apt_get" install -y "${packages[@]}"
     fi
