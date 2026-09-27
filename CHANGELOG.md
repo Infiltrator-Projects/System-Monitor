@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.129 - 2026-09-27
+
+- Implement the documented Linux Mint System Monitor 45.0.2 replacement tranche across the existing Infiltrator System Monitor information architecture.
+- Add All/Active/My process scopes, full technical process metadata, exact Linux nice control, force termination and configurable confirmation while preserving PID-reuse protection and platform-neutral control contracts.
+- Complete mounted File Systems parity with distinct Free versus Available capacity, independent refresh cadence, persistent configurable columns and direct mount-point activation.
+- Add configurable performance graph history, smooth/line rendering, stacked CPU user/kernel presentation, logarithmic Memory presentation and independent network-total units without discarding retained history.
+
 ## 1.0.128 - 2026-09-27
 
 - Replace the Overview and CPU-page hard-coded 80/95 °C thermal thresholds with one processor-aware policy.
