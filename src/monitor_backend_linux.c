@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,28 @@ struct LsmLinuxSamplerState {
 
 #define LSM_SAMPLER_SHUTDOWN_WAIT_MS 250L
 
+static void copy_disk_snapshot(LsmDiskInfo *destination,
+                               const LsmDiskInfo *source)
+{
+    if (!destination || !source) return;
+
+    /*
+     * LsmDiskInfo embeds the maximum partition array so a plain structure copy
+     * moves tens of kilobytes per disk even when only one or two partitions are
+     * populated. Copy the fixed metadata/telemetry prefix, then only the live
+     * partition records. Callers publish partition_count last, so readers never
+     * observe stale tail entries as part of the snapshot.
+     */
+    memcpy(destination, source, offsetof(LsmDiskInfo, partitions));
+    const size_t partition_count =
+        source->partition_count < LSM_MAX_PARTITIONS
+            ? source->partition_count : LSM_MAX_PARTITIONS;
+    if (partition_count > 0U)
+        memcpy(destination->partitions, source->partitions,
+               partition_count * sizeof(destination->partitions[0]));
+    destination->partition_count = partition_count;
+}
+
 static void copy_public_snapshot(LsmMonitor *destination,
                                  const LsmMonitor *source,
                                  void *backend_state,
@@ -65,9 +88,8 @@ static void copy_public_snapshot(LsmMonitor *destination,
 
     destination->disk_count =
         source->disk_count < LSM_MAX_DISKS ? source->disk_count : LSM_MAX_DISKS;
-    if (destination->disk_count > 0U)
-        memcpy(destination->disks, source->disks,
-               destination->disk_count * sizeof(destination->disks[0]));
+    for (size_t index = 0U; index < destination->disk_count; index++)
+        copy_disk_snapshot(&destination->disks[index], &source->disks[index]);
     destination->disk_generation = source->disk_generation;
     destination->topology_generation = source->topology_generation;
 
