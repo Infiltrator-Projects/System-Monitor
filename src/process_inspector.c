@@ -264,9 +264,12 @@ static void present_maps(ProcessInspector *inspector,
     gtk_list_store_clear(inspector->maps_store);
     for (size_t index = 0U; index < count; index++) {
         GtkTreeIter iterator;
-        char range[64], offset[32], inode[32], size[64];
-        snprintf(range, sizeof(range), "%llx–%llx",
-                 (unsigned long long)items[index].start_address,
+        char start[32], end[32], offset[32], inode[32], size[64];
+        char private_clean[64], private_dirty[64];
+        char shared_clean[64], shared_dirty[64];
+        snprintf(start, sizeof(start), "0x%llx",
+                 (unsigned long long)items[index].start_address);
+        snprintf(end, sizeof(end), "0x%llx",
                  (unsigned long long)items[index].end_address);
         snprintf(offset, sizeof(offset), "0x%llx",
                  (unsigned long long)items[index].file_offset);
@@ -274,11 +277,29 @@ static void present_maps(ProcessInspector *inspector,
                  (unsigned long long)items[index].inode);
         lsm_format_bytes(items[index].end_address - items[index].start_address,
                          size, sizeof(size));
+        if (items[index].accounting_available) {
+            lsm_format_bytes(items[index].private_clean_bytes,
+                             private_clean, sizeof(private_clean));
+            lsm_format_bytes(items[index].private_dirty_bytes,
+                             private_dirty, sizeof(private_dirty));
+            lsm_format_bytes(items[index].shared_clean_bytes,
+                             shared_clean, sizeof(shared_clean));
+            lsm_format_bytes(items[index].shared_dirty_bytes,
+                             shared_dirty, sizeof(shared_dirty));
+        } else {
+            snprintf(private_clean, sizeof(private_clean), "N/A");
+            snprintf(private_dirty, sizeof(private_dirty), "N/A");
+            snprintf(shared_clean, sizeof(shared_clean), "N/A");
+            snprintf(shared_dirty, sizeof(shared_dirty), "N/A");
+        }
         gtk_list_store_append(inspector->maps_store, &iterator);
         gtk_list_store_set(inspector->maps_store, &iterator,
-                           0, range, 1, size, 2, items[index].permissions,
-                           3, offset, 4, items[index].device, 5, inode,
-                           6, items[index].path, -1);
+                           0, items[index].path,
+                           1, start, 2, end, 3, size,
+                           4, items[index].permissions, 5, offset,
+                           6, private_clean, 7, private_dirty,
+                           8, shared_clean, 9, shared_dirty,
+                           10, items[index].device, 11, inode, -1);
     }
     if (count != 0U)
         lsm_ui_set_label_text(inspector->maps_status,
@@ -868,15 +889,18 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
                   G_N_ELEMENTS(file_titles), 2, &inspector->open_files_status),
         gtk_label_new("Open Files"));
 
-    inspector->maps_store = gtk_list_store_new(7,
+    inspector->maps_store = gtk_list_store_new(12,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     static const char *map_titles[] = {
-        "Address", "Size", "Permissions", "Offset", "Device", "Inode", "Path"
+        "Filename", "VM Start", "VM End", "VM Size", "Flags", "VM Offset",
+        "Private clean", "Private dirty", "Shared clean", "Shared dirty",
+        "Device", "Inode"
     };
     gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
         lsm_process_table_page(inspector->maps_store, map_titles,
-                  G_N_ELEMENTS(map_titles), 6, &inspector->maps_status),
+                  G_N_ELEMENTS(map_titles), 0, &inspector->maps_status),
         gtk_label_new("Memory Map"));
 
     inspector->threads_store = gtk_list_store_new(3,

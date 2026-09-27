@@ -404,7 +404,8 @@ int main(void)
     }
 
     static const char *directories[] = {
-        "123/fd", "123/task/123", "123/task/124", "456/fd", "456/task/456"
+        "123/fd", "123/net", "123/task/123", "123/task/124",
+        "456/fd", "456/task/456"
     };
     for (size_t index = 0U; index < sizeof(directories) / sizeof(directories[0]); index++) {
         if (!join(path, sizeof(path), root, directories[index]) || !make_tree(path)) {
@@ -418,10 +419,22 @@ int main(void)
         remove_tree(root);
         return 4;
     }
-    if (!join(path, sizeof(path), root, "123/maps") ||
+    if (!join(path, sizeof(path), root, "123/smaps") ||
         !write_text(path,
             "00400000-00452000 r-xp 00000000 08:01 123 /usr/bin/demo\n"
-            "7f000000-7f001000 rw-p 00000000 00:00 0 [heap]\n") ||
+            "Private_Clean:         4 kB\n"
+            "Private_Dirty:         8 kB\n"
+            "Shared_Clean:         12 kB\n"
+            "Shared_Dirty:         16 kB\n"
+            "7f000000-7f001000 rw-p 00000000 00:00 0 [heap]\n"
+            "Private_Clean:         0 kB\n"
+            "Private_Dirty:         1 kB\n"
+            "Shared_Clean:          2 kB\n"
+            "Shared_Dirty:          3 kB\n") ||
+        !join(path, sizeof(path), root, "123/net/unix") ||
+        !write_text(path,
+            "Num RefCount Protocol Flags Type St Inode Path\n"
+            "00000000: 00000002 00000000 00010000 0001 01 99 /tmp/test.sock\n") ||
         !join(path, sizeof(path), root, "123/stat") ||
         !write_text(path, "123 (demo process) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 424242 20\n") ||
         !join(path, sizeof(path), root, "123/comm") || !write_text(path, "demo\n") ||
@@ -448,7 +461,7 @@ int main(void)
     const size_t file_count = lsm_process_inspection_open_files(123, &files);
     if (file_count != 2U || files[0].descriptor != 3 ||
         strcmp(files[0].kind, "File") != 0 ||
-        strcmp(files[1].kind, "Socket") != 0) {
+        strcmp(files[1].kind, "Local socket") != 0) {
         lsm_process_inspection_free(files);
         remove_tree(root);
         return 7;
@@ -459,7 +472,13 @@ int main(void)
     const size_t map_count = lsm_process_inspection_memory_maps(123, &maps);
     if (map_count != 2U || maps[0].start_address != 0x00400000ULL ||
         strcmp(maps[0].permissions, "r-xp") != 0 ||
-        strcmp(maps[1].path, "[heap]") != 0) {
+        !maps[0].accounting_available ||
+        maps[0].private_clean_bytes != 4096U ||
+        maps[0].private_dirty_bytes != 8192U ||
+        maps[0].shared_clean_bytes != 12288U ||
+        maps[0].shared_dirty_bytes != 16384U ||
+        strcmp(maps[1].path, "[heap]") != 0 ||
+        maps[1].private_dirty_bytes != 1024U) {
         lsm_process_inspection_free(maps);
         remove_tree(root);
         return 8;

@@ -97,10 +97,66 @@ bool lsm_process_inspection_identity_matches(
     return parse_start_ticks(text, &current) && current == expected_instance_id;
 }
 
-static const char *descriptor_kind(const char *target)
+static bool parse_socket_inode(const char *target, uint64_t *inode)
+{
+    if (!target || !inode || !lsm_string_starts_with(target, "socket:[")) return false;
+    const char *cursor = target + strlen("socket:[");
+    uint64_t value = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &value) ||
+        *cursor != ']' || cursor[1] != '\0')
+        return false;
+    *inode = value;
+    return true;
+}
+
+static bool socket_table_contains_inode(pid_t pid, const char *suffix,
+                                        size_t inode_field, uint64_t inode)
+{
+    char path[PATH_MAX];
+    if (!process_path(path, sizeof(path), pid, suffix)) return false;
+    FILE *file = fopen(path, "r");
+    if (!file) return false;
+
+    bool found = false;
+    char line[4096];
+    while (!found && fgets(line, sizeof(line), file)) {
+        const char *cursor = line;
+        size_t field = 0U;
+        while (*cursor) {
+            while (*cursor && lsm_ascii_is_space((unsigned char)*cursor)) cursor++;
+            if (!*cursor) break;
+            const char *begin = cursor;
+            while (*cursor && !lsm_ascii_is_space((unsigned char)*cursor)) cursor++;
+            if (field++ != inode_field) continue;
+            const char *number = begin;
+            uint64_t parsed = 0U;
+            if (lsm_parse_u64_token(&number, 10U, &parsed) &&
+                number == cursor && parsed == inode)
+                found = true;
+            break;
+        }
+    }
+    fclose(file);
+    return found;
+}
+
+static const char *descriptor_kind(pid_t pid, const char *target)
 {
     if (!target || !*target) return "Unknown";
-    if (lsm_string_starts_with(target, "socket:[")) return "Socket";
+    uint64_t inode = 0U;
+    if (parse_socket_inode(target, &inode)) {
+        if (socket_table_contains_inode(pid, "net/unix", 6U, inode))
+            return "Local socket";
+        for (const char *const *table = (const char *const[]){"net/tcp", "net/udp", "net/raw", NULL};
+             *table; table++)
+            if (socket_table_contains_inode(pid, *table, 9U, inode))
+                return "IPv4 network connection";
+        for (const char *const *table = (const char *const[]){"net/tcp6", "net/udp6", "net/raw6", NULL};
+             *table; table++)
+            if (socket_table_contains_inode(pid, *table, 9U, inode))
+                return "IPv6 network connection";
+        return "Socket";
+    }
     if (lsm_string_starts_with(target, "pipe:[")) return "Pipe";
     if (lsm_string_starts_with(target, "anon_inode:")) return "Anon inode";
     if (target[0] == '/') return "File";
@@ -153,13 +209,27 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
         memset(item, 0, sizeof(*item));
         item->descriptor = (int)descriptor;
         lsm_copy_string(item->kind, sizeof(item->kind),
-                        descriptor_kind(target));
+                        descriptor_kind(pid, target));
         lsm_copy_string(item->target, sizeof(item->target), target);
     }
     closedir(directory);
     if (count > 1U) qsort(items, count, sizeof(*items), compare_open_file);
     *out_items = items;
     return count;
+}
+
+static bool parse_smaps_bytes(const char *line, const char *prefix,
+                              uint64_t *bytes)
+{
+    if (!line || !prefix || !bytes || !lsm_string_starts_with(line, prefix))
+        return false;
+    const char *cursor = line + strlen(prefix);
+    while (*cursor && lsm_ascii_is_space((unsigned char)*cursor)) cursor++;
+    uint64_t kib = 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &kib)) return false;
+    while (*cursor && lsm_ascii_is_space((unsigned char)*cursor)) cursor++;
+    if (*cursor && !lsm_string_starts_with(cursor, "kB")) return false;
+    return lsm_u64_multiply_checked(kib, 1024U, bytes);
 }
 
 size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapInfo **out_items)
@@ -171,42 +241,72 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapI
     }
     *out_items = NULL;
     char path[PATH_MAX];
-    if (!process_path(path, sizeof(path), pid, "maps")) {
+    if (!process_path(path, sizeof(path), pid, "smaps")) {
         errno = ENAMETOOLONG;
         return 0U;
     }
     FILE *file = fopen(path, "r");
+    bool detailed = file != NULL;
+    if (!file) {
+        if (!process_path(path, sizeof(path), pid, "maps")) {
+            errno = ENAMETOOLONG;
+            return 0U;
+        }
+        file = fopen(path, "r");
+    }
     if (!file) return 0U;
 
     LsmMemoryMapInfo *items = NULL;
     size_t count = 0U, capacity = 0U;
+    LsmMemoryMapInfo *current = NULL;
     char line[4096];
     while (fgets(line, sizeof(line), file)) {
         unsigned long long start = 0U, end = 0U, offset = 0U, inode = 0U;
-        char permissions[8] = "", device[32] = "", pathname[LSM_INSPECTION_MAP_PATH_LEN] = "";
+        char permissions[8] = "", device[32] = "";
+        char pathname[LSM_INSPECTION_MAP_PATH_LEN] = "";
         int consumed = 0;
         const int fields = sscanf(line, "%llx-%llx %7s %llx %31s %llu %n",
                                   &start, &end, permissions, &offset, device,
                                   &inode, &consumed);
-        if (fields < 6) continue;
-        const char *tail = line + consumed;
-        while (*tail == ' ' || *tail == '\t') tail++;
-        size_t tail_length = strcspn(tail, "\r\n");
-        if (tail_length >= sizeof(pathname)) tail_length = sizeof(pathname) - 1U;
-        memcpy(pathname, tail, tail_length);
-        pathname[tail_length] = '\0';
-        if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                               count + 1U, 32U))
-            break;
-        LsmMemoryMapInfo *item = &items[count++];
-        memset(item, 0, sizeof(*item));
-        item->start_address = (uint64_t)start;
-        item->end_address = (uint64_t)end;
-        item->file_offset = (uint64_t)offset;
-        item->inode = (uint64_t)inode;
-        lsm_copy_string(item->permissions, sizeof(item->permissions), permissions);
-        lsm_copy_string(item->device, sizeof(item->device), device);
-        lsm_copy_string(item->path, sizeof(item->path), pathname);
+        if (fields >= 6) {
+            const char *tail = line + consumed;
+            while (*tail == ' ' || *tail == '\t') tail++;
+            size_t tail_length = strcspn(tail, "\r\n");
+            if (tail_length >= sizeof(pathname))
+                tail_length = sizeof(pathname) - 1U;
+            memcpy(pathname, tail, tail_length);
+            pathname[tail_length] = '\0';
+            if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
+                                   count + 1U, 32U))
+                break;
+            current = &items[count++];
+            memset(current, 0, sizeof(*current));
+            current->start_address = (uint64_t)start;
+            current->end_address = (uint64_t)end;
+            current->file_offset = (uint64_t)offset;
+            current->inode = (uint64_t)inode;
+            lsm_copy_string(current->permissions, sizeof(current->permissions),
+                            permissions);
+            lsm_copy_string(current->device, sizeof(current->device), device);
+            lsm_copy_string(current->path, sizeof(current->path), pathname);
+            continue;
+        }
+        if (!detailed || !current) continue;
+
+        uint64_t bytes = 0U;
+        if (parse_smaps_bytes(line, "Private_Clean:", &bytes)) {
+            current->private_clean_bytes = bytes;
+            current->accounting_available = true;
+        } else if (parse_smaps_bytes(line, "Private_Dirty:", &bytes)) {
+            current->private_dirty_bytes = bytes;
+            current->accounting_available = true;
+        } else if (parse_smaps_bytes(line, "Shared_Clean:", &bytes)) {
+            current->shared_clean_bytes = bytes;
+            current->accounting_available = true;
+        } else if (parse_smaps_bytes(line, "Shared_Dirty:", &bytes)) {
+            current->shared_dirty_bytes = bytes;
+            current->accounting_available = true;
+        }
     }
     fclose(file);
     *out_items = items;

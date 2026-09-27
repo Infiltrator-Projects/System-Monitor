@@ -4,9 +4,10 @@
 
 ## Purpose
 
-This is a documentation-only forensic inventory of the Linux Mint System
-Monitor baseline and a placement map for the Infiltrator 22-repository software
-family. It does not implement anything and it is not a one-for-one UI-cloning
+This document began as a forensic inventory of the Linux Mint System Monitor
+baseline and a placement map for the Infiltrator 22-repository software family.
+It is now also the maintained implementation ledger for that replacement work.
+It remains a behavioural coverage specification, not a one-for-one UI-cloning
 specification.
 
 The objective is to ensure that every real capability in the Mint baseline has
@@ -40,9 +41,10 @@ source files included `application.cpp`, `proctable.cpp`,
 `systemd.cpp`, `selinux.cpp`, the GSettings schema, the GTK UI/menu files,
 and the task-oriented help pages.
 
-The Infiltrator comparison point used while writing this audit is System
-Monitor 1.0.128 on `main`. Current-code observations are evidence only; code
-and tests remain authoritative.
+The implementation comparison point is System Monitor 1.0.130. Version 1.0.129
+implemented the main replacement tranche; 1.0.130 closes the remaining
+inspection-detail gaps found by the follow-up audit. Current-code observations
+are evidence only; code and tests remain authoritative.
 
 ## Executive ownership decision
 
@@ -137,25 +139,25 @@ A hidden-by-default column is still a feature and is included here.
 | Process Name | Details: Name | Covered |
 | User | Details: User | Covered |
 | Status | Details: Status | Covered |
-| Virtual Memory | Details + Inspector | Exact separate field not evident |
+| Virtual Memory | Details + Inspector | Covered by Linux technical process enrichment |
 | Resident Memory | Details: RAM + Inspector | Covered as RSS |
-| Writable Memory | Details + Inspector | Exact separate field not evident |
-| Shared Memory | Details + Inspector | Exact separate field not evident |
-| X Server Memory | Details optional Linux/X11 field | Conditional; hide when not meaningful |
+| Writable Memory | Details + Inspector | Covered from Linux smaps_rollup when available |
+| Shared Memory | Details + Inspector | Covered from Linux resident shared/file accounting when available |
+| X Server Memory | Not reproduced as a normal field | Deliberately superseded: upstream 45.0.2 builds with WNCK disabled by default and its own build option warns that enabling it is unstable; modern Wayland sessions have no equivalent X-server allocation concept |
 | % CPU | Details: CPU | Covered |
 | CPU Time | Details: CPU time + Inspector | Covered |
 | Started | Details: Start time + Inspector | Covered |
-| Nice | Details optional native scheduler value + Inspector | Partial: current product uses portable priority classes |
+| Nice | Details + Inspector | Covered with exact Linux nice value plus portable priority classes |
 | ID | Details: PID | Covered |
-| Security Context | Details + Inspector | Generalise to the authoritative active Linux security context/profile |
+| Security Context | Details + Inspector | Covered through the active Linux procfs security attribute when available |
 | Command Line | Details: Command + Inspector | Covered |
 | Memory | Details: Memory % / RAM | Covered with stronger split values |
-| Waiting Channel | Details optional Linux field + Inspector | Exact field not evident |
-| Control Group | Details + Inspector | cgroup-v2 data exists, but normal visible technical field is only partial |
-| Unit | Details + Inspector | Exact systemd unit field not evident |
-| Session | Details + Inspector | Exact logind session field not evident |
-| Seat | Details + Inspector | Exact logind seat field not evident |
-| Owner | Details + Inspector | Preserve distinction from process user when available |
+| Waiting Channel | Details + Inspector | Covered through procfs wchan |
+| Control Group | Details + Inspector | Covered as a selectable technical column and Inspector property |
+| Unit | Details + Inspector | Covered from unified-cgroup/systemd identity |
+| Session | Details + Inspector | Covered when login-session metadata is available |
+| Seat | Details + Inspector | Covered when login-session metadata is available |
+| Owner | Details + Inspector | Covered and kept distinct from the process user where the platform exposes it |
 | Disk read total | Details: Read total | Covered |
 | Disk write total | Details: Written total | Covered |
 | Disk read | Details: Read/s | Covered |
@@ -257,11 +259,11 @@ into an ambiguous generic state.
 | CPU history graph | Performance → CPU | Covered |
 | Per-core/logical CPU activity | Performance → CPU | Covered/richer |
 | Current CPU percentages | Performance → CPU | Covered |
-| CPU colours | Preferences → Graph appearance if user colour customisation is admitted | Placement only |
-| Stacked CPU area chart | Preferences → Graphs → CPU | Exact user option not evident |
-| Smooth/line graph choice | Preferences → Graphs | Renderer is already smooth; user choice is separate |
+| CPU colours | Canonical Infiltrator graph palette | Deliberately superseded by suite-wide semantic colours rather than per-core arbitrary colour pickers |
+| Stacked CPU area chart | Preferences → Graphs → CPU | Covered |
+| Smooth/line graph choice | Preferences → Graphs | Covered |
 | Resource graph update interval | Preferences → Sampling | Covered by refresh-speed choice |
-| Chart data-point/history length | Preferences → Sampling/Graphs | Exact user control not evident |
+| Chart data-point/history length | Preferences → Sampling/Graphs | Covered without discarding retained history |
 | Divide process CPU by CPU count (“Solaris mode”) | Preferences → Process CPU scale | Covered by whole-machine max-100% mode |
 | Per-core/Irix-style process CPU | Preferences → Process CPU scale | Covered by mode allowing >100% |
 
@@ -297,7 +299,7 @@ unless the suite deliberately creates an OS-wide measurement-unit policy.
 | Receive/send colours | Preferences → Graph appearance if admitted | Placement only |
 | Rate in bits vs bytes | Preferences → Network units | Covered |
 | Totals use same unit as rate | Preferences → Network units | Covered common path |
-| Separate totals unit | Preferences → Network units → Advanced | Exact Mint option not evident |
+| Separate totals unit | Preferences → Network units → Advanced | Covered |
 | Totals in bits | Preferences → Network units → Advanced | Goes with separate-total-unit control |
 | Smooth graph choice | Preferences → Graphs | System-Monitor local |
 
@@ -312,7 +314,7 @@ InfiltratorFS.
 | Directory/mount point | File Systems: Mount point | Covered |
 | Type | File Systems: Type | Covered |
 | Total | File Systems: Total | Covered |
-| Free | File Systems optional technical column | Separate field not evident |
+| Free | File Systems: Free | Covered distinctly from Available |
 | Available | File Systems: Available | Covered |
 | Used | File Systems: Used | Covered |
 | Used percentage | File Systems: Use | Covered |
@@ -320,8 +322,8 @@ InfiltratorFS.
 | Show all virtual/system filesystems | File Systems toggle + Preferences default | Covered |
 | Respond to mount add/change/remove | File Systems collector | System-Monitor backend responsibility |
 | Separate filesystem refresh interval | Preferences → Sampling → File Systems | Placement if exact Mint control is retained |
-| Filesystem column visibility/order/sort | File Systems → Columns/View state | Exact configurability not evident |
-| Activate row to open mount directory | File Systems row action | Placement; open via desktop file manager |
+| Filesystem column visibility/order/sort | File Systems → Columns/View state | Covered with persistent configurable columns |
+| Activate row to open mount directory | File Systems row action | Covered through the normal desktop file manager |
 
 Physical disk I/O belongs in Performance → Disks/Partitions. Fragmentation
 belongs in Defragmenter. Driver/install support belongs in Filesystem-Support.
@@ -435,52 +437,58 @@ Several upstream help pages are explanatory, not executable features.
 | 21 | **Filesystem-Support** | Filesystem-support/driver capability only; not mounted-capacity monitoring |
 | 22 | **Infiltrator-OS** | OS integration/default selection/meta-packaging only |
 
-## Current coverage observations at 1.0.128
+## Implementation status at 1.0.130
 
-These observations are here to prevent duplicate work, not to implement it.
+The replacement ledger is now closed for the audited Mint 45.0.2 behaviour.
+The implementation deliberately preserves the stronger Infiltrator information
+architecture instead of reproducing the older three-tab application literally.
 
-Already present or stronger in current System Monitor:
+### Implemented equivalents or stronger replacements
 
-- Overview plus richer Performance navigation;
-- friendly Processes plus a separate advanced Details table;
-- process search, sorting and persisted configurable Details columns;
-- terminate, suspend, resume and force-terminate process-control contracts;
-- portable priority categories and graphical CPU affinity;
-- Process Inspector with Overview, Performance, Open Files, Memory Map, Threads
-  and Process Family;
-- RSS, CPU, CPU time, start/elapsed time, disk rates/totals, threads, handles,
-  executable, command, GPU fields, context switches and page faults;
-- cgroup-v2 identity in process model/grouping;
-- CPU-scale choice equivalent to Mint's divided-vs-per-core modes;
-- network bits/bytes choice;
-- mounted File Systems capacity/search/show-all functionality;
-- searchable local Help; and
-- substantially richer hardware telemetry outside the Mint 45.0.2 floor.
+- All / Active / My process scopes and flat/dependency-tree Details views;
+- every normally meaningful Mint technical process field: virtual, resident,
+  writable and shared memory, exact Linux nice, waiting channel, cgroup,
+  systemd-derived unit/session/seat/owner and active Linux security context;
+- portable priority classes plus exact Linux custom nice values, CPU affinity,
+  terminate/suspend/resume/force-terminate and configurable action confirmation;
+- Process Inspector Open Files with file, pipe, local-socket, IPv4-socket,
+  IPv6-socket, anonymous-inode and kernel-object classification when procfs
+  exposes the corresponding namespace tables;
+- Process Inspector Memory Map with filename, VM start/end/size, flags, offset,
+  private clean/dirty, shared clean/dirty, device and inode. Detailed residency
+  accounting comes from `smaps`; restricted systems fall back to `maps` and
+  report the unavailable accounting explicitly;
+- reverse “find process using file” lookup based on device/inode identity;
+- CPU, Memory and Network histories, configurable visible history length,
+  smooth/line rendering, stacked CPU presentation, logarithmic Memory
+  presentation and independent network-total units;
+- mounted File Systems with Total, Free, Used and Available kept distinct,
+  show-all system mounts, independent refresh cadence, persistent configurable
+  columns and direct mount-point activation;
+- stronger existing Infiltrator capabilities including Overview, per-device
+  Performance pages, Process Family, Threads, GPU/process GPU fields, PSI,
+  hardware telemetry, App History, Services, Users and Startup Apps.
 
-Mint functions whose exact equivalent is not evident, or is only partial, and
-whose destination is now fixed by this document:
+### Deliberate supersessions rather than omissions
 
-- Active / All / My process scope filter;
-- explicit flat/dependency-tree process toggle;
-- virtual, writable and shared process memory;
-- conditional X-server memory;
-- numeric nice and custom -20…19 control;
-- waiting channel;
-- user-visible cgroup field;
-- systemd unit, session, seat and owner;
-- active Linux security-context/profile;
-- optional preference to confirm end/kill;
-- configurable graph-history/data-point length;
-- stacked CPU graph option;
-- logarithmic Memory graph option;
-- separate network-total unit;
-- File Systems Free column;
-- File Systems configurable columns;
-- File Systems row action to open the mount point; and
-- exact Mint graph-colour customisation if the product deliberately chooses to
-  retain it rather than supersede it with the canonical Infiltrator palette.
-
-These are placement findings, not an implementation backlog or release order.
+- **X Server Memory:** not treated as a required 45.0.2 baseline field. Upstream
+  disables its WNCK support by default and its own build option warns that
+  enabling it is unstable. It also has no honest Wayland-wide equivalent.
+- **Per-series arbitrary graph colour pickers:** replaced by the suite's
+  canonical semantic Infiltrator/Common palette so the same metric carries the
+  same visual meaning throughout the product.
+- **IEC on/off memory toggles:** Common already owns one suite-wide memory and
+  storage policy: binary base-2 scaling with the project's established compact
+  B/KB/MB/GB labels. System Monitor does not create a second contradictory
+  unit policy merely to duplicate an older preference switch.
+- **GNOME's adaptive “smooth refresh” algorithm:** superseded by System
+  Monitor's asynchronous/coalescing collectors, completed-snapshot generations,
+  active-page presentation suppression and explicit independent cadences. The
+  user-facing requirement—responsive monitoring without the monitor becoming
+  the workload—is retained without copying that implementation.
+- **GNOME UI geometry and three-tab composition:** not copied. Functional
+  replacement is integrated into Overview, Performance, Processes, Details,
+  Inspector and File Systems according to this document.
 
 ## Replacement acceptance rule
 
@@ -510,7 +518,7 @@ the repository's own provenance and licence requirements.
 
 ## Maintenance
 
-When a baseline capability is implemented, superseded or deliberately rejected,
+When a baseline capability changes, regresses or gains a stronger replacement,
 update the corresponding row here with evidence. If ownership itself changes,
 update [Architecture](ARCHITECTURE.md) in the same change.
 

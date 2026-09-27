@@ -37,12 +37,17 @@ typedef struct {
     char target[LSM_INSPECTION_TARGET_LEN];      /**< Kernel symlink target. */
 } LsmOpenFileInfo;
 
-/** One virtual-memory area from /proc/PID/maps. */
+/** One virtual-memory area from /proc/PID/smaps, falling back to maps. */
 typedef struct {
     uint64_t start_address;                      /**< Inclusive virtual start address. */
     uint64_t end_address;                        /**< Exclusive virtual end address. */
     uint64_t file_offset;                        /**< Backing-file offset in bytes. */
     uint64_t inode;                              /**< Backing inode, or zero for anonymous memory. */
+    uint64_t private_clean_bytes;                /**< Private clean resident bytes when smaps exposes them. */
+    uint64_t private_dirty_bytes;                /**< Private dirty resident bytes when smaps exposes them. */
+    uint64_t shared_clean_bytes;                 /**< Shared clean resident bytes when smaps exposes them. */
+    uint64_t shared_dirty_bytes;                 /**< Shared dirty resident bytes when smaps exposes them. */
+    bool accounting_available;                   /**< True when detailed smaps accounting was observed. */
     char permissions[8];                         /**< Kernel permission text such as r-xp. */
     char device[32];                             /**< Kernel major:minor device text. */
     char path[LSM_INSPECTION_MAP_PATH_LEN];      /**< Pathname or bracketed kernel annotation. */
@@ -82,9 +87,11 @@ bool lsm_process_inspection_identity_matches(
 /**
  * Read the open descriptors of one process.
  *
- * Descriptor targets are collected with readlink(2) and classified by their
- * kernel syntax. The result is sorted numerically by descriptor. A process may
- * close descriptors during the walk; vanished individual entries are ignored.
+ * Descriptor targets are collected with readlink(2). Socket inodes are
+ * resolved against the process network namespace so IPv4, IPv6 and local Unix
+ * sockets remain distinguishable when procfs exposes the corresponding table.
+ * The result is sorted numerically by descriptor. A process may close
+ * descriptors during the walk; vanished individual entries are ignored.
  *
  * @param [in] pid Process to inspect; values less than one are rejected.
  * @param [out] out_items Receives a heap array owned by the caller.
@@ -95,6 +102,10 @@ size_t lsm_process_inspection_open_files(LsmProcessId pid,
 
 /**
  * Read the virtual-memory map of one process.
+ *
+ * Linux smaps is preferred so clean/dirty private/shared accounting accompanies
+ * each mapping. Restricted kernels may expose only maps; in that case mapping
+ * identity remains available and @c accounting_available is false.
  *
  * @param [in] pid Process to inspect; values less than one are rejected.
  * @param [out] out_items Receives a heap array owned by the caller.
