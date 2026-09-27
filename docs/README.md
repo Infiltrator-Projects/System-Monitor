@@ -24,6 +24,7 @@ Specialist documents may go deeper into one subsystem, protocol, platform, resea
 
 - docs/HARDWARE.md — specialist or historical detail retained alongside the canonical baseline.
 - docs/PORTABILITY.md — specialist or historical detail retained alongside the canonical baseline.
+- [Linux Mint System Monitor function ownership audit](LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md) — forensic GNOME System Monitor 45.0.2 capability inventory and placement across the 22-repository suite.
 
 ## Maintenance rule
 
