@@ -51,6 +51,8 @@ typedef struct {
     uint64_t read_bytes;
     uint64_t write_bytes;
     uint64_t peak_rss_bytes;
+    uint64_t current_rss_bytes;
+    unsigned live_generation;
     int64_t first_seen;
     int64_t last_seen;
 } LsmHistoryEntry;
@@ -158,7 +160,7 @@ static int history_entry_recency_compare(const LsmHistoryEntry *left,
 }
 
 static char *history_oldest_key(const LsmApp *app,
-                                GHashTable *protected_keys)
+                                unsigned protected_generation)
 {
     if (!app || !app->history.app_history ||
         app->history.history_entry_count == 0U)
@@ -172,9 +174,10 @@ static char *history_oldest_key(const LsmApp *app,
 
     g_hash_table_iter_init(&iterator, app->history.app_history);
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
-        if (protected_keys && g_hash_table_contains(protected_keys, key))
-            continue;
         const LsmHistoryEntry *entry = value;
+        if (protected_generation != 0U &&
+            entry->live_generation == protected_generation)
+            continue;
         if (!oldest_entry ||
             history_entry_recency_compare(entry, oldest_entry) < 0) {
             oldest_entry = entry;
@@ -185,9 +188,9 @@ static char *history_oldest_key(const LsmApp *app,
 }
 
 static gboolean history_remove_oldest(LsmApp *app,
-                                      GHashTable *protected_keys)
+                                      unsigned protected_generation)
 {
-    char *oldest_key = history_oldest_key(app, protected_keys);
+    char *oldest_key = history_oldest_key(app, protected_generation);
     if (!oldest_key) return FALSE;
 
     const guint removed = g_hash_table_foreach_remove(
@@ -201,12 +204,12 @@ static gboolean history_remove_oldest(LsmApp *app,
 }
 
 static gboolean history_trim_to_limit(LsmApp *app,
-                                      GHashTable *protected_keys)
+                                      unsigned protected_generation)
 {
     gboolean changed = FALSE;
     while (app && app->history.app_history &&
            app->history.history_entry_count > LSM_HISTORY_MAX_ENTRIES) {
-        if (!history_remove_oldest(app, protected_keys)) break;
+        if (!history_remove_oldest(app, protected_generation)) break;
         changed = TRUE;
     }
     return changed;
@@ -539,7 +542,7 @@ static gboolean history_load_record(LsmApp *app, char *line)
         app->history.app_history, entry->key);
     if (!existed &&
         app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        char *oldest_key = history_oldest_key(app, NULL);
+        char *oldest_key = history_oldest_key(app, 0U);
         LsmHistoryEntry *oldest = oldest_key
             ? g_hash_table_lookup(app->history.app_history, oldest_key)
             : NULL;
@@ -551,7 +554,7 @@ static gboolean history_load_record(LsmApp *app, char *line)
             return TRUE;
         }
         g_free(oldest_key);
-        if (!history_remove_oldest(app, NULL)) {
+        if (!history_remove_oldest(app, 0U)) {
             history_entry_free(entry);
             g_strfreev(fields);
             return TRUE;
@@ -821,14 +824,14 @@ static void history_identity(const LsmProcessInfo *process,
 
 static LsmHistoryEntry *history_entry_get(
     LsmApp *app, const LsmProcessInfo *process,
-    const char *key, const char *identity,
-    GHashTable *live_apps)
+    const char *key, const char *identity)
 {
     LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
     if (entry) return entry;
 
     if (app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        (void)history_remove_oldest(app, live_apps);
+        (void)history_remove_oldest(
+            app, app->history.history_generation);
     }
 
     entry = g_new0(LsmHistoryEntry, 1);
@@ -866,37 +869,33 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
     const int64_t now_epoch = (int64_t)time(NULL);
 
     /*
-     * One per-snapshot table serves two purposes: its keys are the complete
-     * live-application set used by retention, and its values accumulate RSS.
-     * Keeping those concerns in one table avoids rebuilding two additional
-     * sets and allocating duplicate application keys on every process sample.
+     * Live membership and per-application RSS are retained directly on each
+     * history entry. This avoids rebuilding a temporary string hash table and
+     * allocating duplicate keys/counters on every process refresh.
      */
-    GHashTable *rss_totals = g_hash_table_new_full(
-        g_str_hash, g_str_equal, g_free, g_free);
-
-    /* Build per-application RSS and process deltas in one process walk. */
     for (size_t i = 0U; i < count; i++) {
         const LsmProcessInfo *process = &processes[i];
         char app_key[LSM_PATH_LEN + 64U], identity[LSM_PATH_LEN];
         history_identity(process, app_key, sizeof(app_key),
                          identity, sizeof(identity));
 
-        uint64_t *rss = g_hash_table_lookup(rss_totals, app_key);
-        if (!rss) {
-            rss = g_new0(uint64_t, 1);
-            g_hash_table_insert(rss_totals, g_strdup(app_key), rss);
-        }
-        *rss = lsm_u64_add_saturating(*rss, process->rss_bytes);
-
         LsmHistoryEntry *entry = history_entry_get(
-            app, process, app_key, identity, rss_totals);
+            app, process, app_key, identity);
+        if (!entry) continue;
+        if (entry->live_generation != app->history.history_generation) {
+            entry->live_generation = app->history.history_generation;
+            entry->current_rss_bytes = 0U;
+        }
+        entry->current_rss_bytes = lsm_u64_add_saturating(
+            entry->current_rss_bytes, process->rss_bytes);
 
         char sample_key[96];
         snprintf(sample_key, sizeof(sample_key), "%llu:%llu",
                  (unsigned long long)process->pid,
                  (unsigned long long)process->instance_id);
-        LsmHistorySample *sample = g_hash_table_lookup(app->history.app_history_samples, sample_key);
-        uint64_t cpu_delta = 0, read_delta = 0, write_delta = 0;
+        LsmHistorySample *sample = g_hash_table_lookup(
+            app->history.app_history_samples, sample_key);
+        uint64_t cpu_delta = 0U, read_delta = 0U, write_delta = 0U;
         if (sample) {
             if (process->cpu_time_nanoseconds >= sample->cpu_time_nanoseconds)
                 cpu_delta = process->cpu_time_nanoseconds -
@@ -907,7 +906,10 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
                 write_delta = process->write_bytes - sample->write_bytes;
         } else {
             sample = g_new0(LsmHistorySample, 1);
-            g_hash_table_insert(app->history.app_history_samples, g_strdup(sample_key), sample);
+            if (!sample) continue;
+            g_hash_table_insert(
+                app->history.app_history_samples,
+                g_strdup(sample_key), sample);
         }
         sample->cpu_time_nanoseconds = process->cpu_time_nanoseconds;
         sample->read_bytes = process->read_bytes;
@@ -919,26 +921,30 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
             entry->read_bytes, read_delta);
         entry->write_bytes = lsm_u64_add_saturating(
             entry->write_bytes, write_delta);
-        if (cpu_delta || read_delta || write_delta || process->cpu_percent > 0.05)
+        if (cpu_delta || read_delta || write_delta ||
+            process->cpu_percent > 0.05)
             entry->last_seen = now_epoch;
-
     }
 
     GHashTableIter iterator;
-    gpointer key, value;
-    g_hash_table_iter_init(&iterator, rss_totals);
+    gpointer key = NULL;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iterator, app->history.app_history);
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
-        LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
-        const uint64_t rss = *(uint64_t *)value;
-        if (!entry) continue;
+        (void)key;
+        LsmHistoryEntry *entry = value;
+        if (entry->live_generation != app->history.history_generation)
+            continue;
         entry->active_seconds += elapsed;
-        if (rss > entry->peak_rss_bytes) entry->peak_rss_bytes = rss;
+        if (entry->current_rss_bytes > entry->peak_rss_bytes)
+            entry->peak_rss_bytes = entry->current_rss_bytes;
     }
 
-    g_hash_table_foreach_remove(app->history.app_history_samples, remove_stale_sample,
-                                GUINT_TO_POINTER(app->history.history_generation));
-    (void)history_trim_to_limit(app, rss_totals);
-    g_hash_table_destroy(rss_totals);
+    g_hash_table_foreach_remove(
+        app->history.app_history_samples, remove_stale_sample,
+        GUINT_TO_POINTER(app->history.history_generation));
+    (void)history_trim_to_limit(
+        app, app->history.history_generation);
     if (count > 0U) history_mark_dirty(app);
 
     if (app->history.history_tree &&
