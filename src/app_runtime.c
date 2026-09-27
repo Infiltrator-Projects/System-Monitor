@@ -127,6 +127,12 @@ void lsm_app_preferences_changed(LsmApp *app)
         app->runtime.update_interval_ms, lsm_performance_update, app);
     app->runtime.process_timer = g_timeout_add(
         process_refresh_interval(app), process_timer_update, app);
+    if (app->runtime.filesystem_timer) {
+        g_source_remove(app->runtime.filesystem_timer);
+        app->runtime.filesystem_timer = g_timeout_add(
+            app->runtime.filesystem_update_interval_ms,
+            filesystem_timer_update, app);
+    }
 }
 
 void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
@@ -147,8 +153,8 @@ void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
             break;
         case LSM_TAB_FILESYSTEMS:
             if (!app->runtime.filesystem_timer)
-                app->runtime.filesystem_timer = g_timeout_add_seconds(
-                    LSM_FILESYSTEM_UPDATE_INTERVAL_SECONDS,
+                app->runtime.filesystem_timer = g_timeout_add(
+                    app->runtime.filesystem_update_interval_ms,
                     filesystem_timer_update, app);
             break;
         case LSM_TAB_PERFORMANCE:

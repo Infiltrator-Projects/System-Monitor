@@ -29,6 +29,7 @@ typedef struct {
     char target[LSM_PATH_LEN];       /**< Decoded mount point. */
     char filesystem[64];             /**< Kernel filesystem type. */
     uint64_t total_bytes;            /**< Total addressable bytes when available. */
+    uint64_t free_bytes;             /**< All free bytes, including privileged reserve. */
     uint64_t used_bytes;             /**< Bytes unavailable to all users. */
     uint64_t available_bytes;        /**< Bytes available to an unprivileged user. */
     unsigned used_percent;           /**< Clamped percentage in the inclusive range 0..100. */

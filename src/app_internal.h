@@ -343,6 +343,7 @@ typedef struct {
     guint users_timer;
     guint filesystem_timer;
     guint update_interval_ms;
+    guint filesystem_update_interval_ms;
     InfiltratrThemeMode theme_mode;
     double last_process_refresh_monotonic;
     gboolean paused;
@@ -490,7 +491,9 @@ typedef struct {
     GtkListStore *filesystem_store;
     GtkWidget *filesystem_search;
     GtkWidget *filesystem_show_all;
+    GtkWidget *filesystem_columns_button;
     GtkWidget *filesystem_count_label;
+    GtkTreeViewColumn *filesystem_columns[8];
     LsmFilesystemInfo *filesystem_snapshot;
     size_t filesystem_snapshot_count;
     gboolean refresh_pending;
@@ -548,6 +551,7 @@ typedef struct {
     char config_dir[LSM_PATH_LEN];
     char filter_path[LSM_PATH_LEN];
     char column_path[LSM_PATH_LEN];
+    char filesystem_column_path[LSM_PATH_LEN];
     char preferences_path[LSM_PATH_LEN];
 } LsmPathState;
 

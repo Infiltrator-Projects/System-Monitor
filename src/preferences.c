@@ -102,6 +102,12 @@ void lsm_preferences_load(LsmApp *app)
         if (strcmp(key, "update_interval_ms") == 0)
             app->runtime.update_interval_ms = validated_interval(
                 value, app->runtime.update_interval_ms);
+        else if (strcmp(key, "filesystem_update_interval_ms") == 0) {
+            int64_t parsed = 0;
+            if (infiltratr_parse_i64_range(
+                    value, 10U, 1000, 100000, &parsed))
+                app->runtime.filesystem_update_interval_ms = (guint)parsed;
+        }
         else if (strcmp(key, "theme_mode") == 0)
             app->runtime.theme_mode = validated_theme_mode(
                 value, app->runtime.theme_mode);
@@ -163,6 +169,7 @@ static bool write_preferences(FILE *file, const void *user_data)
     int result = fprintf(file,
         "# System Monitor graphical preferences\n"
         "update_interval_ms=%u\n"
+        "filesystem_update_interval_ms=%u\n"
         "theme_mode=%s\n"
         "newer_on_right=%d\n"
         "network_use_bits=%d\n"
@@ -177,6 +184,7 @@ static bool write_preferences(FILE *file, const void *user_data)
         "window_maximized=%d\n"
         "last_tab=%d\n",
         app->runtime.update_interval_ms,
+        app->runtime.filesystem_update_interval_ms,
         infiltratr_theme_mode_key(app->runtime.theme_mode),
         app->runtime.newer_on_right ? 1 : 0,
         app->runtime.network_use_bits ? 1 : 0,
@@ -275,6 +283,21 @@ void lsm_preferences_show(LsmApp *app)
                              interval_index(app->runtime.update_interval_ms));
     attach_preference(GTK_GRID(grid), 0, "Performance refresh speed", speed);
 
+    GtkWidget *filesystem_speed = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(filesystem_speed),
+                                   "Fast — 1 second");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(filesystem_speed),
+                                   "Normal — 5 seconds");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(filesystem_speed),
+                                   "Slow — 10 seconds");
+    int filesystem_speed_index =
+        app->runtime.filesystem_update_interval_ms <= 1000U ? 0 :
+        app->runtime.filesystem_update_interval_ms <= 5000U ? 1 : 2;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(filesystem_speed),
+                             filesystem_speed_index);
+    attach_preference(GTK_GRID(grid), 1, "File-system refresh speed",
+                      filesystem_speed);
+
     GtkWidget *network = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network),
                                    "Bytes per second — KB/s, MB/s");
@@ -282,7 +305,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "Bits per second — Kb/s, Mb/s");
     gtk_combo_box_set_active(GTK_COMBO_BOX(network),
                              app->runtime.network_use_bits ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 1, "Network units", network);
+    attach_preference(GTK_GRID(grid), 2, "Network units", network);
 
     GtkWidget *cpu_mode = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(cpu_mode),
@@ -291,7 +314,7 @@ void lsm_preferences_show(LsmApp *app)
         "Per-core capacity — multi-threaded processes may exceed 100%");
     gtk_combo_box_set_active(GTK_COMBO_BOX(cpu_mode),
                              app->runtime.process_cpu_per_core ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 2, "Process CPU scale", cpu_mode);
+    attach_preference(GTK_GRID(grid), 3, "Process CPU scale", cpu_mode);
 
     GtkWidget *direction = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction),
@@ -300,45 +323,50 @@ void lsm_preferences_show(LsmApp *app)
                                    "New values on the left");
     gtk_combo_box_set_active(GTK_COMBO_BOX(direction),
                              app->runtime.newer_on_right ? 0 : 1);
-    attach_preference(GTK_GRID(grid), 3, "Graph direction", direction);
+    attach_preference(GTK_GRID(grid), 4, "Graph direction", direction);
 
     GtkWidget *confirm_process = gtk_check_button_new_with_label(
         "Confirm before ending or force-terminating processes");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm_process),
                                  app->runtime.confirm_process_actions);
-    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 4, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 5, 2, 1);
 
     GtkWidget *show_all = gtk_check_button_new_with_label(
         "Show virtual and system filesystems by default");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(show_all),
                                  app->runtime.show_all_filesystems);
-    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 6, 2, 1);
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Shade busy resource cells in Processes and Details");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap),
                                  app->details.process_heatmap);
-    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 6, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 7, 2, 1);
     GtkWidget *always_on_top = gtk_check_button_new_with_label(
         "Keep the monitor above other windows");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(always_on_top),
                                  app->runtime.always_on_top);
-    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 7, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 8, 2, 1);
     GtkWidget *compact_summary = gtk_check_button_new_with_label(
         "Open in compact summary mode");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_summary),
                                  app->runtime.compact_summary);
-    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 8, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 9, 2, 1);
     GtkWidget *cadence_note = gtk_label_new(
         "Performance graphs can refresh every 0.5 seconds. Process and "
         "management lists refresh no faster than once per second.");
     gtk_label_set_line_wrap(GTK_LABEL(cadence_note), TRUE);
     gtk_widget_set_halign(cadence_note, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 10, 2, 1);
 
     gtk_widget_show_all(dialog);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         app->runtime.update_interval_ms = interval_from_index(
             gtk_combo_box_get_active(GTK_COMBO_BOX(speed)));
+        app->runtime.filesystem_update_interval_ms =
+            gtk_combo_box_get_active(GTK_COMBO_BOX(filesystem_speed)) == 0
+                ? 1000U
+                : gtk_combo_box_get_active(GTK_COMBO_BOX(filesystem_speed)) == 1
+                    ? 5000U : 10000U;
         app->runtime.network_use_bits =
             gtk_combo_box_get_active(GTK_COMBO_BOX(network)) == 1;
         app->runtime.process_cpu_per_core =

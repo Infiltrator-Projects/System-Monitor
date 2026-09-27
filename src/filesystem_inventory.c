@@ -84,8 +84,10 @@ static void collect_capacity(LsmFilesystemInfo *item)
 
     item->capacity_available = true;
     item->total_bytes = total;
+    item->free_bytes = free_all < total ? free_all : total;
     item->available_bytes = available < total ? available : total;
-    item->used_bytes = total >= free_all ? total - free_all : 0U;
+    item->used_bytes = total >= item->free_bytes
+        ? total - item->free_bytes : 0U;
     if (total != 0U) {
         item->used_percent = (unsigned)lsm_percent_u64(
             item->used_bytes, total);

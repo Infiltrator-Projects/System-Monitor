@@ -86,6 +86,9 @@ static bool app_paths_initialise(LsmApp *app)
                          app->paths.config_dir, "filters.conf") &&
         lsm_join_path(app->paths.column_path, sizeof(app->paths.column_path),
                       app->paths.config_dir, "process-columns.conf") &&
+        lsm_join_path(app->paths.filesystem_column_path,
+                      sizeof(app->paths.filesystem_column_path),
+                      app->paths.config_dir, "filesystem-columns.conf") &&
         lsm_join_path(app->paths.preferences_path,
                       sizeof(app->paths.preferences_path),
                       app->paths.config_dir, "preferences.conf");
@@ -228,6 +231,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     }
     app->application = application;
     app->runtime.update_interval_ms = LSM_DEFAULT_UPDATE_INTERVAL_MS;
+    app->runtime.filesystem_update_interval_ms = 5000U;
     app->runtime.theme_mode = INFILTRATR_THEME_SYSTEM;
     app->runtime.newer_on_right = TRUE;
     app->runtime.network_use_bits = FALSE;
