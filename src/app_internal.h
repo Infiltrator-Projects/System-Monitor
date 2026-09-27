@@ -363,6 +363,7 @@ typedef struct {
     gboolean compact_restore_maximized;
     gboolean shutting_down;
     gboolean window_maximized;
+    gboolean compact_layout;
     guint window_restore_reflow_source;
     guint initial_tab_restore_source;
     gint initial_tab_after_paint;

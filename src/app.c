@@ -277,6 +277,8 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
 
     lsm_preferences_load(app);
     constrain_initial_window_geometry(app);
+    app->runtime.compact_layout =
+        app->runtime.window_width < LSM_COMPACT_LAYOUT_THRESHOLD;
     app->runtime.initial_tab_after_paint = app->runtime.last_tab;
     lsm_process_filters_load(app);
     lsm_app_shell_apply_theme(app);
