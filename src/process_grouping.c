@@ -32,10 +32,13 @@ void lsm_process_group_metrics_add(LsmProcessGroupMetrics *metrics,
         positive_finite_sum(metrics->cpu_percent, process->cpu_percent);
     metrics->memory_bytes = lsm_u64_add_saturating(
         metrics->memory_bytes, process->rss_bytes);
-    metrics->disk_bytes_per_sec = positive_finite_sum(
-        metrics->disk_bytes_per_sec, process->read_bytes_per_sec);
-    metrics->disk_bytes_per_sec = positive_finite_sum(
-        metrics->disk_bytes_per_sec, process->write_bytes_per_sec);
+    if (process->io_rate_available) {
+        metrics->disk_bytes_per_sec = positive_finite_sum(
+            metrics->disk_bytes_per_sec, process->read_bytes_per_sec);
+        metrics->disk_bytes_per_sec = positive_finite_sum(
+            metrics->disk_bytes_per_sec, process->write_bytes_per_sec);
+        metrics->disk_available = true;
+    }
     if (process->gpu_available) {
         if (process->gpu_engine[0] &&
             (!metrics->gpu_available ||

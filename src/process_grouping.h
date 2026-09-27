@@ -17,6 +17,7 @@ typedef struct {
     double cpu_percent;       /**< Sum of valid total-computer CPU shares. */
     uint64_t memory_bytes;    /**< Saturating sum of resident memory. */
     double disk_bytes_per_sec;/**< Saturating sum of valid read/write rates. */
+    bool disk_available;       /**< At least one process supplied a measured I/O rate. */
     double gpu_percent;       /**< Sum of readable peak-engine process usage. */
     double gpu_engine_peak;   /**< Highest contributing process GPU share. */
     char gpu_engine[256];     /**< Engine belonging to the peak contributor. */

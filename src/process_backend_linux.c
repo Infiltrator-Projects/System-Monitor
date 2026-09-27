@@ -75,6 +75,7 @@ typedef struct {
     uint64_t cpu_ticks;
     uint64_t read_bytes;
     uint64_t write_bytes;
+    bool io_available;
     double sampled_at;
     double gpu_sampled_at;
     LsmProcessGpuSnapshot gpu;
@@ -658,26 +659,34 @@ static void read_process_technical(pid_t pid, LsmProcessInfo *process)
     derive_systemd_process_identity(process);
 }
 
-static void read_process_io(pid_t pid, LsmProcessInfo *process)
+static bool read_process_io(pid_t pid, LsmProcessInfo *process)
 {
+    if (!process) return false;
     char path[128];
     char text[1024];
     (void)snprintf(path, sizeof(path), "/proc/%d/io", pid);
     if (infiltratr_read_text_file_ex(path, text, sizeof(text), NULL) !=
-        INFILTRATR_IO_OK) return;
+        INFILTRATR_IO_OK)
+        return false;
 
+    bool have_read = false;
+    bool have_write = false;
     char *line = text;
     while (*line) {
         char *next = strchr(line, '\n');
         if (next) *next = '\0';
         uint64_t value = 0U;
-        if (parse_prefixed_u64(line, "read_bytes:", &value))
+        if (parse_prefixed_u64(line, "read_bytes:", &value)) {
             process->read_bytes = value;
-        else if (parse_prefixed_u64(line, "write_bytes:", &value))
+            have_read = true;
+        } else if (parse_prefixed_u64(line, "write_bytes:", &value)) {
             process->write_bytes = value;
+            have_write = true;
+        }
         if (!next) break;
         line = next + 1;
     }
+    return have_read && have_write;
 }
 
 static void read_process_executable(pid_t pid, LsmProcessInfo *process)
@@ -692,20 +701,26 @@ static void read_process_executable(pid_t pid, LsmProcessInfo *process)
     process->executable[length] = '\0';
 }
 
-static unsigned count_process_fds(pid_t pid)
+static bool count_process_fds(pid_t pid, unsigned *count)
 {
+    if (!count) return false;
+    *count = 0U;
     char path[128];
-    snprintf(path, sizeof(path), "/proc/%d/fd", pid);
+    (void)snprintf(path, sizeof(path), "/proc/%d/fd", pid);
     DIR *directory = opendir(path);
-    if (!directory) return 0;
+    if (!directory) return false;
 
-    unsigned count = 0;
+    unsigned value = 0U;
     struct dirent *entry;
-    while ((entry = readdir(directory)))
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
-            count++;
+    while ((entry = readdir(directory))) {
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0)
+            continue;
+        if (value < UINT_MAX) value++;
+    }
     closedir(directory);
-    return count;
+    *count = value;
+    return true;
 }
 
 bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
@@ -718,7 +733,8 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
     if (scan_flags & LSM_PROCESS_SCAN_EXECUTABLE)
         read_process_executable(pid, process);
     if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT)
-        process->handle_count = count_process_fds(pid);
+        process->handle_count_available =
+            count_process_fds(pid, &process->handle_count);
     if ((scan_flags & LSM_PROCESS_SCAN_CGROUP) != 0U ||
         ((scan_flags & LSM_PROCESS_SCAN_TECHNICAL) != 0U &&
          !process->cgroup_path[0]))
@@ -729,8 +745,10 @@ bool lsm_process_enrich(LsmProcessId process_id, LsmProcessInfo *process,
         return true;
     if (scan_flags & LSM_PROCESS_SCAN_EXECUTABLE)
         process->executable[0] = '\0';
-    if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT)
+    if (scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT) {
         process->handle_count = 0U;
+        process->handle_count_available = false;
+    }
     if (scan_flags & LSM_PROCESS_SCAN_CGROUP) {
         process->cgroup_path[0] = '\0';
         process->cgroup_v2 = false;
@@ -924,7 +942,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
             }
         }
 
-        read_process_io(pid, &process);
+        process.io_totals_available = read_process_io(pid, &process);
+        process.io_rate_available = false;
 
         unsigned enrich_flags = scan_flags;
         const double cgroup_age = sample
@@ -977,13 +996,16 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                     process_delta, total_delta);
             }
             double interval = sampled_at - sample->sampled_at;
-            if (same_process && sample->sampled_at > 0.0 && interval > 0.0) {
-                (void)lsm_u64_counter_rate(
+            if (same_process && process.io_totals_available &&
+                sample->io_available && sample->sampled_at > 0.0 &&
+                interval > 0.0) {
+                const bool read_ok = lsm_u64_counter_rate(
                     process.read_bytes, sample->read_bytes, 1.0L, interval,
                     &process.read_bytes_per_sec);
-                (void)lsm_u64_counter_rate(
+                const bool write_ok = lsm_u64_counter_rate(
                     process.write_bytes, sample->write_bytes, 1.0L, interval,
                     &process.write_bytes_per_sec);
+                process.io_rate_available = read_ok && write_ok;
             }
             if ((scan_flags & LSM_PROCESS_SCAN_GPU) != 0U) {
                 const double gpu_interval =
@@ -1036,8 +1058,11 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
             }
             sample->start_ticks = process.instance_id;
             sample->cpu_ticks = cpu_ticks;
-            sample->read_bytes = process.read_bytes;
-            sample->write_bytes = process.write_bytes;
+            if (process.io_totals_available) {
+                sample->read_bytes = process.read_bytes;
+                sample->write_bytes = process.write_bytes;
+            }
+            sample->io_available = process.io_totals_available;
             sample->sampled_at = sampled_at;
             sample->generation = backend->generation;
         }

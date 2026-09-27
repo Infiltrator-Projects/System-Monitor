@@ -47,6 +47,7 @@ typedef struct {
     uint64_t cpu_time_100ns;
     uint64_t read_bytes;
     uint64_t write_bytes;
+    bool io_available;
     uint64_t sampled_at_ms;
     unsigned generation;
 } LsmWindowsProcessSample;
@@ -299,7 +300,9 @@ static void populate_optional_process_fields(HANDLE process,
 
     if ((scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT) != 0U) {
         DWORD handle_count = 0U;
-        if (GetProcessHandleCount(process, &handle_count))
+        info->handle_count_available =
+            GetProcessHandleCount(process, &handle_count) != FALSE;
+        if (info->handle_count_available)
             info->handle_count = (unsigned)handle_count;
     }
 }
@@ -348,7 +351,9 @@ static void populate_process_metrics(LsmProcessBackend *backend,
     if (GetProcessIoCounters(process, &io)) {
         info->read_bytes = (uint64_t)io.ReadTransferCount;
         info->write_bytes = (uint64_t)io.WriteTransferCount;
+        info->io_totals_available = true;
     }
+    info->io_rate_available = false;
 
     const DWORD priority_class = GetPriorityClass(process);
     if (priority_class != 0U)
@@ -367,24 +372,29 @@ static void populate_process_metrics(LsmProcessBackend *backend,
             info->cpu_percent = lsm_process_cpu_total_percent(
                 cpu_time - sample->cpu_time_100ns, system_delta);
 
-        if (now_ms > sample->sampled_at_ms) {
+        if (info->io_totals_available && sample->io_available &&
+            now_ms > sample->sampled_at_ms) {
             const double elapsed =
                 (double)(now_ms - sample->sampled_at_ms) / 1000.0;
             if (elapsed > 0.0) {
-                (void)infiltratr_u64_counter_rate(
+                const bool read_ok = infiltratr_u64_counter_rate(
                     info->read_bytes, sample->read_bytes, 1.0L, elapsed,
                     &info->read_bytes_per_sec);
-                (void)infiltratr_u64_counter_rate(
+                const bool write_ok = infiltratr_u64_counter_rate(
                     info->write_bytes, sample->write_bytes, 1.0L, elapsed,
                     &info->write_bytes_per_sec);
+                info->io_rate_available = read_ok && write_ok;
             }
         }
     }
 
     sample->instance_id = info->instance_id;
     sample->cpu_time_100ns = cpu_time;
-    sample->read_bytes = info->read_bytes;
-    sample->write_bytes = info->write_bytes;
+    if (info->io_totals_available) {
+        sample->read_bytes = info->read_bytes;
+        sample->write_bytes = info->write_bytes;
+    }
+    sample->io_available = info->io_totals_available;
     sample->sampled_at_ms = now_ms;
     sample->generation = backend->generation;
 }

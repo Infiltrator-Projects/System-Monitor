@@ -88,6 +88,7 @@ typedef struct {
     char owner[64];                /**< Unit/session owner when it differs conceptually from User. */
     unsigned threads;
     unsigned handle_count;
+    bool handle_count_available;     /**< Handle/descriptor count was read successfully. */
     LsmProcessPriority priority;
     int nice_value;                /**< Native Unix nice value when nice_value_available is true. */
     bool nice_value_available;
@@ -96,6 +97,7 @@ typedef struct {
     double memory_percent;
     double read_bytes_per_sec;
     double write_bytes_per_sec;
+    bool io_rate_available;          /**< Read/write rates were derived from two valid samples. */
     uint64_t rss_bytes;
     uint64_t virtual_memory_bytes;
     uint64_t writable_memory_bytes;
@@ -105,6 +107,7 @@ typedef struct {
     bool shared_memory_available;
     uint64_t read_bytes;
     uint64_t write_bytes;
+    bool io_totals_available;        /**< Cumulative process I/O totals were read successfully. */
     uint64_t context_switches;
     uint64_t page_faults;
     uint64_t cpu_time_nanoseconds;
