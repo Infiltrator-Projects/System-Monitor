@@ -30,24 +30,12 @@ typedef struct {
 } LsmCpuThermalTableEntry;
 
 static const LsmCpuThermalTableEntry cpu_thermal_table[] = {
+    /* Intel ARK: Core Ultra 5 125U maximum operating temperature 110 C. */
     {"Core(TM) Ultra 5 125U", 110.0},
-    {"Core(TM) Ultra 5 125H", 110.0},
-    {"Core(TM) Ultra 5 135U", 110.0},
-    {"Core(TM) Ultra 5 135H", 110.0},
-    {"Core(TM) Ultra 7 155U", 110.0},
-    {"Core(TM) Ultra 7 155H", 110.0},
-    {"Core(TM) Ultra 7 165U", 110.0},
-    {"Core(TM) Ultra 7 165H", 110.0},
-    {"Core(TM) Ultra 9 185H", 110.0},
-    {"Ryzen 7 7700X3D", 89.0},
+    /* AMD product specifications: these SKUs deliberately differ. */
     {"Ryzen 7 7800X3D", 89.0},
-    {"Ryzen 9 7900X3D", 89.0},
     {"Ryzen 9 7950X3D", 89.0},
-    {"Ryzen 5 7400", 95.0},
-    {"Ryzen 5 7535HS", 95.0},
-    {"Ryzen 7 7700X", 95.0},
-    {"Ryzen 9 7900", 95.0},
-    {"Ryzen 9 7950X", 95.0}
+    {"Ryzen 7 7700X", 95.0}
 };
 
 static bool valid_limit(double celsius)

@@ -79,9 +79,9 @@ typedef struct {
 
 /** One CPU thermal sample and its native limit metadata. */
 typedef struct {
-    double temperature_c;
-    double warning_c;
-    double critical_c;
+    double temperature_c; /**< Current CPU/package temperature, or NAN. */
+    double warning_c;     /**< Native warning/Tcontrol/hot threshold, or NAN. */
+    double critical_c;    /**< Native critical/Tjmax threshold, or NAN. */
 } LsmCpuThermalSample;
 
 /**
