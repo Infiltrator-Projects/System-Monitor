@@ -805,8 +805,15 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
         metric == LSM_OVERVIEW_CPU ||
         metric == LSM_OVERVIEW_MEMORY ||
         metric == LSM_OVERVIEW_NETWORK;
+    /*
+     * Overview lives inside a horizontally non-propagating scroller. Give its
+     * graphs a vertical minimum only: a per-card 220px horizontal minimum is
+     * multiplied by the asymmetric twelve-column span constraints and can
+     * force the toplevel wider than a 1024px work area. The surrounding card
+     * allocation remains stable because live labels are layout-inert.
+     */
     LsmGraph *graph = lsm_graph_new(
-        dual_series, percentage, maximum, 220, overview_graph_height(metric));
+        dual_series, percentage, maximum, -1, overview_graph_height(metric));
     if (graph) {
         const char *primary = overview_colour(metric);
         const char *secondary = NULL;
