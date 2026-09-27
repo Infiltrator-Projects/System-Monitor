@@ -883,6 +883,10 @@ int main(int argc, char **argv)
     puts("Administrator permission is now required to replace the installed package.");
 
     if (root_system_mode) {
+        const char *const remove_arguments[] = {
+            dpkg, "--remove", "infiltrator-system-monitor", NULL
+        };
+        (void)run_process(NULL, remove_arguments, false);
         const char *const install_arguments[] = {
             dpkg, "--install", package_path, NULL
         };
