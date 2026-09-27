@@ -214,12 +214,12 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         view->rail_value, sizeof(view->rail_value),
         "%s %s", percent, speed);
 
-    infiltratr_copy_string(
+    (void)snprintf(
         view->metrics[LSM_CPU_METRIC_UTILISATION],
-        sizeof(view->metrics[LSM_CPU_METRIC_UTILISATION]), percent);
-    infiltratr_copy_string(
+        sizeof(view->metrics[LSM_CPU_METRIC_UTILISATION]), "%s", percent);
+    (void)snprintf(
         view->metrics[LSM_CPU_METRIC_SPEED],
-        sizeof(view->metrics[LSM_CPU_METRIC_SPEED]), speed);
+        sizeof(view->metrics[LSM_CPU_METRIC_SPEED]), "%s", speed);
     format_unsigned(
         true, cpu->process_count,
         view->metrics[LSM_CPU_METRIC_PROCESSES],
@@ -270,9 +270,9 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         cpu->max_frequency_ghz > 0.0, cpu->max_frequency_ghz,
         view->details[LSM_CPU_DETAIL_MAXIMUM_SPEED],
         sizeof(view->details[LSM_CPU_DETAIL_MAXIMUM_SPEED]));
-    infiltratr_copy_string(
+    (void)snprintf(
         view->details[LSM_CPU_DETAIL_VIRTUALISATION],
-        sizeof(view->details[LSM_CPU_DETAIL_VIRTUALISATION]),
+        sizeof(view->details[LSM_CPU_DETAIL_VIRTUALISATION]), "%s",
         cpu->virtualization_available
             ? (cpu->virtualization ? "Enabled" : "Disabled") : "N/A");
     copy_or_na(
