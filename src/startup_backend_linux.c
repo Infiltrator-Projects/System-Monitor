@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static gboolean desktop_boolean(GKeyFile *file, const char *key,
                                 gboolean fallback)
