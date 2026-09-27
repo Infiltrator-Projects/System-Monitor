@@ -712,7 +712,7 @@ static void affinity_apply(ProcessInspector *inspector)
         GTK_WINDOW(inspector->window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 620, 480);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 620, 480);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
     GtkWidget *description = gtk_label_new(
@@ -871,7 +871,7 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
     char title[256];
     snprintf(title, sizeof(title), "%s — Process Inspector", process->name);
     gtk_window_set_title(GTK_WINDOW(inspector->window), title);
-    gtk_window_set_default_size(GTK_WINDOW(inspector->window), 980, 720);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(inspector->window), 980, 720);
     gtk_window_set_transient_for(GTK_WINDOW(inspector->window),
                                  GTK_WINDOW(app->shell.window));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(inspector->window), TRUE);

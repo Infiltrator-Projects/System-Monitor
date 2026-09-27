@@ -326,7 +326,7 @@ static void process_log_plot_complete(GObject *source_object,
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), LSM_PROGRAM_NAME " Process Log");
-    gtk_window_set_default_size(GTK_WINDOW(window), 820, 500);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(window), 820, 500);
     gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(app->shell.window));
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_container_set_border_width(GTK_CONTAINER(box), 12);

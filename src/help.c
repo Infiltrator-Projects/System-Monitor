@@ -247,7 +247,7 @@ void lsm_help_show(LsmApp *app)
     help->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     app->shell.help_window = help->window;
     gtk_window_set_title(GTK_WINDOW(help->window), "System Monitor Help");
-    gtk_window_set_default_size(GTK_WINDOW(help->window), 880, 680);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(help->window), 880, 680);
     gtk_window_set_transient_for(GTK_WINDOW(help->window), GTK_WINDOW(app->shell.window));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(help->window), TRUE);
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

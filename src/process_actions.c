@@ -268,7 +268,7 @@ void lsm_process_filters_dialog(LsmApp *app)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Process filters", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Save", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 540, 420);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 540, 420);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
     GtkWidget *description = gtk_label_new(
@@ -342,7 +342,7 @@ static void show_affinity_dialog(LsmApp *app)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Set CPU affinity", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 620, 480);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 620, 480);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
     GtkWidget *description = gtk_label_new(

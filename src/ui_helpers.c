@@ -124,3 +124,32 @@ gboolean lsm_ui_text_matches(const char *text, const char *needle)
     g_free(folded_needle);
     return matches;
 }
+void lsm_ui_set_workarea_default_size(GtkWindow *window,
+                                      gint requested_width,
+                                      gint requested_height)
+{
+    if (!window) return;
+
+    gint width = requested_width;
+    gint height = requested_height;
+    GdkScreen *screen = gdk_screen_get_default();
+    if (screen) {
+        gint monitor = gdk_screen_get_primary_monitor(screen);
+        if (monitor < 0) monitor = 0;
+
+        GdkRectangle workarea = {0, 0, 0, 0};
+        gdk_screen_get_monitor_workarea(screen, monitor, &workarea);
+        if (workarea.width > 0) {
+            const gint maximum_width =
+                workarea.width > 32 ? workarea.width - 32 : workarea.width;
+            if (width > maximum_width) width = maximum_width;
+        }
+        if (workarea.height > 0) {
+            const gint maximum_height =
+                workarea.height > 80 ? workarea.height - 80 : workarea.height;
+            if (height > maximum_height) height = maximum_height;
+        }
+    }
+
+    gtk_window_set_default_size(window, width, height);
+}

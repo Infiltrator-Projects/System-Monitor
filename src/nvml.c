@@ -77,61 +77,70 @@ typedef struct {
     nvmlReturn_t (*device_get_fan_speed)(nvmlDevice_t, unsigned int *);
 } LsmNvmlApi;
 
-static LsmNvmlApi api;
+struct LsmNvmlContext {
+    LsmNvmlApi api;
+};
 
-static bool initialise(void)
+LsmNvmlContext *lsm_nvml_create(void)
 {
-    if (api.attempted) return api.initialised;
-    api.attempted = true;
+    return calloc(1U, sizeof(LsmNvmlContext));
+}
+
+static bool initialise(LsmNvmlContext *context)
+{
+    if (!context) return false;
+    LsmNvmlApi *api = &context->api;
+    if (api->attempted) return api->initialised;
+    api->attempted = true;
 
     const char *override = getenv("LSM_NVML_LIBRARY");
     if (!infiltratr_dynlib_open(
-            &api.library,
+            &api->library,
             override && *override ? override : "libnvidia-ml.so.1"))
         return false;
 
     const InfiltratrDynlibBinding bindings[] = {
-        {"nvmlInit_v2", &api.init_v2, sizeof api.init_v2, true},
-        {"nvmlShutdown", &api.shutdown, sizeof api.shutdown, true},
-        {"nvmlDeviceGetCount_v2", &api.device_get_count_v2,
-         sizeof api.device_get_count_v2, true},
-        {"nvmlDeviceGetHandleByIndex_v2", &api.device_get_handle_by_index_v2,
-         sizeof api.device_get_handle_by_index_v2, true},
-        {"nvmlDeviceGetName", &api.device_get_name,
-         sizeof api.device_get_name, true},
-        {"nvmlDeviceGetPciInfo_v3", &api.device_get_pci_info_v3,
-         sizeof api.device_get_pci_info_v3, false},
-        {"nvmlSystemGetDriverVersion", &api.system_get_driver_version,
-         sizeof api.system_get_driver_version, false},
-        {"nvmlDeviceGetUtilizationRates", &api.device_get_utilization_rates,
-         sizeof api.device_get_utilization_rates, false},
-        {"nvmlDeviceGetEncoderUtilization", &api.device_get_encoder_utilization,
-         sizeof api.device_get_encoder_utilization, false},
-        {"nvmlDeviceGetDecoderUtilization", &api.device_get_decoder_utilization,
-         sizeof api.device_get_decoder_utilization, false},
-        {"nvmlDeviceGetMemoryInfo", &api.device_get_memory_info,
-         sizeof api.device_get_memory_info, false},
-        {"nvmlDeviceGetTemperature", &api.device_get_temperature,
-         sizeof api.device_get_temperature, false},
-        {"nvmlDeviceGetClockInfo", &api.device_get_clock_info,
-         sizeof api.device_get_clock_info, false},
-        {"nvmlDeviceGetPowerUsage", &api.device_get_power_usage,
-         sizeof api.device_get_power_usage, false},
-        {"nvmlDeviceGetFanSpeed", &api.device_get_fan_speed,
-         sizeof api.device_get_fan_speed, false}
+        {"nvmlInit_v2", &api->init_v2, sizeof api->init_v2, true},
+        {"nvmlShutdown", &api->shutdown, sizeof api->shutdown, true},
+        {"nvmlDeviceGetCount_v2", &api->device_get_count_v2,
+         sizeof api->device_get_count_v2, true},
+        {"nvmlDeviceGetHandleByIndex_v2", &api->device_get_handle_by_index_v2,
+         sizeof api->device_get_handle_by_index_v2, true},
+        {"nvmlDeviceGetName", &api->device_get_name,
+         sizeof api->device_get_name, true},
+        {"nvmlDeviceGetPciInfo_v3", &api->device_get_pci_info_v3,
+         sizeof api->device_get_pci_info_v3, false},
+        {"nvmlSystemGetDriverVersion", &api->system_get_driver_version,
+         sizeof api->system_get_driver_version, false},
+        {"nvmlDeviceGetUtilizationRates", &api->device_get_utilization_rates,
+         sizeof api->device_get_utilization_rates, false},
+        {"nvmlDeviceGetEncoderUtilization", &api->device_get_encoder_utilization,
+         sizeof api->device_get_encoder_utilization, false},
+        {"nvmlDeviceGetDecoderUtilization", &api->device_get_decoder_utilization,
+         sizeof api->device_get_decoder_utilization, false},
+        {"nvmlDeviceGetMemoryInfo", &api->device_get_memory_info,
+         sizeof api->device_get_memory_info, false},
+        {"nvmlDeviceGetTemperature", &api->device_get_temperature,
+         sizeof api->device_get_temperature, false},
+        {"nvmlDeviceGetClockInfo", &api->device_get_clock_info,
+         sizeof api->device_get_clock_info, false},
+        {"nvmlDeviceGetPowerUsage", &api->device_get_power_usage,
+         sizeof api->device_get_power_usage, false},
+        {"nvmlDeviceGetFanSpeed", &api->device_get_fan_speed,
+         sizeof api->device_get_fan_speed, false}
     };
     if (!infiltratr_dynlib_bind_symbols(
-            &api.library, bindings, LSM_ARRAY_LENGTH(bindings)))
+            &api->library, bindings, LSM_ARRAY_LENGTH(bindings)))
         goto fail;
 
-    if (api.init_v2() != NVML_SUCCESS) goto fail;
-    api.initialised = true;
+    if (api->init_v2() != NVML_SUCCESS) goto fail;
+    api->initialised = true;
     return true;
 
 fail:
-    infiltratr_dynlib_close(&api.library);
-    memset(&api, 0, sizeof(api));
-    api.attempted = true;
+    infiltratr_dynlib_close(&api->library);
+    memset(api, 0, sizeof(*api));
+    api->attempted = true;
     return false;
 }
 
@@ -193,12 +202,12 @@ static LsmGpuInfo *append_nvml_gpu(LsmMonitor *monitor, const char *card)
     return gpu;
 }
 
-static LsmGpuInfo *gpu_for_nvml_device(LsmMonitor *monitor, unsigned int index,
-                                       nvmlDevice_t device)
+static LsmGpuInfo *gpu_for_nvml_device(LsmNvmlApi *api, LsmMonitor *monitor,
+                                       unsigned int index, nvmlDevice_t device)
 {
-    if (api.device_get_pci_info_v3) {
+    if (api->device_get_pci_info_v3) {
         nvmlPciInfo_t pci = {0};
-        if (api.device_get_pci_info_v3(device, &pci) == NVML_SUCCESS) {
+        if (api->device_get_pci_info_v3(device, &pci) == NVML_SUCCESS) {
             char nvml_id[32];
             const char *reported_id = pci.bus_id[0]
                 ? pci.bus_id : pci.bus_id_legacy;
@@ -233,35 +242,36 @@ static LsmGpuInfo *gpu_for_nvml_device(LsmMonitor *monitor, unsigned int index,
     return append_nvml_gpu(monitor, card);
 }
 
-void lsm_nvml_refresh(LsmMonitor *monitor)
+void lsm_nvml_refresh(LsmNvmlContext *context, LsmMonitor *monitor)
 {
-    if (!monitor || !initialise()) return;
+    if (!context || !monitor || !initialise(context)) return;
+    LsmNvmlApi *api = &context->api;
 
     unsigned int count = 0;
-    if (api.device_get_count_v2(&count) != NVML_SUCCESS) return;
+    if (api->device_get_count_v2(&count) != NVML_SUCCESS) return;
 
     char driver_version[NVML_DRIVER_BUFFER_SIZE] = "";
-    if (api.system_get_driver_version)
-        (void)api.system_get_driver_version(driver_version, sizeof(driver_version));
+    if (api->system_get_driver_version)
+        (void)api->system_get_driver_version(driver_version, sizeof(driver_version));
 
     for (unsigned int index = 0; index < count; index++) {
         nvmlDevice_t device = NULL;
-        if (api.device_get_handle_by_index_v2(index, &device) != NVML_SUCCESS || !device)
+        if (api->device_get_handle_by_index_v2(index, &device) != NVML_SUCCESS || !device)
             continue;
-        LsmGpuInfo *gpu = gpu_for_nvml_device(monitor, index, device);
+        LsmGpuInfo *gpu = gpu_for_nvml_device(api, monitor, index, device);
         if (!gpu) continue;
 
         char name[NVML_NAME_BUFFER_SIZE] = "";
-        if (api.device_get_name(device, name, sizeof(name)) == NVML_SUCCESS && name[0])
+        if (api->device_get_name(device, name, sizeof(name)) == NVML_SUCCESS && name[0])
             lsm_copy_string(gpu->name, sizeof(gpu->name), name);
         if (driver_version[0])
             snprintf(gpu->driver, sizeof(gpu->driver), "NVIDIA %.55s", driver_version);
         else if (!gpu->driver[0])
             snprintf(gpu->driver, sizeof(gpu->driver), "NVIDIA");
 
-        if (api.device_get_utilization_rates) {
+        if (api->device_get_utilization_rates) {
             nvmlUtilization_t utilization;
-            if (api.device_get_utilization_rates(device, &utilization) == NVML_SUCCESS) {
+            if (api->device_get_utilization_rates(device, &utilization) == NVML_SUCCESS) {
                 gpu->utilization_percent = utilization.gpu;
                 gpu->utilization_available = true;
                 gpu->memory_busy_percent = utilization.memory;
@@ -269,24 +279,24 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
             }
         }
 
-        if (api.device_get_encoder_utilization) {
+        if (api->device_get_encoder_utilization) {
             unsigned int percent = 0, sampling_period = 0;
-            if (api.device_get_encoder_utilization(device, &percent, &sampling_period) == NVML_SUCCESS) {
+            if (api->device_get_encoder_utilization(device, &percent, &sampling_period) == NVML_SUCCESS) {
                 gpu->encoder_percent = percent;
                 gpu->encoder_available = true;
             }
         }
-        if (api.device_get_decoder_utilization) {
+        if (api->device_get_decoder_utilization) {
             unsigned int percent = 0, sampling_period = 0;
-            if (api.device_get_decoder_utilization(device, &percent, &sampling_period) == NVML_SUCCESS) {
+            if (api->device_get_decoder_utilization(device, &percent, &sampling_period) == NVML_SUCCESS) {
                 gpu->decoder_percent = percent;
                 gpu->decoder_available = true;
             }
         }
 
-        if (api.device_get_memory_info) {
+        if (api->device_get_memory_info) {
             nvmlMemory_t memory;
-            if (api.device_get_memory_info(device, &memory) == NVML_SUCCESS) {
+            if (api->device_get_memory_info(device, &memory) == NVML_SUCCESS) {
                 gpu->memory_usage_available = true;
                 gpu->memory_used_bytes = memory.used;
                 gpu->memory_total_bytes = memory.total;
@@ -294,34 +304,34 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
             }
         }
 
-        if (api.device_get_temperature) {
+        if (api->device_get_temperature) {
             unsigned int value = 0;
-            if (api.device_get_temperature(device, NVML_TEMPERATURE_GPU, &value) == NVML_SUCCESS) {
+            if (api->device_get_temperature(device, NVML_TEMPERATURE_GPU, &value) == NVML_SUCCESS) {
                 gpu->temperature_c = value;
                 gpu->temperature_available = true;
             }
         }
-        if (api.device_get_clock_info) {
+        if (api->device_get_clock_info) {
             unsigned int value = 0;
-            if (api.device_get_clock_info(device, NVML_CLOCK_GRAPHICS, &value) == NVML_SUCCESS) {
+            if (api->device_get_clock_info(device, NVML_CLOCK_GRAPHICS, &value) == NVML_SUCCESS) {
                 gpu->core_clock_mhz = value;
                 gpu->core_clock_available = true;
             }
-            if (api.device_get_clock_info(device, NVML_CLOCK_MEM, &value) == NVML_SUCCESS) {
+            if (api->device_get_clock_info(device, NVML_CLOCK_MEM, &value) == NVML_SUCCESS) {
                 gpu->memory_clock_mhz = value;
                 gpu->memory_clock_available = true;
             }
         }
-        if (api.device_get_power_usage) {
+        if (api->device_get_power_usage) {
             unsigned int milliwatts = 0;
-            if (api.device_get_power_usage(device, &milliwatts) == NVML_SUCCESS) {
+            if (api->device_get_power_usage(device, &milliwatts) == NVML_SUCCESS) {
                 gpu->power_watts = (double)milliwatts / 1000.0;
                 gpu->power_available = true;
             }
         }
-        if (api.device_get_fan_speed) {
+        if (api->device_get_fan_speed) {
             unsigned int percent = 0;
-            if (api.device_get_fan_speed(device, &percent) == NVML_SUCCESS) {
+            if (api->device_get_fan_speed(device, &percent) == NVML_SUCCESS) {
                 gpu->fan_percent = percent;
                 gpu->fan_available = true;
             }
@@ -330,9 +340,12 @@ void lsm_nvml_refresh(LsmMonitor *monitor)
     }
 }
 
-void lsm_nvml_shutdown(void)
+void lsm_nvml_destroy(LsmNvmlContext *context)
 {
-    if (api.initialised && api.shutdown) (void)api.shutdown();
-    infiltratr_dynlib_close(&api.library);
-    memset(&api, 0, sizeof(api));
+    if (!context) return;
+    LsmNvmlApi *api = &context->api;
+    if (api->initialised && api->shutdown) (void)api->shutdown();
+    infiltratr_dynlib_close(&api->library);
+    memset(api, 0, sizeof(*api));
+    free(context);
 }

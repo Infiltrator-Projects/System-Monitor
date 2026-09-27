@@ -22,7 +22,7 @@ void lsm_task_launcher_show(LsmApp *app)
         "Run new task", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Run", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 560, 190);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 560, 190);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 16);
 

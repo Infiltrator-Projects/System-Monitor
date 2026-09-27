@@ -65,6 +65,7 @@ typedef struct {
 } LsmNpuTelemetryCache;
 
 struct LsmLinuxHardwareState {
+    LsmNvmlContext *nvml;
     LsmGpuTelemetryCache gpu_telemetry[LSM_MAX_GPUS];
     size_t gpu_telemetry_count;
     LsmNpuTelemetryCache npu_telemetry[LSM_MAX_NPUS];
@@ -586,8 +587,10 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
         }
     }
 
-    /* NVML is loaded in-process when the NVIDIA driver supplies it. */
-    lsm_nvml_refresh(monitor);
+    /* NVML lifetime belongs to this monitor instance, like the other caches. */
+    LsmLinuxHardwareState *hardware = hardware_state(monitor);
+    if (hardware && !hardware->nvml) hardware->nvml = lsm_nvml_create();
+    if (hardware && hardware->nvml) lsm_nvml_refresh(hardware->nvml, monitor);
     for (size_t index = 0U; index < monitor->gpu_count; index++) {
         LsmGpuInfo *gpu = &monitor->gpus[index];
         if (lsm_ascii_starts_with_ci(gpu->driver, "NVIDIA") &&
@@ -759,9 +762,10 @@ void lsm_hardware_shutdown(LsmMonitor *monitor)
             destroy_gpu_telemetry(&state->gpu_telemetry[index]);
         for (size_t index = 0U; index < state->npu_telemetry_count; index++)
             destroy_npu_telemetry(&state->npu_telemetry[index]);
+        lsm_nvml_destroy(state->nvml);
+        state->nvml = NULL;
         free(state);
         backend->hardware_state = NULL;
     }
     lsm_battery_shutdown();
-    lsm_nvml_shutdown();
 }

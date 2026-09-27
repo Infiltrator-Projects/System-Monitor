@@ -12,6 +12,8 @@
 
 #include "monitor_types.h"
 
+typedef struct LsmNvmlContext LsmNvmlContext;
+
 /**
  * Refresh NVIDIA-only optional metrics through a dynamically loaded NVML ABI.
  *
@@ -20,8 +22,11 @@
  *
  * @param [in,out] monitor Snapshot containing enumerated graphics adapters.
  */
-void lsm_nvml_refresh(LsmMonitor *monitor);
-/** Release the optional NVML runtime and its driver context. */
-void lsm_nvml_shutdown(void);
+/** Create an independent optional NVML runtime context. */
+LsmNvmlContext *lsm_nvml_create(void);
+/** Refresh metrics through one monitor-owned NVML context. */
+void lsm_nvml_refresh(LsmNvmlContext *context, LsmMonitor *monitor);
+/** Release one NVML runtime context and its driver state. */
+void lsm_nvml_destroy(LsmNvmlContext *context);
 
 #endif

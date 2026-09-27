@@ -39,7 +39,7 @@ static void show_file_users_results(GtkWindow *parent, const char *path,
         "Processes using file", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Close", GTK_RESPONSE_CLOSE, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 820, 520);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 820, 520);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
     GtkWidget *description = gtk_label_new(NULL);

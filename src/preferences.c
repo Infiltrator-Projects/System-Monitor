@@ -25,6 +25,7 @@
 #include "numeric_io.h"
 #include "performance.h"
 #include "processes_ui.h"
+#include "ui_helpers.h"
 
 #include <infiltratr/config.h>
 #include <infiltratr/core.h>
@@ -290,7 +291,7 @@ void lsm_preferences_show(LsmApp *app)
         "Preferences", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 700, 680);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 700, 680);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 16);
     GtkWidget *intro = gtk_label_new(

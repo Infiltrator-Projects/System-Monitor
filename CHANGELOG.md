@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.133 - 2026-09-27
+
+- Move the optional NVML library/API lifetime out of process-global mutable storage and into each Linux monitor's hardware state, so one monitor instance cannot tear down another monitor's NVIDIA provider.
+- Extend the NVML smoke test to create two independent contexts, destroy one, and prove the other continues to refresh correctly.
+- Clamp Process Inspector, Help, Preferences, process-control, process-log, file-user and task-launcher window defaults to the usable desktop work area while preserving their existing preferred sizes on normal displays.
+
+
 ## 1.0.132 - 2026-09-27
 
 - Bind Linux network counter baselines and topology changes to interface instance identity, reject truncated/interrupted rtnetlink dumps, and make IPv4 selection deterministic.

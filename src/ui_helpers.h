@@ -58,5 +58,18 @@ GdkRGBA lsm_ui_background_colour(GtkWidget *widget);
  * @return TRUE when @p needle is empty or occurs in @p text.
  */
 gboolean lsm_ui_text_matches(const char *text, const char *needle);
+/**
+ * Set a preferred window size clamped to the usable primary-monitor work area.
+ *
+ * Normal displays retain the requested size. Smaller work areas reduce only
+ * the oversized dimension so dialogs and tool windows remain reachable.
+ *
+ * @param [in,out] window Window receiving the preferred size.
+ * @param [in] requested_width Preferred client width.
+ * @param [in] requested_height Preferred client height.
+ */
+void lsm_ui_set_workarea_default_size(GtkWindow *window,
+                                      gint requested_width,
+                                      gint requested_height);
 
 #endif
