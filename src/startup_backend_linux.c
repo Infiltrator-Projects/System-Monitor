@@ -46,6 +46,88 @@ static char *desktop_string(GKeyFile *file, const char *key)
     return value ? value : g_strdup("");
 }
 
+static gboolean current_desktop_matches(const char *candidate)
+{
+    if (!candidate || !candidate[0]) return FALSE;
+    const char *current = g_getenv("XDG_CURRENT_DESKTOP");
+    if (!current || !current[0]) return FALSE;
+    gchar **desktops = g_strsplit(current, ":", -1);
+    gboolean matches = FALSE;
+    for (gchar **item = desktops; item && *item; item++) {
+        if (strcmp(*item, candidate) == 0) {
+            matches = TRUE;
+            break;
+        }
+    }
+    g_strfreev(desktops);
+    return matches;
+}
+
+static gboolean desktop_environment_allows(GKeyFile *file)
+{
+    if (!file) return FALSE;
+
+    GError *error = NULL;
+    gsize count = 0U;
+    gchar **only = g_key_file_get_string_list(
+        file, "Desktop Entry", "OnlyShowIn", &count, &error);
+    if (!error && only && count > 0U) {
+        gboolean matched = FALSE;
+        for (gsize index = 0U; index < count; index++)
+            matched = matched || current_desktop_matches(only[index]);
+        g_strfreev(only);
+        if (!matched) return FALSE;
+    } else {
+        if (error) g_error_free(error);
+        g_strfreev(only);
+    }
+
+    error = NULL;
+    count = 0U;
+    gchar **not_show = g_key_file_get_string_list(
+        file, "Desktop Entry", "NotShowIn", &count, &error);
+    if (!error && not_show) {
+        for (gsize index = 0U; index < count; index++) {
+            if (current_desktop_matches(not_show[index])) {
+                g_strfreev(not_show);
+                return FALSE;
+            }
+        }
+        g_strfreev(not_show);
+    } else {
+        if (error) g_error_free(error);
+        g_strfreev(not_show);
+    }
+    return TRUE;
+}
+
+static gboolean try_exec_available(GKeyFile *file)
+{
+    if (!file) return FALSE;
+    GError *error = NULL;
+    char *try_exec = g_key_file_get_string(
+        file, "Desktop Entry", "TryExec", &error);
+    if (error) {
+        g_error_free(error);
+        return TRUE;
+    }
+    if (!try_exec || !try_exec[0]) {
+        g_free(try_exec);
+        return TRUE;
+    }
+
+    gboolean available = FALSE;
+    if (strchr(try_exec, '/')) {
+        available = g_file_test(try_exec, G_FILE_TEST_IS_EXECUTABLE);
+    } else {
+        char *resolved = g_find_program_in_path(try_exec);
+        available = resolved != NULL;
+        g_free(resolved);
+    }
+    g_free(try_exec);
+    return available;
+}
+
 static gboolean load_startup_entry(const char *path, const char *id,
                                    gboolean user_entry,
                                    LsmStartupEntry *entry)
@@ -81,7 +163,9 @@ static gboolean load_startup_entry(const char *path, const char *id,
     lsm_copy_string(entry->command, sizeof(entry->command), command);
     lsm_copy_string(entry->description, sizeof(entry->description), description);
     entry->user_entry = user_entry != FALSE;
-    entry->enabled = !hidden && gnome_enabled;
+    entry->enabled = !hidden && gnome_enabled &&
+                     desktop_environment_allows(file) &&
+                     try_exec_available(file);
 
     g_free(name);
     g_free(command);
@@ -110,12 +194,12 @@ static gboolean append_entry(LsmStartupEntry **entries, size_t *count,
     return TRUE;
 }
 
-static void scan_directory(const char *directory, gboolean user_entry,
-                           LsmStartupEntry **entries, size_t *count,
-                           size_t *capacity)
+static gboolean scan_directory(const char *directory, gboolean user_entry,
+                                LsmStartupEntry **entries, size_t *count,
+                                size_t *capacity)
 {
     DIR *dir = opendir(directory);
-    if (!dir) return;
+    if (!dir) return errno == ENOENT;
 
     struct dirent *item = NULL;
     while ((item = readdir(dir))) {
@@ -128,10 +212,14 @@ static void scan_directory(const char *directory, gboolean user_entry,
         if (!lsm_join_path(path, sizeof(path), directory, item->d_name))
             continue;
         LsmStartupEntry entry;
-        if (load_startup_entry(path, item->d_name, user_entry, &entry))
-            (void)append_entry(entries, count, capacity, &entry);
+        if (load_startup_entry(path, item->d_name, user_entry, &entry) &&
+            !append_entry(entries, count, capacity, &entry)) {
+            closedir(dir);
+            return FALSE;
+        }
     }
     closedir(dir);
+    return TRUE;
 }
 
 bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
@@ -146,24 +234,33 @@ bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
     size_t capacity = 0U;
     char user_directory[LSM_PATH_LEN];
     char config_home[LSM_PATH_LEN];
-    if (lsm_xdg_config_home(config_home, sizeof(config_home)) &&
-        lsm_join_path(user_directory, sizeof(user_directory),
-                      config_home, "autostart"))
-        scan_directory(user_directory, TRUE, &entries, &count, &capacity);
+    if (!lsm_xdg_config_home(config_home, sizeof(config_home)) ||
+        !lsm_join_path(user_directory, sizeof(user_directory),
+                       config_home, "autostart") ||
+        !scan_directory(user_directory, TRUE, &entries, &count, &capacity)) {
+        free(entries);
+        return false;
+    }
 
     const char *xdg_dirs = getenv("XDG_CONFIG_DIRS");
     if (!xdg_dirs || !xdg_dirs[0]) xdg_dirs = "/etc/xdg";
     char *copy = strdup(xdg_dirs);
-    if (copy) {
-        char *save = NULL;
-        for (char *dir = strtok_r(copy, ":", &save); dir;
-             dir = strtok_r(NULL, ":", &save)) {
-            char path[LSM_PATH_LEN];
-            if (lsm_join_path(path, sizeof(path), dir, "autostart"))
-                scan_directory(path, FALSE, &entries, &count, &capacity);
-        }
-        free(copy);
+    if (!copy) {
+        free(entries);
+        return false;
     }
+    char *save = NULL;
+    for (char *dir = strtok_r(copy, ":", &save); dir;
+         dir = strtok_r(NULL, ":", &save)) {
+        char path[LSM_PATH_LEN];
+        if (!lsm_join_path(path, sizeof(path), dir, "autostart") ||
+            !scan_directory(path, FALSE, &entries, &count, &capacity)) {
+            free(copy);
+            free(entries);
+            return false;
+        }
+    }
+    free(copy);
 
     *out_entries = entries;
     *out_count = count;

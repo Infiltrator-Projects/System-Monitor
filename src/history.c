@@ -94,6 +94,7 @@ typedef struct {
     char config_dir[LSM_PATH_LEN];
     char path[LSM_PATH_LEN];
     LsmHistoryPersistEntry *entries;
+    char *strings;
     size_t count;
     guint generation;
     LsmHistorySaveCoordinator *coordinator;
@@ -286,15 +287,6 @@ static void history_mark_dirty(LsmApp *app)
     app->history.history_dirty = TRUE;
 }
 
-static void history_persist_entry_clear(LsmHistoryPersistEntry *entry)
-{
-    if (!entry) return;
-    g_free(entry->key);
-    g_free(entry->name);
-    g_free(entry->user);
-    g_free(entry->identity);
-}
-
 static void history_coordinator_release(LsmHistorySaveCoordinator *coordinator)
 {
     if (!coordinator ||
@@ -330,8 +322,7 @@ static void history_save_request_free(gpointer data)
 {
     LsmHistorySaveRequest *request = data;
     if (!request) return;
-    for (size_t index = 0U; index < request->count; index++)
-        history_persist_entry_clear(&request->entries[index]);
+    g_free(request->strings);
     g_free(request->entries);
     history_coordinator_release(request->coordinator);
     g_free(request);
@@ -340,28 +331,71 @@ static void history_save_request_free(gpointer data)
 static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
 {
     if (!app || !app->history.app_history) return NULL;
-    LsmHistorySaveRequest *request = g_new0(LsmHistorySaveRequest, 1U);
+    LsmHistorySaveRequest *request = g_try_new0(LsmHistorySaveRequest, 1U);
+    if (!request) return NULL;
     lsm_copy_string(request->config_dir, sizeof(request->config_dir), app->paths.config_dir);
     lsm_copy_string(request->path, sizeof(request->path), app->history.history_path);
     request->generation = app->history.history_mutation_generation;
     request->count = app->history.history_entry_count;
-    if (request->count > 0U)
-        request->entries = g_new0(LsmHistoryPersistEntry, request->count);
 
-    size_t index = 0U;
+    size_t string_bytes = 0U;
     GHashTableIter iterator;
     gpointer key = NULL;
     gpointer value = NULL;
+    g_hash_table_iter_init(&iterator, app->history.app_history);
+    while (g_hash_table_iter_next(&iterator, &key, &value)) {
+        (void)key;
+        const LsmHistoryEntry *entry = value;
+        const char *fields[] = {
+            entry->key, entry->name, entry->user, entry->identity
+        };
+        for (size_t field = 0U; field < LSM_ARRAY_LENGTH(fields); field++) {
+            const size_t length = strlen(fields[field] ? fields[field] : "") + 1U;
+            if (!lsm_size_add_checked(string_bytes, length, &string_bytes)) {
+                history_save_request_free(request);
+                return NULL;
+            }
+        }
+    }
+
+    if (request->count > 0U) {
+        request->entries = g_try_new0(LsmHistoryPersistEntry, request->count);
+        if (!request->entries) {
+            history_save_request_free(request);
+            return NULL;
+        }
+    }
+    if (string_bytes > 0U) {
+        request->strings = g_try_malloc(string_bytes);
+        if (!request->strings) {
+            history_save_request_free(request);
+            return NULL;
+        }
+    }
+
+    char *cursor = request->strings;
+    size_t index = 0U;
     g_hash_table_iter_init(&iterator, app->history.app_history);
     while (index < request->count &&
            g_hash_table_iter_next(&iterator, &key, &value)) {
         (void)key;
         const LsmHistoryEntry *entry = value;
         LsmHistoryPersistEntry *copy = &request->entries[index++];
-        copy->key = g_strdup(entry->key);
-        copy->name = g_strdup(entry->name);
-        copy->user = g_strdup(entry->user);
-        copy->identity = g_strdup(entry->identity);
+
+#define COPY_HISTORY_STRING(member) \
+        do { \
+            const char *source = entry->member ? entry->member : ""; \
+            const size_t length = strlen(source) + 1U; \
+            copy->member = cursor; \
+            memcpy(cursor, source, length); \
+            cursor += length; \
+        } while (0)
+        COPY_HISTORY_STRING(key);
+        COPY_HISTORY_STRING(name);
+        COPY_HISTORY_STRING(user);
+        COPY_HISTORY_STRING(identity);
+#undef COPY_HISTORY_STRING
+
         copy->cpu_seconds = entry->cpu_seconds;
         copy->active_seconds = entry->active_seconds;
         copy->read_bytes = entry->read_bytes;
@@ -770,7 +804,9 @@ static void history_identity(const LsmProcessInfo *process,
                              char *identity, size_t identity_size)
 {
     char executable[LSM_PATH_LEN] = "";
-    if (process->command[0] && process->command[0] != '[') {
+    if (process->executable[0]) {
+        lsm_copy_string(executable, sizeof(executable), process->executable);
+    } else if (process->command[0] && process->command[0] != '[') {
         size_t length = strcspn(process->command, " \t");
         if (length >= sizeof(executable)) length = sizeof(executable) - 1;
         memcpy(executable, process->command, length);
@@ -837,23 +873,21 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
      */
     GHashTable *rss_totals = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, g_free);
+
+    /* Build per-application RSS and process deltas in one process walk. */
     for (size_t i = 0U; i < count; i++) {
-        char app_key[LSM_PATH_LEN + 64U];
-        char identity[LSM_PATH_LEN];
-        history_identity(&processes[i], app_key, sizeof(app_key),
+        const LsmProcessInfo *process = &processes[i];
+        char app_key[LSM_PATH_LEN + 64U], identity[LSM_PATH_LEN];
+        history_identity(process, app_key, sizeof(app_key),
                          identity, sizeof(identity));
+
         uint64_t *rss = g_hash_table_lookup(rss_totals, app_key);
         if (!rss) {
             rss = g_new0(uint64_t, 1);
             g_hash_table_insert(rss_totals, g_strdup(app_key), rss);
         }
-        *rss = lsm_u64_add_saturating(*rss, processes[i].rss_bytes);
-    }
+        *rss = lsm_u64_add_saturating(*rss, process->rss_bytes);
 
-    for (size_t i = 0; i < count; i++) {
-        const LsmProcessInfo *process = &processes[i];
-        char app_key[LSM_PATH_LEN + 64], identity[LSM_PATH_LEN];
-        history_identity(process, app_key, sizeof(app_key), identity, sizeof(identity));
         LsmHistoryEntry *entry = history_entry_get(
             app, process, app_key, identity, rss_totals);
 
@@ -907,7 +941,9 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
     g_hash_table_destroy(rss_totals);
     if (count > 0U) history_mark_dirty(app);
 
-    if (app->history.history_tree && gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) == 2)
+    if (app->history.history_tree &&
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) ==
+            LSM_TAB_APP_HISTORY)
         lsm_history_refresh(app);
 }
 

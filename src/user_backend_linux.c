@@ -19,6 +19,7 @@
 
 #include <pwd.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -149,11 +150,17 @@ static LsmLinuxSessionRecord *parse_session_list(GVariant *reply,
     const char *path = NULL;
     guint32 uid = 0U;
 
+    errno = 0;
     while (g_variant_iter_loop(iter, "(&su&s&s&o)", &id, &uid, &username,
                                &seat, &path)) {
         if (!lsm_array_reserve((void **)&sessions, &capacity,
-                               sizeof(*sessions), count + 1U, 8U))
+                               sizeof(*sessions), count + 1U, 8U)) {
+            free(sessions);
+            sessions = NULL;
+            count = 0U;
+            errno = ENOMEM;
             break;
+        }
         LsmLinuxSessionRecord *record = &sessions[count++];
         memset(record, 0, sizeof(*record));
         record->uid = (uid_t)uid;
@@ -181,6 +188,11 @@ static LsmLinuxSessionRecord *collect_sessions(GDBusConnection *bus,
 
     LsmLinuxSessionRecord *sessions = parse_session_list(reply, out_count);
     g_variant_unref(reply);
+    if (!sessions && *out_count == 0U && errno == ENOMEM) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                            "Unable to allocate the complete session inventory");
+        return NULL;
+    }
     for (size_t index = 0U; index < *out_count; index++) {
         if (cancellable && g_cancellable_is_cancelled(cancellable)) break;
         LsmLinuxSessionRecord *record = &sessions[index];
@@ -208,9 +220,13 @@ static LsmLinuxSessionRecord *collect_sessions(GDBusConnection *bus,
                 (uint64_t)property_uint64(properties, "Timestamp");
             g_variant_unref(properties);
         }
-        if (property_error) g_error_free(property_error);
-        if (!session->state[0])
+        if (property_error) {
+            lsm_copy_string(session->state, sizeof(session->state),
+                            "unavailable");
+            g_error_free(property_error);
+        } else if (!session->state[0]) {
             lsm_copy_string(session->state, sizeof(session->state), "online");
+        }
         if (!session->type[0])
             lsm_copy_string(session->type, sizeof(session->type), "unspecified");
     }

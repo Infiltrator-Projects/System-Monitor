@@ -62,6 +62,7 @@ static const FilesystemColumnSpec filesystem_column_specs[FILESYSTEM_COLUMNS] = 
 typedef struct {
     LsmFilesystemInfo *items; /**< Owned records transferred to page state. */
     size_t count; /**< Number of valid records in @ref items. */
+    gboolean success; /**< TRUE only for a complete namespace snapshot. */
 } FilesystemRefreshResult;
 
 static void filesystem_refresh_result_free(gpointer data)
@@ -387,7 +388,8 @@ static void filesystem_refresh_worker(GTask *task, gpointer source_object,
     (void)task_data;
     (void)cancellable;
     FilesystemRefreshResult *result = g_new0(FilesystemRefreshResult, 1U);
-    result->count = lsm_filesystem_inventory_collect(&result->items);
+    result->success = lsm_filesystem_inventory_collect(
+        &result->items, &result->count);
     g_task_return_pointer(task, result, filesystem_refresh_result_free);
 }
 
@@ -406,14 +408,18 @@ static void filesystem_refresh_complete(GObject *source_object,
     }
 
     app->filesystem.refresh_pending = FALSE;
-    if (result) {
+    if (result && result->success) {
         lsm_filesystem_inventory_free(app->filesystem.filesystem_snapshot);
         app->filesystem.filesystem_snapshot = result->items;
         app->filesystem.filesystem_snapshot_count = result->count;
         result->items = NULL;
-        filesystem_refresh_result_free(result);
         present_filesystem_snapshot(app);
+    } else if (result && app->filesystem.filesystem_count_label) {
+        lsm_ui_set_label_text(
+            app->filesystem.filesystem_count_label,
+            "File systems unavailable — keeping previous snapshot");
     }
+    filesystem_refresh_result_free(result);
 
     if (app->filesystem.refresh_again && !app->runtime.shutting_down) {
         app->filesystem.refresh_again = FALSE;

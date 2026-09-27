@@ -51,6 +51,8 @@ typedef struct {
     char *memory_clock;
     char *memory_clock_dpm;
     char *temperature;
+    char *temperature_warning;
+    char *temperature_critical;
     char *power;
     char *pwm;
     char *pwm_max;
@@ -102,6 +104,8 @@ static void destroy_gpu_telemetry(LsmGpuTelemetryCache *cache)
     free(cache->memory_clock);
     free(cache->memory_clock_dpm);
     free(cache->temperature);
+    free(cache->temperature_warning);
+    free(cache->temperature_critical);
     free(cache->power);
     free(cache->pwm);
     free(cache->pwm_max);
@@ -215,6 +219,12 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
         if (!lsm_join_path(node, sizeof(node), hwmon_root, suffix)) continue;
         if (!cache->temperature)
             cache->temperature = existing_metric_path(node, "/temp1_input");
+        if (!cache->temperature_warning)
+            cache->temperature_warning =
+                existing_metric_path(node, "/temp1_max");
+        if (!cache->temperature_critical)
+            cache->temperature_critical =
+                existing_metric_path(node, "/temp1_crit");
         if (!cache->power)
             cache->power = existing_metric_path(node, "/power1_average");
         if (!cache->pwm) cache->pwm = existing_metric_path(node, "/pwm1");
@@ -459,11 +469,15 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
         gpu->video_enhance_available = false;
         gpu->copy_available = false;
         gpu->temperature_available = false;
+        gpu->temperature_warning_available = false;
+        gpu->temperature_critical_available = false;
         gpu->core_clock_available = false;
         gpu->memory_clock_available = false;
         gpu->power_available = false;
         gpu->fan_available = false;
         gpu->temperature_c = NAN;
+        gpu->temperature_warning_c = NAN;
+        gpu->temperature_critical_c = NAN;
         gpu->core_clock_mhz = NAN;
         gpu->memory_clock_mhz = NAN;
         gpu->power_watts = NAN;
@@ -572,6 +586,27 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
             gpu->temperature_c = (double)value / 1000.0;
             gpu->temperature_available = true;
         }
+        if (telemetry && telemetry->temperature_warning &&
+            lsm_read_u64_file(telemetry->temperature_warning, &value)) {
+            const double warning = (double)value / 1000.0;
+            if (isfinite(warning) && warning >= 30.0 && warning <= 150.0) {
+                gpu->temperature_warning_c = warning;
+                gpu->temperature_warning_available = true;
+            }
+        }
+        if (telemetry && telemetry->temperature_critical &&
+            lsm_read_u64_file(telemetry->temperature_critical, &value)) {
+            const double critical = (double)value / 1000.0;
+            if (isfinite(critical) && critical >= 30.0 && critical <= 150.0) {
+                gpu->temperature_critical_c = critical;
+                gpu->temperature_critical_available = true;
+            }
+        }
+        if (gpu->temperature_warning_available &&
+            gpu->temperature_critical_available &&
+            gpu->temperature_warning_c > gpu->temperature_critical_c)
+            gpu->temperature_warning_available = false;
+
         if (!gpu->power_available && telemetry && telemetry->power &&
             lsm_read_u64_file(telemetry->power, &value)) {
             gpu->power_watts = (double)value / 1000000.0;

@@ -32,6 +32,14 @@ static GtkWidget *summary_item(const char *caption, GtkWidget **value_out,
     gtk_style_context_add_class(
         gtk_widget_get_style_context(value), "lsm-summary-value");
     gtk_widget_set_halign(value, GTK_ALIGN_CENTER);
+    gtk_label_set_width_chars(GTK_LABEL(value), 12);
+    gtk_label_set_max_width_chars(GTK_LABEL(value), 12);
+    gtk_label_set_xalign(GTK_LABEL(value), 0.5f);
+    PangoAttrList *attributes = pango_attr_list_new();
+    PangoAttribute *features = pango_attr_font_features_new("tnum=1");
+    pango_attr_list_insert(attributes, features);
+    gtk_label_set_attributes(GTK_LABEL(value), attributes);
+    pango_attr_list_unref(attributes);
     gtk_label_set_selectable(GTK_LABEL(value), TRUE);
     gtk_widget_set_tooltip_text(box, tooltip);
     gtk_box_pack_start(GTK_BOX(box), caption_label, FALSE, FALSE, 0);

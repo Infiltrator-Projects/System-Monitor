@@ -47,14 +47,16 @@ typedef struct {
  * NULL and never invokes another executable.
  *
  * @param [out] out_items Receives a heap array owned by the caller, or NULL.
- * @return Number of records in the returned snapshot; zero on failure or when
- *         the namespace contains no parseable mounts.
+ * @param [out] out_count Receives the number of records in the snapshot.
+ * @return true for a complete snapshot, including a valid empty namespace;
+ *         false when mountinfo cannot be read or allocation fails.
  * Complexity: O(M log M), where M is the number of mountinfo records.
  * Thread safety: safe for concurrent callers; the function retains no globals.
  * Blocking: statvfs(3) may wait on stale remote filesystems, so interactive
  * callers should execute collection away from their presentation thread.
  */
-size_t lsm_filesystem_inventory_collect(LsmFilesystemInfo **out_items);
+bool lsm_filesystem_inventory_collect(LsmFilesystemInfo **out_items,
+                                      size_t *out_count);
 
 /**
  * Release an array returned by lsm_filesystem_inventory_collect().

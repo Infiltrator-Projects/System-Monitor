@@ -131,19 +131,21 @@ static bool parse_mount_line(char *line, LsmMountInfoEntry *entry)
     return true;
 }
 
-size_t lsm_mountinfo_visit_file(const char *path,
-                                LsmMountInfoVisitor visitor,
-                                void *user_data)
+bool lsm_mountinfo_visit_file_checked(const char *path,
+                                      LsmMountInfoVisitor visitor,
+                                      void *user_data,
+                                      size_t *out_count)
 {
-    if (!path || !visitor) return 0;
+    if (out_count) *out_count = 0U;
+    if (!path || !visitor || !out_count) return false;
 
     FILE *stream = fopen(path, "re");
     if (!stream) stream = fopen(path, "r");
-    if (!stream) return 0;
+    if (!stream) return false;
 
-    size_t count = 0;
+    size_t count = 0U;
     char *line = NULL;
-    size_t line_capacity = 0;
+    size_t line_capacity = 0U;
     while (getline(&line, &line_capacity, stream) >= 0) {
         LsmMountInfoEntry entry = {0};
         if (!parse_mount_line(line, &entry)) continue;
@@ -151,7 +153,18 @@ size_t lsm_mountinfo_visit_file(const char *path,
         if (!visitor(&entry, user_data)) break;
     }
 
+    const bool read_ok = !ferror(stream);
     free(line);
-    fclose(stream);
-    return count;
+    const bool close_ok = fclose(stream) == 0;
+    *out_count = count;
+    return read_ok && close_ok;
+}
+
+size_t lsm_mountinfo_visit_file(const char *path,
+                                LsmMountInfoVisitor visitor,
+                                void *user_data)
+{
+    size_t count = 0U;
+    return lsm_mountinfo_visit_file_checked(
+        path, visitor, user_data, &count) ? count : 0U;
 }

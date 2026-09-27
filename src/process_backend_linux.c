@@ -83,8 +83,10 @@ typedef struct {
     uint64_t gpu_memory_bytes;
     char gpu_engine[256];
     char *command;
+    char *executable;
     char *cgroup_path;
     double command_sampled_at;
+    double executable_sampled_at;
     double cgroup_sampled_at;
     bool gpu_snapshot_valid;
     bool gpu_available;
@@ -92,6 +94,11 @@ typedef struct {
     bool cgroup_v2;
     unsigned generation;
 } PreviousProcessSample;
+
+typedef struct {
+    size_t index;
+    PreviousProcessSample before;
+} PreviousProcessMutation;
 
 typedef struct {
     pid_t pid;
@@ -233,6 +240,63 @@ static PreviousProcessSample *find_or_create_sample(LsmProcessBackend *backend,
     memset(sample, 0, sizeof(*sample));
     sample->pid = pid;
     return sample;
+}
+
+static void sample_metadata_free(PreviousProcessSample *sample)
+{
+    if (!sample) return;
+    free(sample->command);
+    free(sample->executable);
+    free(sample->cgroup_path);
+    sample->command = NULL;
+    sample->executable = NULL;
+    sample->cgroup_path = NULL;
+}
+
+static void rollback_sample_mutations(
+    LsmProcessBackend *backend,
+    const PreviousProcessMutation *mutations,
+    size_t mutation_count,
+    size_t original_sample_count,
+    unsigned original_generation)
+{
+    if (!backend) return;
+    for (size_t position = mutation_count; position > 0U; position--) {
+        const PreviousProcessMutation *mutation = &mutations[position - 1U];
+        if (mutation->index >= backend->sample_count) continue;
+        PreviousProcessSample *current = &backend->samples[mutation->index];
+        if (current->command != mutation->before.command)
+            free(current->command);
+        if (current->executable != mutation->before.executable)
+            free(current->executable);
+        if (current->cgroup_path != mutation->before.cgroup_path)
+            free(current->cgroup_path);
+        *current = mutation->before;
+    }
+    for (size_t index = original_sample_count;
+         index < backend->sample_count; index++)
+        sample_metadata_free(&backend->samples[index]);
+    backend->sample_count = original_sample_count;
+    backend->generation = original_generation;
+}
+
+static void commit_sample_mutations(
+    LsmProcessBackend *backend,
+    const PreviousProcessMutation *mutations,
+    size_t mutation_count)
+{
+    if (!backend) return;
+    for (size_t position = 0U; position < mutation_count; position++) {
+        const PreviousProcessMutation *mutation = &mutations[position];
+        if (mutation->index >= backend->sample_count) continue;
+        const PreviousProcessSample *current = &backend->samples[mutation->index];
+        if (current->command != mutation->before.command)
+            free(mutation->before.command);
+        if (current->executable != mutation->before.executable)
+            free(mutation->before.executable);
+        if (current->cgroup_path != mutation->before.cgroup_path)
+            free(mutation->before.cgroup_path);
+    }
 }
 
 static const char *state_name(char state)
@@ -883,8 +947,9 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     DIR *directory = opendir("/proc");
     if (!directory) return 0;
 
-    backend->generation++;
     const size_t searchable_sample_count = backend->sample_count;
+    const size_t original_sample_count = backend->sample_count;
+    const unsigned original_generation = backend->generation;
     size_t count = 0U;
     size_t capacity = 512U;
     LsmProcessInfo *processes = calloc(capacity, sizeof(*processes));
@@ -892,6 +957,16 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         closedir(directory);
         return 0;
     }
+    PreviousProcessMutation *mutations = searchable_sample_count > 0U
+        ? calloc(searchable_sample_count, sizeof(*mutations)) : NULL;
+    if (searchable_sample_count > 0U && !mutations) {
+        free(processes);
+        closedir(directory);
+        return 0;
+    }
+    size_t mutation_count = 0U;
+    backend->generation++;
+    if (backend->generation == 0U) backend->generation = 1U;
 
     const uint64_t total_memory = backend->total_memory_bytes;
     const long ticks_per_second = backend->ticks_per_second;
@@ -922,8 +997,18 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
 
         PreviousProcessSample *sample = find_or_create_sample(
             backend, searchable_sample_count, pid);
+        if (!sample) {
+            scan_failed = true;
+            break;
+        }
+        const size_t sample_index = (size_t)(sample - backend->samples);
+        if (sample_index < searchable_sample_count) {
+            mutations[mutation_count].index = sample_index;
+            mutations[mutation_count].before = *sample;
+            mutation_count++;
+        }
         const bool same_process =
-            sample && sample->start_ticks == process.instance_id &&
+            sample->start_ticks == process.instance_id &&
             sample->start_ticks != 0U;
 
         read_process_status(backend, pid, &process, &native_status);
@@ -939,12 +1024,28 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                             sample->command);
         } else {
             read_process_command(pid, &process);
-            if (sample) {
-                char *command = strdup(process.command);
-                if (command) {
-                    free(sample->command);
-                    sample->command = command;
-                    sample->command_sampled_at = sampled_at;
+            char *command = strdup(process.command);
+            if (command) {
+                sample->command = command;
+                sample->command_sampled_at = sampled_at;
+            }
+        }
+
+        if ((scan_flags & LSM_PROCESS_SCAN_EXECUTABLE) != 0U) {
+            const double executable_age =
+                sampled_at - sample->executable_sampled_at;
+            if (same_process && sample->executable &&
+                executable_age >= 0.0 &&
+                executable_age < LSM_PROCESS_METADATA_REFRESH_SECONDS) {
+                lsm_copy_string(process.executable,
+                                sizeof(process.executable),
+                                sample->executable);
+            } else {
+                read_process_executable(pid, &process);
+                char *executable = strdup(process.executable);
+                if (executable) {
+                    sample->executable = executable;
+                    sample->executable_sampled_at = sampled_at;
                 }
             }
         }
@@ -952,7 +1053,8 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         process.io_totals_available = read_process_io(pid, &process);
         process.io_rate_available = false;
 
-        unsigned enrich_flags = scan_flags;
+        unsigned enrich_flags =
+            scan_flags & ~LSM_PROCESS_SCAN_EXECUTABLE;
         const double cgroup_age = sample
             ? sampled_at - sample->cgroup_sampled_at : INFINITY;
         if ((scan_flags & LSM_PROCESS_SCAN_CGROUP) != 0U &&
@@ -970,7 +1072,6 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
             (enrich_flags & LSM_PROCESS_SCAN_CGROUP) != 0U && sample) {
             char *cgroup = strdup(process.cgroup_path);
             if (cgroup) {
-                free(sample->cgroup_path);
                 sample->cgroup_path = cgroup;
                 sample->cgroup_v2 = process.cgroup_v2;
                 sample->cgroup_sampled_at = sampled_at;
@@ -1077,9 +1178,16 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     }
     closedir(directory);
     if (scan_failed) {
+        rollback_sample_mutations(
+            backend, mutations, mutation_count,
+            original_sample_count, original_generation);
+        free(mutations);
         free(processes);
         return 0U;
     }
+
+    commit_sample_mutations(backend, mutations, mutation_count);
+    free(mutations);
 
     /* Commit the aggregate CPU baseline only after a complete process scan.
      * A transient /proc or allocation failure must not poison the next delta. */
@@ -1096,15 +1204,13 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     size_t write = 0U;
     for (size_t i = 0U; i < backend->sample_count; i++) {
         if (backend->samples[i].generation != backend->generation) {
-            free(backend->samples[i].command);
-            free(backend->samples[i].cgroup_path);
-            backend->samples[i].command = NULL;
-            backend->samples[i].cgroup_path = NULL;
+            sample_metadata_free(&backend->samples[i]);
             continue;
         }
         if (write != i) {
             backend->samples[write] = backend->samples[i];
             backend->samples[i].command = NULL;
+            backend->samples[i].executable = NULL;
             backend->samples[i].cgroup_path = NULL;
         }
         write++;
@@ -1548,10 +1654,8 @@ LsmProcessBackend *lsm_process_backend_create(void)
 void lsm_process_backend_destroy(LsmProcessBackend *backend)
 {
     if (!backend) return;
-    for (size_t index = 0U; index < backend->sample_count; index++) {
-        free(backend->samples[index].command);
-        free(backend->samples[index].cgroup_path);
-    }
+    for (size_t index = 0U; index < backend->sample_count; index++)
+        sample_metadata_free(&backend->samples[index]);
     free(backend->passwd_buffer);
     free(backend->samples);
     free(backend);

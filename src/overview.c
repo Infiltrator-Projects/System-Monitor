@@ -1200,17 +1200,56 @@ static void overview_set_latest_values(LsmApp *app,
         GtkStyleContext *style = gtk_widget_get_style_context(status);
         gtk_style_context_remove_class(style, "lsm-status-warning");
         gtk_style_context_remove_class(style, "lsm-status-fault");
-        double warning_c = 80.0;
-        double fault_c = 95.0;
+        double warning_c = NAN;
+        double fault_c = NAN;
+        gboolean limits_available = FALSE;
         if (sample->temperature_source == LSM_OVERVIEW_TEMPERATURE_CPU) {
             LsmThermalPolicy thermal_policy;
             if (lsm_cpu_thermal_policy(&app->monitor.cpu, &thermal_policy)) {
                 warning_c = thermal_policy.warning_c;
                 fault_c = thermal_policy.fault_c;
+                limits_available = TRUE;
+            }
+        } else if (sample->temperature_source ==
+                   LSM_OVERVIEW_TEMPERATURE_GPU) {
+            const LsmGpuInfo *gpu = NULL;
+            for (size_t index = 0U; index < app->monitor.gpu_count; index++) {
+                const LsmGpuInfo *candidate = &app->monitor.gpus[index];
+                const char *identity = candidate->platform_identity[0]
+                    ? candidate->platform_identity
+                    : candidate->display_identifier;
+                if ((sample->temperature_identity[0] &&
+                     strcmp(sample->temperature_identity, identity) == 0) ||
+                    (!sample->temperature_identity[0] &&
+                     index == sample->temperature_gpu_index)) {
+                    gpu = candidate;
+                    break;
+                }
+            }
+            if (gpu) {
+                if (gpu->temperature_warning_available) {
+                    warning_c = gpu->temperature_warning_c;
+                    limits_available = TRUE;
+                }
+                if (gpu->temperature_critical_available) {
+                    fault_c = gpu->temperature_critical_c;
+                    limits_available = TRUE;
+                }
+                if (!isfinite(warning_c) && isfinite(fault_c))
+                    warning_c = fmax(30.0, fault_c - 10.0);
+                if (!isfinite(fault_c) && isfinite(warning_c))
+                    fault_c = fmin(150.0, warning_c + 10.0);
             }
         }
         if (!sample->temperature_available) {
             lsm_ui_set_label_text(status, "●  Thermal Data Unavailable");
+        } else if (!limits_available ||
+                   !isfinite(warning_c) || !isfinite(fault_c)) {
+            lsm_ui_set_label_text(
+                status,
+                sample->temperature_source == LSM_OVERVIEW_TEMPERATURE_GPU
+                    ? "●  GPU Thermal Limit Unavailable"
+                    : "●  Thermal Limit Unavailable");
         } else if (sample->temperature_c >= fault_c) {
             lsm_ui_set_label_text(status, "●  Thermal Fault");
             gtk_style_context_add_class(style, "lsm-status-fault");

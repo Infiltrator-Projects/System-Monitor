@@ -307,14 +307,14 @@ static void populate_optional_process_fields(HANDLE process,
     }
 }
 
-static void populate_process_metrics(LsmProcessBackend *backend,
+static bool populate_process_metrics(LsmProcessBackend *backend,
                                      HANDLE process,
                                      LsmProcessInfo *info,
                                      uint64_t system_delta,
                                      uint64_t now_ms,
                                      unsigned scan_flags)
 {
-    if (!backend || !process || !info) return;
+    if (!backend || !process || !info) return false;
 
     int64_t start_epoch = 0;
     const uint64_t cpu_time = process_cpu_time_100ns(
@@ -364,7 +364,7 @@ static void populate_process_metrics(LsmProcessBackend *backend,
 
     LsmWindowsProcessSample *sample =
         find_or_create_sample(backend, (DWORD)info->pid);
-    if (!sample) return;
+    if (!sample) return false;
 
     if (sample->instance_id != 0U &&
         sample->instance_id == info->instance_id) {
@@ -397,6 +397,7 @@ static void populate_process_metrics(LsmProcessBackend *backend,
     sample->io_available = info->io_totals_available;
     sample->sampled_at_ms = now_ms;
     sample->generation = backend->generation;
+    return true;
 }
 
 LsmProcessBackend *lsm_process_backend_create(void)
@@ -444,6 +445,18 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         system_cpu, backend->previous_system_cpu_100ns, &system_delta);
     const uint64_t now_ms = (uint64_t)GetTickCount64();
 
+    const size_t original_sample_count = backend->sample_count;
+    const unsigned original_generation = backend->generation;
+    LsmWindowsProcessSample *sample_backup = original_sample_count > 0U
+        ? malloc(original_sample_count * sizeof(*sample_backup)) : NULL;
+    if (original_sample_count > 0U && !sample_backup) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return 0U;
+    }
+    if (sample_backup)
+        memcpy(sample_backup, backend->samples,
+               original_sample_count * sizeof(*sample_backup));
+
     backend->generation++;
     if (backend->generation == 0U) {
         for (size_t index = 0U; index < backend->sample_count; index++)
@@ -452,24 +465,33 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     }
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0U);
-    if (snapshot == INVALID_HANDLE_VALUE)
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        if (sample_backup)
+            memcpy(backend->samples, sample_backup,
+                   original_sample_count * sizeof(*sample_backup));
+        backend->sample_count = original_sample_count;
+        backend->generation = original_generation;
+        free(sample_backup);
         return 0U;
+    }
 
     LsmProcessInfo *processes = NULL;
     size_t count = 0U;
     size_t capacity = 0U;
+    bool scan_failed = false;
+    DWORD scan_error = ERROR_SUCCESS;
 
     PROCESSENTRY32W entry;
     memset(&entry, 0, sizeof(entry));
     entry.dwSize = (DWORD)sizeof(entry);
+    SetLastError(ERROR_SUCCESS);
     BOOL have_entry = Process32FirstW(snapshot, &entry);
     while (have_entry) {
         if (!infiltratr_array_reserve((void **)&processes, &capacity,
                                       sizeof(*processes), count + 1U, 256U)) {
-            free(processes);
-            CloseHandle(snapshot);
-            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            return 0U;
+            scan_failed = true;
+            scan_error = ERROR_NOT_ENOUGH_MEMORY;
+            break;
         }
 
         LsmProcessInfo *info = &processes[count];
@@ -483,22 +505,55 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
 
         HANDLE process = open_process_for_query(entry.th32ProcessID);
         if (process) {
-            populate_process_metrics(
-                backend, process, info, system_delta, now_ms, scan_flags);
+            if (!populate_process_metrics(
+                    backend, process, info, system_delta, now_ms,
+                    scan_flags)) {
+                CloseHandle(process);
+                scan_failed = true;
+                scan_error = ERROR_NOT_ENOUGH_MEMORY;
+                break;
+            }
             CloseHandle(process);
         }
 
         count++;
+        SetLastError(ERROR_SUCCESS);
         have_entry = Process32NextW(snapshot, &entry);
+    }
+
+    if (!scan_failed) {
+        const DWORD enumeration_error = GetLastError();
+        if (!have_entry && enumeration_error != ERROR_SUCCESS &&
+            enumeration_error != ERROR_NO_MORE_FILES) {
+            scan_failed = true;
+            scan_error = enumeration_error;
+        }
     }
     CloseHandle(snapshot);
 
+    if (scan_failed) {
+        free(processes);
+        if (sample_backup)
+            memcpy(backend->samples, sample_backup,
+                   original_sample_count * sizeof(*sample_backup));
+        backend->sample_count = original_sample_count;
+        backend->generation = original_generation;
+        free(sample_backup);
+        SetLastError(scan_error);
+        return 0U;
+    }
+
+    free(sample_backup);
     backend->previous_system_cpu_100ns = system_cpu;
     prune_process_samples(backend);
 
     if (count == 0U) {
         free(processes);
-        return 0U;
+        processes = calloc(1U, sizeof(*processes));
+        if (!processes) {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return 0U;
+        }
     }
     *out_processes = processes;
     return count;

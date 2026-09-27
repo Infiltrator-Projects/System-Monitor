@@ -120,7 +120,7 @@ LsmProcessScanner *lsm_process_scanner_create(void)
     }
 
     scanner->request_pending = true;
-    scanner->requested_flags = LSM_PROCESS_SCAN_NONE;
+    scanner->requested_flags = LSM_PROCESS_SCAN_EXECUTABLE;
     atomic_init(&scanner->references, 2U);
     const int thread_error = pthread_create(
         &scanner->thread, NULL, scanner_thread_main, scanner);

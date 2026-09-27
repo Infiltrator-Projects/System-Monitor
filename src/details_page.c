@@ -503,7 +503,9 @@ static void process_columns_load(LsmApp *app)
 
 static unsigned process_scan_flags(const LsmApp *app)
 {
-    unsigned flags = LSM_PROCESS_SCAN_NONE;
+    /* App History requires a real executable-image identity. The backend
+     * caches /proc/PID/exe so this remains a low-frequency metadata read. */
+    unsigned flags = LSM_PROCESS_SCAN_EXECUTABLE;
     const gint current = gtk_notebook_get_current_page(
         GTK_NOTEBOOK(app->shell.notebook));
     const gboolean details_ready =

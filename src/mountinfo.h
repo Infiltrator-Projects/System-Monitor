@@ -45,4 +45,13 @@ size_t lsm_mountinfo_visit_file(const char *path,
                                 LsmMountInfoVisitor visitor,
                                 void *user_data);
 
+/**
+ * Parse a mountinfo stream while preserving the distinction between a valid
+ * empty namespace and an I/O failure.
+ */
+bool lsm_mountinfo_visit_file_checked(const char *path,
+                                      LsmMountInfoVisitor visitor,
+                                      void *user_data,
+                                      size_t *out_count);
+
 #endif

@@ -257,8 +257,10 @@ int main(void)
     if (setenv("LSM_PROCFS_ROOT", root, 1) != 0) return 6;
 
     LsmFilesystemInfo *items = NULL;
-    const size_t count = lsm_filesystem_inventory_collect(&items);
-    if (count != 2U || !items) return 7;
+    size_t count = 0U;
+    if (!lsm_filesystem_inventory_collect(&items, &count) ||
+        count != 2U || !items)
+        return 7;
 
     bool found_storage = false, found_kernel = false;
     for (size_t index = 0U; index < count; index++) {
@@ -272,11 +274,18 @@ int main(void)
     }
     lsm_filesystem_inventory_free(items);
     unlink(mountinfo);
+
+    items = NULL;
+    count = 99U;
+    if (lsm_filesystem_inventory_collect(&items, &count) ||
+        items != NULL || count != 0U)
+        return 8;
+
     rmdir(mount_a);
     rmdir(mount_b);
     rmdir(self);
     rmdir(root);
-    if (!found_storage || !found_kernel) return 8;
+    if (!found_storage || !found_kernel) return 9;
     puts("Filesystem inventory classification and capacity sampling passed.");
     return 0;
 }

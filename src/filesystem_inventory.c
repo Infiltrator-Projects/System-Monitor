@@ -120,31 +120,38 @@ static int compare_filesystems(const void *left_value, const void *right_value)
     return target_order != 0 ? target_order : strcmp(left->source, right->source);
 }
 
-size_t lsm_filesystem_inventory_collect(LsmFilesystemInfo **out_items)
+bool lsm_filesystem_inventory_collect(LsmFilesystemInfo **out_items,
+                                      size_t *out_count)
 {
-    if (!out_items) return 0U;
+    if (!out_items || !out_count) return false;
     *out_items = NULL;
+    *out_count = 0U;
 
     FilesystemCollector collector = {0};
     const char *root = getenv("LSM_PROCFS_ROOT");
     if (!root || !*root) root = "/proc";
     char path[LSM_PATH_LEN];
     if (!lsm_join_path(path, sizeof(path), root, "/self/mountinfo"))
-        return 0U;
-    (void)lsm_mountinfo_visit_file(path, append_mount, &collector);
-    if (collector.allocation_failed) {
+        return false;
+
+    size_t visited = 0U;
+    const bool read_ok = lsm_mountinfo_visit_file_checked(
+        path, append_mount, &collector, &visited);
+    (void)visited;
+    if (!read_ok || collector.allocation_failed) {
         free(collector.items);
-        return 0U;
+        return false;
     }
     if (collector.count == 0U) {
         free(collector.items);
-        return 0U;
+        return true;
     }
 
     qsort(collector.items, collector.count, sizeof(*collector.items),
           compare_filesystems);
     *out_items = collector.items;
-    return collector.count;
+    *out_count = collector.count;
+    return true;
 }
 
 void lsm_filesystem_inventory_free(LsmFilesystemInfo *items)

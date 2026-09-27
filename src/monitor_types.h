@@ -244,6 +244,8 @@ typedef struct {
     uint64_t memory_used_bytes;
     uint64_t memory_total_bytes;
     double temperature_c;
+    double temperature_warning_c;
+    double temperature_critical_c;
     double core_clock_mhz;
     double memory_clock_mhz;
     double memory_busy_percent;
@@ -268,6 +270,8 @@ typedef struct {
     bool video_enhance_available;
     bool copy_available;
     bool temperature_available;
+    bool temperature_warning_available;
+    bool temperature_critical_available;
     bool core_clock_available;
     bool memory_clock_available;
     bool power_available;

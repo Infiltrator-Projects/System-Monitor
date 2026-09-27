@@ -111,9 +111,13 @@ static void append_series_segment(cairo_t *cr,
         const size_t p2 = i + 1U;
         const size_t p3 = i + 2U < count ? i + 2U : i + 1U;
         const double c1x = x[p1] + (x[p2] - x[p0]) / 6.0;
-        const double c1y = y[p1] + (y[p2] - y[p0]) / 6.0;
         const double c2x = x[p2] - (x[p3] - x[p1]) / 6.0;
-        const double c2y = y[p2] - (y[p3] - y[p1]) / 6.0;
+        const double lower = fmin(y[p1], y[p2]);
+        const double upper = fmax(y[p1], y[p2]);
+        const double c1y = fmin(
+            upper, fmax(lower, y[p1] + (y[p2] - y[p0]) / 6.0));
+        const double c2y = fmin(
+            upper, fmax(lower, y[p2] - (y[p3] - y[p1]) / 6.0));
         cairo_curve_to(cr, c1x, c1y, c2x, c2y, x[p2], y[p2]);
     }
 }

@@ -72,8 +72,8 @@ static int service_compare(const void *left, const void *right)
     return strcmp(a->name, b->name);
 }
 
-static void merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
-                               size_t *count, size_t *capacity)
+static bool merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
+                                size_t *count, size_t *capacity)
 {
     GVariantIter *iter = NULL;
     g_variant_get(units, "(a(ssssssouso))", &iter);
@@ -101,15 +101,19 @@ static void merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
         const size_t length = strlen(name);
         if (length < 8U || strcmp(name + length - 8U, ".service") != 0) continue;
         LsmServiceEntry *entry = service_get(entries, count, capacity, name);
-        if (!entry) break;
+        if (!entry) {
+            g_variant_iter_free(iter);
+            return false;
+        }
         lsm_copy_string(entry->description, sizeof(entry->description), description);
         lsm_copy_string(entry->active, sizeof(entry->active), active);
         lsm_copy_string(entry->substate, sizeof(entry->substate), substate);
     }
     g_variant_iter_free(iter);
+    return true;
 }
 
-static void merge_unit_files(GVariant *files, LsmServiceEntry **entries,
+static bool merge_unit_files(GVariant *files, LsmServiceEntry **entries,
                              size_t *count, size_t *capacity)
 {
     GVariantIter *iter = NULL;
@@ -122,10 +126,14 @@ static void merge_unit_files(GVariant *files, LsmServiceEntry **entries,
         const size_t length = strlen(unit);
         if (length < 8U || strcmp(unit + length - 8U, ".service") != 0) continue;
         LsmServiceEntry *entry = service_get(entries, count, capacity, unit);
-        if (!entry) break;
+        if (!entry) {
+            g_variant_iter_free(iter);
+            return false;
+        }
         lsm_copy_string(entry->startup, sizeof(entry->startup), state);
     }
     g_variant_iter_free(iter);
+    return true;
 }
 
 static LsmServiceEntry *collect_services(GDBusConnection *bus,
@@ -139,7 +147,13 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
     GVariant *units = manager_call_on_bus(
         bus, "ListUnits", NULL, LSM_DBUS_QUERY_TIMEOUT_MS, cancellable, error);
     if (!units) return NULL;
-    merge_loaded_units(units, &entries, &count, &capacity);
+    if (!merge_loaded_units(units, &entries, &count, &capacity)) {
+        g_variant_unref(units);
+        free(entries);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                            "Unable to allocate the complete service inventory");
+        return NULL;
+    }
     g_variant_unref(units);
 
     GError *files_error = NULL;
@@ -147,7 +161,14 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
         bus, "ListUnitFiles", NULL, LSM_DBUS_QUERY_TIMEOUT_MS, cancellable,
         &files_error);
     if (files) {
-        merge_unit_files(files, &entries, &count, &capacity);
+        if (!merge_unit_files(files, &entries, &count, &capacity)) {
+            g_variant_unref(files);
+            if (files_error) g_error_free(files_error);
+            free(entries);
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                "Unable to allocate the complete service inventory");
+            return NULL;
+        }
         g_variant_unref(files);
     }
     if (files_error) g_error_free(files_error);
