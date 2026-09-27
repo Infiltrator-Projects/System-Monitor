@@ -36,6 +36,7 @@ int main(void)
     processes[0].cpu_percent = 12.5;
     processes[0].read_bytes_per_sec = 1234.5;
     processes[0].write_bytes_per_sec = 6.25;
+    processes[0].io_rate_available = true;
     processes[0].gpu_available = true;
     processes[0].gpu_percent = 33.75;
     strcpy(processes[0].command, "one \"quoted\" command");
