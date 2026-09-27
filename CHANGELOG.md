@@ -6,6 +6,7 @@
 - Resolve procfs socket descriptors against the inspected process network namespace so Open Files distinguishes local, IPv4 and IPv6 network sockets while preserving a generic Socket fallback when kernel tables are restricted.
 - Prefer procfs smaps for Memory Map and expose the complete technical mapping set: filename, VM start/end/size, flags, offset, private clean/dirty, shared clean/dirty, device and inode; fall back to maps with explicit unavailable residency accounting.
 - Update the coverage ledger from its 1.0.128 planning snapshot to the implemented 1.0.130 state and record deliberate supersessions for unstable legacy X-server accounting, arbitrary graph colours, duplicate memory-unit policy and GNOME's older adaptive-refresh implementation.
+- Complete Doxygen contracts for the newly configurable graph APIs and update the process-HAL style audit so its native-primitive guard permits the explicitly documented optional Unix nice capability instead of rejecting its own public contract.
 
 ## 1.0.129 - 2026-09-27
 

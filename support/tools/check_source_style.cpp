@@ -572,7 +572,7 @@ static void check_process_platform_boundary(const char *path, const char *text)
     if (!checked) return;
 
     static const char *const native_markers[] = {
-        "pid_t", "uid_t", "LsmUserId", "user_id", "start_ticks", "nice_value",
+        "pid_t", "uid_t", "LsmUserId", "user_id", "start_ticks",
         "fd_count", "LSM_PROCESS_SCAN_FD_COUNT",
         "<signal.h>", "<sys/types.h>", "SIGTERM", "SIGSTOP", "SIGCONT",
         "setpriority(", "sched_setaffinity(", "sched_getaffinity(",

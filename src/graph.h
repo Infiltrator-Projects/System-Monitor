@@ -105,9 +105,33 @@ void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise);
  * @param [in] smooth TRUE to join contiguous samples with a Catmull-Rom spline.
  */
 void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth);
+/**
+ * Limit how many retained samples are visible without discarding history.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] points Number of newest/oldest samples to render, clamped to the retained-history capacity.
+ */
 void lsm_graph_set_visible_points(LsmGraph *graph, size_t points);
+/**
+ * Select logarithmic vertical presentation for non-negative samples.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] logarithmic TRUE to transform the visible vertical scale with log1p.
+ */
 void lsm_graph_set_logarithmic(LsmGraph *graph, gboolean logarithmic);
+/**
+ * Select whether the optional secondary trace is drawn.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] visible TRUE to draw the secondary trace.
+ */
 void lsm_graph_set_secondary_visible(LsmGraph *graph, gboolean visible);
+/**
+ * Select stacked-area presentation for graphs that support two related series.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] stacked TRUE to present the secondary series as part of the stacked view.
+ */
 void lsm_graph_set_stacked(LsmGraph *graph, gboolean stacked);
 /**
  * Select whether the optional secondary trace uses a dashed stroke.
