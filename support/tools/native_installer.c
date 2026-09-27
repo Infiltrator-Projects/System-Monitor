@@ -437,6 +437,7 @@ static void usage(const char *version)
     puts("  --skip-tests");
     puts("  --no-strip");
     puts("  --dry-run");
+    puts("  --system-package-mode");
     puts("  -h, --help");
 }
 
@@ -506,9 +507,14 @@ static void run_make(const char *make_path, const char *source_root,
 int main(int argc, char **argv)
 {
     if (atexit(cleanup_paths) != 0) fail("cannot register cleanup handler");
+    bool system_package_mode = false;
+    for (int index = 1; index < argc; index++) {
+        if (strcmp(argv[index], "--system-package-mode") == 0)
+            system_package_mode = true;
+    }
     const bool help_only = argc == 2 &&
         (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0);
-    if (geteuid() == 0 && !help_only)
+    if (geteuid() == 0 && !help_only && !system_package_mode)
         fail("do not run this builder with sudo or as root");
 
     /* Build outputs must not inherit a group-writable login umask. The unified
@@ -575,6 +581,8 @@ int main(int argc, char **argv)
             strip_binary = false;
         } else if (strcmp(argument, "--dry-run") == 0) {
             dry_run = true;
+        } else if (strcmp(argument, "--system-package-mode") == 0) {
+            system_package_mode = true;
         } else if (strcmp(argument, "-h") == 0 || strcmp(argument, "--help") == 0) {
             usage(version);
             return EXIT_SUCCESS;
@@ -586,6 +594,9 @@ int main(int argc, char **argv)
     if (strcmp(profile, "native") != 0 && strcmp(profile, "aggressive") != 0 &&
         strcmp(profile, "portable") != 0)
         fail("profile must be native, aggressive, or portable");
+    if (system_package_mode && geteuid() != 0)
+        fail("--system-package-mode requires root");
+    const bool root_system_mode = system_package_mode && geteuid() == 0;
 
     char compiler[LSM_BUILDER_PATH_LEN];
     const char *compiler_request = compiler_option && compiler_option[0]
@@ -613,7 +624,7 @@ int main(int argc, char **argv)
         "dpkg-deb", dpkg_deb, sizeof(dpkg_deb));
     const bool dpkg_found = trusted_system_executable(
         "dpkg", dpkg, sizeof(dpkg));
-    const bool sudo_found = trusted_system_executable(
+    const bool sudo_found = root_system_mode || trusted_system_executable(
         "sudo", sudo_path, sizeof(sudo_path));
     bool gtk_found = false;
     if (pkg_found) {
@@ -871,10 +882,17 @@ int main(int argc, char **argv)
     puts("\nCompilation and package creation passed.");
     puts("Administrator permission is now required to replace the installed package.");
 
-    const char *const install_arguments[] = {
-        sudo_path, "--", dpkg, "--install", package_path, NULL
-    };
-    run_required(NULL, install_arguments);
+    if (root_system_mode) {
+        const char *const install_arguments[] = {
+            dpkg, "--install", package_path, NULL
+        };
+        run_required(NULL, install_arguments);
+    } else {
+        const char *const install_arguments[] = {
+            sudo_path, "--", dpkg, "--install", package_path, NULL
+        };
+        run_required(NULL, install_arguments);
+    }
 
     printf("\nSystem Monitor %s is installed system-wide.\n", version);
     puts("The normal menu launcher and system-monitor command now use this");
