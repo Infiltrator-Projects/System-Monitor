@@ -20,6 +20,11 @@ jobs:
   test:
     runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 30
+    env:
+      # Self-hosted runner services can inherit a deliberately minimal PATH.
+      # Keep checkout/tool discovery deterministic instead of falling back to
+      # the REST archive path, which cannot initialise the Common submodule.
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
