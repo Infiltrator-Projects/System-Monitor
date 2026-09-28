@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.146 - 2026-09-28
+
+- Move native Windows Performance collection off the Win32 message thread into a refcounted completed-snapshot worker, keeping painting, navigation and shutdown responsive when storage, network or GPU providers are slow.
+- Treat first, reset and zero-length CPU counter intervals as unavailable gaps instead of fabricated 0% utilisation, with the same explicit availability semantics in Linux, Windows, Overview, per-core labels and diagnostic output.
+- Require complete cpufreq policy sampling for current CPU speed, reject partial policy averages and stop presenting a retained prior frequency as a live reading after collection failure.
+- Preserve the native logical-processor total separately from bounded per-core detail capacity and stop inventing one logical processor or partial physical/socket topology after failed native reads.
+- Make Linux process handle counts, AC-power discovery and topology refresh completion fail closed; incomplete enumeration no longer publishes partial counts, false battery-power state or a successful topology cadence.
+- Retry failed Linux topology discovery promptly instead of waiting for the normal topology interval, while preserving the last complete disk, network, GPU, battery and NPU topology.
+- Reject malformed trailing rtnetlink attributes and partial preference, PCI override, OS-release and AMD DPM-clock reads instead of accepting believable prefixes.
+- Bootstrap Git and its subcommands without root privileges on BigBedroom self-hosted runners when the runner service PATH lacks Git, preserving recursive Common checkout and self-hosted-runner priority.
+
 ## 1.0.145 - 2026-09-28
 
 - Treat the first valid cumulative sample after startup, loss or counter rollback as a baseline rather than a measured zero interval across Linux/Windows disk, network and GPU rate paths.
