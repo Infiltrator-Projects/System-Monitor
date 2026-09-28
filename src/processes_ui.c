@@ -394,7 +394,12 @@ static GPtrArray *collect_groups(LsmApp *app)
         GTK_ENTRY(app->processes.processes_search));
     char *folded_search = search && *search
         ? g_utf8_casefold(search, -1) : NULL;
-    if (search && *search && !folded_search) {
+    GPtrArray *folded_filters = fold_process_filters(app);
+    if ((search && *search && !folded_search) ||
+        (app->process.filters && app->process.filters->len > 0U &&
+         !folded_filters)) {
+        g_free(folded_search);
+        if (folded_filters) g_ptr_array_free(folded_filters, TRUE);
         g_ptr_array_free(groups, TRUE);
         return NULL;
     }
@@ -403,7 +408,21 @@ static GPtrArray *collect_groups(LsmApp *app)
          index < app->process.process_snapshot_count; index++) {
         const LsmProcessInfo *process =
             &app->process.process_snapshot[index];
-        if (process_excluded(app, process)) continue;
+        FoldedProcessText folded_process = {0};
+        const gboolean need_folded =
+            (folded_search && *folded_search) || folded_filters != NULL;
+        if (need_folded &&
+            !folded_process_text_init(process, &folded_process)) {
+            g_free(folded_search);
+            if (folded_filters)
+                g_ptr_array_free(folded_filters, TRUE);
+            g_ptr_array_free(groups, TRUE);
+            return NULL;
+        }
+        if (process_excluded(folded_filters, &folded_process)) {
+            folded_process_text_clear(&folded_process);
+            continue;
+        }
 
         ProcessCategory category = PROCESS_CATEGORY_BACKGROUND;
         char key[LSM_NAME_LEN * 2U];
@@ -412,14 +431,20 @@ static GPtrArray *collect_groups(LsmApp *app)
         process_identity(app, index, pid_index, &category, key,
                          sizeof(key), name, sizeof(name),
                          icon, sizeof(icon));
-        if (!process_matches_search(process, name, folded_search))
+        if (!process_matches_search(
+                process, name, folded_search, &folded_process)) {
+            folded_process_text_clear(&folded_process);
             continue;
+        }
+        folded_process_text_clear(&folded_process);
 
         ProcessGroup *group = g_hash_table_lookup(group_index, key);
         if (!group) {
             group = calloc(1U, sizeof(*group));
             if (!group) {
                 g_free(folded_search);
+                if (folded_filters)
+                    g_ptr_array_free(folded_filters, TRUE);
                 g_ptr_array_free(groups, TRUE);
                 return NULL;
             }
@@ -438,12 +463,15 @@ static GPtrArray *collect_groups(LsmApp *app)
         }
         if (!group_append(group, index, process)) {
             g_free(folded_search);
+            if (folded_filters)
+                g_ptr_array_free(folded_filters, TRUE);
             g_ptr_array_free(groups, TRUE);
             return NULL;
         }
     }
 
     g_free(folded_search);
+    if (folded_filters) g_ptr_array_free(folded_filters, TRUE);
     g_ptr_array_sort(groups, compare_groups);
     return groups;
 }
