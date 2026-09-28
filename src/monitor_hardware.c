@@ -56,6 +56,14 @@ typedef struct {
     char *power;
     char *pwm;
     char *pwm_max;
+    uint64_t vram_total_value;
+    uint64_t pwm_max_value;
+    double temperature_warning_c;
+    double temperature_critical_c;
+    bool vram_total_cached;
+    bool pwm_max_cached;
+    bool temperature_warning_cached;
+    bool temperature_critical_cached;
     LsmIntelGpuBackend *intel_backend;
     char *engine_busy[LSM_MAX_GPU_ENGINE_COUNTERS];
     size_t engine_count;
@@ -181,6 +189,9 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
     cache->gpu_busy = existing_metric_path(base, "/gpu_busy_percent");
     cache->vram_used = existing_metric_path(base, "/mem_info_vram_used");
     cache->vram_total = existing_metric_path(base, "/mem_info_vram_total");
+    if (cache->vram_total &&
+        lsm_read_u64_file(cache->vram_total, &cache->vram_total_value))
+        cache->vram_total_cached = true;
     cache->memory_busy = existing_metric_path(base, "/mem_busy_percent");
     cache->core_clock = existing_metric_path(base, "/gt_cur_freq_mhz");
     cache->core_clock_dpm = existing_metric_path(base, "/pp_dpm_sclk");
@@ -288,7 +299,35 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
         cache->pwm = NULL;
         cache->pwm_max = NULL;
         errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return;
     }
+
+    uint64_t value = 0U;
+    if (cache->temperature_warning &&
+        lsm_read_u64_file(cache->temperature_warning, &value)) {
+        const double warning = (double)value / 1000.0;
+        if (isfinite(warning) && warning >= 30.0 && warning <= 150.0) {
+            cache->temperature_warning_c = warning;
+            cache->temperature_warning_cached = true;
+        }
+    }
+    if (cache->temperature_critical &&
+        lsm_read_u64_file(cache->temperature_critical, &value)) {
+        const double critical = (double)value / 1000.0;
+        if (isfinite(critical) && critical >= 30.0 && critical <= 150.0) {
+            cache->temperature_critical_c = critical;
+            cache->temperature_critical_cached = true;
+        }
+    }
+    if (cache->temperature_warning_cached &&
+        cache->temperature_critical_cached &&
+        cache->temperature_warning_c > cache->temperature_critical_c)
+        cache->temperature_warning_cached = false;
+
+    if (cache->pwm_max &&
+        lsm_read_u64_file(cache->pwm_max, &cache->pwm_max_value) &&
+        cache->pwm_max_value > 0U)
+        cache->pwm_max_cached = true;
 }
 
 static void build_npu_telemetry_cache(const LsmNpuInfo *npu,
