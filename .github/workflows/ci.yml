@@ -35,13 +35,29 @@ jobs:
             git --version
             exit 0
           fi
-          if ! command -v apt-get >/dev/null 2>&1; then
-            echo "Git is required for recursive Common checkout and apt-get is unavailable." >&2
+          if ! command -v apt-get >/dev/null 2>&1 ||
+             ! command -v dpkg-deb >/dev/null 2>&1; then
+            echo "Git is required for recursive Common checkout and local package extraction is unavailable." >&2
             exit 1
           fi
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
-          git --version
+
+          # The BigBedroom service account intentionally has no passwordless
+          # sudo. Materialise the distro Git package under RUNNER_TEMP instead
+          # of mutating the host, then expose it to later workflow steps.
+          git_root="$RUNNER_TEMP/system-monitor-git"
+          package_dir="$RUNNER_TEMP/system-monitor-git-package"
+          rm -rf "$git_root" "$package_dir"
+          mkdir -p "$git_root" "$package_dir"
+          (
+            cd "$package_dir"
+            apt-get download git
+            package="$(find . -maxdepth 1 -type f -name 'git_*.deb' -print -quit)"
+            test -n "$package"
+            dpkg-deb -x "$package" "$git_root"
+          )
+          test -x "$git_root/usr/bin/git"
+          "$git_root/usr/bin/git" --version
+          echo "$git_root/usr/bin" >> "$GITHUB_PATH"
 
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
