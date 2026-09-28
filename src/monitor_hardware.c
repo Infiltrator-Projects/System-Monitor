@@ -595,8 +595,11 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
         uint64_t used = 0U;
         gpu->memory_usage_available = telemetry && telemetry->vram_used &&
             lsm_read_u64_file(telemetry->vram_used, &used);
-        const uint64_t total = telemetry && telemetry->vram_total
-            ? lsm_read_u64_or_zero(telemetry->vram_total) : 0U;
+        const uint64_t total =
+            telemetry && telemetry->vram_total_cached
+                ? telemetry->vram_total_value
+                : telemetry && telemetry->vram_total
+                    ? lsm_read_u64_or_zero(telemetry->vram_total) : 0U;
         gpu->memory_used_bytes = used;
         gpu->memory_total_bytes = total;
         gpu->memory_percent = lsm_percent_u64(used, total);
@@ -689,16 +692,24 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
             gpu->temperature_c = (double)value / 1000.0;
             gpu->temperature_available = true;
         }
-        if (telemetry && telemetry->temperature_warning &&
-            lsm_read_u64_file(telemetry->temperature_warning, &value)) {
+        if (telemetry && telemetry->temperature_warning_cached) {
+            gpu->temperature_warning_c = telemetry->temperature_warning_c;
+            gpu->temperature_warning_available = true;
+        } else if (telemetry && telemetry->temperature_warning &&
+                   lsm_read_u64_file(
+                       telemetry->temperature_warning, &value)) {
             const double warning = (double)value / 1000.0;
             if (isfinite(warning) && warning >= 30.0 && warning <= 150.0) {
                 gpu->temperature_warning_c = warning;
                 gpu->temperature_warning_available = true;
             }
         }
-        if (telemetry && telemetry->temperature_critical &&
-            lsm_read_u64_file(telemetry->temperature_critical, &value)) {
+        if (telemetry && telemetry->temperature_critical_cached) {
+            gpu->temperature_critical_c = telemetry->temperature_critical_c;
+            gpu->temperature_critical_available = true;
+        } else if (telemetry && telemetry->temperature_critical &&
+                   lsm_read_u64_file(
+                       telemetry->temperature_critical, &value)) {
             const double critical = (double)value / 1000.0;
             if (isfinite(critical) && critical >= 30.0 && critical <= 150.0) {
                 gpu->temperature_critical_c = critical;
@@ -719,8 +730,11 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
         uint64_t pwm_max = 0U;
         const bool have_pwm = telemetry && telemetry->pwm &&
                               lsm_read_u64_file(telemetry->pwm, &pwm);
-        const bool have_pwm_max = telemetry && telemetry->pwm_max &&
-                                  lsm_read_u64_file(telemetry->pwm_max, &pwm_max);
+        const bool have_pwm_max =
+            telemetry && telemetry->pwm_max_cached
+                ? (pwm_max = telemetry->pwm_max_value, true)
+                : telemetry && telemetry->pwm_max &&
+                  lsm_read_u64_file(telemetry->pwm_max, &pwm_max);
         if (have_pwm && have_pwm_max && pwm_max > 0U) {
             gpu->fan_percent = lsm_percent_u64(pwm, pwm_max);
             gpu->fan_available = true;
