@@ -76,8 +76,12 @@ static void check_cpu_availability_semantics(void)
 
     LsmCpuPerformanceView view;
     lsm_cpu_performance_view(&monitor, &view);
-
     assert(strcmp(view.subtitle, "Test CPU") == 0);
+    assert(strcmp(view.rail_value, "N/A N/A") == 0);
+
+    monitor.cpu.usage_available = true;
+    monitor.cpu.frequency_available = true;
+    lsm_cpu_performance_view(&monitor, &view);
     assert(strcmp(view.rail_value, "25% 2.50 GHz") == 0);
     assert(strcmp(
         view.details[LSM_CPU_DETAIL_VIRTUALISATION], "Disabled") == 0);
