@@ -57,7 +57,9 @@ jobs:
           )
           test -x "$git_root/usr/bin/git"
           "$git_root/usr/bin/git" --version
+          test -x "$git_root/usr/lib/git-core/git-submodule"
           echo "$git_root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$git_root/usr/lib/git-core" >> "$GITHUB_ENV"
 
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
