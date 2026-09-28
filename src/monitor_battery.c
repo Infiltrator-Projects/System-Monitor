@@ -418,16 +418,22 @@ static void apply_hidpp_snapshot(LsmMonitor *monitor,
 }
 
 /* Inventory and sampling are separate so hotplug work stays off fast graphs. */
-void lsm_battery_enumerate(LsmMonitor *monitor)
+bool lsm_battery_enumerate(LsmMonitor *monitor)
 {
-    monitor->battery_count = 0;
+    if (!monitor) return false;
+    const char *root = power_supply_root();
+    errno = 0;
+    DIR *directory = opendir(root);
+    if (!directory && errno != ENOENT)
+        return false;
+
+    monitor->battery_count = 0U;
     LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
     if (backend) {
         memset(backend->batteries, 0, sizeof(backend->batteries));
         backend->battery_count = 0U;
     }
-    const char *root = power_supply_root();
-    DIR *directory = opendir(root);
+
     if (directory) {
         struct dirent *entry;
         while ((entry = readdir(directory)) &&
@@ -446,17 +452,17 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
             initialise_battery_measurements(battery);
             lsm_copy_string(battery->name, sizeof(battery->name), entry->d_name);
             (void)lsm_join_path(path, sizeof(path), base, "/model_name");
-            lsm_read_text_file(path, battery->model, sizeof(battery->model));
+            (void)lsm_read_text_file(path, battery->model, sizeof(battery->model));
             (void)lsm_join_path(path, sizeof(path), base, "/manufacturer");
-            lsm_read_text_file(path, battery->manufacturer,
-                               sizeof(battery->manufacturer));
+            (void)lsm_read_text_file(path, battery->manufacturer,
+                                     sizeof(battery->manufacturer));
             (void)lsm_join_path(path, sizeof(path), base, "/technology");
-            lsm_read_text_file(path, battery->technology,
-                               sizeof(battery->technology));
+            (void)lsm_read_text_file(path, battery->technology,
+                                     sizeof(battery->technology));
             (void)lsm_join_path(path, sizeof(path), base, "/scope");
-            lsm_read_text_file(path, battery->scope, sizeof(battery->scope));
+            (void)lsm_read_text_file(path, battery->scope, sizeof(battery->scope));
             (void)lsm_join_path(path, sizeof(path), base, "/serial_number");
-            lsm_read_text_file(path, battery->serial, sizeof(battery->serial));
+            (void)lsm_read_text_file(path, battery->serial, sizeof(battery->serial));
             battery->is_peripheral =
                 lsm_ascii_equal_ci(battery->scope, "Device");
             if (battery->is_peripheral &&
@@ -465,8 +471,8 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
                 memset(battery, 0, sizeof(*battery));
                 continue;
             }
-            LsmLinuxBatteryState *battery_state = register_battery_state(
-                monitor, battery->name);
+            LsmLinuxBatteryState *battery_state =
+                register_battery_state(monitor, battery->name);
             if (battery->is_peripheral &&
                 (lsm_ascii_equal_ci(battery->manufacturer, "Logitech") ||
                  lsm_string_starts_with(battery->name, "hidpp_battery_"))) {
@@ -480,10 +486,12 @@ void lsm_battery_enumerate(LsmMonitor *monitor)
                                     "Logitech HID++");
             }
         }
-        closedir(directory);
+        if (closedir(directory) != 0)
+            return false;
     }
     merge_bluez_batteries(monitor);
     track_hidpp_batteries(monitor);
+    return true;
 }
 
 void lsm_battery_update(LsmMonitor *monitor)

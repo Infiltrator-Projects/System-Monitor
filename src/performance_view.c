@@ -229,7 +229,7 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         view->metrics[LSM_CPU_METRIC_THREADS],
         sizeof(view->metrics[LSM_CPU_METRIC_THREADS]));
     format_u64(
-        true, cpu->file_handle_count,
+        cpu->file_handle_count_available, cpu->file_handle_count,
         view->metrics[LSM_CPU_METRIC_HANDLES],
         sizeof(view->metrics[LSM_CPU_METRIC_HANDLES]));
     infiltratr_format_duration_clock(
@@ -520,25 +520,39 @@ void lsm_disk_performance_view(const LsmDiskInfo *disk, size_t index,
     (void)snprintf(
         view->subtitle, sizeof(view->subtitle),
         "%s — %s", disk->name[0] ? disk->name : "Disk", capacity);
-    (void)snprintf(
-        view->rail_value, sizeof(view->rail_value),
-        "%.0f%%", disk->active_percent);
+    if (isfinite(disk->active_percent))
+        (void)snprintf(view->rail_value, sizeof(view->rail_value),
+                       "%.0f%%", disk->active_percent);
+    else
+        infiltratr_copy_string(view->rail_value, sizeof(view->rail_value), "N/A");
 
     char value[128];
-    (void)snprintf(
-        value, sizeof(value), "%.1f MB/s",
-        disk->read_bytes_per_sec / (1024.0 * 1024.0));
+    if (isfinite(disk->read_bytes_per_sec))
+        (void)snprintf(value, sizeof(value), "%.1f MB/s",
+                       disk->read_bytes_per_sec / (1024.0 * 1024.0));
+    else
+        infiltratr_copy_string(value, sizeof(value), "N/A");
     device_view_metric(view, "Read speed", value);
-    (void)snprintf(
-        value, sizeof(value), "%.1f MB/s",
-        disk->write_bytes_per_sec / (1024.0 * 1024.0));
+    if (isfinite(disk->write_bytes_per_sec))
+        (void)snprintf(value, sizeof(value), "%.1f MB/s",
+                       disk->write_bytes_per_sec / (1024.0 * 1024.0));
+    else
+        infiltratr_copy_string(value, sizeof(value), "N/A");
     device_view_metric(view, "Write speed", value);
-    (void)snprintf(value, sizeof(value), "%.0f%%", disk->active_percent);
+    if (isfinite(disk->active_percent))
+        (void)snprintf(value, sizeof(value), "%.0f%%", disk->active_percent);
+    else
+        infiltratr_copy_string(value, sizeof(value), "N/A");
     device_view_metric(view, "Active time", value);
-    (void)snprintf(
-        value, sizeof(value), "%.1f ms", disk->average_response_ms);
+    if (isfinite(disk->average_response_ms))
+        (void)snprintf(value, sizeof(value), "%.1f ms", disk->average_response_ms);
+    else
+        infiltratr_copy_string(value, sizeof(value), "N/A");
     device_view_metric(view, "Average response", value);
-    (void)snprintf(value, sizeof(value), "%.2f", disk->queue_length);
+    if (isfinite(disk->queue_length))
+        (void)snprintf(value, sizeof(value), "%.2f", disk->queue_length);
+    else
+        infiltratr_copy_string(value, sizeof(value), "N/A");
     device_view_metric(view, "Queue length", value);
     device_view_metric(view, "Capacity", capacity);
     device_view_metric(

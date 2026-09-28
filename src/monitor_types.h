@@ -73,6 +73,7 @@ typedef struct {
     unsigned thread_count;
     uint64_t uptime_seconds;          /**< Seconds elapsed since the current boot. */
     uint64_t file_handle_count;       /**< System-wide allocated file handles. */
+    bool file_handle_count_available; /**< System-wide handle count was sampled successfully. */
     double load_average_1;
     double load_average_5;
     double load_average_15;

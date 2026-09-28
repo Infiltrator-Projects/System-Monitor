@@ -193,7 +193,7 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor);
  *
  * @param [in,out] monitor Snapshot whose battery topology is replaced.
  */
-void lsm_battery_enumerate(LsmMonitor *monitor);
+bool lsm_battery_enumerate(LsmMonitor *monitor);
 /**
  * Apply current system and peripheral battery telemetry to the snapshot.
  *

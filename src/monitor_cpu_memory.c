@@ -461,14 +461,18 @@ static void read_cpu_thermal(LsmMonitor *monitor)
 /* sysinfo supplies fast totals every sample. The kernel's authoritative
  * MemAvailable value is also read every sample, while reclaimable/cache detail
  * fields retain the slower detail cadence. */
-static uint64_t read_system_file_handles(void)
+static bool read_system_file_handles(uint64_t *count)
 {
+    if (!count) return false;
     char text[128];
     if (!lsm_read_text_file("/proc/sys/fs/file-nr", text, sizeof(text)))
-        return 0U;
+        return false;
     const char *cursor = text;
     uint64_t allocated = 0U;
-    return lsm_parse_u64_token(&cursor, 10U, &allocated) ? allocated : 0U;
+    if (!lsm_parse_u64_token(&cursor, 10U, &allocated))
+        return false;
+    *count = allocated;
+    return true;
 }
 
 static void update_memory(LsmMonitor *monitor, bool refresh_details)
@@ -517,7 +521,11 @@ static void update_memory(LsmMonitor *monitor, bool refresh_details)
         ? memory->total_bytes - memory->available_bytes : 0U;
     memory->usage_percent = lsm_percent_u64(
         memory->used_bytes, memory->total_bytes);
-    monitor->cpu.file_handle_count = read_system_file_handles();
+    uint64_t file_handles = 0U;
+    monitor->cpu.file_handle_count_available =
+        read_system_file_handles(&file_handles);
+    if (monitor->cpu.file_handle_count_available)
+        monitor->cpu.file_handle_count = file_handles;
 }
 
 

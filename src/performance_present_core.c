@@ -196,8 +196,11 @@ static void update_disk_page(LsmApp *app, LsmDevicePage *page)
     lsm_ui_set_label_text(
         widgets->queue_length, "%s",
         view.metric_values[LSM_DISK_VIEW_QUEUE_LENGTH]);
-    lsm_ui_set_label_text(widgets->current_requests, "%u",
-                          disk->in_progress_operations);
+    if (isfinite(disk->active_percent))
+        lsm_ui_set_label_text(widgets->current_requests, "%u",
+                              disk->in_progress_operations);
+    else
+        lsm_ui_set_label_text(widgets->current_requests, "%s", "N/A");
     set_pressure_text(widgets->io_pressure, &app->monitor.io_pressure);
     lsm_ui_set_label_text(
         widgets->media_type, "%s",
@@ -377,26 +380,31 @@ bool performance_record_core_page_sample(
             if (page->index >= app->monitor.disk_count) return true;
             const LsmDiskInfo *disk = &app->monitor.disks[page->index];
             const double megabyte = 1024.0 * 1024.0;
-            lsm_graph_push(page->graph, disk->active_percent, 0.0,
+            const double active = isfinite(disk->active_percent)
+                ? disk->active_percent : NAN;
+            const double read_rate = isfinite(disk->read_bytes_per_sec)
+                ? disk->read_bytes_per_sec / megabyte : NAN;
+            const double write_rate = isfinite(disk->write_bytes_per_sec)
+                ? disk->write_bytes_per_sec / megabyte : NAN;
+            lsm_graph_push(page->graph, active, NAN,
                            app->runtime.newer_on_right);
-            lsm_graph_push(
-                page->secondary_graph,
-                disk->read_bytes_per_sec / megabyte,
-                disk->write_bytes_per_sec / megabyte,
-                app->runtime.newer_on_right);
-            lsm_graph_push(page->side_graph, disk->active_percent, 0.0,
+            lsm_graph_push(page->secondary_graph, read_rate, write_rate,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, active, NAN,
                            app->runtime.newer_on_right);
             return true;
         }
         case LSM_PAGE_NETWORK: {
             if (page->index >= app->monitor.net_count) return true;
             const LsmNetInfo *net = &app->monitor.nets[page->index];
-            lsm_graph_push(
-                page->graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
-                app->runtime.newer_on_right);
-            lsm_graph_push(
-                page->side_graph, net->rx_bytes_per_sec, net->tx_bytes_per_sec,
-                app->runtime.newer_on_right);
+            const double receive = isfinite(net->rx_bytes_per_sec)
+                ? net->rx_bytes_per_sec : NAN;
+            const double send = isfinite(net->tx_bytes_per_sec)
+                ? net->tx_bytes_per_sec : NAN;
+            lsm_graph_push(page->graph, receive, send,
+                           app->runtime.newer_on_right);
+            lsm_graph_push(page->side_graph, receive, send,
+                           app->runtime.newer_on_right);
             return true;
         }
         case LSM_PAGE_BLUETOOTH:

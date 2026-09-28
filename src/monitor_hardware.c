@@ -363,15 +363,19 @@ static void update_gpu_active_engine(LsmGpuInfo *gpu)
 
 /* Vendor-neutral discovery starts with DRM; vendor-specific telemetry is
  * capability-detected after the stable device identity is known. */
-static void enumerate_gpus(LsmMonitor *monitor)
+static bool enumerate_gpus(LsmMonitor *monitor)
 {
-    monitor->gpu_count = 0;
+    if (!monitor) return false;
     LsmGpuRecord records[LSM_MAX_GPUS] = {0};
-    const size_t count = lsm_sources_list_gpus(
-        monitor_system_sources(monitor), records, LSM_MAX_GPUS);
-    for (size_t index = 0; index < count; index++) {
-        LsmGpuInfo *gpu = &monitor->gpus[monitor->gpu_count++];
-        memset(gpu, 0, sizeof(*gpu));
+    size_t count = 0U;
+    if (!lsm_sources_list_gpus_checked(
+            monitor_system_sources(monitor), records, LSM_MAX_GPUS, &count))
+        return false;
+
+    LsmGpuInfo discovered[LSM_MAX_GPUS];
+    memset(discovered, 0, sizeof(discovered));
+    for (size_t index = 0U; index < count; index++) {
+        LsmGpuInfo *gpu = &discovered[index];
         lsm_copy_string(gpu->display_identifier, sizeof(gpu->display_identifier),
                         records[index].card);
         lsm_copy_string(gpu->driver, sizeof(gpu->driver), records[index].driver);
@@ -382,14 +386,12 @@ static void enumerate_gpus(LsmMonitor *monitor)
             strcmp(records[index].product, "N/A") != 0)
             lsm_copy_string(gpu->name, sizeof(gpu->name), records[index].product);
         else if (records[index].vendor[0] &&
-                 strcmp(records[index].vendor, "N/A") != 0) {
-            (void)snprintf(
-                gpu->name, sizeof(gpu->name), "%.*s graphics",
-                (int)(sizeof(gpu->name) - sizeof(" graphics")),
-                records[index].vendor);
-        } else {
+                 strcmp(records[index].vendor, "N/A") != 0)
+            (void)snprintf(gpu->name, sizeof(gpu->name), "%.*s graphics",
+                           (int)(sizeof(gpu->name) - sizeof(" graphics")),
+                           records[index].vendor);
+        else
             snprintf(gpu->name, sizeof(gpu->name), "GPU %zu", index);
-        }
         if (lsm_intel_gpu_driver_supported(gpu->driver)) {
             gpu->engine_metrics_capable = true;
             char vram_path[LSM_PATH_LEN];
@@ -399,11 +401,16 @@ static void enumerate_gpus(LsmMonitor *monitor)
                                gpu->platform_identity, "/mem_info_vram_total") ||
                 !lsm_read_u64_file(vram_path, &vram_total) || vram_total == 0U;
             gpu->integrated_cooling = gpu->shared_system_memory;
-            lsm_copy_string(gpu->metrics_source,
-                            sizeof(gpu->metrics_source),
+            lsm_copy_string(gpu->metrics_source, sizeof(gpu->metrics_source),
                             "Native Intel backend");
         }
     }
+    memcpy(monitor->gpus, discovered, count * sizeof(discovered[0]));
+    if (count < LSM_MAX_GPUS)
+        memset(&monitor->gpus[count], 0,
+               (LSM_MAX_GPUS - count) * sizeof(monitor->gpus[0]));
+    monitor->gpu_count = count;
+    return true;
 }
 
 static double read_active_dpm_clock(const char *path)
@@ -639,65 +646,79 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
 }
 
 /* NPU discovery deliberately tolerates incomplete early driver ABIs. */
-static void enumerate_npus(LsmMonitor *monitor)
+static bool enumerate_npus(LsmMonitor *monitor)
 {
-    monitor->npu_count = 0;
+    if (!monitor) return false;
     DIR *directory = opendir("/sys/class/accel");
-    if (!directory) return;
+    if (!directory) {
+        if (errno == ENOENT) {
+            memset(monitor->npus, 0, sizeof(monitor->npus));
+            monitor->npu_count = 0U;
+            return true;
+        }
+        return false;
+    }
+
+    LsmNpuInfo discovered[LSM_MAX_NPUS];
+    memset(discovered, 0, sizeof(discovered));
+    size_t count = 0U;
     struct dirent *entry;
-    while ((entry = readdir(directory)) && monitor->npu_count < LSM_MAX_NPUS) {
+    while ((entry = readdir(directory)) && count < LSM_MAX_NPUS) {
         if (!lsm_string_starts_with(entry->d_name, "accel") ||
             !lsm_ascii_is_digit((unsigned char)entry->d_name[5])) continue;
-        LsmNpuInfo *npu = &monitor->npus[monitor->npu_count++];
-        memset(npu, 0, sizeof(*npu));
+        LsmNpuInfo *npu = &discovered[count];
         lsm_copy_string(npu->display_identifier, sizeof(npu->display_identifier),
                         entry->d_name);
-        if (!lsm_join_path(npu->device_identifier,
-                           sizeof(npu->device_identifier),
-                           "/dev/accel", entry->d_name)) {
-            monitor->npu_count--;
+        if (!lsm_join_path(npu->device_identifier, sizeof(npu->device_identifier),
+                           "/dev/accel", entry->d_name))
             continue;
-        }
 
-        char class_path[LSM_PATH_LEN];
-        char link[LSM_PATH_LEN], resolved[LSM_PATH_LEN];
+        char class_path[LSM_PATH_LEN], link[LSM_PATH_LEN], resolved[LSM_PATH_LEN];
         if (!lsm_join_path(class_path, sizeof(class_path),
                            "/sys/class/accel", entry->d_name) ||
-            !lsm_join_path(link, sizeof(link), class_path, "device")) {
-            monitor->npu_count--;
+            !lsm_join_path(link, sizeof(link), class_path, "device"))
             continue;
-        }
         if (lsm_realpath_copy(link, resolved, sizeof(resolved)))
-            lsm_copy_string(npu->platform_identity, sizeof(npu->platform_identity), resolved);
+            lsm_copy_string(npu->platform_identity,
+                            sizeof(npu->platform_identity), resolved);
         else
-            lsm_copy_string(npu->platform_identity, sizeof(npu->platform_identity), link);
+            lsm_copy_string(npu->platform_identity,
+                            sizeof(npu->platform_identity), link);
 
         char driver_link[LSM_PATH_LEN];
-        (void)lsm_join_path(link, sizeof(link), npu->platform_identity, "/driver");
-        ssize_t length = readlink(link, driver_link, sizeof(driver_link) - 1);
-        if (length > 0) {
-            driver_link[length] = '\0';
-            lsm_copy_string(npu->driver, sizeof(npu->driver),
-                            lsm_path_basename(driver_link));
+        if (lsm_join_path(link, sizeof(link), npu->platform_identity, "/driver")) {
+            const ssize_t length =
+                readlink(link, driver_link, sizeof(driver_link) - 1U);
+            if (length > 0) {
+                driver_link[length] = '\0';
+                lsm_copy_string(npu->driver, sizeof(npu->driver),
+                                lsm_path_basename(driver_link));
+            }
         }
 
-        char vendor_id[32] = "", device_id[32] = "", vendor[LSM_NAME_LEN] = "";
-        char product[LSM_NAME_LEN] = "";
-        (void)lsm_join_path(link, sizeof(link), npu->platform_identity, "/vendor");
-        lsm_read_text_file(link, vendor_id, sizeof(vendor_id));
-        (void)lsm_join_path(link, sizeof(link), npu->platform_identity, "/device");
-        lsm_read_text_file(link, device_id, sizeof(device_id));
+        char vendor_id[32] = "", device_id[32] = "";
+        char vendor[LSM_NAME_LEN] = "", product[LSM_NAME_LEN] = "";
+        if (lsm_join_path(link, sizeof(link), npu->platform_identity, "/vendor"))
+            (void)lsm_read_text_file(link, vendor_id, sizeof(vendor_id));
+        if (lsm_join_path(link, sizeof(link), npu->platform_identity, "/device"))
+            (void)lsm_read_text_file(link, device_id, sizeof(device_id));
         (void)lsm_pci_names_lookup(vendor_id, device_id, vendor, sizeof(vendor),
                                    product, sizeof(product));
-        if (product[0]) lsm_copy_string(npu->name, sizeof(npu->name), product);
-        else if (npu->driver[0]) {
-            char driver_name[64];
-            lsm_copy_string(driver_name, sizeof(driver_name), npu->driver);
-            snprintf(npu->name, sizeof(npu->name), "%.96s accelerator", driver_name);
-        }
-        else snprintf(npu->name, sizeof(npu->name), "NPU %zu", monitor->npu_count - 1);
+        if (product[0])
+            lsm_copy_string(npu->name, sizeof(npu->name), product);
+        else if (npu->driver[0])
+            snprintf(npu->name, sizeof(npu->name), "%.96s accelerator", npu->driver);
+        else
+            snprintf(npu->name, sizeof(npu->name), "NPU %zu", count);
+        count++;
     }
-    closedir(directory);
+    if (closedir(directory) != 0) return false;
+    memcpy(monitor->npus, discovered, count * sizeof(discovered[0]));
+    if (count < LSM_MAX_NPUS)
+        memset(&monitor->npus[count], 0,
+               (LSM_MAX_NPUS - count) * sizeof(monitor->npus[0]));
+    monitor->npu_count = count;
+    return true;
 }
 
 static void update_npus(LsmMonitor *monitor, double elapsed)
@@ -736,11 +757,11 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
     memcpy(old_bluetooth_devices, monitor->bluetooth_devices,
            sizeof(old_bluetooth_devices));
 
-    enumerate_gpus(monitor);
+    (void)enumerate_gpus(monitor);
     lsm_bluetooth_enumerate(monitor);
     lsm_monitor_bluetooth_reconcile_states(monitor);
-    lsm_battery_enumerate(monitor);
-    enumerate_npus(monitor);
+    (void)lsm_battery_enumerate(monitor);
+    (void)enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
         monitor, old_gpus, old_gpu_count, old_batteries, old_battery_count,
         old_npus, old_npu_count) ||
