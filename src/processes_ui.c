@@ -168,22 +168,65 @@ static const LsmApplicationEntry *application_for_process(
     return entry;
 }
 
-static gboolean process_excluded(const LsmApp *app,
-                                 const LsmProcessInfo *process)
+typedef struct {
+    char *name;
+    char *user;
+    char *command;
+} FoldedProcessText;
+
+static gboolean folded_process_text_init(
+    const LsmProcessInfo *process, FoldedProcessText *folded)
 {
-    if (!app->process.filters) return FALSE;
-    for (guint index = 0U; index < app->process.filters->len; index++) {
-        const char *filter = g_ptr_array_index(app->process.filters, index);
-        if (lsm_ui_text_matches(process->name, filter) ||
-            lsm_ui_text_matches(process->user, filter) ||
-            lsm_ui_text_matches(process->command, filter))
+    if (!process || !folded) return FALSE;
+    memset(folded, 0, sizeof(*folded));
+    folded->name = g_utf8_casefold(process->name, -1);
+    folded->user = g_utf8_casefold(process->user, -1);
+    folded->command = g_utf8_casefold(process->command, -1);
+    if (folded->name && folded->user && folded->command)
+        return TRUE;
+    g_free(folded->name);
+    g_free(folded->user);
+    g_free(folded->command);
+    memset(folded, 0, sizeof(*folded));
+    return FALSE;
+}
+
+static void folded_process_text_clear(FoldedProcessText *folded)
+{
+    if (!folded) return;
+    g_free(folded->name);
+    g_free(folded->user);
+    g_free(folded->command);
+    memset(folded, 0, sizeof(*folded));
+}
+
+static gboolean folded_process_contains(
+    const FoldedProcessText *folded, const char *needle)
+{
+    if (!needle || !*needle) return TRUE;
+    return folded &&
+        ((folded->name && strstr(folded->name, needle)) ||
+         (folded->user && strstr(folded->user, needle)) ||
+         (folded->command && strstr(folded->command, needle)));
+}
+
+static gboolean process_excluded(
+    const GPtrArray *folded_filters,
+    const FoldedProcessText *folded_process)
+{
+    if (!folded_filters) return FALSE;
+    for (guint index = 0U; index < folded_filters->len; index++) {
+        const char *filter =
+            g_ptr_array_index((GPtrArray *)folded_filters, index);
+        if (filter && *filter &&
+            folded_process_contains(folded_process, filter))
             return TRUE;
     }
     return FALSE;
 }
 
 static gboolean text_matches_folded(const char *text,
-                                       const char *folded_needle)
+                                    const char *folded_needle)
 {
     if (!folded_needle || !*folded_needle) return TRUE;
     if (!text) return FALSE;
@@ -194,19 +237,37 @@ static gboolean text_matches_folded(const char *text,
     return matches;
 }
 
-static gboolean process_matches_search(const LsmProcessInfo *process,
-                                       const char *group_name,
-                                       const char *folded_search)
+static gboolean process_matches_search(
+    const LsmProcessInfo *process, const char *group_name,
+    const char *folded_search, const FoldedProcessText *folded_process)
 {
     if (!folded_search || !*folded_search) return TRUE;
     char pid[32];
     snprintf(pid, sizeof(pid), "%llu",
              (unsigned long long)process->pid);
     return text_matches_folded(group_name, folded_search) ||
-           text_matches_folded(process->name, folded_search) ||
-           text_matches_folded(process->user, folded_search) ||
-           text_matches_folded(process->command, folded_search) ||
+           folded_process_contains(folded_process, folded_search) ||
            strstr(pid, folded_search) != NULL;
+}
+
+static GPtrArray *fold_process_filters(const LsmApp *app)
+{
+    if (!app || !app->process.filters || app->process.filters->len == 0U)
+        return NULL;
+    GPtrArray *folded =
+        g_ptr_array_new_with_free_func(g_free);
+    if (!folded) return NULL;
+    for (guint index = 0U; index < app->process.filters->len; index++) {
+        const char *filter =
+            g_ptr_array_index(app->process.filters, index);
+        char *value = g_utf8_casefold(filter ? filter : "", -1);
+        if (!value) {
+            g_ptr_array_free(folded, TRUE);
+            return NULL;
+        }
+        g_ptr_array_add(folded, value);
+    }
+    return folded;
 }
 
 static gboolean cgroup_path_has_slice(const char *path,
