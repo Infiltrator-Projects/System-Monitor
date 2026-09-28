@@ -12,6 +12,7 @@
 #include "system_sources.h"
 
 #include <errno.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -28,10 +29,12 @@ int __wrap_pthread_detach(pthread_t thread);
 int __real_pthread_detach(pthread_t thread);
 void __wrap_lsm_sources_destroy(LsmSystemSources *sources);
 void __real_lsm_sources_destroy(LsmSystemSources *sources);
-size_t __wrap_lsm_sources_read_network_counters(
-    LsmSystemSources *sources, LsmNetworkCounterRecord *records, size_t capacity);
-size_t __real_lsm_sources_read_network_counters(
-    LsmSystemSources *sources, LsmNetworkCounterRecord *records, size_t capacity);
+bool __wrap_lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count);
+bool __real_lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count);
 
 static atomic_uint sources_destroyed;
 static bool joined_timeout_thread;
@@ -39,17 +42,22 @@ static bool network_fixture;
 static bool network_sample_available;
 static uint64_t network_sample_bytes;
 
-size_t __wrap_lsm_sources_read_network_counters(
-    LsmSystemSources *sources, LsmNetworkCounterRecord *records, size_t capacity)
+bool __wrap_lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count)
 {
     if (!network_fixture)
-        return __real_lsm_sources_read_network_counters(sources, records, capacity);
-    if (!network_sample_available || capacity == 0U) return 0U;
+        return __real_lsm_sources_read_network_counters_checked(
+            sources, records, capacity, out_count);
+    if (!out_count || !records || capacity == 0U) return false;
+    *out_count = 0U;
+    if (!network_sample_available) return true;
     records[0] = (LsmNetworkCounterRecord){0};
     (void)snprintf(records[0].name, sizeof(records[0].name), "fixture0");
     records[0].rx_bytes = network_sample_bytes;
     records[0].tx_bytes = network_sample_bytes;
-    return 1U;
+    *out_count = 1U;
+    return true;
 }
 
 static bool collector_recovery_valid(void)
@@ -83,7 +91,8 @@ static bool collector_recovery_valid(void)
     lsm_storage_update(monitor, 1.0, false);
     okay = okay && !state->networks[0].initialized &&
         !monitor->nets[0].utilisation_available &&
-        monitor->nets[0].rx_bytes_per_sec == 0.0;
+        isnan(monitor->nets[0].rx_bytes_per_sec) &&
+        isnan(monitor->nets[0].tx_bytes_per_sec);
     network_sample_available = true;
     network_sample_bytes = 5000U;
     lsm_storage_update(monitor, 1.0, false);

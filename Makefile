@@ -508,7 +508,7 @@ monitor-platform-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) \
 		support/tests/backend_smoke.c $(MONITOR_SOURCES) $(PROCESS_SOURCES) \
-		-Wl,--wrap=pthread_timedjoin_np,--wrap=pthread_detach,--wrap=lsm_sources_destroy,--wrap=lsm_sources_read_network_counters \
+		-Wl,--wrap=pthread_timedjoin_np,--wrap=pthread_detach,--wrap=lsm_sources_destroy,--wrap=lsm_sources_read_network_counters_checked \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm -ldl \
 		-o $(BUILD_DIR)/backend-smoke
 	./$(BUILD_DIR)/backend-smoke
