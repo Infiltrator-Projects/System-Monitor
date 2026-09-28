@@ -26,6 +26,23 @@ jobs:
       # the REST archive path, which cannot initialise the Common submodule.
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
+      - name: Ensure Git is available on self-hosted runners
+        if: ${{ !startsWith(github.event.head_commit.message, 'Release ') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null 2>&1; then
+            git --version
+            exit 0
+          fi
+          if ! command -v apt-get >/dev/null 2>&1; then
+            echo "Git is required for recursive Common checkout and apt-get is unavailable." >&2
+            exit 1
+          fi
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
+          git --version
+
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
