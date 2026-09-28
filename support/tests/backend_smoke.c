@@ -94,8 +94,9 @@ static bool collector_recovery_valid(void)
     network_sample_bytes = 1000U;
     lsm_storage_update(monitor, 1.0, false);
     if (!state->networks[0].initialized ||
-        monitor->nets[0].rx_bytes_per_sec != 0.0 ||
-        monitor->nets[0].tx_bytes_per_sec != 0.0) {
+        !isnan(monitor->nets[0].rx_bytes_per_sec) ||
+        !isnan(monitor->nets[0].tx_bytes_per_sec) ||
+        monitor->nets[0].utilisation_available) {
         fprintf(stderr,
                 "network initial baseline mismatch: initialized=%d rx=%f tx=%f\n",
                 state->networks[0].initialized,
@@ -133,8 +134,9 @@ static bool collector_recovery_valid(void)
     network_sample_bytes = 5000U;
     lsm_storage_update(monitor, 1.0, false);
     if (!state->networks[0].initialized ||
-        monitor->nets[0].rx_bytes_per_sec != 0.0 ||
-        monitor->nets[0].tx_bytes_per_sec != 0.0) {
+        !isnan(monitor->nets[0].rx_bytes_per_sec) ||
+        !isnan(monitor->nets[0].tx_bytes_per_sec) ||
+        monitor->nets[0].utilisation_available) {
         fprintf(stderr,
                 "network recovery baseline mismatch: initialized=%d rx=%f tx=%f\n",
                 state->networks[0].initialized,

@@ -2133,22 +2133,28 @@ static void refresh_topology_and_devices(
         state->last_topology_tick == 0ULL ||
         now - state->last_topology_tick >= LSM_WINDOWS_TOPOLOGY_REFRESH_MS;
 
-    LsmDiskInfo disk_backup[LSM_MAX_DISKS];
-    LsmWindowsDiskBaseline disk_baseline_backup[LSM_MAX_DISKS];
-    const size_t disk_count_backup = monitor->disk_count;
-    const uint64_t disk_generation_backup = monitor->disk_generation;
-    const uint64_t topology_generation_backup = monitor->topology_generation;
-    memcpy(disk_backup, monitor->disks, sizeof(disk_backup));
-    memcpy(disk_baseline_backup, state->disks, sizeof(disk_baseline_backup));
-    if (!enumerate_physical_disks(monitor, state, elapsed) ||
-        !enumerate_disk_volumes(monitor)) {
-        memcpy(monitor->disks, disk_backup, sizeof(disk_backup));
-        monitor->disk_count = disk_count_backup;
-        monitor->disk_generation = disk_generation_backup;
-        monitor->topology_generation = topology_generation_backup;
-        memcpy(state->disks, disk_baseline_backup,
-               sizeof(disk_baseline_backup));
+    LsmDiskInfo *disk_backup =
+        (LsmDiskInfo *)malloc(sizeof(monitor->disks));
+    LsmWindowsDiskBaseline *disk_baseline_backup =
+        (LsmWindowsDiskBaseline *)malloc(sizeof(state->disks));
+    if (disk_backup && disk_baseline_backup) {
+        const size_t disk_count_backup = monitor->disk_count;
+        const uint64_t disk_generation_backup = monitor->disk_generation;
+        const uint64_t topology_generation_backup =
+            monitor->topology_generation;
+        memcpy(disk_backup, monitor->disks, sizeof(monitor->disks));
+        memcpy(disk_baseline_backup, state->disks, sizeof(state->disks));
+        if (!enumerate_physical_disks(monitor, state, elapsed) ||
+            !enumerate_disk_volumes(monitor)) {
+            memcpy(monitor->disks, disk_backup, sizeof(monitor->disks));
+            monitor->disk_count = disk_count_backup;
+            monitor->disk_generation = disk_generation_backup;
+            monitor->topology_generation = topology_generation_backup;
+            memcpy(state->disks, disk_baseline_backup, sizeof(state->disks));
+        }
     }
+    free(disk_baseline_backup);
+    free(disk_backup);
 
     (void)enumerate_networks(monitor, state, elapsed);
     if (due) {
