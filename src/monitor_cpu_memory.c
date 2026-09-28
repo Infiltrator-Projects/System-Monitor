@@ -467,7 +467,9 @@ static unsigned cpu_list_weight(const char *text)
                 parsed_last >= first)
                 last = parsed_last;
         }
-        const uint64_t span = last - first + 1U;
+        uint64_t span = 0U;
+        if (!lsm_u64_add_checked(last - first, 1U, &span))
+            return UINT_MAX;
         total = lsm_u64_add_saturating(total, span);
         if (total >= UINT_MAX) return UINT_MAX;
 
