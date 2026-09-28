@@ -71,48 +71,101 @@ static bool collector_recovery_valid(void)
     }
     monitor->backend_state = state;
     monitor->cpu.base_frequency_ghz = 3.0;
-    /* Keep this fixture independent of the CI host's actual cpufreq policies.
-     * The production rediscovery path is rate-limited, so a just-checked
-     * timestamp intentionally leaves an absent source unavailable here. */
-    state->last_cpu_frequency_source_refresh_monotonic =
-        lsm_monotonic_seconds();
     lsm_cpu_memory_update(monitor, 1.0);
-    const bool frequency_unavailable = monitor->cpu.frequency_ghz == 0.0 &&
-        monitor->cpu.max_frequency_ghz == 0.0;
+    if (monitor->cpu.frequency_ghz != 0.0 ||
+        monitor->cpu.max_frequency_ghz != 0.0) {
+        fprintf(stderr, "frequency availability mismatch: current=%.6f max=%.6f\n",
+                monitor->cpu.frequency_ghz, monitor->cpu.max_frequency_ghz);
+        free(state);
+        free(monitor);
+        return false;
+    }
+
     monitor->net_count = state->network_count = 1U;
-    (void)snprintf(monitor->nets[0].name, sizeof(monitor->nets[0].name), "fixture0");
-    (void)snprintf(state->networks[0].name, sizeof(state->networks[0].name), "fixture0");
+    (void)snprintf(monitor->nets[0].name,
+                   sizeof(monitor->nets[0].name), "fixture0");
+    (void)snprintf(state->networks[0].name,
+                   sizeof(state->networks[0].name), "fixture0");
     (void)snprintf(monitor->nets[0].connection_state,
                    sizeof(monitor->nets[0].connection_state), "Up");
     monitor->nets[0].link_speed_mbps = 1000.0;
+
     network_fixture = network_sample_available = true;
     network_sample_bytes = 1000U;
     lsm_storage_update(monitor, 1.0, false);
+    if (!state->networks[0].initialized ||
+        monitor->nets[0].rx_bytes_per_sec != 0.0 ||
+        monitor->nets[0].tx_bytes_per_sec != 0.0) {
+        fprintf(stderr,
+                "network initial baseline mismatch: initialized=%d rx=%f tx=%f\n",
+                state->networks[0].initialized,
+                monitor->nets[0].rx_bytes_per_sec,
+                monitor->nets[0].tx_bytes_per_sec);
+        goto failed;
+    }
+
     network_sample_bytes = 2000U;
     lsm_storage_update(monitor, 1.0, false);
-    bool okay = frequency_unavailable &&
-        monitor->nets[0].rx_bytes_per_sec == 1000.0;
+    if (monitor->nets[0].rx_bytes_per_sec != 1000.0 ||
+        monitor->nets[0].tx_bytes_per_sec != 1000.0) {
+        fprintf(stderr, "network rate mismatch: rx=%f tx=%f\n",
+                monitor->nets[0].rx_bytes_per_sec,
+                monitor->nets[0].tx_bytes_per_sec);
+        goto failed;
+    }
+
     network_sample_available = false;
     lsm_storage_update(monitor, 1.0, false);
-    okay = okay && !state->networks[0].initialized &&
-        !monitor->nets[0].utilisation_available &&
-        isnan(monitor->nets[0].rx_bytes_per_sec) &&
-        isnan(monitor->nets[0].tx_bytes_per_sec);
+    if (state->networks[0].initialized ||
+        monitor->nets[0].utilisation_available ||
+        !isnan(monitor->nets[0].rx_bytes_per_sec) ||
+        !isnan(monitor->nets[0].tx_bytes_per_sec)) {
+        fprintf(stderr,
+                "network missing-sample mismatch: initialized=%d available=%d rx=%f tx=%f\n",
+                state->networks[0].initialized,
+                monitor->nets[0].utilisation_available,
+                monitor->nets[0].rx_bytes_per_sec,
+                monitor->nets[0].tx_bytes_per_sec);
+        goto failed;
+    }
+
     network_sample_available = true;
     network_sample_bytes = 5000U;
     lsm_storage_update(monitor, 1.0, false);
-    okay = okay && monitor->nets[0].rx_bytes_per_sec == 0.0;
+    if (!state->networks[0].initialized ||
+        monitor->nets[0].rx_bytes_per_sec != 0.0 ||
+        monitor->nets[0].tx_bytes_per_sec != 0.0) {
+        fprintf(stderr,
+                "network recovery baseline mismatch: initialized=%d rx=%f tx=%f\n",
+                state->networks[0].initialized,
+                monitor->nets[0].rx_bytes_per_sec,
+                monitor->nets[0].tx_bytes_per_sec);
+        goto failed;
+    }
+
     network_sample_bytes = 6000U;
     lsm_storage_update(monitor, 1.0, false);
-    okay = okay && monitor->nets[0].rx_bytes_per_sec == 1000.0 &&
-        monitor->nets[0].tx_bytes_per_sec == 1000.0;
+    if (monitor->nets[0].rx_bytes_per_sec != 1000.0 ||
+        monitor->nets[0].tx_bytes_per_sec != 1000.0) {
+        fprintf(stderr, "network resumed rate mismatch: rx=%f tx=%f\n",
+                monitor->nets[0].rx_bytes_per_sec,
+                monitor->nets[0].tx_bytes_per_sec);
+        goto failed;
+    }
+
     network_fixture = false;
     free(state);
     free(monitor);
-    return okay;
+    return true;
+
+failed:
+    network_fixture = false;
+    free(state);
+    free(monitor);
+    return false;
 }
 
-/* Force the timeout/worker-exit ordering deterministically. Joining here
+/* Force the timeout//worker-exit ordering deterministically. Joining here
  * establishes that the worker has already released its reference before the
  * caller sees ETIMEDOUT. The paired detach wrapper avoids detaching a joined
  * pthread handle; production still uses the real timed join and detach. */
