@@ -162,6 +162,7 @@ int main(void)
 #endif
 #include <assert.h>
 #include <dirent.h>
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -296,9 +297,13 @@ int main(void)
     }
 
     LsmProcessGpuSnapshot capped;
-    assert(lsm_process_gpu_read(root, 4343, &capped));
-    assert(capped.memory_available);
-    assert(capped.memory_bytes == TEST_CLIENT_LIMIT * 1024ULL);
+    errno = 0;
+    assert(!lsm_process_gpu_read(root, 4343, &capped));
+    assert(errno == EOVERFLOW);
+    assert(capped.engine_count == 0U);
+    assert(!capped.engine_counters_available);
+    assert(!capped.memory_available);
+    assert(capped.memory_bytes == 0U);
 
     remove_process_fixture(root, 4343);
     remove_process_fixture(root, 4242);
