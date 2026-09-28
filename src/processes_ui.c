@@ -1189,6 +1189,16 @@ void lsm_processes_build(LsmApp *app, GtkWidget *container)
 void lsm_processes_destroy(LsmApp *app)
 {
     if (!app) return;
-    if (app->processes.processes_store) g_object_unref(app->processes.processes_store);
+    if (app->processes.processes_store)
+        g_object_unref(app->processes.processes_store);
     app->processes.processes_store = NULL;
+    if (app->processes.process_pid_index)
+        g_hash_table_destroy(app->processes.process_pid_index);
+    app->processes.process_pid_index = NULL;
+    if (app->processes.process_group_index)
+        g_hash_table_destroy(app->processes.process_group_index);
+    app->processes.process_group_index = NULL;
+    if (app->processes.process_group_cache)
+        g_ptr_array_free(app->processes.process_group_cache, TRUE);
+    app->processes.process_group_cache = NULL;
 }
