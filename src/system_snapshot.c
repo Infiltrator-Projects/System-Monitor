@@ -391,6 +391,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
 
     const LsmMonitor *monitor = &app->monitor;
     char memory_used[64], memory_total[64];
+    char cpu_usage[32], cpu_user[32], cpu_kernel[32];
     char cpu_speed[32], memory_speed[32], slots[32];
     char cpu_pressure[64], memory_pressure[64], io_pressure[64];
     char uptime[128] = "N/A";
@@ -398,9 +399,18 @@ static bool write_snapshot(FILE *file, const void *user_data)
                      sizeof(memory_used));
     lsm_format_bytes(monitor->memory.total_bytes, memory_total,
                      sizeof(memory_total));
-    lsm_metric_format_ghz(monitor->cpu.frequency_ghz > 0.0,
-                          monitor->cpu.frequency_ghz, cpu_speed,
-                          sizeof(cpu_speed));
+    lsm_metric_format_percent(
+        monitor->cpu.usage_available && isfinite(monitor->cpu.usage_percent),
+        monitor->cpu.usage_percent, cpu_usage, sizeof(cpu_usage));
+    lsm_metric_format_percent(
+        isfinite(monitor->cpu.user_percent),
+        monitor->cpu.user_percent, cpu_user, sizeof(cpu_user));
+    lsm_metric_format_percent(
+        isfinite(monitor->cpu.kernel_percent),
+        monitor->cpu.kernel_percent, cpu_kernel, sizeof(cpu_kernel));
+    lsm_metric_format_ghz(
+        monitor->cpu.frequency_available && monitor->cpu.frequency_ghz > 0.0,
+        monitor->cpu.frequency_ghz, cpu_speed, sizeof(cpu_speed));
     lsm_metric_format_mhz(monitor->memory.speed_mhz > 0U,
                           (double)monitor->memory.speed_mhz, memory_speed,
                           sizeof(memory_speed));
@@ -428,7 +438,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
         "System Monitor diagnostic snapshot\n"
         "Version: %s\nGenerated: %s\nHost: %s\nOperating system: %s\n"
         "Kernel: %s %s\nArchitecture: %s\n\n"
-        "CPU\n  %s\n  Utilisation: %.1f%% (user %.1f%%, kernel %.1f%%)\n"
+        "CPU\n  %s\n  Utilisation: %s (user %s, kernel %s)\n"
         "  Speed: %s | cores: %u | logical: %u | sockets: %u | NUMA: %u\n"
         "  Load average: %.2f %.2f %.2f | interrupts/s: %.0f | context switches/s: %.0f\n"
         "  CPU pressure (10 s): %s\n"
@@ -438,9 +448,10 @@ static bool write_snapshot(FILE *file, const void *user_data)
         "  I/O pressure (10 s): %s\n",
         lsm_project_info()->version, generated, hostname, os_name, kernel.release,
         kernel.version, kernel.machine, monitor->cpu.model,
-        monitor->cpu.usage_percent, monitor->cpu.user_percent,
-        monitor->cpu.kernel_percent, cpu_speed,
-        monitor->cpu.physical_cores, monitor->cpu.logical_cores,
+        cpu_usage, cpu_user, cpu_kernel, cpu_speed,
+        monitor->cpu.physical_cores,
+        monitor->cpu.logical_cores_total > 0U
+            ? monitor->cpu.logical_cores_total : monitor->cpu.logical_cores,
         monitor->cpu.socket_count, monitor->cpu.numa_node_count,
         monitor->cpu.load_average_1, monitor->cpu.load_average_5,
         monitor->cpu.load_average_15, monitor->cpu.interrupts_per_sec,
