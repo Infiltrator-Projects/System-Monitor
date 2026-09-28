@@ -9,6 +9,11 @@
 - Preserve Linux network addresses transactionally across transient getifaddrs failures and treat malformed/lost rtnetlink events as topology invalidations.
 - Parse the owned Linux /proc/stat buffer in place and skip unchanged GTK Performance presentation between completed monitor generations.
 - Clean up dense hot-path formatting and redundant implementation comments without removing rationale comments.
+- Reuse retained Linux process PID/group lookup structures and group child-capacity across refreshes, and case-fold search/filter text once instead of per field/filter comparison.
+- Weight Linux cpufreq policy averages by the number of logical CPUs represented, accept range-form CPU lists, and replace fixed cache/core-topology tracking limits with dynamically bounded storage.
+- Cache static GPU VRAM totals, thermal limits and PWM maxima outside the one-second hot path while keeping dynamic usage, temperature, power and fan telemetry live.
+- Isolate x86 CPUID affinity probing on a disposable helper thread so a failed affinity restoration cannot pin the long-lived sampler.
+- Retain the Windows paint backbuffer across frames, suppress unchanged status invalidations, and use stock DC brush/pen objects for common panel drawing instead of allocating GDI objects per repaint.
 
 ## 1.0.146 - 2026-09-28
 
