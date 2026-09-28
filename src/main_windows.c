@@ -2679,60 +2679,110 @@ static void refresh_processes(LsmWindowsUiState *state)
     if (!same_structure)
         SendMessageW(state->process_list, LVM_DELETEALLITEMS, 0, 0);
 
+    bool list_changed = !same_structure;
     const size_t shown = count > (size_t)INT_MAX ? (size_t)INT_MAX : count;
     for (size_t index = 0U; index < shown; index++) {
         const LsmProcessInfo *process = &processes[index];
-        wchar_t name[256];
-        wchar_t user[128];
-        wchar_t number[64];
-
-        text_to_wide(
-            process->name, name,
-            sizeof(name) / sizeof(name[0]));
-        text_to_wide(
-            process->user, user,
-            sizeof(user) / sizeof(user[0]));
-        if (!name[0]) lstrcpyW(name, L"-");
-        if (!user[0]) lstrcpyW(user, L"-");
+        const LsmProcessInfo *old_process =
+            same_structure ? &previous[index] : NULL;
+        wchar_t text[256];
+        wchar_t old_text[256];
 
         if (!same_structure) {
+            text_to_wide(
+                process->name, text,
+                sizeof(text) / sizeof(text[0]));
+            if (!text[0]) lstrcpyW(text, L"-");
+
             LVITEMW item;
             ZeroMemory(&item, sizeof(item));
             item.mask = LVIF_TEXT;
             item.iItem = (int)index;
             item.iSubItem = 0;
-            item.pszText = name;
+            item.pszText = text;
             const LRESULT inserted = SendMessageW(
                 state->process_list, LVM_INSERTITEMW, 0, (LPARAM)&item);
             if (inserted < 0) continue;
 
             (void)swprintf(
-                number, sizeof(number) / sizeof(number[0]),
+                text, sizeof(text) / sizeof(text[0]),
                 L"%llu", (unsigned long long)process->pid);
             list_view_set_text(
-                state->process_list, (int)index, 1, number);
+                state->process_list, (int)index, 1, text);
+
+            text_to_wide(
+                process->user, text,
+                sizeof(text) / sizeof(text[0]));
+            if (!text[0]) lstrcpyW(text, L"-");
             list_view_set_text(
-                state->process_list, (int)index, 4, user);
+                state->process_list, (int)index, 4, text);
+        } else {
+            if (strcmp(old_process->name, process->name) != 0) {
+                text_to_wide(
+                    process->name, text,
+                    sizeof(text) / sizeof(text[0]));
+                if (!text[0]) lstrcpyW(text, L"-");
+                list_view_set_text(
+                    state->process_list, (int)index, 0, text);
+                list_changed = true;
+            }
+            if (strcmp(old_process->user, process->user) != 0) {
+                text_to_wide(
+                    process->user, text,
+                    sizeof(text) / sizeof(text[0]));
+                if (!text[0]) lstrcpyW(text, L"-");
+                list_view_set_text(
+                    state->process_list, (int)index, 4, text);
+                list_changed = true;
+            }
         }
 
         (void)swprintf(
-            number, sizeof(number) / sizeof(number[0]),
+            text, sizeof(text) / sizeof(text[0]),
             L"%.1f%%", process->cpu_percent);
-        list_view_set_text(state->process_list, (int)index, 2, number);
+        if (!same_structure) {
+            list_view_set_text(state->process_list, (int)index, 2, text);
+        } else {
+            (void)swprintf(
+                old_text, sizeof(old_text) / sizeof(old_text[0]),
+                L"%.1f%%", old_process->cpu_percent);
+            if (lstrcmpW(text, old_text) != 0) {
+                list_view_set_text(
+                    state->process_list, (int)index, 2, text);
+                list_changed = true;
+            }
+        }
 
         (void)swprintf(
-            number, sizeof(number) / sizeof(number[0]),
+            text, sizeof(text) / sizeof(text[0]),
             L"%.1f%%", process->memory_percent);
-        list_view_set_text(state->process_list, (int)index, 3, number);
+        if (!same_structure) {
+            list_view_set_text(state->process_list, (int)index, 3, text);
+        } else {
+            (void)swprintf(
+                old_text, sizeof(old_text) / sizeof(old_text[0]),
+                L"%.1f%%", old_process->memory_percent);
+            if (lstrcmpW(text, old_text) != 0) {
+                list_view_set_text(
+                    state->process_list, (int)index, 3, text);
+                list_changed = true;
+            }
+        }
 
-        (void)swprintf(
-            number, sizeof(number) / sizeof(number[0]),
-            L"%u", process->threads);
-        list_view_set_text(state->process_list, (int)index, 5, number);
+        if (!same_structure ||
+            old_process->threads != process->threads) {
+            (void)swprintf(
+                text, sizeof(text) / sizeof(text[0]),
+                L"%u", process->threads);
+            list_view_set_text(
+                state->process_list, (int)index, 5, text);
+            list_changed = true;
+        }
     }
 
     SendMessageW(state->process_list, WM_SETREDRAW, TRUE, 0);
-    InvalidateRect(state->process_list, NULL, TRUE);
+    if (list_changed)
+        InvalidateRect(state->process_list, NULL, TRUE);
 
     lsm_process_list_free(state->processes);
     state->processes = processes;

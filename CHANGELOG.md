@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.148 - 2026-09-29
+
+- Publish completed Windows monitor snapshots by copying only active device ranges instead of the full fixed-capacity monitor object, reducing lock-held memory traffic on every sample.
+- Update retained Windows process rows only when their displayed values actually change, while allowing late account/name enrichment without forcing a destructive ListView rebuild.
+
 ## 1.0.147 - 2026-09-28
 
 - Move native Windows disk and network discovery off the fast monitoring cadence while retaining one-second performance counters.

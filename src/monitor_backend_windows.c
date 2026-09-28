@@ -2524,6 +2524,103 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
     return true;
 }
 
+static void publish_monitor_snapshot(
+    LsmMonitor *destination, const LsmMonitor *source)
+{
+    if (!destination || !source) return;
+
+    const size_t old_disk_count = destination->disk_count;
+    const size_t old_net_count = destination->net_count;
+    const size_t old_bluetooth_count = destination->bluetooth_count;
+    const size_t old_bluetooth_device_count =
+        destination->bluetooth_device_count;
+    const size_t old_gpu_count = destination->gpu_count;
+    const size_t old_battery_count = destination->battery_count;
+    const size_t old_npu_count = destination->npu_count;
+
+    destination->cpu = source->cpu;
+    destination->memory = source->memory;
+    destination->cpu_pressure = source->cpu_pressure;
+    destination->memory_pressure = source->memory_pressure;
+    destination->io_pressure = source->io_pressure;
+
+    if (source->disk_count > 0U)
+        memcpy(destination->disks, source->disks,
+               source->disk_count * sizeof(destination->disks[0]));
+    if (source->disk_count < old_disk_count)
+        memset(&destination->disks[source->disk_count], 0,
+               (old_disk_count - source->disk_count) *
+                   sizeof(destination->disks[0]));
+    destination->disk_count = source->disk_count;
+    destination->disk_generation = source->disk_generation;
+    destination->topology_generation = source->topology_generation;
+
+    if (source->net_count > 0U)
+        memcpy(destination->nets, source->nets,
+               source->net_count * sizeof(destination->nets[0]));
+    if (source->net_count < old_net_count)
+        memset(&destination->nets[source->net_count], 0,
+               (old_net_count - source->net_count) *
+                   sizeof(destination->nets[0]));
+    destination->net_count = source->net_count;
+
+    if (source->bluetooth_count > 0U)
+        memcpy(destination->bluetooth, source->bluetooth,
+               source->bluetooth_count *
+                   sizeof(destination->bluetooth[0]));
+    if (source->bluetooth_count < old_bluetooth_count)
+        memset(&destination->bluetooth[source->bluetooth_count], 0,
+               (old_bluetooth_count - source->bluetooth_count) *
+                   sizeof(destination->bluetooth[0]));
+    destination->bluetooth_count = source->bluetooth_count;
+
+    if (source->bluetooth_device_count > 0U)
+        memcpy(destination->bluetooth_devices, source->bluetooth_devices,
+               source->bluetooth_device_count *
+                   sizeof(destination->bluetooth_devices[0]));
+    if (source->bluetooth_device_count < old_bluetooth_device_count)
+        memset(
+            &destination->bluetooth_devices[source->bluetooth_device_count],
+            0,
+            (old_bluetooth_device_count -
+             source->bluetooth_device_count) *
+                sizeof(destination->bluetooth_devices[0]));
+    destination->bluetooth_device_count =
+        source->bluetooth_device_count;
+
+    if (source->gpu_count > 0U)
+        memcpy(destination->gpus, source->gpus,
+               source->gpu_count * sizeof(destination->gpus[0]));
+    if (source->gpu_count < old_gpu_count)
+        memset(&destination->gpus[source->gpu_count], 0,
+               (old_gpu_count - source->gpu_count) *
+                   sizeof(destination->gpus[0]));
+    destination->gpu_count = source->gpu_count;
+
+    if (source->battery_count > 0U)
+        memcpy(destination->batteries, source->batteries,
+               source->battery_count *
+                   sizeof(destination->batteries[0]));
+    if (source->battery_count < old_battery_count)
+        memset(&destination->batteries[source->battery_count], 0,
+               (old_battery_count - source->battery_count) *
+                   sizeof(destination->batteries[0]));
+    destination->battery_count = source->battery_count;
+
+    if (source->npu_count > 0U)
+        memcpy(destination->npus, source->npus,
+               source->npu_count * sizeof(destination->npus[0]));
+    if (source->npu_count < old_npu_count)
+        memset(&destination->npus[source->npu_count], 0,
+               (old_npu_count - source->npu_count) *
+                   sizeof(destination->npus[0]));
+    destination->npu_count = source->npu_count;
+
+    destination->sample_generation = source->sample_generation;
+    destination->sample_monotonic_seconds =
+        source->sample_monotonic_seconds;
+}
+
 bool lsm_monitor_platform_update(LsmMonitor *monitor)
 {
     if (!monitor || !monitor->backend_state) return false;
@@ -2532,9 +2629,7 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     bool signal = false;
     EnterCriticalSection(&sampler->lock);
     if (sampler->sample_ready) {
-        void *backend_state = monitor->backend_state;
-        *monitor = sampler->sample;
-        monitor->backend_state = backend_state;
+        publish_monitor_snapshot(monitor, &sampler->sample);
         sampler->sample_ready = false;
     }
     if (!sampler->stop_requested &&
