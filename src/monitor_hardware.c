@@ -704,12 +704,16 @@ static bool enumerate_npus(LsmMonitor *monitor)
             (void)lsm_read_text_file(link, device_id, sizeof(device_id));
         (void)lsm_pci_names_lookup(vendor_id, device_id, vendor, sizeof(vendor),
                                    product, sizeof(product));
-        if (product[0])
+        if (product[0]) {
             lsm_copy_string(npu->name, sizeof(npu->name), product);
-        else if (npu->driver[0])
-            snprintf(npu->name, sizeof(npu->name), "%.96s accelerator", npu->driver);
-        else
+        } else if (npu->driver[0]) {
+            char driver_name[64];
+            lsm_copy_string(driver_name, sizeof(driver_name), npu->driver);
+            snprintf(npu->name, sizeof(npu->name), "%.96s accelerator",
+                     driver_name);
+        } else {
             snprintf(npu->name, sizeof(npu->name), "NPU %zu", count);
+        }
         count++;
     }
     if (closedir(directory) != 0) return false;
