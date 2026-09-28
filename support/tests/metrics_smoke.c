@@ -689,6 +689,7 @@ int main(void)
     monitor.sample_generation = 1U;
     monitor.sample_monotonic_seconds = 10.0;
     monitor.cpu.usage_percent = 25.0;
+    monitor.cpu.usage_available = true;
     monitor.cpu.user_percent = 17.0;
     monitor.cpu.kernel_percent = 8.0;
     monitor.memory.total_bytes = 1024U;
