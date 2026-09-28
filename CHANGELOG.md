@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.144 - 2026-09-28
+
+- Make Linux process snapshots genuinely transactional across directory-enumeration, allocation and close failures so a partial /proc walk can never replace the last complete process set.
+- Make process-tree termination enumerate the complete target tree before sending the first signal, aborting safely on allocation or directory-read failure.
+- Reject bounded topology truncation in checked disk, partition, network, GPU, NPU, battery and CPU-enumeration paths instead of publishing a capacity-limited prefix as authoritative.
+- Add checked Process Inspector inventory APIs that distinguish a legitimate empty result from incomplete open-file, memory-map, thread or file-user enumeration; the GUI now reports incomplete inventories rather than presenting partial counts.
+- Reject partial cpufreq policy discovery and incomplete per-process DRM GPU accounting, preserving fallback or prior state instead of under-reporting valid-looking metrics.
+- Harden startup-application and desktop-application catalogue enumeration against directory and allocation failures.
+- Remove the Windows process-worker shutdown use-after-free window by retaining worker-owned state when a native query ignores cancellation.
+- Add regression coverage requiring checked storage/network/GPU inventories to reject bounded truncation and exercise the new checked process-inspection contracts.
+
 ## 1.0.143 - 2026-09-28
 
 - Make the checked mountinfo visitor contract genuinely transactional: a visitor that stops enumeration early now reports an incomplete read instead of allowing a bounded partial mount set to be published as authoritative.
