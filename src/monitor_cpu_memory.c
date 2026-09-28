@@ -287,7 +287,7 @@ static void read_cpu_static(LsmMonitor *monitor)
     read_cpu_cache_totals(&monitor->cpu);
 }
 
-static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
+static unsigned read_cpu_socket_count(void)
 {
     int packages[LSM_MAX_CPUS];
     size_t count = 0U;
@@ -606,7 +606,7 @@ bool lsm_cpu_memory_initialise(LsmMonitor *monitor)
     LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
     if (!state) return false;
     read_cpu_static(monitor);
-    monitor->cpu.socket_count = read_cpu_socket_count(&monitor->cpu);
+    monitor->cpu.socket_count = read_cpu_socket_count();
     monitor->cpu.numa_node_count = read_numa_node_count();
     update_load_average(&monitor->cpu);
     state->cpu_frequency_source = create_cpu_frequency_source();
