@@ -74,6 +74,11 @@ typedef struct {
     uint64_t bytes;
 } LsmSeenCache;
 
+typedef struct {
+    int package;
+    int core;
+} LsmPhysicalCoreKey;
+
 static int compare_cpu_ids(const void *left, const void *right)
 {
     const unsigned a = *(const unsigned *)left;
@@ -158,20 +163,15 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
 {
     unsigned cpu_ids[LSM_MAX_CPUS];
     const size_t cpu_count = read_topology_cpu_ids(cpu_ids);
-    const size_t capacity = cpu_count * 16U + 16U;
-    LsmSeenCache *seen = calloc(capacity, sizeof(*seen));
-    if (!seen) {
-        snprintf(cpu->cache_l1, sizeof(cpu->cache_l1), "N/A");
-        snprintf(cpu->cache_l2, sizeof(cpu->cache_l2), "N/A");
-        snprintf(cpu->cache_l3, sizeof(cpu->cache_l3), "N/A");
-        return;
-    }
-
-    size_t seen_count = 0;
+    LsmSeenCache *seen = NULL;
+    size_t seen_count = 0U;
+    size_t seen_capacity = 0U;
+    bool cache_complete = true;
     uint64_t totals[4] = {0, 0, 0, 0};
     unsigned instances[4] = {0, 0, 0, 0};
 
-    for (size_t cpu_position = 0U; cpu_position < cpu_count; cpu_position++) {
+    for (size_t cpu_position = 0U;
+         cpu_position < cpu_count && cache_complete; cpu_position++) {
         const unsigned cpu_index = cpu_ids[cpu_position];
         for (int index = 0; index < 32; index++) {
             char path[LSM_PATH_LEN], type[32] = "", size_text[32] = "";
@@ -211,9 +211,16 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
                     break;
                 }
             }
-            if (duplicate || seen_count >= capacity) continue;
+            if (duplicate) continue;
+            if (!lsm_array_reserve(
+                    (void **)&seen, &seen_capacity, sizeof(*seen),
+                    seen_count + 1U, 32U)) {
+                cache_complete = false;
+                break;
+            }
 
-            lsm_copy_string(seen[seen_count].key, sizeof(seen[seen_count].key), key);
+            lsm_copy_string(
+                seen[seen_count].key, sizeof(seen[seen_count].key), key);
             seen[seen_count].level = level;
             seen[seen_count].bytes = bytes;
             seen_count++;
@@ -223,9 +230,18 @@ static void read_cpu_cache_totals(LsmCpuInfo *cpu)
         }
     }
 
-    format_cache_summary(totals[1], instances[1], cpu->cache_l1, sizeof(cpu->cache_l1));
-    format_cache_summary(totals[2], instances[2], cpu->cache_l2, sizeof(cpu->cache_l2));
-    format_cache_summary(totals[3], instances[3], cpu->cache_l3, sizeof(cpu->cache_l3));
+    if (cache_complete) {
+        format_cache_summary(
+            totals[1], instances[1], cpu->cache_l1, sizeof(cpu->cache_l1));
+        format_cache_summary(
+            totals[2], instances[2], cpu->cache_l2, sizeof(cpu->cache_l2));
+        format_cache_summary(
+            totals[3], instances[3], cpu->cache_l3, sizeof(cpu->cache_l3));
+    } else {
+        lsm_copy_string(cpu->cache_l1, sizeof(cpu->cache_l1), "N/A");
+        lsm_copy_string(cpu->cache_l2, sizeof(cpu->cache_l2), "N/A");
+        lsm_copy_string(cpu->cache_l3, sizeof(cpu->cache_l3), "N/A");
+    }
     free(seen);
 }
 
@@ -244,13 +260,21 @@ static void read_cpu_static(LsmMonitor *monitor)
     FILE *file = fopen("/proc/cpuinfo", "r");
     char line[512];
     bool model_found = false;
-    bool physical_pairs[256][256] = {{false}};
-    int physical_id = 0, core_id = 0;
-    unsigned physical_count = 0;
+    LsmPhysicalCoreKey *physical_pairs = NULL;
+    size_t physical_pair_count = 0U;
+    size_t physical_pair_capacity = 0U;
+    bool physical_pairs_complete = true;
+    int physical_id = -1;
+    int core_id = -1;
     bool cpuinfo_complete = file != NULL;
 
     if (file) {
         while (fgets(line, sizeof(line), file)) {
+            if (line[0] == '\n' || line[0] == '\r') {
+                physical_id = -1;
+                core_id = -1;
+                continue;
+            }
             char *colon = strchr(line, ':');
             if (!colon) continue;
             *colon = '\0';
@@ -271,10 +295,32 @@ static void read_cpu_static(LsmMonitor *monitor)
                                          &parsed))
                     continue;
                 core_id = (int)parsed;
-                if (physical_id >= 0 && physical_id < 256 && core_id >= 0 && core_id < 256 &&
-                    !physical_pairs[physical_id][core_id]) {
-                    physical_pairs[physical_id][core_id] = true;
-                    physical_count++;
+                if (physical_id >= 0 && core_id >= 0 &&
+                    physical_pairs_complete) {
+                    bool known = false;
+                    for (size_t index = 0U;
+                         index < physical_pair_count; index++) {
+                        if (physical_pairs[index].package == physical_id &&
+                            physical_pairs[index].core == core_id) {
+                            known = true;
+                            break;
+                        }
+                    }
+                    if (!known) {
+                        if (!lsm_array_reserve(
+                                (void **)&physical_pairs,
+                                &physical_pair_capacity,
+                                sizeof(*physical_pairs),
+                                physical_pair_count + 1U, 32U)) {
+                            physical_pairs_complete = false;
+                        } else {
+                            physical_pairs[physical_pair_count++] =
+                                (LsmPhysicalCoreKey){
+                                    .package = physical_id,
+                                    .core = core_id
+                                };
+                        }
+                    }
                 }
             } else if (strcmp(line, "flags") == 0 ||
                        strcmp(line, "Features") == 0) {
@@ -287,9 +333,15 @@ static void read_cpu_static(LsmMonitor *monitor)
         if (ferror(file)) cpuinfo_complete = false;
         if (fclose(file) != 0) cpuinfo_complete = false;
     }
-    if (!model_found) snprintf(monitor->cpu.model, sizeof(monitor->cpu.model), "Unknown processor");
+    if (!model_found)
+        snprintf(
+            monitor->cpu.model, sizeof(monitor->cpu.model),
+            "Unknown processor");
     monitor->cpu.physical_cores =
-        cpuinfo_complete && physical_count ? physical_count : 0U;
+        cpuinfo_complete && physical_pairs_complete &&
+        physical_pair_count > 0U && physical_pair_count <= UINT_MAX
+            ? (unsigned)physical_pair_count : 0U;
+    free(physical_pairs);
 
     read_cpu_cache_totals(&monitor->cpu);
 }
