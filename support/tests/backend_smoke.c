@@ -51,7 +51,7 @@ bool __wrap_lsm_sources_read_network_counters_checked(
             sources, records, capacity, out_count);
     if (!out_count || !records || capacity == 0U) return false;
     *out_count = 0U;
-    if (!network_sample_available) return true;
+    if (!network_sample_available) return false;
     records[0] = (LsmNetworkCounterRecord){0};
     (void)snprintf(records[0].name, sizeof(records[0].name), "fixture0");
     records[0].rx_bytes = network_sample_bytes;
@@ -71,6 +71,11 @@ static bool collector_recovery_valid(void)
     }
     monitor->backend_state = state;
     monitor->cpu.base_frequency_ghz = 3.0;
+    /* Keep this fixture independent of the CI host's actual cpufreq policies.
+     * The production rediscovery path is rate-limited, so a just-checked
+     * timestamp intentionally leaves an absent source unavailable here. */
+    state->last_cpu_frequency_source_refresh_monotonic =
+        lsm_monotonic_seconds();
     lsm_cpu_memory_update(monitor, 1.0);
     const bool frequency_unavailable = monitor->cpu.frequency_ghz == 0.0 &&
         monitor->cpu.max_frequency_ghz == 0.0;
