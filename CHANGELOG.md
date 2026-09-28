@@ -10,6 +10,10 @@
 - Retry failed Linux topology discovery promptly instead of waiting for the normal topology interval, while preserving the last complete disk, network, GPU, battery and NPU topology.
 - Reject malformed trailing rtnetlink attributes and partial preference, PCI override, OS-release and AMD DPM-clock reads instead of accepting believable prefixes.
 - Bootstrap Git and its subcommands without root privileges on BigBedroom self-hosted runners when the runner service PATH lacks Git, preserving recursive Common checkout and self-hosted-runner priority.
+- Make CPU thermal sysfs discovery transactional across directory-read/close failure and keep failed Linux topology refreshes immediately retryable instead of aging them into the normal cadence.
+- Reject monitor-level Bluetooth controller/device overflow and Windows GPU-engine overflow instead of publishing bounded prefixes, and reject malformed Windows processor-topology streams before committing static details.
+- Preserve CPU-unavailable gaps in the native Windows history renderer and make Overview honour the explicit CPU availability contract.
+- Restore strict C17 compilation validation for the 1.0.146 changes, including the required standard declarations for dynamically allocated file content.
 
 ## 1.0.145 - 2026-09-28
 

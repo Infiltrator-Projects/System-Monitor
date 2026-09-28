@@ -1498,8 +1498,19 @@ static LsmCpuThermalSample hwmon_cpu_thermal(
     if (!directory) return best;
 
     int best_score = -1;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while ((entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.') continue;
         char path[LSM_PATH_LEN];
         char chip[128] = "";
@@ -1546,7 +1557,16 @@ static LsmCpuThermalSample hwmon_cpu_thermal(
             }
         }
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return (LsmCpuThermalSample){
+            .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
+        };
+    }
     return best;
 }
 
@@ -1602,8 +1622,19 @@ static LsmCpuThermalSample thermal_cpu_thermal(
     DIR *directory = opendir(root);
     if (!directory) return best;
 
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while ((entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "thermal_zone")) continue;
         char path[LSM_PATH_LEN];
         char type[128] = "";
@@ -1627,7 +1658,16 @@ static LsmCpuThermalSample thermal_cpu_thermal(
             best.warning_c > best.critical_c)
             best.warning_c = NAN;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return (LsmCpuThermalSample){
+            .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
+        };
+    }
     return best;
 }
 

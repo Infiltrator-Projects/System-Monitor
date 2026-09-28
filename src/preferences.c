@@ -33,6 +33,7 @@
 #include <infiltratr/format.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static gboolean parse_boolean(const char *value, gboolean fallback)

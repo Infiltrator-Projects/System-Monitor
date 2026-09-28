@@ -249,11 +249,19 @@ static void populate_cpu_topology(LsmCpuInfo *cpu)
 
     BYTE *cursor = (BYTE *)(void *)buffer;
     BYTE *const end = cursor + length;
-    while (cursor + sizeof(DWORD) * 2U <= end) {
+    bool topology_complete = true;
+    while (cursor < end) {
+        if ((size_t)(end - cursor) < sizeof(DWORD) * 2U) {
+            topology_complete = false;
+            break;
+        }
         SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *entry =
             (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)(void *)cursor;
-        if (entry->Size == 0U || cursor + entry->Size > end)
+        if (entry->Size < sizeof(DWORD) * 2U ||
+            (size_t)(end - cursor) < (size_t)entry->Size) {
+            topology_complete = false;
             break;
+        }
 
         switch (entry->Relationship) {
             case RelationProcessorCore:
@@ -282,7 +290,11 @@ static void populate_cpu_topology(LsmCpuInfo *cpu)
         }
         cursor += entry->Size;
     }
+    if (cursor != end)
+        topology_complete = false;
     free(buffer);
+    if (!topology_complete)
+        return;
 
     if (physical_cores > 0U)
         cpu->physical_cores = physical_cores;
@@ -1793,6 +1805,7 @@ static void update_gpu_engine_metrics(
         LSM_WINDOWS_GPU_ENGINE_LIMIT];
     memset(engines, 0, sizeof(engines));
     size_t engine_count = 0U;
+    bool engine_inventory_complete = true;
 
     for (DWORD item = 0U; item < item_count; item++) {
         const PDH_FMT_COUNTERVALUE *formatted =
@@ -1834,8 +1847,10 @@ static void update_gpu_engine_metrics(
                 break;
         }
         if (engine == engine_count) {
-            if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT)
-                continue;
+            if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT) {
+                engine_inventory_complete = false;
+                break;
+            }
             engines[engine].used = true;
             engines[engine].gpu_index = (size_t)matched_gpu;
             engines[engine].physical_index = physical_index;
@@ -1848,6 +1863,11 @@ static void update_gpu_engine_metrics(
     }
 
     free(items);
+    if (!engine_inventory_complete) {
+        for (size_t index = 0U; index < monitor->gpu_count; index++)
+            reset_gpu_engine_metrics(&monitor->gpus[index]);
+        return;
+    }
 
     for (size_t engine = 0U; engine < engine_count; engine++) {
         if (!engines[engine].used ||

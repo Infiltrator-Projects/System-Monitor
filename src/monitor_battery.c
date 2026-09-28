@@ -287,20 +287,22 @@ static bool merge_bluez_batteries(LsmMonitor *monitor)
     return true;
 }
 
-void lsm_bluetooth_enumerate(LsmMonitor *monitor)
+bool lsm_bluetooth_enumerate(LsmMonitor *monitor)
 {
-    if (!monitor) return;
+    if (!monitor) return false;
+
     LsmBluetoothAdapterRecord records[LSM_BLUETOOTH_ADAPTER_MAX] = {0};
     const size_t count = lsm_bluetooth_adapter_snapshot(
         records, LSM_BLUETOOTH_ADAPTER_MAX);
+    if (count > LSM_MAX_BLUETOOTH) {
+        errno = EOVERFLOW;
+        return false;
+    }
 
-    monitor->bluetooth_count = count < LSM_MAX_BLUETOOTH
-        ? count : LSM_MAX_BLUETOOTH;
-    for (size_t index = 0U; index < monitor->bluetooth_count; index++) {
+    LsmBluetoothInfo discovered_adapters[LSM_MAX_BLUETOOTH] = {0};
+    for (size_t index = 0U; index < count; index++) {
         const LsmBluetoothAdapterRecord *source = &records[index];
-        LsmBluetoothInfo *destination = &monitor->bluetooth[index];
-        memset(destination, 0, sizeof(*destination));
-
+        LsmBluetoothInfo *destination = &discovered_adapters[index];
         const char *name = lsm_path_basename(source->object_path);
         lsm_copy_string(destination->name, sizeof(destination->name),
                         name[0] ? name : "Bluetooth");
@@ -322,25 +324,22 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor)
         destination->pairable = source->pairable;
         destination->discovering = source->discovering;
     }
-    if (monitor->bluetooth_count < LSM_MAX_BLUETOOTH) {
-        memset(&monitor->bluetooth[monitor->bluetooth_count], 0,
-               (LSM_MAX_BLUETOOTH - monitor->bluetooth_count) *
-               sizeof(monitor->bluetooth[0]));
-    }
 
     LsmBluetoothDeviceRecord devices[LSM_BLUETOOTH_DEVICE_MAX] = {0};
     const size_t device_count = lsm_bluetooth_device_snapshot(
         devices, LSM_BLUETOOTH_DEVICE_MAX);
-    monitor->bluetooth_device_count = 0U;
-    for (size_t index = 0U;
-         index < device_count &&
-         monitor->bluetooth_device_count < LSM_MAX_BLUETOOTH_DEVICES;
-         index++) {
+    LsmBluetoothDeviceInfo
+        discovered_devices[LSM_MAX_BLUETOOTH_DEVICES] = {0};
+    size_t connected_count = 0U;
+    for (size_t index = 0U; index < device_count; index++) {
         const LsmBluetoothDeviceRecord *source = &devices[index];
         if (!source->connected || !source->address[0]) continue;
+        if (connected_count >= LSM_MAX_BLUETOOTH_DEVICES) {
+            errno = EOVERFLOW;
+            return false;
+        }
         LsmBluetoothDeviceInfo *destination =
-            &monitor->bluetooth_devices[monitor->bluetooth_device_count++];
-        memset(destination, 0, sizeof(*destination));
+            &discovered_devices[connected_count++];
         lsm_copy_string(destination->controller,
                         sizeof(destination->controller), source->controller);
         lsm_copy_string(destination->address,
@@ -361,12 +360,19 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor)
         destination->trusted = source->trusted;
         destination->services_resolved = source->services_resolved;
     }
-    if (monitor->bluetooth_device_count < LSM_MAX_BLUETOOTH_DEVICES) {
-        memset(
-            &monitor->bluetooth_devices[monitor->bluetooth_device_count], 0,
-            (LSM_MAX_BLUETOOTH_DEVICES - monitor->bluetooth_device_count) *
-            sizeof(monitor->bluetooth_devices[0]));
-    }
+
+    memset(monitor->bluetooth, 0, sizeof(monitor->bluetooth));
+    if (count > 0U)
+        memcpy(monitor->bluetooth, discovered_adapters,
+               count * sizeof(discovered_adapters[0]));
+    monitor->bluetooth_count = count;
+
+    memset(monitor->bluetooth_devices, 0, sizeof(monitor->bluetooth_devices));
+    if (connected_count > 0U)
+        memcpy(monitor->bluetooth_devices, discovered_devices,
+               connected_count * sizeof(discovered_devices[0]));
+    monitor->bluetooth_device_count = connected_count;
+    return true;
 }
 
 static bool track_hidpp_batteries(const LsmMonitor *monitor)

@@ -34,6 +34,7 @@
 #include <dwmapi.h>
 
 #include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -707,19 +708,25 @@ static void draw_history_graph(LsmWindowsUiState *state, HDC dc, RECT rect,
     const int width = inner.right - inner.left;
     const int height = inner.bottom - inner.top;
 
+    bool drawing = false;
     for (size_t index = 0U; index < count; index++) {
         const double value =
             history_value(history, count, position, index);
+        if (!isfinite(value)) {
+            drawing = false;
+            continue;
+        }
         const double bounded =
             value < 0.0 ? 0.0 : (value > 100.0 ? 100.0 : value);
         const int x = inner.left +
             (int)((index * (size_t)width) / (count - 1U));
         const int y = inner.bottom -
             (int)((bounded / 100.0) * (double)height);
-        if (index == 0U)
+        if (!drawing)
             MoveToEx(dc, x, y, NULL);
         else
             LineTo(dc, x, y);
+        drawing = true;
     }
 
     SelectObject(dc, previous);

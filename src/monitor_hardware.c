@@ -843,8 +843,9 @@ static bool refresh_hardware_topology(LsmMonitor *monitor)
            sizeof(old_bluetooth_devices));
 
     const bool gpu_complete = enumerate_gpus(monitor);
-    lsm_bluetooth_enumerate(monitor);
-    lsm_monitor_bluetooth_reconcile_states(monitor);
+    const bool bluetooth_complete = lsm_bluetooth_enumerate(monitor);
+    if (bluetooth_complete)
+        lsm_monitor_bluetooth_reconcile_states(monitor);
     const bool battery_complete = lsm_battery_enumerate(monitor);
     const bool npu_complete = enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
@@ -867,7 +868,8 @@ static bool refresh_hardware_topology(LsmMonitor *monitor)
         memset(&monitor->npus[monitor->npu_count], 0,
                (LSM_MAX_NPUS - monitor->npu_count) * sizeof(monitor->npus[0]));
     if (changed) monitor->topology_generation++;
-    return gpu_complete && battery_complete && npu_complete;
+    return gpu_complete && bluetooth_complete &&
+        battery_complete && npu_complete;
 }
 
 /* Public hardware lifecycle. */

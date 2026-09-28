@@ -143,8 +143,10 @@ static void copy_public_snapshot(LsmMonitor *destination,
 }
 
 static bool sample_once(LsmLinuxMonitorBackendState *state,
-                        LsmMonitor *sample, bool force_topology)
+                        LsmMonitor *sample, bool force_topology,
+                        bool *topology_retry)
 {
+    if (topology_retry) *topology_retry = false;
     if (!state || !sample) return false;
     const double now = lsm_monotonic_seconds();
     if (!isfinite(now) || now <= state->last_update_monotonic)
@@ -180,6 +182,8 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
 
     if (refresh_topology && storage_complete && hardware_complete)
         state->last_topology_scan_monotonic = now;
+    else if (refresh_topology && topology_retry)
+        *topology_retry = true;
     if (refresh_batteries)
         state->last_battery_update_monotonic = now;
     return true;
@@ -240,11 +244,15 @@ static void *sampler_thread_main(void *user_data)
         sampler->backend->topology_refresh_requested = false;
         (void)pthread_mutex_unlock(&sampler->mutex);
 
-        const bool sampled =
-            sample_once(sampler->backend, &sampler->sample, force_topology);
+        bool topology_retry = false;
+        const bool sampled = sample_once(
+            sampler->backend, &sampler->sample, force_topology,
+            &topology_retry);
 
         (void)pthread_mutex_lock(&sampler->mutex);
         sampler->sample_in_progress = false;
+        if (topology_retry)
+            sampler->backend->topology_refresh_requested = true;
         if (sampled && !sampler->stop_requested) {
             copy_public_snapshot(
                 &sampler->completed, &sampler->sample, NULL, false);
