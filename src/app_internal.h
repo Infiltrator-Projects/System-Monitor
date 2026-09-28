@@ -395,6 +395,7 @@ typedef struct {
     LsmGraph **cpu_core_graphs;
     GtkWidget **cpu_core_labels;
     uint64_t recorded_sample_generation;
+    uint64_t displayed_sample_generation;
 } LsmPerformanceState;
 
 /** Overview widgets backed by toolkit-neutral completed-snapshot history. */

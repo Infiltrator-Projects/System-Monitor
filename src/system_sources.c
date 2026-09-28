@@ -52,6 +52,15 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
+#define LSM_CPU_THERMAL_SENSOR_MAX 128U
+
+typedef struct {
+    char input_path[LSM_PATH_LEN];
+    int score;
+    double warning_c;
+    double critical_c;
+} LsmCpuThermalSensorPath;
+
 struct LsmSystemSources {
     char sysfs_root[LSM_PATH_LEN];
     char procfs_root[LSM_PATH_LEN];
@@ -60,6 +69,10 @@ struct LsmSystemSources {
     int network_request_fd;
     int network_event_fd;
     uint32_t network_sequence;
+    LsmCpuThermalSensorPath
+        cpu_thermal_sensors[LSM_CPU_THERMAL_SENSOR_MAX];
+    size_t cpu_thermal_sensor_count;
+    bool cpu_thermal_discovered;
 };
 
 /* Fixture-aware path helpers keep production and synthetic backends identical. */
@@ -1342,10 +1355,15 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
             case RTM_DELADDR:
                 changed = true;
                 break;
+            case NLMSG_ERROR:
+            case NLMSG_OVERRUN:
+                return true;
             default:
                 break;
             }
         }
+        if (remaining != 0)
+            return true;
     }
     return changed;
 }
@@ -1484,20 +1502,89 @@ static double hwmon_temperature_attribute(
     return valid_temperature_limit(celsius) ? celsius : NAN;
 }
 
-static LsmCpuThermalSample hwmon_cpu_thermal(
-    const LsmSystemSources *sources)
+static void cpu_thermal_cache_clear(LsmSystemSources *sources)
 {
+    if (!sources) return;
+    memset(
+        sources->cpu_thermal_sensors, 0,
+        sizeof(sources->cpu_thermal_sensors));
+    sources->cpu_thermal_sensor_count = 0U;
+    sources->cpu_thermal_discovered = false;
+}
+
+static bool cpu_thermal_cache_append(
+    LsmSystemSources *sources, const char *input_path, int score,
+    double warning_c, double critical_c)
+{
+    if (!sources || !input_path || !input_path[0]) return false;
+    if (sources->cpu_thermal_sensor_count >= LSM_CPU_THERMAL_SENSOR_MAX) {
+        errno = EOVERFLOW;
+        return false;
+    }
+
+    LsmCpuThermalSensorPath *sensor =
+        &sources->cpu_thermal_sensors[sources->cpu_thermal_sensor_count++];
+    lsm_copy_string(
+        sensor->input_path, sizeof(sensor->input_path), input_path);
+    sensor->score = score;
+    sensor->warning_c = warning_c;
+    sensor->critical_c = critical_c;
+    return true;
+}
+
+static bool cpu_thermal_cache_sample(
+    LsmSystemSources *sources, LsmCpuThermalSample *sample)
+{
+    if (!sources || !sample || !sources->cpu_thermal_discovered ||
+        sources->cpu_thermal_sensor_count == 0U)
+        return false;
+
     LsmCpuThermalSample best = {
         .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
     };
+    int best_score = INT_MIN;
+    bool any_read = false;
+    for (size_t index = 0U;
+         index < sources->cpu_thermal_sensor_count; index++) {
+        const LsmCpuThermalSensorPath *sensor =
+            &sources->cpu_thermal_sensors[index];
+        double milli = NAN;
+        if (!lsm_read_double_file(sensor->input_path, &milli))
+            continue;
+        const double celsius = milli / 1000.0;
+        if (!valid_temperature(celsius)) continue;
+        any_read = true;
+        if (sensor->score < best_score ||
+            (sensor->score == best_score &&
+             isfinite(best.temperature_c) &&
+             celsius <= best.temperature_c))
+            continue;
+        best.temperature_c = celsius;
+        best.warning_c = sensor->warning_c;
+        best.critical_c = sensor->critical_c;
+        best_score = sensor->score;
+    }
+
+    if (!any_read || !isfinite(best.temperature_c)) {
+        cpu_thermal_cache_clear(sources);
+        return false;
+    }
+    *sample = best;
+    return true;
+}
+
+static bool discover_hwmon_cpu_thermal(LsmSystemSources *sources)
+{
+    if (!sources) return false;
+    cpu_thermal_cache_clear(sources);
+
     char root[LSM_PATH_LEN];
     if (!lsm_join_path(
             root, sizeof(root), sources->sysfs_root, "/class/hwmon"))
-        return best;
+        return false;
     DIR *directory = opendir(root);
-    if (!directory) return best;
+    if (!directory) return false;
 
-    int best_score = -1;
     bool complete = true;
     int enumeration_error = 0;
     struct dirent *entry = NULL;
@@ -1512,6 +1599,7 @@ static LsmCpuThermalSample hwmon_cpu_thermal(
             break;
         }
         if (entry->d_name[0] == '.') continue;
+
         char path[LSM_PATH_LEN];
         char chip[128] = "";
         if (!child_path(path, sizeof(path), root, entry->d_name, "/name"))
@@ -1527,11 +1615,14 @@ static LsmCpuThermalSample hwmon_cpu_thermal(
                 (size_t)input_written >= sizeof(suffix) ||
                 !child_path(path, sizeof(path), root, entry->d_name, suffix))
                 continue;
-            double milli = NAN;
-            if (!lsm_read_double_file(path, &milli)) continue;
-            const double celsius = milli / 1000.0;
-            if (!valid_temperature(celsius)) continue;
 
+            double milli = NAN;
+            if (!lsm_read_double_file(path, &milli) ||
+                !valid_temperature(milli / 1000.0))
+                continue;
+
+            char input_path[LSM_PATH_LEN];
+            lsm_copy_string(input_path, sizeof(input_path), path);
             char label[128] = "";
             const int label_written = snprintf(
                 suffix, sizeof(suffix), "/temp%u_label", index);
@@ -1539,35 +1630,38 @@ static LsmCpuThermalSample hwmon_cpu_thermal(
                 (size_t)label_written < sizeof(suffix) &&
                 child_path(path, sizeof(path), root, entry->d_name, suffix))
                 (void)lsm_read_text_file(path, label, sizeof(label));
-            const int score = temperature_label_score(label);
-            if (score > best_score ||
-                (score == best_score &&
-                 (!isfinite(best.temperature_c) ||
-                  celsius > best.temperature_c))) {
-                best.temperature_c = celsius;
-                best.warning_c = hwmon_temperature_attribute(
-                    root, entry->d_name, index, "max");
-                best.critical_c = hwmon_temperature_attribute(
-                    root, entry->d_name, index, "crit");
-                if (isfinite(best.warning_c) &&
-                    isfinite(best.critical_c) &&
-                    best.warning_c > best.critical_c)
-                    best.warning_c = NAN;
-                best_score = score;
+
+            double warning_c = hwmon_temperature_attribute(
+                root, entry->d_name, index, "max");
+            double critical_c = hwmon_temperature_attribute(
+                root, entry->d_name, index, "crit");
+            if (isfinite(warning_c) && isfinite(critical_c) &&
+                warning_c > critical_c)
+                warning_c = NAN;
+
+            if (!cpu_thermal_cache_append(
+                    sources, input_path, temperature_label_score(label),
+                    warning_c, critical_c)) {
+                complete = false;
+                enumeration_error = errno != 0 ? errno : EOVERFLOW;
+                break;
             }
         }
+        if (!complete) break;
     }
+
     if (closedir(directory) != 0 && complete) {
         complete = false;
         enumeration_error = errno != 0 ? errno : EIO;
     }
     if (!complete) {
+        cpu_thermal_cache_clear(sources);
         errno = enumeration_error != 0 ? enumeration_error : EIO;
-        return (LsmCpuThermalSample){
-            .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
-        };
+        return false;
     }
-    return best;
+    sources->cpu_thermal_discovered =
+        sources->cpu_thermal_sensor_count > 0U;
+    return sources->cpu_thermal_discovered;
 }
 
 static void thermal_zone_trip_points(
@@ -1609,18 +1703,17 @@ static void thermal_zone_trip_points(
     }
 }
 
-static LsmCpuThermalSample thermal_cpu_thermal(
-    const LsmSystemSources *sources)
+static bool discover_thermal_zone_cpu_thermal(LsmSystemSources *sources)
 {
-    LsmCpuThermalSample best = {
-        .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
-    };
+    if (!sources) return false;
+    cpu_thermal_cache_clear(sources);
+
     char root[LSM_PATH_LEN];
     if (!lsm_join_path(
             root, sizeof(root), sources->sysfs_root, "/class/thermal"))
-        return best;
+        return false;
     DIR *directory = opendir(root);
-    if (!directory) return best;
+    if (!directory) return false;
 
     bool complete = true;
     int enumeration_error = 0;
@@ -1635,7 +1728,9 @@ static LsmCpuThermalSample thermal_cpu_thermal(
             }
             break;
         }
-        if (!lsm_string_starts_with(entry->d_name, "thermal_zone")) continue;
+        if (!lsm_string_starts_with(entry->d_name, "thermal_zone"))
+            continue;
+
         char path[LSM_PATH_LEN];
         char type[128] = "";
         if (!child_path(path, sizeof(path), root, entry->d_name, "/type") ||
@@ -1644,31 +1739,39 @@ static LsmCpuThermalSample thermal_cpu_thermal(
             continue;
         if (!child_path(path, sizeof(path), root, entry->d_name, "/temp"))
             continue;
+
         double milli = NAN;
-        if (!lsm_read_double_file(path, &milli)) continue;
-        const double celsius = milli / 1000.0;
-        if (!valid_temperature(celsius) ||
-            (isfinite(best.temperature_c) && celsius <= best.temperature_c))
+        if (!lsm_read_double_file(path, &milli) ||
+            !valid_temperature(milli / 1000.0))
             continue;
 
-        best.temperature_c = celsius;
+        double warning_c = NAN;
+        double critical_c = NAN;
         thermal_zone_trip_points(
-            root, entry->d_name, &best.warning_c, &best.critical_c);
-        if (isfinite(best.warning_c) && isfinite(best.critical_c) &&
-            best.warning_c > best.critical_c)
-            best.warning_c = NAN;
+            root, entry->d_name, &warning_c, &critical_c);
+        if (isfinite(warning_c) && isfinite(critical_c) &&
+            warning_c > critical_c)
+            warning_c = NAN;
+        if (!cpu_thermal_cache_append(
+                sources, path, 0, warning_c, critical_c)) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : EOVERFLOW;
+            break;
+        }
     }
+
     if (closedir(directory) != 0 && complete) {
         complete = false;
         enumeration_error = errno != 0 ? errno : EIO;
     }
     if (!complete) {
+        cpu_thermal_cache_clear(sources);
         errno = enumeration_error != 0 ? enumeration_error : EIO;
-        return (LsmCpuThermalSample){
-            .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
-        };
+        return false;
     }
-    return best;
+    sources->cpu_thermal_discovered =
+        sources->cpu_thermal_sensor_count > 0U;
+    return sources->cpu_thermal_discovered;
 }
 
 bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
@@ -1679,17 +1782,18 @@ bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
         .temperature_c = NAN, .warning_c = NAN, .critical_c = NAN
     };
 
-    const LsmCpuThermalSample hwmon = hwmon_cpu_thermal(sources);
-    if (isfinite(hwmon.temperature_c)) {
-        *sample = hwmon;
+    if (cpu_thermal_cache_sample(sources, sample))
         return true;
-    }
 
-    const LsmCpuThermalSample thermal = thermal_cpu_thermal(sources);
-    if (isfinite(thermal.temperature_c)) {
-        *sample = thermal;
+    if (discover_hwmon_cpu_thermal(sources) &&
+        cpu_thermal_cache_sample(sources, sample))
         return true;
-    }
+
+    if (discover_thermal_zone_cpu_thermal(sources) &&
+        cpu_thermal_cache_sample(sources, sample))
+        return true;
+
+    cpu_thermal_cache_clear(sources);
     return false;
 }
 

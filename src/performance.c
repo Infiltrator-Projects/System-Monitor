@@ -816,6 +816,7 @@ void lsm_performance_destroy(LsmApp *app)
     app->performance.cpu_core_graphs = NULL;
     app->performance.cpu_core_labels = NULL;
     app->performance.recorded_sample_generation = 0U;
+    app->performance.displayed_sample_generation = 0U;
     app->performance.performance_stack = NULL;
     app->performance.side_scroller = NULL;
     app->performance.sidepane = NULL;
@@ -1066,7 +1067,9 @@ void lsm_performance_refresh(LsmApp *app)
 
     if (app->runtime.active_tab == LSM_TAB_PERFORMANCE &&
         app->performance.performance_stack &&
-        app->performance.device_pages) {
+        app->performance.device_pages &&
+        app->monitor.sample_generation !=
+            app->performance.displayed_sample_generation) {
         const char *visible = gtk_stack_get_visible_child_name(
             GTK_STACK(app->performance.performance_stack));
         for (guint index = 0U;
@@ -1083,6 +1086,8 @@ void lsm_performance_refresh(LsmApp *app)
                 lsm_performance_present_rail(app, page);
         }
         performance_synchronise_side_selection(app);
+        app->performance.displayed_sample_generation =
+            app->monitor.sample_generation;
     }
 
     if (app->shell.summary_bar &&

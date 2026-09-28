@@ -54,17 +54,15 @@ static bool parse_named_counter(const char *line, const char *name,
     return lsm_parse_u64_token(&cursor, 10U, value);
 }
 
-bool lsm_cpu_accounting_parse(const char *text,
-                              LsmCpuAccountingSample *sample)
+static bool cpu_accounting_parse_mutable(
+    char *text, LsmCpuAccountingSample *sample)
 {
     if (!text || !sample) return false;
     memset(sample, 0, sizeof(*sample));
-    char *copy = strdup(text);
-    if (!copy) return false;
 
     bool aggregate_found = false;
     char *save = NULL;
-    for (char *line = strtok_r(copy, "\n", &save); line;
+    for (char *line = strtok_r(text, "\n", &save); line;
          line = strtok_r(NULL, "\n", &save)) {
         if (lsm_string_starts_with(line, "cpu") &&
             (lsm_ascii_is_space((unsigned char)line[3]) ||
@@ -93,8 +91,18 @@ bool lsm_cpu_accounting_parse(const char *text,
             (void)parse_named_counter(line, "ctxt", &sample->context_switches);
         }
     }
-    free(copy);
     return aggregate_found;
+}
+
+bool lsm_cpu_accounting_parse(const char *text,
+                              LsmCpuAccountingSample *sample)
+{
+    if (!text || !sample) return false;
+    char *copy = strdup(text);
+    if (!copy) return false;
+    const bool okay = cpu_accounting_parse_mutable(copy, sample);
+    free(copy);
+    return okay;
 }
 
 bool lsm_cpu_accounting_read(const char *path,
@@ -106,7 +114,8 @@ bool lsm_cpu_accounting_read(const char *path,
     if (lsm_read_text_file_alloc(path, &text, &length) != INFILTRATR_IO_OK)
         return false;
     const bool valid_text = memchr(text, '\0', length) == NULL;
-    const bool okay = valid_text && lsm_cpu_accounting_parse(text, sample);
+    const bool okay =
+        valid_text && cpu_accounting_parse_mutable(text, sample);
     free(text);
     return okay;
 }

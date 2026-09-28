@@ -823,8 +823,7 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
     }
 }
 
-/** Rescan optional hardware while retaining live metric baselines by stable ID. */
-/* Rebuild into temporary arrays, carry forward matching state, then commit. */
+/* Rescan into temporary arrays, retain live baselines by stable identity, then commit. */
 static bool refresh_hardware_topology(LsmMonitor *monitor)
 {
     if (!monitor) return false;

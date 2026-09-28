@@ -449,32 +449,48 @@ static bool refresh_networks(LsmMonitor *monitor)
 
 static void update_interface_addresses(LsmMonitor *monitor)
 {
-    for (size_t i = 0; i < monitor->net_count; i++) {
-        monitor->nets[i].ipv4[0] = '\0';
-        monitor->nets[i].ipv6[0] = '\0';
-    }
+    if (!monitor) return;
+
+    /*
+     * Build a complete address snapshot before publishing it. A transient
+     * getifaddrs() failure must not erase previously valid interface addresses.
+     */
+    char ipv4[LSM_MAX_NETS][64] = {{0}};
+    char ipv6[LSM_MAX_NETS][128] = {{0}};
     struct ifaddrs *addresses = NULL;
     if (getifaddrs(&addresses) != 0) return;
+
     for (struct ifaddrs *it = addresses; it; it = it->ifa_next) {
-        if (!it->ifa_addr) continue;
-        int family = it->ifa_addr->sa_family;
-        for (size_t i = 0; i < monitor->net_count; i++) {
-            LsmNetInfo *net = &monitor->nets[i];
-            if (strcmp(net->name, it->ifa_name) != 0) continue;
+        if (!it->ifa_addr || !it->ifa_name) continue;
+        const int family = it->ifa_addr->sa_family;
+        for (size_t i = 0U; i < monitor->net_count; i++) {
+            if (strcmp(monitor->nets[i].name, it->ifa_name) != 0)
+                continue;
             void *address = NULL;
             char *destination = NULL;
-            size_t size = 0;
-            if (family == AF_INET && net->ipv4[0] == '\0') {
+            size_t size = 0U;
+            if (family == AF_INET && ipv4[i][0] == '\0') {
                 address = &((struct sockaddr_in *)it->ifa_addr)->sin_addr;
-                destination = net->ipv4; size = sizeof(net->ipv4);
-            } else if (family == AF_INET6 && net->ipv6[0] == '\0') {
+                destination = ipv4[i];
+                size = sizeof(ipv4[i]);
+            } else if (family == AF_INET6 && ipv6[i][0] == '\0') {
                 address = &((struct sockaddr_in6 *)it->ifa_addr)->sin6_addr;
-                destination = net->ipv6; size = sizeof(net->ipv6);
+                destination = ipv6[i];
+                size = sizeof(ipv6[i]);
             }
-            if (address) inet_ntop(family, address, destination, (socklen_t)size);
+            if (address)
+                (void)inet_ntop(
+                    family, address, destination, (socklen_t)size);
         }
     }
     freeifaddrs(addresses);
+
+    for (size_t i = 0U; i < monitor->net_count; i++) {
+        lsm_copy_string(
+            monitor->nets[i].ipv4, sizeof(monitor->nets[i].ipv4), ipv4[i]);
+        lsm_copy_string(
+            monitor->nets[i].ipv6, sizeof(monitor->nets[i].ipv6), ipv6[i]);
+    }
 }
 
 static void update_network_link_details(LsmNetInfo *net)
@@ -509,44 +525,72 @@ static void update_networks(LsmMonitor *monitor, double elapsed,
     size_t counter_count = 0U;
     const bool snapshot_ok = lsm_sources_read_network_counters_checked(
         monitor_system_sources(monitor), counters, LSM_MAX_NETS, &counter_count);
-    for (size_t i=0;i<monitor->net_count;i++) {
-        LsmNetInfo *net=&monitor->nets[i];
-        uint64_t rx=net->rx_bytes_total, tx=net->tx_bytes_total;
-        bool available=false;
-        if(snapshot_ok) for(size_t j=0;j<counter_count;j++){
-            if(strcmp(net->name,counters[j].name)!=0 ||
-               !network_instance_matches(net->instance_identity,net->name,
-                                         counters[j].instance_identity,counters[j].name))
-                continue;
-            rx=counters[j].rx_bytes; tx=counters[j].tx_bytes; available=true; break;
+    for (size_t i = 0U; i < monitor->net_count; i++) {
+        LsmNetInfo *net = &monitor->nets[i];
+        uint64_t rx = net->rx_bytes_total;
+        uint64_t tx = net->tx_bytes_total;
+        bool available = false;
+        if (snapshot_ok) {
+            for (size_t j = 0U; j < counter_count; j++) {
+                if (strcmp(net->name, counters[j].name) != 0 ||
+                    !network_instance_matches(
+                        net->instance_identity, net->name,
+                        counters[j].instance_identity, counters[j].name))
+                    continue;
+                rx = counters[j].rx_bytes;
+                tx = counters[j].tx_bytes;
+                available = true;
+                break;
+            }
         }
-        LsmLinuxNetworkState *state=find_network_state(monitor,net);
-        net->rx_bytes_per_sec=NAN; net->tx_bytes_per_sec=NAN;
-        if(available && state && state->initialized && elapsed > 0.0){
-            double rr=0.0,tr=0.0;
-            if(lsm_u64_counter_rate(rx,state->previous_rx,1.0L,elapsed,&rr))
-                net->rx_bytes_per_sec=rr;
-            if(lsm_u64_counter_rate(tx,state->previous_tx,1.0L,elapsed,&tr))
-                net->tx_bytes_per_sec=tr;
+
+        LsmLinuxNetworkState *state = find_network_state(monitor, net);
+        net->rx_bytes_per_sec = NAN;
+        net->tx_bytes_per_sec = NAN;
+        if (available && state && state->initialized && elapsed > 0.0) {
+            double receive_rate = 0.0;
+            double transmit_rate = 0.0;
+            if (lsm_u64_counter_rate(
+                    rx, state->previous_rx, 1.0L, elapsed, &receive_rate))
+                net->rx_bytes_per_sec = receive_rate;
+            if (lsm_u64_counter_rate(
+                    tx, state->previous_tx, 1.0L, elapsed, &transmit_rate))
+                net->tx_bytes_per_sec = transmit_rate;
         }
-        if(available){net->rx_bytes_total=rx;net->tx_bytes_total=tx;}
-        if(state){
-            if(available){state->previous_rx=rx;state->previous_tx=tx;}
-            state->initialized=available;
+        if (available) {
+            net->rx_bytes_total = rx;
+            net->tx_bytes_total = tx;
         }
-        if(refresh_link_metadata || !net->connection_state[0]) update_network_link_details(net);
-        LsmLinuxMonitorBackendState *backend=monitor_backend_state(monitor);
-        if(backend && backend->wifi_metadata) lsm_wifi_metadata_refresh(backend->wifi_metadata,net);
-        if(available && isfinite(net->rx_bytes_per_sec) && isfinite(net->tx_bytes_per_sec) &&
-           net->link_speed_mbps>0.0){
-            long double busiest=fmaxl((long double)net->rx_bytes_per_sec,
-                                      (long double)net->tx_bytes_per_sec);
-            long double capacity=(long double)net->link_speed_mbps*1000000.0L/8.0L;
-            net->utilisation_percent=(double)fminl(100.0L,fmaxl(0.0L,busiest*100.0L/capacity));
-            net->utilisation_available=true;
+        if (state) {
+            if (available) {
+                state->previous_rx = rx;
+                state->previous_tx = tx;
+            }
+            state->initialized = available;
+        }
+
+        if (refresh_link_metadata || !net->connection_state[0])
+            update_network_link_details(net);
+        LsmLinuxMonitorBackendState *backend =
+            monitor_backend_state(monitor);
+        if (backend && backend->wifi_metadata)
+            lsm_wifi_metadata_refresh(backend->wifi_metadata, net);
+
+        if (available &&
+            isfinite(net->rx_bytes_per_sec) &&
+            isfinite(net->tx_bytes_per_sec) &&
+            net->link_speed_mbps > 0.0) {
+            const long double busiest =
+                fmaxl((long double)net->rx_bytes_per_sec,
+                      (long double)net->tx_bytes_per_sec);
+            const long double capacity =
+                (long double)net->link_speed_mbps * 1000000.0L / 8.0L;
+            net->utilisation_percent = (double)fminl(
+                100.0L, fmaxl(0.0L, busiest * 100.0L / capacity));
+            net->utilisation_available = true;
         } else {
-            net->utilisation_percent=NAN;
-            net->utilisation_available=false;
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
         }
     }
 }
