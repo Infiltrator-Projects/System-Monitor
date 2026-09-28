@@ -330,7 +330,13 @@ static GPtrArray *collect_groups(LsmApp *app)
         ProcessGroup *group = g_hash_table_lookup(group_index, key);
         if (!group) {
             group = calloc(1U, sizeof(*group));
-            if (!group) continue;
+            if (!group) {
+                g_free(folded_search);
+                g_hash_table_destroy(group_index);
+                g_hash_table_destroy(pid_index);
+                g_ptr_array_free(groups, TRUE);
+                return NULL;
+            }
             group->category = category;
             lsm_copy_string(group->key, sizeof(group->key), key);
             lsm_copy_string(group->name, sizeof(group->name), name);
@@ -341,8 +347,12 @@ static GPtrArray *collect_groups(LsmApp *app)
             }
             g_ptr_array_add(groups, group);
             g_hash_table_insert(group_index, group->key, group);
-        } else {
-            (void)group_append(group, index, process);
+        } else if (!group_append(group, index, process)) {
+            g_free(folded_search);
+            g_hash_table_destroy(group_index);
+            g_hash_table_destroy(pid_index);
+            g_ptr_array_free(groups, TRUE);
+            return NULL;
         }
     }
 

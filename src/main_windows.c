@@ -2579,7 +2579,14 @@ static void stop_process_worker(LsmWindowsUiState *state)
 
     if (state->process_thread) {
         (void)CancelSynchronousIo(state->process_thread);
-        (void)WaitForSingleObject(state->process_thread, INFINITE);
+        const DWORD stopped = WaitForSingleObject(state->process_thread, 500U);
+        if (stopped != WAIT_OBJECT_0) {
+            /* Shutdown remains bounded. The worker references only this UI
+             * state and its private process backend; WinMain returns directly
+             * after teardown, so process termination safely reclaims a native
+             * query that ignored cancellation without freeing state beneath it. */
+            return;
+        }
         CloseHandle(state->process_thread);
         state->process_thread = NULL;
     }

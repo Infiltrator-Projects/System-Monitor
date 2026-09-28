@@ -554,9 +554,16 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
     if (!state) return;
     (void)read_cpu_counters(monitor, false, elapsed_seconds);
     update_load_average(&monitor->cpu);
-    monitor->cpu.frequency_ghz = read_cpu_frequency_ghz(monitor, false);
-    if (monitor->cpu.max_frequency_ghz <= 0.0)
-        monitor->cpu.max_frequency_ghz = read_cpu_frequency_ghz(monitor, true);
+    const double current_frequency =
+        read_cpu_frequency_ghz(monitor, false);
+    if (current_frequency > 0.0)
+        monitor->cpu.frequency_ghz = current_frequency;
+    if (monitor->cpu.max_frequency_ghz <= 0.0) {
+        const double maximum_frequency =
+            read_cpu_frequency_ghz(monitor, true);
+        if (maximum_frequency > 0.0)
+            monitor->cpu.max_frequency_ghz = maximum_frequency;
+    }
     read_cpu_thermal(monitor);
     const double now = lsm_monotonic_seconds();
     const bool refresh_memory_details = lsm_refresh_interval_due(

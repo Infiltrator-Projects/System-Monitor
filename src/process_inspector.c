@@ -192,6 +192,12 @@ static GtkWidget *metric_block(const char *caption, GtkWidget **value_out)
     GtkWidget *name = gtk_label_new(caption);
     gtk_widget_set_halign(value, GTK_ALIGN_START);
     gtk_widget_set_halign(name, GTK_ALIGN_START);
+    gtk_label_set_width_chars(GTK_LABEL(value), 12);
+    PangoAttrList *attributes = pango_attr_list_new();
+    PangoAttribute *features = pango_attr_font_features_new("tnum=1");
+    if (features) pango_attr_list_insert(attributes, features);
+    gtk_label_set_attributes(GTK_LABEL(value), attributes);
+    pango_attr_list_unref(attributes);
     char *markup = g_markup_printf_escaped("<span size=\"xx-large\"><b>%s</b></span>",
                                            "0%");
     gtk_label_set_markup(GTK_LABEL(value), markup);
@@ -505,7 +511,9 @@ static gboolean inspector_update(gpointer user_data)
         lsm_ui_set_label_text(inspector->identity_label,
                               "Process %llu has exited",
                               (unsigned long long)inspector->pid);
-        return G_SOURCE_CONTINUE;
+        mark_inventory_unavailable(inspector);
+        inspector->refresh_timer = 0U;
+        return G_SOURCE_REMOVE;
     }
 
     LsmProcessInfo process = *snapshot;

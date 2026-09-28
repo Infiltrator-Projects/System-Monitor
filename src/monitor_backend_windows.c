@@ -430,7 +430,9 @@ static bool update_memory_snapshot(LsmMonitor *monitor)
         monitor->cpu.thread_count =
             size_to_unsigned((SIZE_T)performance.ThreadCount);
         monitor->cpu.file_handle_count = (uint64_t)performance.HandleCount;
+        monitor->cpu.file_handle_count_available = true;
     } else {
+        monitor->cpu.file_handle_count_available = false;
         MEMORYSTATUSEX status;
         memset(&status, 0, sizeof(status));
         status.dwLength = (DWORD)sizeof(status);
@@ -677,11 +679,19 @@ static void enumerate_physical_disks(
          number++) {
         char path[64];
         (void)snprintf(path, sizeof(path), "\\\\.\\PhysicalDrive%u", number);
+        SetLastError(ERROR_SUCCESS);
         HANDLE disk = CreateFileA(
             path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL, OPEN_EXISTING, 0U, NULL);
-        if (disk == INVALID_HANDLE_VALUE)
-            continue;
+        if (disk == INVALID_HANDLE_VALUE) {
+            const DWORD failure = GetLastError();
+            if (failure == ERROR_FILE_NOT_FOUND ||
+                failure == ERROR_PATH_NOT_FOUND ||
+                failure == ERROR_INVALID_NAME)
+                continue;
+            free(discovered);
+            return;
+        }
 
         LsmDiskInfo *info = &discovered[count];
         (void)snprintf(info->name, sizeof(info->name), "Disk %u", number);
@@ -1039,8 +1049,10 @@ static void enumerate_networks(
         MIB_IF_ROW2 row;
         memset(&row, 0, sizeof(row));
         row.InterfaceLuid = adapter->Luid;
-        if (GetIfEntry2(&row) != NO_ERROR)
-            continue;
+        if (GetIfEntry2(&row) != NO_ERROR) {
+            free(addresses);
+            return;
+        }
 
         LsmNetInfo *net = &discovered[count];
         wide_to_utf8(
@@ -1089,8 +1101,8 @@ static void enumerate_networks(
 
         if (link_bits > 0U) {
             const long double current_bits =
-                ((long double)net->rx_bytes_per_sec +
-                 (long double)net->tx_bytes_per_sec) * 8.0L;
+                fmaxl((long double)net->rx_bytes_per_sec,
+                      (long double)net->tx_bytes_per_sec) * 8.0L;
             long double utilisation =
                 (current_bits * 100.0L) / (long double)link_bits;
             if (utilisation > 100.0L) utilisation = 100.0L;
@@ -1775,8 +1787,10 @@ static void enumerate_gpus(
 {
     if (!monitor || !state) return;
 
-    memset(state->gpu_luids, 0, sizeof(state->gpu_luids));
-    memset(state->gpu_luid_valid, 0, sizeof(state->gpu_luid_valid));
+    LUID discovered_luids[LSM_MAX_GPUS];
+    bool discovered_luid_valid[LSM_MAX_GPUS];
+    memset(discovered_luids, 0, sizeof(discovered_luids));
+    memset(discovered_luid_valid, 0, sizeof(discovered_luid_valid));
 
     LsmGpuInfo discovered[LSM_MAX_GPUS];
     memset(discovered, 0, sizeof(discovered));
@@ -1787,8 +1801,13 @@ static void enumerate_gpus(
         DISPLAY_DEVICEA device;
         memset(&device, 0, sizeof(device));
         device.cb = sizeof(device);
-        if (!EnumDisplayDevicesA(NULL, device_index, &device, 0U))
+        SetLastError(ERROR_SUCCESS);
+        if (!EnumDisplayDevicesA(NULL, device_index, &device, 0U)) {
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_SUCCESS)
+                return;
             break;
+        }
         if ((device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) != 0U)
             continue;
         if (!device.DeviceString[0])
@@ -1817,8 +1836,8 @@ static void enumerate_gpus(
 
         LUID luid;
         if (display_luid_for_name(device.DeviceName, &luid)) {
-            state->gpu_luids[gpu_index] = luid;
-            state->gpu_luid_valid[gpu_index] = true;
+            discovered_luids[gpu_index] = luid;
+            discovered_luid_valid[gpu_index] = true;
         }
     }
 
@@ -1826,6 +1845,9 @@ static void enumerate_gpus(
             monitor->gpus, monitor->gpu_count, discovered, count))
         monitor->topology_generation++;
 
+    memcpy(state->gpu_luids, discovered_luids, sizeof(state->gpu_luids));
+    memcpy(state->gpu_luid_valid, discovered_luid_valid,
+           sizeof(state->gpu_luid_valid));
     memset(monitor->gpus, 0, sizeof(monitor->gpus));
     if (count > 0U)
         memcpy(monitor->gpus, discovered, count * sizeof(discovered[0]));

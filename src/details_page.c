@@ -563,9 +563,9 @@ void lsm_details_show_columns(LsmApp *app)
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
 
     GtkWidget *description = gtk_label_new(
-        "Choose the fields displayed in the process table. Executable paths, "
-        "handle counts and graphics counters are collected only while "
-        "their columns are in use.");
+        "Choose the fields displayed in the process table. Executable identity "
+        "is retained for App History; handle counts, technical fields and "
+        "graphics counters are collected only while their columns are in use.");
     gtk_label_set_line_wrap(GTK_LABEL(description), TRUE);
     gtk_widget_set_halign(description, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(content), description, FALSE, FALSE, 0);

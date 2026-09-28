@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.142 - 2026-09-28
+
+- Make Linux disk, partition, network and GPU discovery transactional: checked source APIs distinguish a valid empty inventory from enumeration failure, so Performance preserves the last completed topology instead of publishing transient device disappearance.
+- Keep disconnected Linux network adapters visible and retain their stable identity; failed disk/network telemetry now becomes an explicit graph gap/N/A instead of synthetic zero activity, while cumulative totals and recovery baselines remain correct.
+- Calculate network utilisation from the busier receive/transmit direction on full-duplex links on Linux and Windows instead of summing independent directions and prematurely clamping at 100%.
+- Preserve GPU, battery and NPU topology across transient discovery failures, and preserve the last valid CPU frequency/handle values while exposing handle availability explicitly.
+- Make grouped Processes collection fail atomically under allocation pressure and enforce the App History 4,096-entry cap even when all retained entries are currently live.
+- Stop Process Inspector polling after its exact process instance exits, stabilise its changing metric widths with tabular digits, and correct the Details explanation now that executable identity is always retained for App History.
+- Harden Windows disk/network/GPU enumeration against transient native API failures and bound process-worker shutdown instead of waiting forever on a native query that ignores cancellation.
+- Extend storage and metric smoke coverage for checked enumeration contracts and unavailable disk-sample semantics.
+
 ## 1.0.139 - 2026-09-28
 
 - Preserve the last complete process snapshot when Linux process enumeration fails, distinguish a valid zero-process result from backend failure, and keep aggregate CPU baselines unchanged across failed /proc/stat reads.

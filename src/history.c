@@ -829,10 +829,10 @@ static LsmHistoryEntry *history_entry_get(
     LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
     if (entry) return entry;
 
-    if (app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        (void)history_remove_oldest(
-            app, app->history.history_generation);
-    }
+    if (app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES &&
+        !history_remove_oldest(
+            app, app->history.history_generation))
+        return NULL;
 
     entry = g_new0(LsmHistoryEntry, 1);
     entry->key = g_strdup(key);
