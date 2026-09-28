@@ -1007,8 +1007,13 @@ static bool enumerate_disk_volumes(LsmMonitor *monitor)
     if (!monitor) return false;
     if (monitor->disk_count == 0U) return true;
 
-    LsmDiskInfo backup[LSM_MAX_DISKS];
-    memcpy(backup, monitor->disks, sizeof(backup));
+    LsmDiskInfo *backup =
+        (LsmDiskInfo *)malloc(sizeof(monitor->disks));
+    if (!backup) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return false;
+    }
+    memcpy(backup, monitor->disks, sizeof(monitor->disks));
     for (size_t index = 0U; index < monitor->disk_count; index++) {
         monitor->disks[index].partition_count = 0U;
         monitor->disks[index].system_disk = false;
@@ -1021,8 +1026,12 @@ static bool enumerate_disk_volumes(LsmMonitor *monitor)
     HANDLE search = FindFirstVolumeA(volume_name, (DWORD)sizeof(volume_name));
     if (search == INVALID_HANDLE_VALUE) {
         const DWORD failure = GetLastError();
-        if (failure == ERROR_NO_MORE_FILES) return true;
-        memcpy(monitor->disks, backup, sizeof(backup));
+        if (failure == ERROR_NO_MORE_FILES) {
+            free(backup);
+            return true;
+        }
+        memcpy(monitor->disks, backup, sizeof(monitor->disks));
+        free(backup);
         return false;
     }
 
@@ -1129,12 +1138,14 @@ static bool enumerate_disk_volumes(LsmMonitor *monitor)
         enumeration_error = GetLastError();
     }
     if (!complete) {
-        memcpy(monitor->disks, backup, sizeof(backup));
+        memcpy(monitor->disks, backup, sizeof(monitor->disks));
+        free(backup);
         SetLastError(
             enumeration_error != ERROR_SUCCESS
                 ? enumeration_error : ERROR_GEN_FAILURE);
         return false;
     }
+    free(backup);
     return true;
 }
 
