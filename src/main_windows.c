@@ -96,6 +96,11 @@ typedef struct {
     HFONT title_font;
     HFONT heading_font;
     HFONT metric_font;
+    HDC backbuffer_dc;
+    HBITMAP backbuffer_bitmap;
+    HGDIOBJ backbuffer_previous;
+    int backbuffer_width;
+    int backbuffer_height;
     HANDLE font_resources[LSM_WINDOWS_FONT_RESOURCE_COUNT];
     size_t font_resource_count;
     LsmMonitor monitor;
@@ -317,9 +322,10 @@ static void write_startup_smoke_status(const char *status)
 static void set_status(LsmWindowsUiState *state, const wchar_t *text)
 {
     if (!state) return;
+    const wchar_t *value = text ? text : L"";
+    if (lstrcmpW(state->status_text, value) == 0) return;
     lstrcpynW(
-        state->status_text,
-        text ? text : L"",
+        state->status_text, value,
         (int)(sizeof(state->status_text) / sizeof(state->status_text[0])));
     if (state->window) InvalidateRect(state->window, NULL, FALSE);
 }
@@ -2186,6 +2192,37 @@ static void draw_status_bar(
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+static bool ensure_backbuffer(
+    LsmWindowsUiState *state, HDC target, int width, int height)
+{
+    if (!state || !target || width <= 0 || height <= 0) return false;
+    if (!state->backbuffer_dc) {
+        state->backbuffer_dc = CreateCompatibleDC(target);
+        if (!state->backbuffer_dc) return false;
+    }
+    if (state->backbuffer_bitmap &&
+        state->backbuffer_width == width &&
+        state->backbuffer_height == height)
+        return true;
+
+    HBITMAP bitmap = CreateCompatibleBitmap(target, width, height);
+    if (!bitmap) return false;
+    HGDIOBJ previous = SelectObject(state->backbuffer_dc, bitmap);
+    if (!previous || previous == HGDI_ERROR) {
+        DeleteObject(bitmap);
+        return false;
+    }
+
+    if (state->backbuffer_bitmap)
+        DeleteObject(previous);
+    else
+        state->backbuffer_previous = previous;
+    state->backbuffer_bitmap = bitmap;
+    state->backbuffer_width = width;
+    state->backbuffer_height = height;
+    return true;
+}
+
 static void paint_window(LsmWindowsUiState *state, HDC target)
 {
     if (!state || !target || !state->window) return;
@@ -2194,16 +2231,9 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
     if (!GetClientRect(state->window, &client)) return;
     const int width = client.right - client.left;
     const int height = client.bottom - client.top;
+    if (!ensure_backbuffer(state, target, width, height)) return;
 
-    HDC dc = CreateCompatibleDC(target);
-    HBITMAP bitmap = CreateCompatibleBitmap(target, width, height);
-    if (!dc || !bitmap) {
-        if (bitmap) DeleteObject(bitmap);
-        if (dc) DeleteDC(dc);
-        return;
-    }
-
-    HGDIOBJ previous_bitmap = SelectObject(dc, bitmap);
+    HDC dc = state->backbuffer_dc;
     fill_solid(dc, &client, state->palette.background);
     draw_menu_strip(state, dc, width);
     draw_summary_bar(state, dc, width);
@@ -2221,10 +2251,6 @@ static void paint_window(LsmWindowsUiState *state, HDC target)
 
     draw_status_bar(state, dc, width, height);
     BitBlt(target, 0, 0, width, height, dc, 0, 0, SRCCOPY);
-
-    SelectObject(dc, previous_bitmap);
-    DeleteObject(bitmap);
-    DeleteDC(dc);
 }
 
 static void apply_process_list_theme(LsmWindowsUiState *state)
