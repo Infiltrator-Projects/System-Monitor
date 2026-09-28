@@ -26,6 +26,7 @@
 #if defined(__i386__) || defined(__x86_64__)
 #include <cpuid.h>
 #include <sched.h>
+#include <pthread.h>
 
 #define LSM_MAX_DIRECT_CACHES (LSM_MAX_CPUS * 8U)
 
@@ -132,6 +133,51 @@ static void add_current_cpu_caches(LsmDirectCache *caches, size_t capacity,
         *count = add_cache_leaf(0x8000001dU, caches, capacity, *count, apic_id);
 }
 
+typedef struct {
+    uint32_t cores[LSM_MAX_CPUS];
+    size_t core_count;
+    LsmDirectCache caches[LSM_MAX_DIRECT_CACHES];
+    size_t cache_count;
+} LsmDirectTopologyScan;
+
+/*
+ * Affinity probing runs on a disposable helper thread. If a hostile or unusual
+ * scheduler refuses the final mask restoration, the affected thread exits
+ * immediately rather than pinning the long-lived monitor sampler.
+ */
+static void *scan_direct_topology(void *user_data)
+{
+    LsmDirectTopologyScan *scan = user_data;
+    if (!scan) return NULL;
+
+    cpu_set_t original;
+    if (sched_getaffinity(0, sizeof(original), &original) != 0)
+        return NULL;
+
+    for (unsigned processor = 0U; processor < CPU_SETSIZE; processor++) {
+        if (!CPU_ISSET((int)processor, &original)) continue;
+        cpu_set_t selected;
+        CPU_ZERO(&selected);
+        CPU_SET((int)processor, &selected);
+        if (sched_setaffinity(0, sizeof(selected), &selected) != 0)
+            continue;
+
+        uint32_t apic_id = processor;
+        unsigned smt_shift = 0U;
+        (void)direct_topology(&apic_id, &smt_shift);
+        const uint32_t core_key = apic_id >> smt_shift;
+        if (!seen_core(scan->cores, scan->core_count, core_key) &&
+            scan->core_count < LSM_MAX_CPUS)
+            scan->cores[scan->core_count++] = core_key;
+        add_current_cpu_caches(
+            scan->caches, LSM_MAX_DIRECT_CACHES,
+            &scan->cache_count, apic_id);
+    }
+
+    (void)sched_setaffinity(0, sizeof(original), &original);
+    return NULL;
+}
+
 static void format_cache(uint64_t bytes, unsigned instances,
                          char *destination, size_t destination_size)
 {
@@ -215,52 +261,35 @@ bool lsm_cpu_direct_read_static(LsmCpuInfo *cpu)
         cpu->logical_cores_total > 0U &&
         cpu->logical_cores_total <= LSM_MAX_CPUS;
 
-    cpu_set_t original;
-    const bool have_affinity =
-        topology_supported &&
-        sched_getaffinity(0, sizeof(original), &original) == 0;
-    uint32_t cores[LSM_MAX_CPUS] = {0};
-    size_t core_count = 0U;
-    LsmDirectCache caches[LSM_MAX_DIRECT_CACHES] = {{0}};
-    size_t cache_count = 0U;
-
-    if (have_affinity) {
-        for (unsigned processor = 0U; processor < CPU_SETSIZE; processor++) {
-            if (!CPU_ISSET((int)processor, &original)) continue;
-            cpu_set_t selected;
-            CPU_ZERO(&selected);
-            CPU_SET((int)processor, &selected);
-            if (sched_setaffinity(0, sizeof(selected), &selected) != 0) continue;
-
-            uint32_t apic_id = processor;
-            unsigned smt_shift = 0U;
-            (void)direct_topology(&apic_id, &smt_shift);
-            const uint32_t core_key = apic_id >> smt_shift;
-            if (!seen_core(cores, core_count, core_key) && core_count < LSM_MAX_CPUS)
-                cores[core_count++] = core_key;
-            add_current_cpu_caches(caches, LSM_MAX_DIRECT_CACHES,
-                                   &cache_count, apic_id);
-        }
-        (void)sched_setaffinity(0, sizeof(original), &original);
+    LsmDirectTopologyScan scan = {0};
+    if (topology_supported) {
+        pthread_t topology_thread;
+        if (pthread_create(
+                &topology_thread, NULL, scan_direct_topology, &scan) == 0)
+            (void)pthread_join(topology_thread, NULL);
     }
 
-    if (cache_count == 0U && topology_supported) {
+    if (scan.cache_count == 0U && topology_supported) {
         uint32_t apic_id = 0U;
         unsigned smt_shift = 0U;
         (void)direct_topology(&apic_id, &smt_shift);
-        add_current_cpu_caches(caches, LSM_MAX_DIRECT_CACHES,
-                               &cache_count, apic_id);
+        add_current_cpu_caches(
+            scan.caches, LSM_MAX_DIRECT_CACHES,
+            &scan.cache_count, apic_id);
     }
 
-    if (core_count > 0U) cpu->physical_cores = (unsigned)core_count;
-    else cpu->physical_cores = topology_supported ? cpu->logical_cores : 0U;
+    if (scan.core_count > 0U)
+        cpu->physical_cores = (unsigned)scan.core_count;
+    else
+        cpu->physical_cores =
+            topology_supported ? cpu->logical_cores : 0U;
 
     uint64_t totals[4] = {0U, 0U, 0U, 0U};
     unsigned instances[4] = {0U, 0U, 0U, 0U};
-    for (size_t index = 0U; index < cache_count; index++) {
-        const unsigned level = caches[index].level;
+    for (size_t index = 0U; index < scan.cache_count; index++) {
+        const unsigned level = scan.caches[index].level;
         totals[level] = lsm_u64_add_saturating(
-            totals[level], caches[index].bytes);
+            totals[level], scan.caches[index].bytes);
         instances[level]++;
     }
     format_cache(totals[1], instances[1], cpu->cache_l1, sizeof(cpu->cache_l1));
