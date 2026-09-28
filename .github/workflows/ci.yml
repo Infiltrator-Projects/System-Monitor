@@ -17,8 +17,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runner_preflight:
+    if: ${{ !startsWith(github.event.head_commit.message, 'Release ') }}
+    runs-on: bigbedroom
+    timeout-minutes: 3
+    outputs:
+      ready: ${{ steps.probe.outputs.ready }}
+    env:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - id: probe
+        name: Check BigBedroom build capability
+        shell: bash
+        run: |
+          ready=true
+          for command_name in cmake doxygen gcc g++ git make pkg-config \
+              x86_64-w64-mingw32-gcc x86_64-w64-mingw32-objdump xauth Xvfb; do
+            if ! command -v "$command_name" >/dev/null 2>&1; then
+              echo "BigBedroom is missing $command_name; Verify will fall back to GitHub-hosted." >&2
+              ready=false
+            fi
+          done
+          if [[ "$ready" == true ]] && ! pkg-config --exists gtk+-3.0; then
+            echo "BigBedroom is missing GTK 3 development metadata; Verify will fall back to GitHub-hosted." >&2
+            ready=false
+          fi
+          if [[ "$ready" == true ]]; then
+            probe="$(mktemp --suffix=.c)"
+            printf 'int main(void){return 0;}\n' > "$probe"
+            if ! gcc -m32 "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe"; then
+              echo "BigBedroom cannot compile the required 32-bit probe; Verify will fall back to GitHub-hosted." >&2
+              ready=false
+            fi
+            rm -f "$probe" "$RUNNER_TEMP/system-monitor-m32-probe"
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
   test:
-    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'bigbedroom' }}
+    needs: runner_preflight
+    if: ${{ always() }}
+    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || (needs.runner_preflight.outputs.ready == 'true' && 'bigbedroom' || 'ubuntu-24.04') }}
     timeout-minutes: 30
     env:
       # Self-hosted runner services can inherit a deliberately minimal PATH.
