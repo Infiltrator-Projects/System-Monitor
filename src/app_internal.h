@@ -426,6 +426,9 @@ typedef struct {
     gboolean processes_model_dirty;
     gboolean processes_structure_valid;
     uint64_t processes_structure_signature;
+    GPtrArray *process_group_cache;
+    GHashTable *process_group_index;
+    GHashTable *process_pid_index;
 } LsmProcessesState;
 
 /** Process snapshot, selection, filtering and recording shared by process pages. */
