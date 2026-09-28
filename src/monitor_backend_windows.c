@@ -36,7 +36,6 @@
 #include <pdhmsg.h>
 #include <psapi.h>
 #include <setupapi.h>
-#include <ntddstor.h>
 #include <winioctl.h>
 
 #include <limits.h>
@@ -53,6 +52,16 @@
 #define LSM_WINDOWS_EXTENTS_BUFFER 4096U
 #define LSM_WINDOWS_EXTENTS_BUFFER_MAX (1024U * 1024U)
 #define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
+
+/*
+ * GUID_DEVINTERFACE_DISK ({53F56307-B6BF-11D0-94F2-00A0C91EFB8B})
+ * is a stable Windows device-interface contract. Keep the value local so the
+ * backend does not depend on SDK header ordering quirks in ntddstor.h.
+ */
+static const GUID LSM_GUID_DEVINTERFACE_DISK = {
+    0x53f56307U, 0xb6bfU, 0x11d0U,
+    {0x94U, 0xf2U, 0x00U, 0xa0U, 0xc9U, 0x1eU, 0xfbU, 0x8bU}
+};
 
 /*
  * CallNtPowerInformation(ProcessorInformation) returns one six-ULONG record
@@ -700,7 +709,7 @@ static bool enumerate_physical_disk_numbers(
     if (!numbers || !out_count) return false;
 
     HDEVINFO devices = SetupDiGetClassDevsA(
-        &GUID_DEVINTERFACE_DISK, NULL, NULL,
+        &LSM_GUID_DEVINTERFACE_DISK, NULL, NULL,
         DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (devices == INVALID_HANDLE_VALUE) return false;
 
@@ -714,7 +723,7 @@ static bool enumerate_physical_disk_numbers(
 
         SetLastError(ERROR_SUCCESS);
         if (!SetupDiEnumDeviceInterfaces(
-                devices, NULL, &GUID_DEVINTERFACE_DISK, index,
+                devices, NULL, &LSM_GUID_DEVINTERFACE_DISK, index,
                 &interface_data)) {
             const DWORD failure = GetLastError();
             if (failure != ERROR_NO_MORE_ITEMS) {
