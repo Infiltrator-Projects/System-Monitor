@@ -111,10 +111,15 @@ static ssize_t snapshot_index_for_pid(const LsmApp *app, LsmProcessId pid)
     return -1;
 }
 
-static GHashTable *build_snapshot_pid_index(const LsmApp *app)
+static GHashTable *refresh_snapshot_pid_index(LsmApp *app)
 {
-    GHashTable *index = g_hash_table_new(g_direct_hash, g_direct_equal);
+    if (!app) return NULL;
+    if (!app->processes.process_pid_index)
+        app->processes.process_pid_index =
+            g_hash_table_new(g_direct_hash, g_direct_equal);
+    GHashTable *index = app->processes.process_pid_index;
     if (!index) return NULL;
+    g_hash_table_remove_all(index);
     for (size_t item = 0U; item < app->process.process_snapshot_count; item++) {
         const LsmProcessId pid = app->process.process_snapshot[item].pid;
         if (pid == 0U || pid > (LsmProcessId)UINT_MAX || item >= UINT_MAX)
