@@ -300,10 +300,9 @@ static GPtrArray *collect_groups(LsmApp *app)
     GPtrArray *groups = g_ptr_array_new_with_free_func(group_destroy);
     if (!groups) return NULL;
 
-    GHashTable *pid_index = build_snapshot_pid_index(app);
+    GHashTable *pid_index = refresh_snapshot_pid_index(app);
     GHashTable *group_index = g_hash_table_new(g_str_hash, g_str_equal);
     if (!pid_index || !group_index) {
-        if (pid_index) g_hash_table_destroy(pid_index);
         if (group_index) g_hash_table_destroy(group_index);
         g_ptr_array_free(groups, TRUE);
         return NULL;
@@ -315,7 +314,6 @@ static GPtrArray *collect_groups(LsmApp *app)
         ? g_utf8_casefold(search, -1) : NULL;
     if (search && *search && !folded_search) {
         g_hash_table_destroy(group_index);
-        g_hash_table_destroy(pid_index);
         g_ptr_array_free(groups, TRUE);
         return NULL;
     }
@@ -338,8 +336,7 @@ static GPtrArray *collect_groups(LsmApp *app)
             if (!group) {
                 g_free(folded_search);
                 g_hash_table_destroy(group_index);
-                g_hash_table_destroy(pid_index);
-                g_ptr_array_free(groups, TRUE);
+                        g_ptr_array_free(groups, TRUE);
                 return NULL;
             }
             group->category = category;
@@ -350,8 +347,7 @@ static GPtrArray *collect_groups(LsmApp *app)
                 group_destroy(group);
                 g_free(folded_search);
                 g_hash_table_destroy(group_index);
-                g_hash_table_destroy(pid_index);
-                g_ptr_array_free(groups, TRUE);
+                        g_ptr_array_free(groups, TRUE);
                 return NULL;
             }
             g_ptr_array_add(groups, group);
@@ -359,15 +355,13 @@ static GPtrArray *collect_groups(LsmApp *app)
         } else if (!group_append(group, index, process)) {
             g_free(folded_search);
             g_hash_table_destroy(group_index);
-            g_hash_table_destroy(pid_index);
-            g_ptr_array_free(groups, TRUE);
+                g_ptr_array_free(groups, TRUE);
             return NULL;
         }
     }
 
     g_free(folded_search);
     g_hash_table_destroy(group_index);
-    g_hash_table_destroy(pid_index);
     g_ptr_array_sort(groups, compare_groups);
     return groups;
 }
