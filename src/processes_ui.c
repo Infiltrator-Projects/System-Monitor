@@ -297,15 +297,36 @@ static gint compare_groups(gconstpointer left, gconstpointer right)
 
 static GPtrArray *collect_groups(LsmApp *app)
 {
-    GPtrArray *groups = g_ptr_array_new_with_free_func(group_destroy);
+    if (!app) return NULL;
+    GPtrArray *groups = g_ptr_array_new();
     if (!groups) return NULL;
 
     GHashTable *pid_index = refresh_snapshot_pid_index(app);
-    GHashTable *group_index = g_hash_table_new(g_str_hash, g_str_equal);
-    if (!pid_index || !group_index) {
-        if (group_index) g_hash_table_destroy(group_index);
+    if (!app->processes.process_group_cache)
+        app->processes.process_group_cache =
+            g_ptr_array_new_with_free_func(group_destroy);
+    if (!app->processes.process_group_index)
+        app->processes.process_group_index =
+            g_hash_table_new(g_str_hash, g_str_equal);
+    GPtrArray *group_cache = app->processes.process_group_cache;
+    GHashTable *group_index = app->processes.process_group_index;
+    if (!pid_index || !group_cache || !group_index) {
         g_ptr_array_free(groups, TRUE);
         return NULL;
+    }
+
+    for (guint index = group_cache->len; index > 0U; index--) {
+        ProcessGroup *group =
+            g_ptr_array_index(group_cache, index - 1U);
+        if (group && group->count == 0U)
+            g_ptr_array_remove_index_fast(group_cache, index - 1U);
+    }
+    g_hash_table_remove_all(group_index);
+    for (guint index = 0U; index < group_cache->len; index++) {
+        ProcessGroup *group = g_ptr_array_index(group_cache, index);
+        group->count = 0U;
+        memset(&group->metrics, 0, sizeof(group->metrics));
+        g_hash_table_insert(group_index, group->key, group);
     }
 
     const char *search = gtk_entry_get_text(
@@ -313,14 +334,16 @@ static GPtrArray *collect_groups(LsmApp *app)
     char *folded_search = search && *search
         ? g_utf8_casefold(search, -1) : NULL;
     if (search && *search && !folded_search) {
-        g_hash_table_destroy(group_index);
         g_ptr_array_free(groups, TRUE);
         return NULL;
     }
 
-    for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
-        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+    for (size_t index = 0U;
+         index < app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process =
+            &app->process.process_snapshot[index];
         if (process_excluded(app, process)) continue;
+
         ProcessCategory category = PROCESS_CATEGORY_BACKGROUND;
         char key[LSM_NAME_LEN * 2U];
         char name[LSM_NAME_LEN];
@@ -328,40 +351,38 @@ static GPtrArray *collect_groups(LsmApp *app)
         process_identity(app, index, pid_index, &category, key,
                          sizeof(key), name, sizeof(name),
                          icon, sizeof(icon));
-        if (!process_matches_search(process, name, folded_search)) continue;
+        if (!process_matches_search(process, name, folded_search))
+            continue;
 
         ProcessGroup *group = g_hash_table_lookup(group_index, key);
         if (!group) {
             group = calloc(1U, sizeof(*group));
             if (!group) {
                 g_free(folded_search);
-                g_hash_table_destroy(group_index);
-                        g_ptr_array_free(groups, TRUE);
+                g_ptr_array_free(groups, TRUE);
                 return NULL;
             }
             group->category = category;
             lsm_copy_string(group->key, sizeof(group->key), key);
             lsm_copy_string(group->name, sizeof(group->name), name);
             lsm_copy_string(group->icon, sizeof(group->icon), icon);
-            if (!group_append(group, index, process)) {
-                group_destroy(group);
-                g_free(folded_search);
-                g_hash_table_destroy(group_index);
-                        g_ptr_array_free(groups, TRUE);
-                return NULL;
-            }
-            g_ptr_array_add(groups, group);
+            g_ptr_array_add(group_cache, group);
             g_hash_table_insert(group_index, group->key, group);
-        } else if (!group_append(group, index, process)) {
+        }
+        if (group->count == 0U) {
+            group->category = category;
+            lsm_copy_string(group->name, sizeof(group->name), name);
+            lsm_copy_string(group->icon, sizeof(group->icon), icon);
+            g_ptr_array_add(groups, group);
+        }
+        if (!group_append(group, index, process)) {
             g_free(folded_search);
-            g_hash_table_destroy(group_index);
-                g_ptr_array_free(groups, TRUE);
+            g_ptr_array_free(groups, TRUE);
             return NULL;
         }
     }
 
     g_free(folded_search);
-    g_hash_table_destroy(group_index);
     g_ptr_array_sort(groups, compare_groups);
     return groups;
 }
