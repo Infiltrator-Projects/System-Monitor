@@ -53,9 +53,10 @@ bool lsm_logitech_hidpp_start(void);
  * Paths are copied; the caller retains ownership of the supplied strings.
  *
  * @param [in] device_paths Array of NUL-terminated hidraw paths.
- * @param [in] count Number of paths, truncated to the project maximum.
+ * @param [in] count Number of candidate paths.
+ * @return true only when the complete unique set fits and is published.
  */
-void lsm_logitech_hidpp_set_devices(const char *const *device_paths,
+bool lsm_logitech_hidpp_set_devices(const char *const *device_paths,
                                     size_t count);
 /**
  * Copy the latest cached HID++ reading for one device.

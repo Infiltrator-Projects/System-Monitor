@@ -192,17 +192,45 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
     if (lsm_join_path(engine_root, sizeof(engine_root), base, "/engine")) {
         DIR *directory = opendir(engine_root);
         if (directory) {
-            struct dirent *entry;
-            while ((entry = readdir(directory)) &&
-                   cache->engine_count < LSM_MAX_GPU_ENGINE_COUNTERS) {
+            bool complete = true;
+            int enumeration_error = 0;
+            struct dirent *entry = NULL;
+            for (;;) {
+                errno = 0;
+                entry = readdir(directory);
+                if (!entry) {
+                    if (errno != 0) {
+                        complete = false;
+                        enumeration_error = errno;
+                    }
+                    break;
+                }
                 if (entry->d_name[0] == '.') continue;
                 char suffix[300];
                 (void)snprintf(suffix, sizeof(suffix), "/%.240s/busy",
                                entry->d_name);
                 char *path = existing_metric_path(engine_root, suffix);
-                if (path) cache->engine_busy[cache->engine_count++] = path;
+                if (!path) continue;
+                if (cache->engine_count >= LSM_MAX_GPU_ENGINE_COUNTERS) {
+                    free(path);
+                    complete = false;
+                    if (enumeration_error == 0) enumeration_error = EOVERFLOW;
+                    continue;
+                }
+                cache->engine_busy[cache->engine_count++] = path;
             }
-            closedir(directory);
+            if (closedir(directory) != 0 && complete) {
+                complete = false;
+                enumeration_error = errno != 0 ? errno : EIO;
+            }
+            if (!complete) {
+                for (size_t index = 0U; index < cache->engine_count; index++) {
+                    free(cache->engine_busy[index]);
+                    cache->engine_busy[index] = NULL;
+                }
+                cache->engine_count = 0U;
+                errno = enumeration_error != 0 ? enumeration_error : EIO;
+            }
         }
     }
 
@@ -210,8 +238,19 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
     if (!lsm_join_path(hwmon_root, sizeof(hwmon_root), base, "/hwmon")) return;
     DIR *directory = opendir(hwmon_root);
     if (!directory) return;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.') continue;
         char node[LSM_PATH_LEN];
         char suffix[300];
@@ -231,7 +270,25 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
         if (!cache->pwm_max)
             cache->pwm_max = existing_metric_path(node, "/pwm1_max");
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(cache->temperature);
+        free(cache->temperature_warning);
+        free(cache->temperature_critical);
+        free(cache->power);
+        free(cache->pwm);
+        free(cache->pwm_max);
+        cache->temperature = NULL;
+        cache->temperature_warning = NULL;
+        cache->temperature_critical = NULL;
+        cache->power = NULL;
+        cache->pwm = NULL;
+        cache->pwm_max = NULL;
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+    }
 }
 
 static void build_npu_telemetry_cache(const LsmNpuInfo *npu,
@@ -524,18 +581,18 @@ static void update_gpus(LsmMonitor *monitor, double elapsed)
                     read_gpu_engine_busy(telemetry, &engine_busy);
                 if (engine_busy_available && gpu_state) {
                     double percent = 0.0;
-                    if (gpu_state->engine_busy_initialized &&
+                    const bool measured =
+                        gpu_state->engine_busy_initialized &&
                         lsm_u64_counter_rate(
                             engine_busy, gpu_state->previous_engine_busy_ns,
-                            0.0000001L, elapsed, &percent)) {
-                        gpu->utilization_percent =
-                            lsm_clamp_double(percent, 0.0, 100.0);
-                    } else {
-                        gpu->utilization_percent = 0.0;
-                    }
+                            0.0000001L, elapsed, &percent);
                     gpu_state->previous_engine_busy_ns = engine_busy;
                     gpu_state->engine_busy_initialized = true;
-                    gpu->utilization_available = true;
+                    if (measured) {
+                        gpu->utilization_percent =
+                            lsm_clamp_double(percent, 0.0, 100.0);
+                        gpu->utilization_available = true;
+                    }
                 } else {
                     /* Never turn a failed cumulative read into a zero sample.
                      * Reset the baseline so recovery cannot create a false spike. */

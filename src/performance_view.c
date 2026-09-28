@@ -341,39 +341,67 @@ void lsm_memory_performance_view(const LsmMonitor *monitor,
     }
 
     const LsmMemoryInfo *memory = &monitor->memory;
+    const bool accounting_available =
+        memory->total_bytes > 0U && isfinite(memory->usage_percent);
     char used[64];
     char total[64];
-    infiltratr_format_bytes(memory->used_bytes, used, sizeof(used));
     infiltratr_format_bytes(memory->total_bytes, total, sizeof(total));
-    (void)snprintf(
-        view->rail_value, sizeof(view->rail_value),
-        "%s/%s (%.0f%%)", used, total, memory->usage_percent);
+    if (accounting_available) {
+        infiltratr_format_bytes(memory->used_bytes, used, sizeof(used));
+        (void)snprintf(
+            view->rail_value, sizeof(view->rail_value),
+            "%s/%s (%.0f%%)", used, total, memory->usage_percent);
+    } else {
+        infiltratr_copy_string(
+            view->rail_value, sizeof(view->rail_value), "N/A");
+    }
     infiltratr_format_memory_gb(
         memory->total_bytes, view->subtitle, sizeof(view->subtitle));
 
-    infiltratr_format_memory_gb(
-        memory->used_bytes,
-        view->metrics[LSM_MEMORY_METRIC_IN_USE],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_IN_USE]));
-    infiltratr_format_memory_gb(
-        memory->available_bytes,
-        view->metrics[LSM_MEMORY_METRIC_AVAILABLE],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_AVAILABLE]));
+    if (accounting_available) {
+        infiltratr_format_memory_gb(
+            memory->used_bytes,
+            view->metrics[LSM_MEMORY_METRIC_IN_USE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_IN_USE]));
+        infiltratr_format_memory_gb(
+            memory->available_bytes,
+            view->metrics[LSM_MEMORY_METRIC_AVAILABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_AVAILABLE]));
+    } else {
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_IN_USE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_IN_USE]), "N/A");
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_AVAILABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_AVAILABLE]), "N/A");
+    }
 
     char committed[64];
     char commit_limit[64];
-    infiltratr_format_bytes(
-        memory->committed_bytes, committed, sizeof(committed));
-    infiltratr_format_bytes(
-        memory->commit_limit_bytes, commit_limit, sizeof(commit_limit));
-    (void)snprintf(
-        view->metrics[LSM_MEMORY_METRIC_COMMITTED],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_COMMITTED]),
-        "%s/%s", committed, commit_limit);
-    infiltratr_format_memory_gb(
-        memory->cached_bytes,
-        view->metrics[LSM_MEMORY_METRIC_CACHED],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_CACHED]));
+    if (accounting_available && memory->commit_limit_bytes > 0U) {
+        infiltratr_format_bytes(
+            memory->committed_bytes, committed, sizeof(committed));
+        infiltratr_format_bytes(
+            memory->commit_limit_bytes, commit_limit, sizeof(commit_limit));
+        (void)snprintf(
+            view->metrics[LSM_MEMORY_METRIC_COMMITTED],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_COMMITTED]),
+            "%s/%s", committed, commit_limit);
+    } else {
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_COMMITTED],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_COMMITTED]), "N/A");
+    }
+    if (accounting_available) {
+        infiltratr_format_memory_gb(
+            memory->cached_bytes,
+            view->metrics[LSM_MEMORY_METRIC_CACHED],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_CACHED]));
+    } else {
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_CACHED],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_CACHED]), "N/A");
+    }
     infiltratr_format_memory_gb(
         memory->buffers_bytes,
         view->metrics[LSM_MEMORY_METRIC_BUFFERS],
@@ -384,18 +412,30 @@ void lsm_memory_performance_view(const LsmMonitor *monitor,
         "%.1Lf/%.1Lf GB",
         (long double)memory->swap_used_bytes / 1073741824.0L,
         (long double)memory->swap_total_bytes / 1073741824.0L);
-    infiltratr_format_bytes(
-        memory->kernel_reclaimable_bytes,
-        view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE]));
-    infiltratr_format_bytes(
-        memory->kernel_nonreclaimable_bytes,
-        view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE]));
-    infiltratr_format_bytes(
-        memory->page_tables_bytes,
-        view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES],
-        sizeof(view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES]));
+    if (accounting_available) {
+        infiltratr_format_bytes(
+            memory->kernel_reclaimable_bytes,
+            view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE]));
+        infiltratr_format_bytes(
+            memory->kernel_nonreclaimable_bytes,
+            view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE]));
+        infiltratr_format_bytes(
+            memory->page_tables_bytes,
+            view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES]));
+    } else {
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_RECLAIMABLE]), "N/A");
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_KERNEL_NONRECLAIMABLE]), "N/A");
+        infiltratr_copy_string(
+            view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES],
+            sizeof(view->metrics[LSM_MEMORY_METRIC_PAGE_TABLES]), "N/A");
+    }
     format_pressure(
         &monitor->memory_pressure,
         view->metrics[LSM_MEMORY_METRIC_PRESSURE],
@@ -419,10 +459,16 @@ void lsm_memory_performance_view(const LsmMonitor *monitor,
         view->details[LSM_MEMORY_DETAIL_FORM_FACTOR],
         sizeof(view->details[LSM_MEMORY_DETAIL_FORM_FACTOR]),
         memory->form_factor);
-    infiltratr_format_bytes(
-        memory->hardware_corrupted_bytes,
-        view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED],
-        sizeof(view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED]));
+    if (accounting_available) {
+        infiltratr_format_bytes(
+            memory->hardware_corrupted_bytes,
+            view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED],
+            sizeof(view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED]));
+    } else {
+        infiltratr_copy_string(
+            view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED],
+            sizeof(view->details[LSM_MEMORY_DETAIL_HARDWARE_CORRUPTED]), "N/A");
+    }
 
     if (!memory->module_details_available || memory->module_count == 0U) {
         infiltratr_copy_string(

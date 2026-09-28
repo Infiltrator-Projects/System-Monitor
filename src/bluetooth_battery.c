@@ -15,6 +15,7 @@
 #include "common.h"
 
 #include <gio/gio.h>
+#include <errno.h>
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
@@ -27,6 +28,7 @@
 #define LSM_BLUEZ_BATTERY_INTERFACE "org.bluez.Battery1"
 #define LSM_BLUEZ_REFRESH_SECONDS 2
 #define LSM_BLUEZ_TIMEOUT_MS 1500
+#define LSM_BLUEZ_SHUTDOWN_WAIT_MS 500U
 
 /** Process-wide cache state; the monitor owns exactly one hardware sampler. */
 typedef struct {
@@ -125,28 +127,37 @@ static void append_connected_name(LsmBluetoothAdapterRecord *adapter,
     adapter->connected_names[used + length] = '\0';
 }
 
-size_t lsm_bluetooth_adapter_parse_objects(
-    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity)
+bool lsm_bluetooth_adapter_parse_objects_checked(
+    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity,
+    size_t *out_count)
 {
-    if (!objects || !records || capacity == 0U ||
+    if (out_count) *out_count = 0U;
+    if (!objects || !records || capacity == 0U || !out_count ||
         !g_variant_is_of_type(objects, G_VARIANT_TYPE("a{oa{sa{sv}}}")))
-        return 0U;
+        return false;
 
     size_t count = 0U;
+    bool complete = true;
     GVariantIter *object_iterator = g_variant_iter_new(objects);
-    if (!object_iterator) return 0U;
+    if (!object_iterator) return false;
     const char *object_path = NULL;
     GVariant *interfaces = NULL;
-    while (count < capacity &&
-           g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
+    while (g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
                                &object_path, &interfaces)) {
         GVariant *adapter = g_variant_lookup_value(
             interfaces, LSM_BLUEZ_ADAPTER_INTERFACE,
             G_VARIANT_TYPE("a{sv}"));
         if (adapter) {
+            if (count >= capacity) {
+                complete = false;
+                g_variant_unref(adapter);
+                g_variant_unref(interfaces);
+                continue;
+            }
             LsmBluetoothAdapterRecord *record = &records[count++];
             memset(record, 0, sizeof(*record));
-            lsm_copy_string(record->object_path, sizeof(record->object_path), object_path);
+            lsm_copy_string(record->object_path, sizeof(record->object_path),
+                            object_path);
             (void)lookup_string(adapter, "Address", record->address,
                                 sizeof(record->address));
             (void)lookup_string(adapter, "Name", record->name,
@@ -166,9 +177,17 @@ size_t lsm_bluetooth_adapter_parse_objects(
         g_variant_unref(interfaces);
     }
     g_variant_iter_free(object_iterator);
+    if (!complete) {
+        memset(records, 0, capacity * sizeof(records[0]));
+        errno = EOVERFLOW;
+        return false;
+    }
 
     object_iterator = g_variant_iter_new(objects);
-    if (!object_iterator) return count;
+    if (!object_iterator) {
+        memset(records, 0, capacity * sizeof(records[0]));
+        return false;
+    }
     object_path = NULL;
     interfaces = NULL;
     while (g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
@@ -214,10 +233,9 @@ size_t lsm_bluetooth_adapter_parse_objects(
                                    sizeof(device_name)))
                     (void)lookup_string(device, "Name", device_name,
                                         sizeof(device_name));
-                if (!device_name[0]) {
+                if (!device_name[0])
                     (void)lookup_string(device, "Address", device_name,
                                         sizeof(device_name));
-                }
                 append_connected_name(record, device_name);
             }
             break;
@@ -226,24 +244,34 @@ size_t lsm_bluetooth_adapter_parse_objects(
         g_variant_unref(interfaces);
     }
     g_variant_iter_free(object_iterator);
-    return count;
+    *out_count = count;
+    return true;
 }
 
-
-size_t lsm_bluetooth_device_parse_objects(
-    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity)
+size_t lsm_bluetooth_adapter_parse_objects(
+    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity)
 {
-    if (!objects || !records || capacity == 0U ||
+    size_t count = 0U;
+    return lsm_bluetooth_adapter_parse_objects_checked(
+        objects, records, capacity, &count) ? count : 0U;
+}
+
+bool lsm_bluetooth_device_parse_objects_checked(
+    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity,
+    size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!objects || !records || capacity == 0U || !out_count ||
         !g_variant_is_of_type(objects, G_VARIANT_TYPE("a{oa{sa{sv}}}")))
-        return 0U;
+        return false;
 
     size_t count = 0U;
+    bool complete = true;
     GVariantIter *object_iterator = g_variant_iter_new(objects);
-    if (!object_iterator) return 0U;
+    if (!object_iterator) return false;
     const char *object_path = NULL;
     GVariant *interfaces = NULL;
-    while (count < capacity &&
-           g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
+    while (g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
                                &object_path, &interfaces)) {
         GVariant *device = g_variant_lookup_value(
             interfaces, LSM_BLUEZ_DEVICE_INTERFACE,
@@ -252,10 +280,17 @@ size_t lsm_bluetooth_device_parse_objects(
             g_variant_unref(interfaces);
             continue;
         }
+        if (count >= capacity) {
+            complete = false;
+            g_variant_unref(device);
+            g_variant_unref(interfaces);
+            continue;
+        }
 
         LsmBluetoothDeviceRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
-        lsm_copy_string(record->object_path, sizeof(record->object_path), object_path);
+        lsm_copy_string(record->object_path, sizeof(record->object_path),
+                        object_path);
         (void)lookup_object_path(device, "Adapter", record->adapter_path,
                                  sizeof(record->adapter_path));
         if (!record->adapter_path[0]) {
@@ -300,23 +335,39 @@ size_t lsm_bluetooth_device_parse_objects(
         g_variant_unref(interfaces);
     }
     g_variant_iter_free(object_iterator);
-    return count;
+    if (!complete) {
+        memset(records, 0, capacity * sizeof(records[0]));
+        errno = EOVERFLOW;
+        return false;
+    }
+    *out_count = count;
+    return true;
 }
 
-size_t lsm_bluetooth_battery_parse_objects(
-    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity)
+size_t lsm_bluetooth_device_parse_objects(
+    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity)
 {
-    if (!objects || !records || capacity == 0U ||
+    size_t count = 0U;
+    return lsm_bluetooth_device_parse_objects_checked(
+        objects, records, capacity, &count) ? count : 0U;
+}
+
+bool lsm_bluetooth_battery_parse_objects_checked(
+    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity,
+    size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!objects || !records || capacity == 0U || !out_count ||
         !g_variant_is_of_type(objects, G_VARIANT_TYPE("a{oa{sa{sv}}}")))
-        return 0U;
+        return false;
 
     size_t count = 0U;
+    bool complete = true;
     GVariantIter *object_iterator = g_variant_iter_new(objects);
-    if (!object_iterator) return 0U;
+    if (!object_iterator) return false;
     const char *object_path = NULL;
     GVariant *interfaces = NULL;
-    while (count < capacity &&
-           g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
+    while (g_variant_iter_next(object_iterator, "{&o@a{sa{sv}}}",
                                &object_path, &interfaces)) {
         GVariant *battery = g_variant_lookup_value(
             interfaces, LSM_BLUEZ_BATTERY_INTERFACE,
@@ -331,9 +382,6 @@ size_t lsm_bluetooth_battery_parse_objects(
             continue;
         }
 
-        /* Battery1 objects are useful only while their parent Device1 is
-         * explicitly connected. Missing Connected data is not evidence of a
-         * live device and must not resurrect a stale ObjectManager entry. */
         gboolean connected = FALSE;
         (void)g_variant_lookup(device, "Connected", "b", &connected);
         guint8 percentage = 0U;
@@ -345,15 +393,24 @@ size_t lsm_bluetooth_battery_parse_objects(
             g_variant_unref(interfaces);
             continue;
         }
+        if (count >= capacity) {
+            complete = false;
+            g_variant_unref(device);
+            g_variant_unref(battery);
+            g_variant_unref(interfaces);
+            continue;
+        }
 
         LsmBluetoothBatteryRecord *record = &records[count];
         memset(record, 0, sizeof(*record));
-        lsm_copy_string(record->object_path, sizeof(record->object_path), object_path);
+        lsm_copy_string(record->object_path, sizeof(record->object_path),
+                        object_path);
         if (!lookup_string(device, "Address", record->address,
                            sizeof(record->address))) {
             const char *marker = strstr(object_path, "/dev_");
             if (marker) {
-                lsm_copy_string(record->address, sizeof(record->address), marker + 5);
+                lsm_copy_string(record->address, sizeof(record->address),
+                                marker + 5);
                 for (char *cursor = record->address; *cursor; cursor++)
                     if (*cursor == '_') *cursor = ':';
             }
@@ -363,7 +420,8 @@ size_t lsm_bluetooth_battery_parse_objects(
             (void)lookup_string(device, "Name", record->name,
                                 sizeof(record->name));
         if (!record->name[0])
-            lsm_copy_string(record->name, sizeof(record->name), "Bluetooth device");
+            lsm_copy_string(record->name, sizeof(record->name),
+                            "Bluetooth device");
         (void)lookup_string(battery, "Source", record->source,
                             sizeof(record->source));
         (void)lookup_string(device, "AddressType", record->address_type,
@@ -385,10 +443,24 @@ size_t lsm_bluetooth_battery_parse_objects(
         g_variant_unref(interfaces);
     }
     g_variant_iter_free(object_iterator);
-    return count;
+    if (!complete) {
+        memset(records, 0, capacity * sizeof(records[0]));
+        errno = EOVERFLOW;
+        return false;
+    }
+    *out_count = count;
+    return true;
 }
 
-static void collect_bluez_snapshot(
+size_t lsm_bluetooth_battery_parse_objects(
+    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity)
+{
+    size_t count = 0U;
+    return lsm_bluetooth_battery_parse_objects_checked(
+        objects, records, capacity, &count) ? count : 0U;
+}
+
+static bool collect_bluez_snapshot(
     GCancellable *cancellable,
     LsmBluetoothBatteryRecord *battery_records, size_t battery_capacity,
     size_t *battery_count,
@@ -400,12 +472,14 @@ static void collect_bluez_snapshot(
     if (battery_count) *battery_count = 0U;
     if (adapter_count) *adapter_count = 0U;
     if (device_count) *device_count = 0U;
+    if (!battery_count || !adapter_count || !device_count) return false;
+
     GError *error = NULL;
     GDBusConnection *connection =
         g_bus_get_sync(G_BUS_TYPE_SYSTEM, cancellable, &error);
     if (!connection) {
         g_clear_error(&error);
-        return;
+        return false;
     }
 
     GVariant *reply = g_dbus_connection_call_sync(
@@ -416,22 +490,29 @@ static void collect_bluez_snapshot(
     g_object_unref(connection);
     if (!reply) {
         g_clear_error(&error);
-        return;
+        return false;
     }
 
     GVariant *objects = NULL;
     g_variant_get(reply, "(@a{oa{sa{sv}}})", &objects);
-    if (battery_count)
-        *battery_count = lsm_bluetooth_battery_parse_objects(
-            objects, battery_records, battery_capacity);
-    if (adapter_count)
-        *adapter_count = lsm_bluetooth_adapter_parse_objects(
-            objects, adapter_records, adapter_capacity);
-    if (device_count)
-        *device_count = lsm_bluetooth_device_parse_objects(
-            objects, device_records, device_capacity);
+    size_t batteries = 0U;
+    size_t adapters = 0U;
+    size_t devices = 0U;
+    const bool complete =
+        lsm_bluetooth_battery_parse_objects_checked(
+            objects, battery_records, battery_capacity, &batteries) &&
+        lsm_bluetooth_adapter_parse_objects_checked(
+            objects, adapter_records, adapter_capacity, &adapters) &&
+        lsm_bluetooth_device_parse_objects_checked(
+            objects, device_records, device_capacity, &devices);
     g_variant_unref(objects);
     g_variant_unref(reply);
+    if (!complete) return false;
+
+    *battery_count = batteries;
+    *adapter_count = adapters;
+    *device_count = devices;
+    return true;
 }
 
 static void wait_for_next_refresh(LsmBluetoothBatteryState *state)
@@ -472,7 +553,7 @@ static void *bluetooth_worker(void *user_data)
         size_t count = 0U;
         size_t adapter_count = 0U;
         size_t device_count = 0U;
-        collect_bluez_snapshot(
+        const bool complete = collect_bluez_snapshot(
             cancellable, records, LSM_BLUETOOTH_BATTERY_MAX, &count,
             adapters, LSM_BLUETOOTH_ADAPTER_MAX, &adapter_count,
             devices, LSM_BLUETOOTH_DEVICE_MAX, &device_count);
@@ -480,12 +561,14 @@ static void *bluetooth_worker(void *user_data)
 
         pthread_mutex_lock(&state->mutex);
         if (!state->stop_requested) {
-            memcpy(state->records, records, sizeof(records));
-            memcpy(state->adapters, adapters, sizeof(adapters));
-            memcpy(state->devices, devices, sizeof(devices));
-            state->count = count;
-            state->adapter_count = adapter_count;
-            state->device_count = device_count;
+            if (complete) {
+                memcpy(state->records, records, sizeof(records));
+                memcpy(state->adapters, adapters, sizeof(adapters));
+                memcpy(state->devices, devices, sizeof(devices));
+                state->count = count;
+                state->adapter_count = adapter_count;
+                state->device_count = device_count;
+            }
             wait_for_next_refresh(state);
         }
         const bool finished = state->stop_requested;
@@ -581,7 +664,15 @@ void lsm_bluetooth_battery_stop(void)
     const pthread_t thread = bluetooth_state.thread;
     pthread_mutex_unlock(&bluetooth_state.mutex);
 
-    pthread_join(thread, NULL);
+    struct timespec deadline;
+    int join_result = lsm_posix_deadline_after_milliseconds(
+        CLOCK_REALTIME, LSM_BLUEZ_SHUTDOWN_WAIT_MS, &deadline);
+    if (join_result == 0)
+        join_result = pthread_timedjoin_np(thread, NULL, &deadline);
+    if (join_result != 0) {
+        (void)pthread_detach(thread);
+        return;
+    }
 
     pthread_mutex_lock(&bluetooth_state.mutex);
     bluetooth_state.thread_started = false;

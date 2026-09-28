@@ -491,7 +491,7 @@ LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index)
     char stack[96], button[LSM_NAME_LEN + 32];
     snprintf(stack, sizeof(stack), "battery-%s", battery->name);
     battery_page_name(&app->monitor, index, button, sizeof(button));
-    char battery_title[LSM_NAME_LEN + 64];
+    char battery_title[(LSM_NAME_LEN * 2U) + 64U];
     if (performance_useful_hardware_name(battery->model))
         snprintf(battery_title, sizeof(battery_title), "%s — %s",
                  button, battery->model);

@@ -260,13 +260,27 @@ LsmWifiMetadata *lsm_wifi_metadata_create(void)
     return metadata;
 }
 
+static void clear_network_wifi_metadata(LsmNetInfo *network)
+{
+    if (!network) return;
+    network->ssid[0] = '\0';
+    network->access_point[0] = '\0';
+    network->signal_percent = 0.0;
+    network->signal_dbm = NAN;
+    network->frequency_mhz = 0.0;
+    network->link_speed_mbps = 0.0;
+}
+
 void lsm_wifi_metadata_refresh(LsmWifiMetadata *metadata, LsmNetInfo *network)
 {
     if (!metadata || !network || !network->wireless || !network->name[0]) return;
 
     const double now = lsm_monotonic_seconds();
     LsmWifiCacheRecord *record = find_record(metadata, network->name, true);
-    if (!record) return;
+    if (!record) {
+        clear_network_wifi_metadata(network);
+        return;
+    }
 
     if (lsm_refresh_interval_due(
             now, record->last_sampled, LSM_WIFI_METADATA_INTERVAL_SECONDS)) {
@@ -279,15 +293,18 @@ void lsm_wifi_metadata_refresh(LsmWifiMetadata *metadata, LsmNetInfo *network)
         }
     }
 
-    if (!record->valid) return;
+    if (!record->valid) {
+        clear_network_wifi_metadata(network);
+        return;
+    }
     lsm_copy_string(network->ssid, sizeof(network->ssid), record->ssid);
     lsm_copy_string(network->access_point, sizeof(network->access_point),
                     record->access_point);
     network->signal_percent = record->signal_percent;
     network->signal_dbm = record->signal_dbm;
     network->frequency_mhz = record->frequency_mhz;
-    if (record->link_speed_mbps > 0.0)
-        network->link_speed_mbps = record->link_speed_mbps;
+    network->link_speed_mbps = record->link_speed_mbps > 0.0
+        ? record->link_speed_mbps : 0.0;
 }
 
 void lsm_wifi_metadata_destroy(LsmWifiMetadata *metadata)

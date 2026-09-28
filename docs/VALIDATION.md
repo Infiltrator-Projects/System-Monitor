@@ -31,6 +31,25 @@ The exact revision intended for release must pass the required automated gates. 
 
 Every fixed defect should gain the narrowest useful permanent regression check when reproducible. Tests are part of the product contract rather than disposable scaffolding.
 
+## 1.0.145 forensic repair record — 2026-09-28
+
+The follow-up audit after 1.0.144 concentrated on the remaining places where a
+partial, first-baseline or stale observation could still look like a completed
+measurement. Disk, network and cumulative GPU accounting now leave startup,
+recovery and rollback intervals unavailable until two valid counter observations
+exist. Intel/DRM telemetry discovery, BlueZ inventories, Windows disk/network/GPU
+topology, Logitech HID++ tracking and SMBIOS module detail reject incomplete
+bounded sets rather than committing prefixes. Linux memory accounting commits
+only after a clean /proc/meminfo read, and App History similarly commits a load
+only after clean EOF/close.
+
+Regression fixtures cover first/recovery disk baselines, Intel first-sample
+availability, checked BlueZ overflow, HID++ device-set overflow, retained memory
+state on rejected input and SMBIOS module-capacity rejection. The Windows
+cross-build remains the compile-time gate for the SetupAPI topology changes;
+native Windows hardware behavior and physical-device behavior remain
+environment-dependent evidence rather than claims made by synthetic CI.
+
 ## 1.0.96 forensic audit record — 2026-09-25
 
 Baseline: System Monitor 1.0.95, commit
@@ -113,11 +132,13 @@ These items are not closed by this patch or by successful cross-compilation:
 - Native Windows runtime/metric comparison, GTK navigation and visual checks,
   privileged process/service actions, physical GPU/NPU/battery/Bluetooth devices,
   and actual device hotplug require target-system evidence.
-- CPU numbering with sparse online IDs/hotplug needs targeted fixtures: parsing
-  uses kernel CPU IDs while projection is bounded by logical processor count.
-- Network replacement under an unchanged interface name needs an identity test;
-  current Linux rate-state reconciliation is name-based. Process I/O permission
-  loss/recovery and Windows counter-gap handling also need dedicated fixtures.
+- Sparse Linux CPU IDs no longer fall back to invented dense topology after a
+  failed online-CPU enumeration; targeted live hotplug evidence is still useful
+  because synthetic CI cannot reproduce every kernel topology transition.
+- Network replacement under an unchanged interface name needs continued live
+  hotplug evidence. Linux now keys retained counter state by the interface's
+  native instance identity where available; process I/O permission loss/recovery
+  also remains environment-dependent assurance work.
 - Raw netlink truncation/interrupted dumps, Windows IOCTL payload bounds and the
   wider UI callback/lifetime surface warrant further manual review and fault
   injection. These are investigation areas, not claims of reproduced exploits.

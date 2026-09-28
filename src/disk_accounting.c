@@ -31,14 +31,6 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
         state->initialized = false;
         return;
     }
-    disk->read_bytes_per_sec = 0.0;
-    disk->write_bytes_per_sec = 0.0;
-    disk->active_percent = 0.0;
-    disk->read_response_ms = 0.0;
-    disk->write_response_ms = 0.0;
-    disk->average_response_ms = 0.0;
-    disk->queue_length = 0.0;
-    disk->in_progress_operations = 0U;
     disk->read_bytes_total = lsm_u64_multiply_saturating(
         counters->read_sectors, 512U);
     disk->write_bytes_total = lsm_u64_multiply_saturating(
@@ -46,13 +38,31 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
     disk->in_progress_operations =
         counters->in_progress_operations > UINT_MAX
             ? UINT_MAX : (unsigned)counters->in_progress_operations;
-    if (state->initialized) {
-        (void)lsm_u64_counter_rate(
-            counters->read_sectors, state->previous_read_sectors,
-            512.0L, elapsed_seconds, &disk->read_bytes_per_sec);
-        (void)lsm_u64_counter_rate(
-            counters->write_sectors, state->previous_write_sectors,
-            512.0L, elapsed_seconds, &disk->write_bytes_per_sec);
+
+    /*
+     * Cumulative counters need two valid observations. The first observation
+     * after startup, loss or rollback establishes a baseline and must not be
+     * published as a measured zero-rate interval.
+     */
+    disk->read_bytes_per_sec = NAN;
+    disk->write_bytes_per_sec = NAN;
+    disk->active_percent = NAN;
+    disk->read_response_ms = NAN;
+    disk->write_response_ms = NAN;
+    disk->average_response_ms = NAN;
+    disk->queue_length = NAN;
+
+    if (state->initialized && elapsed_seconds > 0.0) {
+        double read_rate = 0.0;
+        double write_rate = 0.0;
+        if (lsm_u64_counter_rate(
+                counters->read_sectors, state->previous_read_sectors,
+                512.0L, elapsed_seconds, &read_rate))
+            disk->read_bytes_per_sec = read_rate;
+        if (lsm_u64_counter_rate(
+                counters->write_sectors, state->previous_write_sectors,
+                512.0L, elapsed_seconds, &write_rate))
+            disk->write_bytes_per_sec = write_rate;
 
         double io_milliseconds_per_second = 0.0;
         if (lsm_u64_counter_rate(
@@ -60,8 +70,6 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
                 elapsed_seconds, &io_milliseconds_per_second))
             disk->active_percent = lsm_clamp_double(
                 io_milliseconds_per_second / 10.0, 0.0, 100.0);
-        else
-            disk->active_percent = 0.0;
 
         const bool read_valid =
             counters->read_operations >= state->previous_read_operations &&
@@ -77,16 +85,21 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
             ? counters->read_ms - state->previous_read_ms : 0U;
         const uint64_t write_time = write_valid
             ? counters->write_ms - state->previous_write_ms : 0U;
-        disk->read_response_ms = read_operations > 0U
-            ? (double)read_time / (double)read_operations : 0.0;
-        disk->write_response_ms = write_operations > 0U
-            ? (double)write_time / (double)write_operations : 0.0;
-        const uint64_t operations = lsm_u64_add_saturating(
-            read_operations, write_operations);
-        const uint64_t operation_time = lsm_u64_add_saturating(
-            read_time, write_time);
-        disk->average_response_ms = operations > 0U
-            ? (double)operation_time / (double)operations : 0.0;
+        if (read_valid)
+            disk->read_response_ms = read_operations > 0U
+                ? (double)read_time / (double)read_operations : 0.0;
+        if (write_valid)
+            disk->write_response_ms = write_operations > 0U
+                ? (double)write_time / (double)write_operations : 0.0;
+        if (read_valid && write_valid) {
+            const uint64_t operations = lsm_u64_add_saturating(
+                read_operations, write_operations);
+            const uint64_t operation_time = lsm_u64_add_saturating(
+                read_time, write_time);
+            disk->average_response_ms = operations > 0U
+                ? (double)operation_time / (double)operations : 0.0;
+        }
+
         double weighted_milliseconds_per_second = 0.0;
         if (lsm_u64_counter_rate(
                 counters->weighted_io_ms, state->previous_weighted_io_ms,
@@ -94,8 +107,6 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
                 &weighted_milliseconds_per_second))
             disk->queue_length = fmax(
                 0.0, weighted_milliseconds_per_second / 1000.0);
-        else
-            disk->queue_length = 0.0;
     }
 
     state->previous_read_operations = counters->read_operations;

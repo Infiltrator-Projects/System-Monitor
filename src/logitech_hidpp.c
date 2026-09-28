@@ -45,6 +45,7 @@
 #define LSM_HIDPP_REFRESH_SECONDS 10.0
 #define LSM_HIDPP_RETRY_SECONDS 30.0
 #define LSM_HIDPP_PATH_SIZE 512U
+#define LSM_HIDPP_SHUTDOWN_WAIT_MS 500U
 
 typedef struct {
     char device_path[LSM_HIDPP_PATH_SIZE];
@@ -121,8 +122,15 @@ bool lsm_logitech_hidpp_find_device(const char *power_supply_path,
     if (!directory) return false;
 
     bool found = false;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            enumeration_error = errno;
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "hidraw")) continue;
         char hidraw_path[LSM_HIDPP_PATH_SIZE];
         char link_path[LSM_HIDPP_PATH_SIZE];
@@ -132,7 +140,9 @@ bool lsm_logitech_hidpp_find_device(const char *power_supply_path,
             !lsm_join_path(link_path, sizeof(link_path),
                            hidraw_path, "device"))
             continue;
-        if (!lsm_realpath_copy(link_path, resolved_device, sizeof(resolved_device))) continue;
+        if (!lsm_realpath_copy(link_path, resolved_device,
+                               sizeof(resolved_device)))
+            continue;
         if (strcmp(resolved_supply, resolved_device) != 0) continue;
         if (!lsm_join_path(device_path, device_path_size,
                            hidraw_dev_root(), entry->d_name))
@@ -140,7 +150,14 @@ bool lsm_logitech_hidpp_find_device(const char *power_supply_path,
         found = device_path[0] != '\0';
         break;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && enumeration_error == 0)
+        enumeration_error = errno != 0 ? errno : EIO;
+    if (!found && enumeration_error != 0) errno = enumeration_error;
+    if (found && enumeration_error != 0) {
+        device_path[0] = '\0';
+        errno = enumeration_error;
+        return false;
+    }
     return found;
 }
 
@@ -496,16 +513,16 @@ bool lsm_logitech_hidpp_start(void)
     return true;
 }
 
-void lsm_logitech_hidpp_set_devices(const char *const *device_paths,
+bool lsm_logitech_hidpp_set_devices(const char *const *device_paths,
                                     size_t count)
 {
+    if (count > 0U && !device_paths) return false;
+
     pthread_mutex_lock(&hidpp_state.mutex);
     LsmHidppDeviceSlot updated[LSM_LOGITECH_HIDPP_MAX_DEVICES] = {0};
     size_t updated_count = 0U;
-    for (size_t input = 0U;
-         input < count && updated_count < LSM_LOGITECH_HIDPP_MAX_DEVICES;
-         input++) {
-        const char *path = device_paths ? device_paths[input] : NULL;
+    for (size_t input = 0U; input < count; input++) {
+        const char *path = device_paths[input];
         if (!path || !path[0]) continue;
 
         bool duplicate = false;
@@ -515,6 +532,11 @@ void lsm_logitech_hidpp_set_devices(const char *const *device_paths,
                 break;
             }
         if (duplicate) continue;
+        if (updated_count >= LSM_LOGITECH_HIDPP_MAX_DEVICES) {
+            pthread_mutex_unlock(&hidpp_state.mutex);
+            errno = EOVERFLOW;
+            return false;
+        }
 
         LsmHidppDeviceSlot *old = find_slot_locked(path);
         if (old) updated[updated_count] = *old;
@@ -532,6 +554,7 @@ void lsm_logitech_hidpp_set_devices(const char *const *device_paths,
     if (ensure_worker_condition_locked())
         pthread_cond_broadcast(&hidpp_state.condition);
     pthread_mutex_unlock(&hidpp_state.mutex);
+    return true;
 }
 
 bool lsm_logitech_hidpp_snapshot(const char *device_path,
@@ -564,7 +587,15 @@ void lsm_logitech_hidpp_stop(void)
     const pthread_t thread = hidpp_state.thread;
     pthread_mutex_unlock(&hidpp_state.mutex);
 
-    (void)pthread_join(thread, NULL);
+    struct timespec deadline;
+    int join_result = lsm_posix_deadline_after_milliseconds(
+        CLOCK_REALTIME, LSM_HIDPP_SHUTDOWN_WAIT_MS, &deadline);
+    if (join_result == 0)
+        join_result = pthread_timedjoin_np(thread, NULL, &deadline);
+    if (join_result != 0) {
+        (void)pthread_detach(thread);
+        return;
+    }
 
     pthread_mutex_lock(&hidpp_state.mutex);
     close(hidpp_state.cancel_pipe[0]);

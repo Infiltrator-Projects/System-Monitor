@@ -119,6 +119,43 @@ size_t lsm_bluetooth_device_snapshot(LsmBluetoothDeviceRecord *records,
 void lsm_bluetooth_battery_stop(void);
 
 /**
+ * Parse the complete BlueZ ObjectManager controller set.
+ *
+ * @param [in] objects BlueZ ObjectManager result variant.
+ * @param [out] records Caller-owned controller destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @param [out] out_count Number of complete records written on success.
+ * @return true only when the entire matching set fits and is parsed.
+ */
+bool lsm_bluetooth_adapter_parse_objects_checked(
+    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity,
+    size_t *out_count);
+/**
+ * Parse the complete BlueZ ObjectManager Device1 set.
+ *
+ * @param [in] objects BlueZ ObjectManager result variant.
+ * @param [out] records Caller-owned device destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @param [out] out_count Number of complete records written on success.
+ * @return true only when the entire matching set fits and is parsed.
+ */
+bool lsm_bluetooth_device_parse_objects_checked(
+    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity,
+    size_t *out_count);
+/**
+ * Parse the complete connected BlueZ Battery1 set.
+ *
+ * @param [in] objects BlueZ ObjectManager result variant.
+ * @param [out] records Caller-owned battery destination array.
+ * @param [in] capacity Number of records available in @p records.
+ * @param [out] out_count Number of complete records written on success.
+ * @return true only when the entire matching set fits and is parsed.
+ */
+bool lsm_bluetooth_battery_parse_objects_checked(
+    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity,
+    size_t *out_count);
+
+/**
  * Parse BlueZ ObjectManager data into controller and connected-device records.
  *
  * @param [in] objects BlueZ ObjectManager result variant.

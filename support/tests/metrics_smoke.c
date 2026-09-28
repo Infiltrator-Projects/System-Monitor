@@ -171,7 +171,10 @@ int main(void)
         .weighted_io_ms = 1500U
     };
     lsm_disk_accounting_update(&disk, &state, &first, 2.0);
-    if (!state.initialized || disk.read_bytes_per_sec != 0.0 ||
+    if (!state.initialized || !isnan(disk.read_bytes_per_sec) ||
+        !isnan(disk.write_bytes_per_sec) || !isnan(disk.active_percent) ||
+        !isnan(disk.read_response_ms) || !isnan(disk.write_response_ms) ||
+        !isnan(disk.average_response_ms) || !isnan(disk.queue_length) ||
         disk.read_bytes_total != 512000U ||
         disk.write_bytes_total != 1024000U ||
         disk.in_progress_operations != 2U)
@@ -209,15 +212,20 @@ int main(void)
         disk.write_bytes_total != 3121152U)
         return 5;
     lsm_disk_accounting_update(&disk, &state, &second, 2.0);
-    if (!state.initialized || disk.read_bytes_per_sec != 0.0 ||
-        disk.active_percent != 0.0)
+    if (!state.initialized || !isnan(disk.read_bytes_per_sec) ||
+        !isnan(disk.write_bytes_per_sec) || !isnan(disk.active_percent) ||
+        !isnan(disk.average_response_ms) || !isnan(disk.queue_length))
         return 6;
 
     const LsmDiskCounters reset = {0};
     lsm_disk_accounting_update(&disk, &state, &reset, 1.0);
-    if (disk.read_bytes_per_sec != 0.0 || disk.write_bytes_per_sec != 0.0 ||
-        disk.active_percent != 0.0 || disk.average_response_ms != 0.0 ||
-        disk.queue_length != 0.0 || disk.in_progress_operations != 0U ||
+    if (!isnan(disk.read_bytes_per_sec) ||
+        !isnan(disk.write_bytes_per_sec) ||
+        !isnan(disk.active_percent) ||
+        !isnan(disk.read_response_ms) ||
+        !isnan(disk.write_response_ms) ||
+        !isnan(disk.average_response_ms) ||
+        !isnan(disk.queue_length) || disk.in_progress_operations != 0U ||
         disk.read_bytes_total != 0U || disk.write_bytes_total != 0U)
         return 3;
     puts("Disk rates, totals, queue depth and counter-reset handling passed.");
@@ -300,8 +308,12 @@ int main(void)
     assert(memory.committed_bytes == (8ULL << 30U));
     assert(memory.kernel_nonreclaimable_bytes == (3ULL << 20U));
 
+    const uint64_t retained_available = memory.available_bytes;
+    const uint64_t retained_committed = memory.committed_bytes;
     replace_file(path, "MemAvailable: 18446744073709551615 kB\n");
     assert(!lsm_memory_accounting_read(path, &memory, false));
+    assert(memory.available_bytes == retained_available);
+    assert(memory.committed_bytes == retained_committed);
 
     assert(unlink(path) == 0);
     puts("Memory accounting smoke test passed.");

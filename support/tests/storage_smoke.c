@@ -436,7 +436,7 @@ static size_t add_memory_device(uint8_t *table, size_t offset,
 
 int main(void)
 {
-    uint8_t table[256] = {0};
+    uint8_t table[4096] = {0};
     size_t used = 0;
     used = add_memory_device(table, used, 8192, 0x0d, 4800, 5600, true);
     used = add_memory_device(table, used, 0, 0x0d, 4800, 4800, false);
@@ -488,6 +488,21 @@ int main(void)
            (ssize_t)sizeof(truncated));
     close(malformed);
     assert(!lsm_smbios_memory_read(path, &info, error, sizeof(error)));
+
+    memset(table, 0, sizeof(table));
+    used = 0U;
+    for (size_t index = 0U; index < LSM_SMBIOS_MAX_MODULES + 1U; index++)
+        used = add_memory_device(
+            table, used, 1024U, 0x0d, 4800U, 4800U, false);
+    table[used] = 127U;
+    table[used + 1U] = 4U;
+    used += 6U;
+    const int overflow = open(path, O_WRONLY | O_TRUNC);
+    assert(overflow >= 0);
+    assert(write(overflow, table, used) == (ssize_t)used);
+    assert(close(overflow) == 0);
+    assert(!lsm_smbios_memory_read(path, &info, error, sizeof(error)));
+    assert(strstr(error, "exceeds supported capacity") != NULL);
 
     unlink(path);
     puts("SMBIOS memory parser smoke test passed.");

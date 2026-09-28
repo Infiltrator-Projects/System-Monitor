@@ -348,22 +348,24 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor)
     }
 }
 
-static void track_hidpp_batteries(const LsmMonitor *monitor)
+static bool track_hidpp_batteries(const LsmMonitor *monitor)
 {
     const char *devices[LSM_LOGITECH_HIDPP_MAX_DEVICES] = {0};
     size_t count = 0U;
     const LsmLinuxMonitorBackendState *state =
         monitor_backend_state_const(monitor);
     if (state) {
-        for (size_t index = 0U;
-             index < state->battery_count &&
-             count < LSM_LOGITECH_HIDPP_MAX_DEVICES;
-             index++) {
+        for (size_t index = 0U; index < state->battery_count; index++) {
             const char *path = state->batteries[index].hidraw_path;
-            if (path[0]) devices[count++] = path;
+            if (!path[0]) continue;
+            if (count >= LSM_LOGITECH_HIDPP_MAX_DEVICES) {
+                errno = EOVERFLOW;
+                return false;
+            }
+            devices[count++] = path;
         }
     }
-    lsm_logitech_hidpp_set_devices(devices, count);
+    return lsm_logitech_hidpp_set_devices(devices, count);
 }
 
 static bool hidpp_status_matches(const char *sysfs_status,
@@ -528,6 +530,10 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
         complete = false;
         enumeration_error = errno != 0 ? errno : EOVERFLOW;
     }
+    if (complete && !track_hidpp_batteries(monitor)) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EOVERFLOW;
+    }
 
     if (!complete) {
         memcpy(monitor->batteries, previous_batteries,
@@ -542,7 +548,6 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
         return false;
     }
 
-    track_hidpp_batteries(monitor);
     return true;
 }
 

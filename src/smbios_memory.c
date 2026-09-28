@@ -231,6 +231,7 @@ bool lsm_smbios_memory_read(const char *path,
     if (!read_table(path, &table, &table_size, error, error_size)) return false;
 
     size_t offset = 0;
+    bool modules_complete = true;
     while (offset + 4 <= table_size) {
         const uint8_t type = table[offset];
         const uint8_t length = table[offset + 1];
@@ -287,6 +288,8 @@ bool lsm_smbios_memory_read(const char *path,
                     copy_smbios_string(table, table_size, strings_start, next,
                         length > 0x1a ? record[0x1a] : 0U,
                         module->part_number, sizeof(module->part_number));
+                } else {
+                    modules_complete = false;
                 }
             }
         }
@@ -297,6 +300,14 @@ bool lsm_smbios_memory_read(const char *path,
     }
 
     free(table);
+    if (!modules_complete) {
+        memset(info, 0, sizeof(*info));
+        snprintf(info->form_factor, sizeof(info->form_factor), "N/A");
+        set_error(error, error_size,
+                  "SMBIOS memory module count exceeds supported capacity",
+                  NULL);
+        return false;
+    }
     if (info->slots_total == 0) {
         set_error(error, error_size, "No SMBIOS memory-device records found", NULL);
         return false;

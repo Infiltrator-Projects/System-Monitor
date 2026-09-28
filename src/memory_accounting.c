@@ -96,9 +96,11 @@ bool lsm_memory_accounting_read(const char *path, LsmMemoryInfo *memory,
             have_corrupted = true;
         }
     }
-    fclose(file);
+    const bool complete = !ferror(file) && fclose(file) == 0;
+    if (!complete || !have_available)
+        return false;
 
-    if (have_available) memory->available_bytes = available;
+    memory->available_bytes = available;
     if (have_committed) memory->committed_bytes = committed;
     if (have_commit_limit) memory->commit_limit_bytes = commit_limit;
     if (refresh_details) {

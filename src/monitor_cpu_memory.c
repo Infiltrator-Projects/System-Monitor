@@ -146,22 +146,18 @@ static bool read_online_cpu_ids(unsigned ids[LSM_MAX_CPUS],
     return true;
 }
 
-static size_t cpu_ids_or_dense_fallback(const LsmCpuInfo *cpu,
-                                        unsigned ids[LSM_MAX_CPUS])
+static size_t read_topology_cpu_ids(unsigned ids[LSM_MAX_CPUS])
 {
     size_t count = 0U;
-    if (read_online_cpu_ids(ids, &count) && count > 0U) return count;
-    const unsigned logical =
-        cpu && cpu->logical_cores > 0U && cpu->logical_cores <= LSM_MAX_CPUS
-            ? cpu->logical_cores : 1U;
-    for (unsigned index = 0U; index < logical; index++) ids[index] = index;
-    return logical;
+    if (!read_online_cpu_ids(ids, &count) || count == 0U)
+        return 0U;
+    return count;
 }
 
 static void read_cpu_cache_totals(LsmCpuInfo *cpu)
 {
     unsigned cpu_ids[LSM_MAX_CPUS];
-    const size_t cpu_count = cpu_ids_or_dense_fallback(cpu, cpu_ids);
+    const size_t cpu_count = read_topology_cpu_ids(cpu_ids);
     const size_t capacity = cpu_count * 16U + 16U;
     LsmSeenCache *seen = calloc(capacity, sizeof(*seen));
     if (!seen) {
@@ -296,7 +292,7 @@ static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
     int packages[LSM_MAX_CPUS];
     size_t count = 0U;
     unsigned cpu_ids[LSM_MAX_CPUS];
-    const size_t cpu_count = cpu_ids_or_dense_fallback(cpu, cpu_ids);
+    const size_t cpu_count = read_topology_cpu_ids(cpu_ids);
     for (size_t position = 0U; position < cpu_count; position++) {
         const unsigned cpu_id = cpu_ids[position];
         char path[LSM_PATH_LEN];
@@ -312,24 +308,50 @@ static unsigned read_cpu_socket_count(const LsmCpuInfo *cpu)
             if (packages[current] == (int)package) known = true;
         if (!known && count < LSM_MAX_CPUS) packages[count++] = (int)package;
     }
-    return count > 0U ? (unsigned)count : 1U;
+    return (unsigned)count;
 }
 
 static unsigned read_numa_node_count(void)
 {
     DIR *directory = opendir("/sys/devices/system/node");
-    if (!directory) return 1U;
+    if (!directory) return 0U;
+
     unsigned count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while ((entry = readdir(directory))) {
-        if (!lsm_string_starts_with(entry->d_name, "node")) continue;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
+        if (!lsm_string_starts_with(entry->d_name, "node") ||
+            !lsm_ascii_is_digit((unsigned char)entry->d_name[4]))
+            continue;
         uint64_t node = 0U;
-        if (lsm_parse_u64(entry->d_name + 4U, 10U, &node) &&
-            count < UINT_MAX)
-            count++;
+        if (!lsm_parse_u64(entry->d_name + 4U, 10U, &node))
+            continue;
+        if (count == UINT_MAX) {
+            complete = false;
+            if (enumeration_error == 0) enumeration_error = EOVERFLOW;
+            continue;
+        }
+        count++;
     }
-    closedir(directory);
-    return count > 0U ? count : 1U;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return 0U;
+    }
+    return count;
 }
 
 static void update_load_average(LsmCpuInfo *cpu)
@@ -539,12 +561,21 @@ static void update_memory(LsmMonitor *monitor, bool refresh_details)
     const bool have_available = lsm_memory_accounting_read(
         "/proc/meminfo", memory, refresh_details);
     if (!have_available) {
-        uint64_t available = lsm_u64_add_saturating(
-            memory->free_bytes, memory->buffers_bytes);
-        available = lsm_u64_add_saturating(
-            available, memory->cached_bytes);
-        memory->available_bytes = available < memory->total_bytes
-            ? available : memory->total_bytes;
+        /*
+         * MemAvailable has no faithful sysinfo substitute. Do not combine
+         * current free/buffer counters with retained cache data and present
+         * the result as a fresh measurement.
+         */
+        memory->available_bytes = 0U;
+        memory->used_bytes = 0U;
+        memory->committed_bytes = 0U;
+        memory->commit_limit_bytes = 0U;
+        memory->cached_bytes = 0U;
+        memory->kernel_reclaimable_bytes = 0U;
+        memory->kernel_nonreclaimable_bytes = 0U;
+        memory->page_tables_bytes = 0U;
+        memory->hardware_corrupted_bytes = 0U;
+        memory->usage_percent = NAN;
     }
     if (memory->free_bytes > memory->total_bytes)
         memory->free_bytes = memory->total_bytes;
@@ -554,10 +585,12 @@ static void update_memory(LsmMonitor *monitor, bool refresh_details)
         memory->cached_bytes = memory->total_bytes;
     if (memory->available_bytes > memory->total_bytes)
         memory->available_bytes = memory->total_bytes;
-    memory->used_bytes = memory->total_bytes > memory->available_bytes
-        ? memory->total_bytes - memory->available_bytes : 0U;
-    memory->usage_percent = lsm_percent_u64(
-        memory->used_bytes, memory->total_bytes);
+    if (have_available) {
+        memory->used_bytes = memory->total_bytes > memory->available_bytes
+            ? memory->total_bytes - memory->available_bytes : 0U;
+        memory->usage_percent = lsm_percent_u64(
+            memory->used_bytes, memory->total_bytes);
+    }
     uint64_t file_handles = 0U;
     monitor->cpu.file_handle_count_available =
         read_system_file_handles(&file_handles);

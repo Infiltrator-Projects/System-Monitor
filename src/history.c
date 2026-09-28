@@ -576,6 +576,23 @@ static void history_load(LsmApp *app)
     FILE *file = fopen(app->history.history_path, "r");
     if (!file) return;
 
+    /*
+     * Load into temporary retained state. A short read or close failure must
+     * not replace the last complete in-memory history with a file prefix that
+     * could later be persisted as if it were authoritative.
+     */
+    GHashTable *original = app->history.app_history;
+    const guint original_count = app->history.history_entry_count;
+    const gboolean original_dirty = app->history.history_dirty;
+    GHashTable *loaded = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, history_entry_free);
+    if (!loaded) {
+        (void)fclose(file);
+        return;
+    }
+    app->history.app_history = loaded;
+    app->history.history_entry_count = 0U;
+
     gboolean truncated = FALSE;
     char line[LSM_HISTORY_MAX_LINE_BYTES];
     while (fgets(line, sizeof(line), file)) {
@@ -594,7 +611,16 @@ static void history_load(LsmApp *app)
             line[--length] = '\0';
         if (history_load_record(app, line)) truncated = TRUE;
     }
-    (void)fclose(file);
+    const gboolean read_complete = !ferror(file) && fclose(file) == 0;
+    if (!read_complete) {
+        g_hash_table_destroy(loaded);
+        app->history.app_history = original;
+        app->history.history_entry_count = original_count;
+        app->history.history_dirty = original_dirty;
+        return;
+    }
+
+    if (original) g_hash_table_destroy(original);
     if (truncated) history_mark_dirty(app);
 }
 

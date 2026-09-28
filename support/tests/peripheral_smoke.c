@@ -7,6 +7,7 @@
  * @license GPL-3.0-or-later
  */
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 int smoke_case_bluetooth_battery(void);
@@ -29,6 +30,7 @@ int smoke_case_wifi_metadata(void);
 #include "bluetooth_battery.h"
 
 #include <gio/gio.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -89,6 +91,23 @@ int main(void)
         objects, adapters, 2U);
     const size_t device_count = lsm_bluetooth_device_parse_objects(
         objects, devices, 4U);
+
+    LsmBluetoothDeviceRecord too_small[2] = {0};
+    size_t checked_count = SIZE_MAX;
+    errno = 0;
+    const bool overflow_rejected =
+        !lsm_bluetooth_device_parse_objects_checked(
+            objects, too_small, 2U, &checked_count) &&
+        errno == EOVERFLOW && checked_count == 0U;
+    size_t checked_adapter_count = 0U;
+    size_t checked_battery_count = 0U;
+    const bool checked_sets =
+        lsm_bluetooth_adapter_parse_objects_checked(
+            objects, adapters, 2U, &checked_adapter_count) &&
+        lsm_bluetooth_battery_parse_objects_checked(
+            objects, records, 4U, &checked_battery_count) &&
+        checked_adapter_count == adapter_count &&
+        checked_battery_count == count;
     g_variant_unref(objects);
 
     const bool adapter_ok = adapter_count == 1U &&
@@ -116,7 +135,8 @@ int main(void)
         strcmp(devices[2].address, "01:02:03:04:05:06") == 0 &&
         !devices[2].connected;
 
-    const bool ok = adapter_ok && devices_ok && count == 1U &&
+    const bool ok = overflow_rejected && checked_sets &&
+        adapter_ok && devices_ok && count == 1U &&
         strcmp(records[0].address, "10:20:30:40:50:60") == 0 &&
         strcmp(records[0].name, "Marshall Headphones") == 0 &&
         strcmp(records[0].source, "GATT Battery Service") == 0 &&
@@ -446,7 +466,22 @@ static bool test_hidraw_mapping(void)
 static bool test_worker_lifecycle(void)
 {
     if (!lsm_logitech_hidpp_start()) return false;
-    lsm_logitech_hidpp_set_devices(NULL, 0U);
+    if (!lsm_logitech_hidpp_set_devices(NULL, 0U)) return false;
+
+    const char *overflow[LSM_LOGITECH_HIDPP_MAX_DEVICES + 1U];
+    char names[LSM_LOGITECH_HIDPP_MAX_DEVICES + 1U][32];
+    for (size_t index = 0U;
+         index < LSM_LOGITECH_HIDPP_MAX_DEVICES + 1U; index++) {
+        (void)snprintf(names[index], sizeof(names[index]),
+                       "/dev/hidraw%zu", index);
+        overflow[index] = names[index];
+    }
+    errno = 0;
+    if (lsm_logitech_hidpp_set_devices(
+            overflow, LSM_LOGITECH_HIDPP_MAX_DEVICES + 1U) ||
+        errno != EOVERFLOW)
+        return false;
+
     lsm_logitech_hidpp_stop();
     return true;
 }

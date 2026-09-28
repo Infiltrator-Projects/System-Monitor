@@ -293,7 +293,7 @@ LsmDevicePage *performance_build_disk_page(LsmApp *app, size_t index)
     gtk_label_set_markup(GTK_LABEL(page->title), markup);
     g_free(markup);
     gtk_widget_set_halign(page->title, GTK_ALIGN_START);
-    char disk_subtitle[128];
+    char disk_subtitle[192];
     snprintf(disk_subtitle, sizeof(disk_subtitle), "%s — %s",
              disk->name, capacity);
     page->subtitle = gtk_label_new(disk_subtitle);

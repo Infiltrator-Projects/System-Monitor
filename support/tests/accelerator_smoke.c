@@ -190,6 +190,12 @@ int main(void)
     LsmIntelGpuBackend *backend = lsm_intel_gpu_create(&gpu);
     if (!backend) return 7;
     if (!lsm_intel_gpu_refresh(backend, &gpu, 1.0)) return 8;
+    if (gpu.utilization_available || gpu.render_available ||
+        gpu.compute_available || gpu.video_available ||
+        gpu.video_enhance_available || gpu.copy_available ||
+        gpu.core_clock_available || gpu.memory_clock_available ||
+        gpu.power_available || !gpu.temperature_available)
+        return 19;
 
 #define WRITE_VALUE(name, text) \
     do { \

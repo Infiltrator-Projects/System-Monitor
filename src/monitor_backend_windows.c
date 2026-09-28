@@ -36,6 +36,7 @@
 #include <pdhmsg.h>
 #include <psapi.h>
 #include <setupapi.h>
+#include <ntddstor.h>
 #include <winioctl.h>
 
 #include <limits.h>
@@ -70,6 +71,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
+    DWORD number;
     uint64_t read_bytes;
     uint64_t write_bytes;
     uint64_t read_count;
@@ -595,17 +597,32 @@ static void update_disk_performance(
     disk->write_bytes_total = write_bytes;
     disk->queue_length = (double)performance->QueueDepth;
     disk->in_progress_operations = performance->QueueDepth;
+    disk->read_bytes_per_sec = NAN;
+    disk->write_bytes_per_sec = NAN;
+    disk->active_percent = NAN;
+    disk->read_response_ms = NAN;
+    disk->write_response_ms = NAN;
+    disk->average_response_ms = NAN;
 
     if (baseline->valid && elapsed > 0.0) {
-        (void)infiltratr_u64_counter_rate(
-            read_bytes, baseline->read_bytes, 1.0L, elapsed,
-            &disk->read_bytes_per_sec);
-        (void)infiltratr_u64_counter_rate(
-            write_bytes, baseline->write_bytes, 1.0L, elapsed,
-            &disk->write_bytes_per_sec);
+        double read_rate = 0.0;
+        double write_rate = 0.0;
+        if (infiltratr_u64_counter_rate(
+                read_bytes, baseline->read_bytes, 1.0L, elapsed,
+                &read_rate))
+            disk->read_bytes_per_sec = read_rate;
+        if (infiltratr_u64_counter_rate(
+                write_bytes, baseline->write_bytes, 1.0L, elapsed,
+                &write_rate))
+            disk->write_bytes_per_sec = write_rate;
 
-        if (read_time >= baseline->read_time_100ns &&
-            write_time >= baseline->write_time_100ns) {
+        const bool read_valid =
+            read_time >= baseline->read_time_100ns &&
+            read_count >= baseline->read_count;
+        const bool write_valid =
+            write_time >= baseline->write_time_100ns &&
+            write_count >= baseline->write_count;
+        if (read_valid && write_valid) {
             const uint64_t read_time_delta =
                 read_time - baseline->read_time_100ns;
             const uint64_t write_time_delta =
@@ -617,18 +634,19 @@ static void update_disk_performance(
                 (long double)write_time_delta;
             double active = elapsed_100ns > 0.0L
                 ? (double)((busy * 100.0L) / elapsed_100ns)
-                : 0.0;
-            if (active > 100.0) active = 100.0;
-            if (active < 0.0) active = 0.0;
-            disk->active_percent = active;
+                : NAN;
+            if (isfinite(active)) {
+                if (active > 100.0) active = 100.0;
+                if (active < 0.0) active = 0.0;
+                disk->active_percent = active;
+            }
 
             const uint64_t read_ops =
-                read_count >= baseline->read_count
-                    ? read_count - baseline->read_count : 0U;
+                read_count - baseline->read_count;
             const uint64_t write_ops =
-                write_count >= baseline->write_count
-                    ? write_count - baseline->write_count : 0U;
-            const uint64_t operations = read_ops + write_ops;
+                write_count - baseline->write_count;
+            const uint64_t operations =
+                infiltratr_u64_add_saturating(read_ops, write_ops);
             disk->read_response_ms = read_ops > 0U
                 ? (double)read_time_delta / 10000.0 / (double)read_ops
                 : 0.0;
@@ -664,51 +682,196 @@ static bool disk_identity_changed(
     return false;
 }
 
-static void enumerate_physical_disks(
+static const LsmWindowsDiskBaseline *find_disk_baseline(
+    const LsmWindowsMonitorBackendState *state, DWORD number)
+{
+    if (!state) return NULL;
+    for (size_t index = 0U; index < LSM_MAX_DISKS; index++)
+        if (state->disks[index].valid &&
+            state->disks[index].number == number)
+            return &state->disks[index];
+    return NULL;
+}
+
+static bool enumerate_physical_disk_numbers(
+    DWORD numbers[LSM_MAX_DISKS], size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!numbers || !out_count) return false;
+
+    HDEVINFO devices = SetupDiGetClassDevsA(
+        &GUID_DEVINTERFACE_DISK, NULL, NULL,
+        DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (devices == INVALID_HANDLE_VALUE) return false;
+
+    size_t count = 0U;
+    bool complete = true;
+    DWORD enumeration_error = ERROR_SUCCESS;
+    for (DWORD index = 0U;; index++) {
+        SP_DEVICE_INTERFACE_DATA interface_data;
+        memset(&interface_data, 0, sizeof(interface_data));
+        interface_data.cbSize = sizeof(interface_data);
+
+        SetLastError(ERROR_SUCCESS);
+        if (!SetupDiEnumDeviceInterfaces(
+                devices, NULL, &GUID_DEVINTERFACE_DISK, index,
+                &interface_data)) {
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_NO_MORE_ITEMS) {
+                complete = false;
+                enumeration_error = failure != ERROR_SUCCESS
+                    ? failure : ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+
+        DWORD required = 0U;
+        SetLastError(ERROR_SUCCESS);
+        (void)SetupDiGetDeviceInterfaceDetailA(
+            devices, &interface_data, NULL, 0U, &required, NULL);
+        const DWORD sizing_error = GetLastError();
+        if (required < sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_A) ||
+            sizing_error != ERROR_INSUFFICIENT_BUFFER) {
+            complete = false;
+            enumeration_error = sizing_error != ERROR_SUCCESS
+                ? sizing_error : ERROR_INVALID_DATA;
+            break;
+        }
+
+        SP_DEVICE_INTERFACE_DETAIL_DATA_A *detail =
+            (SP_DEVICE_INTERFACE_DETAIL_DATA_A *)calloc(1U, required);
+        if (!detail) {
+            complete = false;
+            enumeration_error = ERROR_NOT_ENOUGH_MEMORY;
+            break;
+        }
+        detail->cbSize = sizeof(*detail);
+        if (!SetupDiGetDeviceInterfaceDetailA(
+                devices, &interface_data, detail, required, NULL, NULL)) {
+            enumeration_error = GetLastError();
+            free(detail);
+            complete = false;
+            break;
+        }
+
+        HANDLE disk = CreateFileA(
+            detail->DevicePath, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        free(detail);
+        if (disk == INVALID_HANDLE_VALUE) {
+            enumeration_error = GetLastError();
+            complete = false;
+            break;
+        }
+
+        STORAGE_DEVICE_NUMBER device_number;
+        memset(&device_number, 0, sizeof(device_number));
+        DWORD bytes = 0U;
+        const BOOL have_number = DeviceIoControl(
+            disk, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+            NULL, 0U, &device_number, (DWORD)sizeof(device_number),
+            &bytes, NULL);
+        const DWORD number_error = have_number ? ERROR_SUCCESS : GetLastError();
+        (void)CloseHandle(disk);
+        if (!have_number || bytes < sizeof(device_number)) {
+            complete = false;
+            enumeration_error = number_error != ERROR_SUCCESS
+                ? number_error : ERROR_INVALID_DATA;
+            break;
+        }
+        if (device_number.DeviceType != FILE_DEVICE_DISK)
+            continue;
+
+        bool duplicate = false;
+        for (size_t known = 0U; known < count; known++)
+            if (numbers[known] == device_number.DeviceNumber) {
+                duplicate = true;
+                break;
+            }
+        if (duplicate) continue;
+        if (count >= LSM_MAX_DISKS) {
+            complete = false;
+            enumeration_error = ERROR_BUFFER_OVERFLOW;
+            break;
+        }
+        numbers[count++] = device_number.DeviceNumber;
+    }
+
+    if (!SetupDiDestroyDeviceInfoList(devices) && complete) {
+        complete = false;
+        enumeration_error = GetLastError();
+    }
+    if (!complete) {
+        SetLastError(
+            enumeration_error != ERROR_SUCCESS
+                ? enumeration_error : ERROR_GEN_FAILURE);
+        return false;
+    }
+
+    *out_count = count;
+    return true;
+}
+
+static bool enumerate_physical_disks(
     LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
     double elapsed)
 {
-    if (!monitor || !state) return;
+    if (!monitor || !state) return false;
+
+    DWORD numbers[LSM_MAX_DISKS] = {0};
+    size_t number_count = 0U;
+    if (!enumerate_physical_disk_numbers(numbers, &number_count))
+        return false;
 
     LsmDiskInfo *discovered =
         (LsmDiskInfo *)calloc(LSM_MAX_DISKS, sizeof(*discovered));
-    if (!discovered) return;
-    size_t count = 0U;
+    if (!discovered) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return false;
+    }
+    LsmWindowsDiskBaseline next_baselines[LSM_MAX_DISKS];
+    memset(next_baselines, 0, sizeof(next_baselines));
 
-    for (unsigned number = 0U;
-         number < LSM_MAX_DISKS && count < LSM_MAX_DISKS;
-         number++) {
+    size_t count = 0U;
+    for (size_t position = 0U; position < number_count; position++) {
+        const DWORD number = numbers[position];
         char path[64];
-        (void)snprintf(path, sizeof(path), "\\\\.\\PhysicalDrive%u", number);
-        SetLastError(ERROR_SUCCESS);
+        (void)snprintf(
+            path, sizeof(path), "\\\\.\\PhysicalDrive%lu",
+            (unsigned long)number);
         HANDLE disk = CreateFileA(
             path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL, OPEN_EXISTING, 0U, NULL);
         if (disk == INVALID_HANDLE_VALUE) {
-            const DWORD failure = GetLastError();
-            if (failure == ERROR_FILE_NOT_FOUND ||
-                failure == ERROR_PATH_NOT_FOUND ||
-                failure == ERROR_INVALID_NAME)
-                continue;
             free(discovered);
-            return;
+            return false;
         }
 
         LsmDiskInfo *info = &discovered[count];
-        (void)snprintf(info->name, sizeof(info->name), "Disk %u", number);
+        (void)snprintf(
+            info->name, sizeof(info->name), "Disk %lu",
+            (unsigned long)number);
         infiltratr_copy_string(
             info->instance_identity, sizeof(info->instance_identity), path);
         query_disk_size(disk, info);
         (void)query_disk_identity(disk, info);
 
+        LsmWindowsDiskBaseline *baseline = &next_baselines[count];
+        const LsmWindowsDiskBaseline *old =
+            find_disk_baseline(state, number);
+        if (old) *baseline = *old;
+        baseline->number = number;
+
         DISK_PERFORMANCE performance;
         if (query_disk_performance(disk, &performance))
-            update_disk_performance(
-                info, &state->disks[number], &performance, elapsed);
+            update_disk_performance(info, baseline, &performance, elapsed);
         else
-            state->disks[number].valid = false;
+            baseline->valid = false;
 
-        CloseHandle(disk);
+        if (!CloseHandle(disk)) {
+            free(discovered);
+            return false;
+        }
         count++;
     }
 
@@ -722,7 +885,9 @@ static void enumerate_physical_disks(
     if (count > 0U)
         memcpy(monitor->disks, discovered, count * sizeof(discovered[0]));
     monitor->disk_count = count;
+    memcpy(state->disks, next_baselines, sizeof(state->disks));
     free(discovered);
+    return true;
 }
 
 static int physical_disk_index(
@@ -753,17 +918,20 @@ static bool volume_is_system_volume(const char *mount_point)
         windows_directory[1] == ':';
 }
 
-static void append_volume_to_disk(
+static bool append_volume_to_disk(
     LsmMonitor *monitor, int disk_index, const char *volume_name,
     const char *mount_point, const char *filesystem,
     uint64_t total_bytes, uint64_t used_bytes, bool usage_known)
 {
     if (!monitor || disk_index < 0 ||
         (size_t)disk_index >= monitor->disk_count)
-        return;
+        return false;
 
     LsmDiskInfo *disk = &monitor->disks[(size_t)disk_index];
-    if (disk->partition_count >= LSM_MAX_PARTITIONS) return;
+    if (disk->partition_count >= LSM_MAX_PARTITIONS) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        return false;
+    }
 
     LsmPartitionInfo *partition =
         &disk->partitions[disk->partition_count++];
@@ -784,6 +952,7 @@ static void append_volume_to_disk(
         ? (unsigned)infiltratr_percent_u64(used_bytes, total_bytes) : 0U;
     if (mount_point && volume_is_system_volume(mount_point))
         disk->system_disk = true;
+    return true;
 }
 
 static VOLUME_DISK_EXTENTS *query_volume_disk_extents(
@@ -824,16 +993,33 @@ static VOLUME_DISK_EXTENTS *query_volume_disk_extents(
     return NULL;
 }
 
-static void enumerate_disk_volumes(LsmMonitor *monitor)
+static bool enumerate_disk_volumes(LsmMonitor *monitor)
 {
-    if (!monitor || monitor->disk_count == 0U) return;
+    if (!monitor) return false;
+    if (monitor->disk_count == 0U) return true;
+
+    LsmDiskInfo backup[LSM_MAX_DISKS];
+    memcpy(backup, monitor->disks, sizeof(backup));
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        monitor->disks[index].partition_count = 0U;
+        monitor->disks[index].system_disk = false;
+        memset(monitor->disks[index].partitions, 0,
+               sizeof(monitor->disks[index].partitions));
+    }
 
     char volume_name[MAX_PATH];
+    SetLastError(ERROR_SUCCESS);
     HANDLE search = FindFirstVolumeA(volume_name, (DWORD)sizeof(volume_name));
-    if (search == INVALID_HANDLE_VALUE) return;
+    if (search == INVALID_HANDLE_VALUE) {
+        const DWORD failure = GetLastError();
+        if (failure == ERROR_NO_MORE_FILES) return true;
+        memcpy(monitor->disks, backup, sizeof(backup));
+        return false;
+    }
 
-    bool more = true;
-    while (more) {
+    bool complete = true;
+    DWORD enumeration_error = ERROR_SUCCESS;
+    for (;;) {
         char volume_path[MAX_PATH];
         infiltratr_copy_string(volume_path, sizeof(volume_path), volume_name);
         const size_t volume_length = strlen(volume_path);
@@ -856,60 +1042,91 @@ static void enumerate_disk_volumes(LsmMonitor *monitor)
                         ? (bytes - extent_offset) /
                             (DWORD)sizeof(extents->Extents[0])
                         : 0U;
-                const DWORD extent_count =
-                    extents->NumberOfDiskExtents <= extent_capacity
-                        ? extents->NumberOfDiskExtents : 0U;
-
-                char mount_points[LSM_WINDOWS_VOLUME_BUFFER];
-                DWORD required = 0U;
-                mount_points[0] = '\0';
-                if (!GetVolumePathNamesForVolumeNameA(
-                        volume_name, mount_points,
-                        (DWORD)sizeof(mount_points), &required))
+                if (extents->NumberOfDiskExtents > extent_capacity) {
+                    complete = false;
+                    enumeration_error = ERROR_INVALID_DATA;
+                } else {
+                    char mount_points[LSM_WINDOWS_VOLUME_BUFFER];
+                    DWORD required = 0U;
                     mount_points[0] = '\0';
+                    if (!GetVolumePathNamesForVolumeNameA(
+                            volume_name, mount_points,
+                            (DWORD)sizeof(mount_points), &required))
+                        mount_points[0] = '\0';
 
-                char filesystem[64];
-                filesystem[0] = '\0';
-                (void)GetVolumeInformationA(
-                    volume_name, NULL, 0U, NULL, NULL, NULL,
-                    filesystem, (DWORD)sizeof(filesystem));
+                    char filesystem[64];
+                    filesystem[0] = '\0';
+                    (void)GetVolumeInformationA(
+                        volume_name, NULL, 0U, NULL, NULL, NULL,
+                        filesystem, (DWORD)sizeof(filesystem));
 
-                ULARGE_INTEGER available;
-                ULARGE_INTEGER total;
-                ULARGE_INTEGER free_total;
-                const bool usage_known =
-                    GetDiskFreeSpaceExA(
-                        volume_name, &available, &total, &free_total) != FALSE;
-                const uint64_t total_bytes =
-                    usage_known ? (uint64_t)total.QuadPart : 0U;
-                const uint64_t free_bytes =
-                    usage_known ? (uint64_t)free_total.QuadPart : 0U;
-                const uint64_t used_bytes =
-                    usage_known && total_bytes >= free_bytes
-                        ? total_bytes - free_bytes : 0U;
+                    ULARGE_INTEGER available;
+                    ULARGE_INTEGER total;
+                    ULARGE_INTEGER free_total;
+                    const bool usage_known =
+                        GetDiskFreeSpaceExA(
+                            volume_name, &available, &total, &free_total) != FALSE;
+                    const uint64_t total_bytes =
+                        usage_known ? (uint64_t)total.QuadPart : 0U;
+                    const uint64_t free_bytes =
+                        usage_known ? (uint64_t)free_total.QuadPart : 0U;
+                    const uint64_t used_bytes =
+                        usage_known && total_bytes >= free_bytes
+                            ? total_bytes - free_bytes : 0U;
+                    const char *display_mount =
+                        mount_points[0] ? mount_points : volume_name;
 
-                const char *display_mount =
-                    mount_points[0] ? mount_points : volume_name;
-                for (DWORD extent = 0U;
-                     extent < extent_count;
-                     extent++) {
-                    const int index = physical_disk_index(
-                        monitor, extents->Extents[extent].DiskNumber);
-                    append_volume_to_disk(
-                        monitor, index, volume_name, display_mount,
-                        filesystem, total_bytes, used_bytes, usage_known);
+                    for (DWORD extent = 0U;
+                         extent < extents->NumberOfDiskExtents; extent++) {
+                        const int index = physical_disk_index(
+                            monitor, extents->Extents[extent].DiskNumber);
+                        if (!append_volume_to_disk(
+                                monitor, index, volume_name, display_mount,
+                                filesystem, total_bytes, used_bytes,
+                                usage_known)) {
+                            complete = false;
+                            enumeration_error = GetLastError();
+                            if (enumeration_error == ERROR_SUCCESS)
+                                enumeration_error = ERROR_INVALID_DATA;
+                            break;
+                        }
+                    }
                 }
                 free(extents);
             }
-            CloseHandle(volume);
+            if (!CloseHandle(volume) && complete) {
+                complete = false;
+                enumeration_error = GetLastError();
+            }
         }
 
+        if (!complete) break;
+
+        SetLastError(ERROR_SUCCESS);
         if (!FindNextVolumeA(
                 search, volume_name, (DWORD)sizeof(volume_name))) {
-            more = false;
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_NO_MORE_FILES) {
+                complete = false;
+                enumeration_error = failure != ERROR_SUCCESS
+                    ? failure : ERROR_GEN_FAILURE;
+            }
+            break;
         }
     }
-    FindVolumeClose(search);
+
+    if (!FindVolumeClose(search) && complete) {
+        complete = false;
+        enumeration_error = GetLastError();
+    }
+    if (!complete) {
+        memcpy(monitor->disks, backup, sizeof(backup));
+        SetLastError(
+            enumeration_error != ERROR_SUCCESS
+                ? enumeration_error : ERROR_GEN_FAILURE);
+        return false;
+    }
+    return true;
 }
 
 static LsmWindowsNetBaseline *net_baseline(
@@ -1004,16 +1221,16 @@ static bool network_identity_changed(
     return false;
 }
 
-static void enumerate_networks(
+static bool enumerate_networks(
     LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
     double elapsed)
 {
-    if (!monitor || !state) return;
+    if (!monitor || !state) return false;
 
     ULONG buffer_size = 16384U;
     IP_ADAPTER_ADDRESSES *addresses =
         (IP_ADAPTER_ADDRESSES *)malloc(buffer_size);
-    if (!addresses) return;
+    if (!addresses) return false;
 
     const ULONG flags =
         GAA_FLAG_INCLUDE_PREFIX |
@@ -1027,7 +1244,7 @@ static void enumerate_networks(
             (IP_ADAPTER_ADDRESSES *)realloc(addresses, buffer_size);
         if (!larger) {
             free(addresses);
-            return;
+            return false;
         }
         addresses = larger;
         result = GetAdaptersAddresses(
@@ -1035,15 +1252,26 @@ static void enumerate_networks(
     }
     if (result != NO_ERROR) {
         free(addresses);
-        return;
+        return false;
     }
 
     LsmNetInfo discovered[LSM_MAX_NETS];
     memset(discovered, 0, sizeof(discovered));
+    LsmWindowsNetBaseline baseline_backup[LSM_MAX_NETS];
+    memcpy(baseline_backup, state->nets, sizeof(baseline_backup));
+    uint64_t discovered_keys[LSM_MAX_NETS] = {0};
     size_t count = 0U;
 
     for (const IP_ADAPTER_ADDRESSES *adapter = addresses;
-         adapter && count < LSM_MAX_NETS; adapter = adapter->Next) {
+         adapter; adapter = adapter->Next) {
+        if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+            continue;
+        if (count >= LSM_MAX_NETS) {
+            memcpy(state->nets, baseline_backup, sizeof(state->nets));
+            free(addresses);
+            SetLastError(ERROR_BUFFER_OVERFLOW);
+            return false;
+        }
         if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
             continue;
 
@@ -1051,8 +1279,9 @@ static void enumerate_networks(
         memset(&row, 0, sizeof(row));
         row.InterfaceLuid = adapter->Luid;
         if (GetIfEntry2(&row) != NO_ERROR) {
+            memcpy(state->nets, baseline_backup, sizeof(state->nets));
             free(addresses);
-            return;
+            return false;
         }
 
         LsmNetInfo *net = &discovered[count];
@@ -1079,20 +1308,29 @@ static void enumerate_networks(
         net->link_speed_mbps = (double)link_bits / 1000000.0;
         net->rx_bytes_total = row.InOctets;
         net->tx_bytes_total = row.OutOctets;
+        net->rx_bytes_per_sec = NAN;
+        net->tx_bytes_per_sec = NAN;
+        net->utilisation_percent = NAN;
+        net->utilisation_available = false;
 
         const uint64_t key = adapter->Luid.Value;
+        discovered_keys[count] = key;
         (void)snprintf(
             net->instance_identity, sizeof(net->instance_identity),
             "luid:%016llx", (unsigned long long)key);
         LsmWindowsNetBaseline *baseline = net_baseline(state, key);
         if (baseline) {
             if (baseline->valid && elapsed > 0.0) {
-                (void)infiltratr_u64_counter_rate(
+                double receive_rate = 0.0;
+                double transmit_rate = 0.0;
+                const bool receive_ok = infiltratr_u64_counter_rate(
                     row.InOctets, baseline->rx_bytes, 1.0L, elapsed,
-                    &net->rx_bytes_per_sec);
-                (void)infiltratr_u64_counter_rate(
+                    &receive_rate);
+                const bool transmit_ok = infiltratr_u64_counter_rate(
                     row.OutOctets, baseline->tx_bytes, 1.0L, elapsed,
-                    &net->tx_bytes_per_sec);
+                    &transmit_rate);
+                if (receive_ok) net->rx_bytes_per_sec = receive_rate;
+                if (transmit_ok) net->tx_bytes_per_sec = transmit_rate;
             }
             baseline->key = key;
             baseline->rx_bytes = row.InOctets;
@@ -1100,7 +1338,9 @@ static void enumerate_networks(
             baseline->valid = true;
         }
 
-        if (link_bits > 0U) {
+        if (link_bits > 0U &&
+            isfinite(net->rx_bytes_per_sec) &&
+            isfinite(net->tx_bytes_per_sec)) {
             const long double current_bits =
                 fmaxl((long double)net->rx_bytes_per_sec,
                       (long double)net->tx_bytes_per_sec) * 8.0L;
@@ -1114,6 +1354,17 @@ static void enumerate_networks(
         count++;
     }
 
+    for (size_t slot = 0U; slot < LSM_MAX_NETS; slot++) {
+        if (!state->nets[slot].valid) continue;
+        bool present = false;
+        for (size_t index = 0U; index < count; index++)
+            if (state->nets[slot].key == discovered_keys[index]) {
+                present = true;
+                break;
+            }
+        if (!present) memset(&state->nets[slot], 0, sizeof(state->nets[slot]));
+    }
+
     if (network_identity_changed(
             monitor->nets, monitor->net_count, discovered, count))
         monitor->topology_generation++;
@@ -1123,6 +1374,7 @@ static void enumerate_networks(
         memcpy(monitor->nets, discovered, count * sizeof(discovered[0]));
     monitor->net_count = count;
     free(addresses);
+    return true;
 }
 
 static bool display_luid_for_name(
@@ -1783,10 +2035,10 @@ static bool gpu_already_present(
     return false;
 }
 
-static void enumerate_gpus(
+static bool enumerate_gpus(
     LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
 {
-    if (!monitor || !state) return;
+    if (!monitor || !state) return false;
 
     LUID discovered_luids[LSM_MAX_GPUS];
     bool discovered_luid_valid[LSM_MAX_GPUS];
@@ -1797,8 +2049,7 @@ static void enumerate_gpus(
     memset(discovered, 0, sizeof(discovered));
     size_t count = 0U;
 
-    for (DWORD device_index = 0U;
-         count < LSM_MAX_GPUS; device_index++) {
+    for (DWORD device_index = 0U;; device_index++) {
         DISPLAY_DEVICEA device;
         memset(&device, 0, sizeof(device));
         device.cb = sizeof(device);
@@ -1806,7 +2057,7 @@ static void enumerate_gpus(
         if (!EnumDisplayDevicesA(NULL, device_index, &device, 0U)) {
             const DWORD failure = GetLastError();
             if (failure != ERROR_SUCCESS)
-                return;
+                return false;
             break;
         }
         if ((device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) != 0U)
@@ -1819,6 +2070,10 @@ static void enumerate_gpus(
             (device.DeviceKey[0] ? device.DeviceKey : device.DeviceName);
         if (gpu_already_present(discovered, count, identity))
             continue;
+        if (count >= LSM_MAX_GPUS) {
+            SetLastError(ERROR_BUFFER_OVERFLOW);
+            return false;
+        }
 
         const size_t gpu_index = count++;
         LsmGpuInfo *gpu = &discovered[gpu_index];
@@ -1854,6 +2109,7 @@ static void enumerate_gpus(
         memcpy(monitor->gpus, discovered, count * sizeof(discovered[0]));
     monitor->gpu_count = count;
     populate_gpu_setupapi_metadata(monitor);
+    return true;
 }
 
 static void refresh_topology_and_devices(
@@ -1868,14 +2124,30 @@ static void refresh_topology_and_devices(
         state->last_topology_tick == 0ULL ||
         now - state->last_topology_tick >= LSM_WINDOWS_TOPOLOGY_REFRESH_MS;
 
-    enumerate_physical_disks(monitor, state, elapsed);
-    enumerate_disk_volumes(monitor);
-    enumerate_networks(monitor, state, elapsed);
+    LsmDiskInfo disk_backup[LSM_MAX_DISKS];
+    LsmWindowsDiskBaseline disk_baseline_backup[LSM_MAX_DISKS];
+    const size_t disk_count_backup = monitor->disk_count;
+    const uint64_t disk_generation_backup = monitor->disk_generation;
+    const uint64_t topology_generation_backup = monitor->topology_generation;
+    memcpy(disk_backup, monitor->disks, sizeof(disk_backup));
+    memcpy(disk_baseline_backup, state->disks, sizeof(disk_baseline_backup));
+    if (!enumerate_physical_disks(monitor, state, elapsed) ||
+        !enumerate_disk_volumes(monitor)) {
+        memcpy(monitor->disks, disk_backup, sizeof(disk_backup));
+        monitor->disk_count = disk_count_backup;
+        monitor->disk_generation = disk_generation_backup;
+        monitor->topology_generation = topology_generation_backup;
+        memcpy(state->disks, disk_baseline_backup,
+               sizeof(disk_baseline_backup));
+    }
+
+    (void)enumerate_networks(monitor, state, elapsed);
     if (due) {
         populate_cpu_topology(&monitor->cpu);
-        enumerate_gpus(monitor, state);
-        state->last_topology_tick = now;
-        state->topology_refresh_requested = false;
+        if (enumerate_gpus(monitor, state)) {
+            state->last_topology_tick = now;
+            state->topology_refresh_requested = false;
+        }
     }
 }
 

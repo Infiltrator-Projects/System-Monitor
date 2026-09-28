@@ -133,7 +133,18 @@ active application monitor.
 
 Missing disk/network samples invalidate their rate baselines. The next valid
 sample establishes a baseline instead of assigning a multi-interval delta to one
-interval. CPU counter rollback similarly suppresses the affected interval. GPU
-memory capacity and sampled adapter-wide usage have separate availability: an
-unknown usage value must not render as measured zero. Linux nominal CPU frequency
-is never substituted for an unavailable current or maximum clock.
+interval. The same completed-interval rule applies to cumulative GPU engine,
+energy and Windows native rate counters: startup, recovery and rollback samples
+are unavailable until a second valid observation establishes an interval. CPU
+counter rollback similarly suppresses the affected interval. GPU memory capacity
+and sampled adapter-wide usage have separate availability: an unknown usage
+value must not render as measured zero. Linux nominal CPU frequency is never
+substituted for an unavailable current or maximum clock.
+
+Bounded hardware inventories are complete-or-preserved. Linux and Windows disk,
+network and accelerator discovery, BlueZ ObjectManager snapshots, Logitech HID++
+device tracking and SMBIOS module detail reject capacity overflow or incomplete
+enumeration rather than publishing a valid-looking prefix. Slow peripheral
+shutdown is also bounded; cancellation is requested first, and a provider that
+does not stop within its shutdown budget may retain static worker resources
+until process exit rather than blocking the GUI indefinitely.

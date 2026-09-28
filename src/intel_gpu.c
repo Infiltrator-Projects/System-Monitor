@@ -177,17 +177,30 @@ static bool discover_pmu_root(const LsmGpuInfo *gpu,
     DIR *directory = opendir(root);
     if (!directory) return false;
     bool found = false;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            enumeration_error = errno;
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "i915") &&
             !lsm_string_starts_with(entry->d_name, "xe"))
             continue;
         if (!pmu_root_matches_identity(entry->d_name, gpu)) continue;
         found = lsm_join_path(destination, destination_size,
                               root, entry->d_name);
-        if (found) break;
+        break;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && enumeration_error == 0)
+        enumeration_error = errno != 0 ? errno : EIO;
+    if (enumeration_error != 0) {
+        destination[0] = '\0';
+        errno = enumeration_error;
+        return false;
+    }
     return found;
 }
 
@@ -284,8 +297,7 @@ static bool counter_delta(LsmIntelCounter *counter, double elapsed,
         counter->previous_enabled = sample.time_enabled;
         counter->previous_running = sample.time_running;
         counter->initialised = true;
-        *result = 0.0;
-        return true;
+        return false;
     }
 
     long double delta = (long double)value_delta;
@@ -308,17 +320,28 @@ static bool event_path(char *destination, size_t size, const char *pmu_root,
 }
 
 
-static void discover_events(LsmIntelGpuBackend *backend)
+static bool discover_events(LsmIntelGpuBackend *backend)
 {
     char events_path[LSM_PATH_LEN];
     if (!lsm_join_path(events_path, sizeof(events_path), backend->pmu_root,
                        "/events"))
-        return;
+        return false;
     DIR *directory = opendir(events_path);
-    if (!directory) return;
+    if (!directory) return false;
 
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.' ||
             lsm_string_ends_with(entry->d_name, ".unit"))
             continue;
@@ -328,8 +351,12 @@ static void discover_events(LsmIntelGpuBackend *backend)
             !read_pmu_config(path, &config))
             continue;
 
-        if (lsm_string_ends_with(entry->d_name, "-busy") &&
-            backend->engine_count < LSM_INTEL_MAX_COUNTERS) {
+        if (lsm_string_ends_with(entry->d_name, "-busy")) {
+            if (backend->engine_count >= LSM_INTEL_MAX_COUNTERS) {
+                complete = false;
+                if (enumeration_error == 0) enumeration_error = EOVERFLOW;
+                continue;
+            }
             LsmIntelCounter *counter =
                 &backend->engines[backend->engine_count];
             if (initialise_counter(backend, counter, entry->d_name, config,
@@ -359,7 +386,20 @@ static void discover_events(LsmIntelGpuBackend *backend)
                 counter_reset(&backend->media_frequency);
         }
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        for (size_t index = 0U; index < backend->engine_count; index++)
+            counter_reset(&backend->engines[index]);
+        backend->engine_count = 0U;
+        counter_reset(&backend->graphics_frequency);
+        counter_reset(&backend->media_frequency);
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
+    return true;
 }
 
 static void discover_driver_paths(LsmIntelGpuBackend *backend,
@@ -393,8 +433,19 @@ static void discover_driver_paths(LsmIntelGpuBackend *backend,
     if (!lsm_join_path(hwmon_root, sizeof(hwmon_root), base, "/hwmon")) return;
     DIR *directory = opendir(hwmon_root);
     if (!directory) return;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.') continue;
         char node[LSM_PATH_LEN];
         const int written = snprintf(node, sizeof(node), "%s/%s",
@@ -410,7 +461,21 @@ static void discover_driver_paths(LsmIntelGpuBackend *backend,
             backend->energy_range_path =
                 existing_path(node, "/max_energy_range_uj");
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(backend->temperature_path);
+        free(backend->power_average_path);
+        free(backend->energy_path);
+        free(backend->energy_range_path);
+        backend->temperature_path = NULL;
+        backend->power_average_path = NULL;
+        backend->energy_path = NULL;
+        backend->energy_range_path = NULL;
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+    }
 }
 
 bool lsm_intel_gpu_driver_supported(const char *driver)
@@ -489,24 +554,26 @@ static bool update_power(LsmIntelGpuBackend *backend, LsmGpuInfo *gpu,
     if (!backend->energy_initialised) {
         backend->previous_energy_uj = value;
         backend->energy_initialised = true;
-        return true;
+        return false;
     }
 
     uint64_t delta = 0U;
-    if (!lsm_u64_counter_delta(
-            value, backend->previous_energy_uj, &delta) &&
-        backend->energy_range_path) {
+    bool delta_valid = lsm_u64_counter_delta(
+        value, backend->previous_energy_uj, &delta);
+    if (!delta_valid && backend->energy_range_path) {
         uint64_t range = 0U;
         if (lsm_read_u64_file(backend->energy_range_path, &range) &&
-            range > backend->previous_energy_uj)
+            range > backend->previous_energy_uj && value < range) {
             delta = (range - backend->previous_energy_uj) + value;
+            delta_valid = true;
+        }
     }
     backend->previous_energy_uj = value;
-    if (delta == 0U) return true;
+    if (!delta_valid) return false;
     gpu->power_watts = (double)delta / 1000000.0 / elapsed;
     gpu->power_available = isfinite(gpu->power_watts) &&
                            gpu->power_watts >= 0.0;
-    return true;
+    return gpu->power_available;
 }
 
 bool lsm_intel_gpu_refresh(LsmIntelGpuBackend *backend, LsmGpuInfo *gpu,

@@ -522,14 +522,12 @@ static void update_networks(LsmMonitor *monitor, double elapsed,
         }
         LsmLinuxNetworkState *state=find_network_state(monitor,net);
         net->rx_bytes_per_sec=NAN; net->tx_bytes_per_sec=NAN;
-        if(available && state && state->initialized){
+        if(available && state && state->initialized && elapsed > 0.0){
             double rr=0.0,tr=0.0;
             if(lsm_u64_counter_rate(rx,state->previous_rx,1.0L,elapsed,&rr))
                 net->rx_bytes_per_sec=rr;
             if(lsm_u64_counter_rate(tx,state->previous_tx,1.0L,elapsed,&tr))
                 net->tx_bytes_per_sec=tr;
-        } else if(available) {
-            net->rx_bytes_per_sec=0.0; net->tx_bytes_per_sec=0.0;
         }
         if(available){net->rx_bytes_total=rx;net->tx_bytes_total=tx;}
         if(state){

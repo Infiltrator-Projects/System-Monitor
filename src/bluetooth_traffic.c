@@ -44,6 +44,7 @@
 #define LSM_HCI_LINK_SLOTS 128U
 #define LSM_HCI_MAX_CONNECTIONS 64U
 #define LSM_HCI_MONITOR_BUFFER 8192U
+#define LSM_HCI_SHUTDOWN_WAIT_MS 500U
 
 typedef struct {
     uint16_t controller_index;
@@ -301,7 +302,15 @@ void lsm_bluetooth_traffic_stop(void)
     (void)pthread_mutex_unlock(&capture_state.mutex);
 
     if (descriptor >= 0) (void)shutdown(descriptor, SHUT_RDWR);
-    (void)pthread_join(thread, NULL);
+    struct timespec deadline;
+    int join_result = lsm_posix_deadline_after_milliseconds(
+        CLOCK_REALTIME, LSM_HCI_SHUTDOWN_WAIT_MS, &deadline);
+    if (join_result == 0)
+        join_result = pthread_timedjoin_np(thread, NULL, &deadline);
+    if (join_result != 0) {
+        (void)pthread_detach(thread);
+        return;
+    }
     if (descriptor >= 0) (void)close(descriptor);
 
     (void)pthread_mutex_lock(&capture_state.mutex);

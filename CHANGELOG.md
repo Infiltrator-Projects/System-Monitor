@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.145 - 2026-09-28
+
+- Treat the first valid cumulative sample after startup, loss or counter rollback as a baseline rather than a measured zero interval across Linux/Windows disk, network and GPU rate paths.
+- Make Intel PMU, DRM engine and hwmon discovery reject directory-read, close and bounded-capacity failures instead of publishing partial accelerator telemetry.
+- Make BlueZ adapter/device/battery snapshots transactional: bounded truncation or ObjectManager failure preserves the last complete snapshot rather than publishing a prefix or false disappearance.
+- Replace Windows physical-disk number probing with complete SetupAPI disk-interface discovery, reject over-capacity disk/network/GPU/volume topology, and roll disk/volume publication back as one transaction on failure.
+- Clear published Wi-Fi metadata when its current native refresh fails so stale SSID, access-point, signal, frequency and link-rate values cannot appear live.
+- Stop inventing dense CPU IDs or a one-node NUMA topology after Linux sysfs enumeration failure; failed topology reads now remain unavailable.
+- Make /proc/meminfo accounting transactional and remove the stale-cache-derived MemAvailable fallback; memory presentation shows N/A when the authoritative accounting sample is unavailable.
+- Load App History through temporary retained state so a short read or close failure cannot replace complete history with a file prefix that may later be persisted.
+- Bound BlueZ, Bluetooth HCI and Logitech HID++ worker shutdown waits; blocked providers may retain static worker resources until process exit rather than holding GUI shutdown indefinitely.
+- Reject Logitech hidraw enumeration errors, HID++ device-set overflow and SMBIOS module-detail overflow instead of silently treating incomplete bounded sets as complete.
+- Remove the remaining disk/battery header string truncation warnings and extend regression coverage for baseline, overflow and retained-state semantics.
+
 ## 1.0.144 - 2026-09-28
 
 - Make Linux process snapshots genuinely transactional across directory-enumeration, allocation and close failures so a partial /proc walk can never replace the last complete process set.
