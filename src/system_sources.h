@@ -108,6 +108,9 @@ void lsm_sources_destroy(LsmSystemSources *sources);
  * @param [in] capacity Number of records available.
  * @return Number of records written, never greater than @p capacity.
  */
+bool lsm_sources_list_block_devices_checked(
+    LsmSystemSources *sources, LsmBlockDeviceRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
                                       LsmBlockDeviceRecord *records,
                                       size_t capacity);
@@ -119,6 +122,9 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
  * @param [in] capacity Number of records available.
  * @return Number of records written.
  */
+bool lsm_sources_list_mounts_checked(
+    LsmSystemSources *sources, LsmMountRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_list_mounts(LsmSystemSources *sources,
                                LsmMountRecord *records,
                                size_t capacity);
@@ -130,6 +136,9 @@ size_t lsm_sources_list_mounts(LsmSystemSources *sources,
  * @param [in] capacity Number of records available.
  * @return Number of records written.
  */
+bool lsm_sources_list_partitions_checked(
+    LsmSystemSources *sources, LsmPartitionRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_list_partitions(LsmSystemSources *sources,
                                    LsmPartitionRecord *records,
                                    size_t capacity);
@@ -141,6 +150,9 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
  * @param [in] capacity Number of records available.
  * @return Number of records written.
  */
+bool lsm_sources_list_networks_checked(
+    LsmSystemSources *sources, LsmNetworkRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_list_networks(LsmSystemSources *sources,
                                  LsmNetworkRecord *records,
                                  size_t capacity);
@@ -152,6 +164,9 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
  * @param [in] capacity Number of records available.
  * @return Number of counter records written.
  */
+bool lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
                                          LsmNetworkCounterRecord *records,
                                          size_t capacity);
@@ -171,6 +186,9 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources);
  * @param [in] capacity Number of records available.
  * @return Number of adapters written.
  */
+bool lsm_sources_list_gpus_checked(
+    LsmSystemSources *sources, LsmGpuRecord *records,
+    size_t capacity, size_t *out_count);
 size_t lsm_sources_list_gpus(LsmSystemSources *sources,
                              LsmGpuRecord *records,
                              size_t capacity);

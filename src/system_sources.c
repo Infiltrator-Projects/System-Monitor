@@ -552,11 +552,14 @@ static bool netlink_message_ok(const struct nlmsghdr *header, int remaining)
            header->nlmsg_len <= (unsigned int)remaining;
 }
 
-static size_t route_link_dump(LsmSystemSources *sources,
-                              LsmRouteLink *records, size_t capacity)
+static bool route_link_dump(LsmSystemSources *sources,
+                            LsmRouteLink *records, size_t capacity,
+                            size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U || sources->network_request_fd < 0)
-        return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count ||
+        sources->network_request_fd < 0)
+        return false;
 
     struct {
         struct nlmsghdr header;
@@ -568,26 +571,19 @@ static size_t route_link_dump(LsmSystemSources *sources,
     request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
     request.header.nlmsg_seq = ++sources->network_sequence;
     request.message.ifi_family = AF_UNSPEC;
-
     if (send(sources->network_request_fd, &request, request.header.nlmsg_len, 0) < 0)
-        return 0U;
+        return false;
 
     size_t count = 0U;
-    bool complete = false;
-    bool failed = false;
+    bool complete = false, failed = false;
     while (!complete && !failed) {
         _Alignas(struct nlmsghdr) unsigned char buffer[32768];
-        struct iovec vector = {
-            .iov_base = buffer,
-            .iov_len = sizeof(buffer)
-        };
+        struct iovec vector = {.iov_base = buffer, .iov_len = sizeof(buffer)};
         struct msghdr message;
         memset(&message, 0, sizeof(message));
         message.msg_iov = &vector;
         message.msg_iovlen = 1U;
-
-        const ssize_t received =
-            recvmsg(sources->network_request_fd, &message, 0);
+        const ssize_t received = recvmsg(sources->network_request_fd, &message, 0);
         if (received < 0) {
             if (errno == EINTR) continue;
             failed = true;
@@ -597,7 +593,6 @@ static size_t route_link_dump(LsmSystemSources *sources,
             failed = true;
             break;
         }
-
         int remaining = (int)received;
         for (struct nlmsghdr *header = (struct nlmsghdr *)(void *)buffer;
              netlink_message_ok(header, remaining);
@@ -612,8 +607,7 @@ static size_t route_link_dump(LsmSystemSources *sources,
                 break;
             }
             if (header->nlmsg_type == NLMSG_ERROR) {
-                if (header->nlmsg_len <
-                    NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
+                if (header->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
                     failed = true;
                     break;
                 }
@@ -623,10 +617,8 @@ static size_t route_link_dump(LsmSystemSources *sources,
                 continue;
             }
             if (header->nlmsg_type != RTM_NEWLINK ||
-                header->nlmsg_len <
-                    NLMSG_LENGTH(sizeof(struct ifinfomsg)))
+                header->nlmsg_len < NLMSG_LENGTH(sizeof(struct ifinfomsg)))
                 continue;
-
             struct ifinfomsg *information = NLMSG_DATA(header);
             if ((information->ifi_flags & IFF_LOOPBACK) != 0U) continue;
             LsmRouteLink record;
@@ -635,7 +627,6 @@ static size_t route_link_dump(LsmSystemSources *sources,
                 ? (unsigned)information->ifi_index : 0U;
             record.flags = information->ifi_flags;
             record.operstate = IF_OPER_UNKNOWN;
-
             int attribute_length = IFLA_PAYLOAD(header);
             for (struct rtattr *attribute = IFLA_RTA(information);
                  RTA_OK(attribute, attribute_length);
@@ -644,10 +635,11 @@ static size_t route_link_dump(LsmSystemSources *sources,
             if (!record.name[0] || count >= capacity) continue;
             records[count++] = record;
         }
-        if (!complete && !failed && remaining != 0)
-            failed = true;
+        if (!complete && !failed && remaining != 0) failed = true;
     }
-    return complete && !failed ? count : 0U;
+    if (!complete || failed) return false;
+    *out_count = count;
+    return true;
 }
 
 bool lsm_sources_init(LsmSystemSources **out)
@@ -772,16 +764,16 @@ static void block_instance_identity(const char *root, const char *name,
 
 /* Block and mount inventory. Device-node ioctls are preferred for capacity;
  * sysfs remains the unprivileged identity and topology fallback. */
-size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
-                                      LsmBlockDeviceRecord *records,
-                                      size_t capacity)
+bool lsm_sources_list_block_devices_checked(
+    LsmSystemSources *sources, LsmBlockDeviceRecord *records,
+    size_t capacity, size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
     char root[LSM_PATH_LEN];
-    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/block")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/block")) return false;
     DIR *directory = opendir(root);
-    if (!directory) return 0U;
-
+    if (!directory) return false;
     size_t count = 0U;
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
@@ -790,7 +782,6 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
         if (!child_path(device_path, sizeof(device_path), root, entry->d_name, "") ||
             !directory_entry(device_path))
             continue;
-
         LsmBlockDeviceRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
@@ -798,24 +789,17 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
                                 record->instance_identity,
                                 sizeof(record->instance_identity));
         read_block_characteristics(root, entry->d_name, device_path, record);
-
         char path[LSM_PATH_LEN];
         record->size_bytes = direct_block_size(sources, entry->d_name);
         if (!record->size_bytes &&
             child_path(path, sizeof(path), root, entry->d_name, "/size"))
             record->size_bytes = sector_count_bytes(lsm_read_u64_or_zero(path));
-
-        char vendor[LSM_NAME_LEN] = "";
-        char model[LSM_NAME_LEN] = "";
+        char vendor[LSM_NAME_LEN] = "", model[LSM_NAME_LEN] = "";
         if (child_path(path, sizeof(path), root, entry->d_name, "/device/vendor"))
             (void)lsm_read_text_file(path, vendor, sizeof(vendor));
         if (child_path(path, sizeof(path), root, entry->d_name, "/device/model"))
             (void)lsm_read_text_file(path, model, sizeof(model));
         lsm_trim(model);
-
-        /* MMC/SD cards expose the CID product name through device/name rather
-         * than the SCSI-style device/model attribute used by SATA/NVMe paths.
-         * Prefer that native kernel identity before falling back to mmcblkN. */
         if (!model[0] && lsm_string_starts_with(entry->d_name, "mmcblk") &&
             child_path(path, sizeof(path), root, entry->d_name, "/device/name")) {
             (void)lsm_read_text_file(path, model, sizeof(model));
@@ -824,8 +808,18 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
         combine_identity(record->model, sizeof(record->model),
                          vendor, model, entry->d_name);
     }
-    closedir(directory);
-    return count;
+    if (closedir(directory) != 0) return false;
+    *out_count = count;
+    return true;
+}
+
+size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
+                                      LsmBlockDeviceRecord *records,
+                                      size_t capacity)
+{
+    size_t count = 0U;
+    return lsm_sources_list_block_devices_checked(
+        sources, records, capacity, &count) ? count : 0U;
 }
 
 static void resolve_block_identity(LsmSystemSources *sources,
@@ -901,22 +895,33 @@ static bool collect_mount(const LsmMountInfoEntry *entry, void *user_data)
     return collector->count < collector->capacity;
 }
 
+bool lsm_sources_list_mounts_checked(
+    LsmSystemSources *sources, LsmMountRecord *records,
+    size_t capacity, size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
+    char path[LSM_PATH_LEN];
+    if (!lsm_join_path(path, sizeof(path), sources->procfs_root, "/self/mountinfo"))
+        return false;
+    LsmMountCollector collector = {
+        .sources = sources, .records = records, .capacity = capacity, .count = 0U
+    };
+    size_t visited = 0U;
+    if (!lsm_mountinfo_visit_file_checked(path, collect_mount, &collector, &visited))
+        return false;
+    (void)visited;
+    *out_count = collector.count;
+    return true;
+}
+
 size_t lsm_sources_list_mounts(LsmSystemSources *sources,
                                LsmMountRecord *records,
                                size_t capacity)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
-    char path[LSM_PATH_LEN];
-    if (!lsm_join_path(path, sizeof(path), sources->procfs_root, "/self/mountinfo"))
-        return 0U;
-    LsmMountCollector collector = {
-        .sources = sources,
-        .records = records,
-        .capacity = capacity,
-        .count = 0U
-    };
-    (void)lsm_mountinfo_visit_file(path, collect_mount, &collector);
-    return collector.count;
+    size_t count = 0U;
+    return lsm_sources_list_mounts_checked(
+        sources, records, capacity, &count) ? count : 0U;
 }
 
 static size_t append_partition_record(LsmPartitionRecord *records, size_t count,
@@ -939,37 +944,39 @@ static size_t append_partition_record(LsmPartitionRecord *records, size_t count,
     return count;
 }
 
-size_t lsm_sources_list_partitions(LsmSystemSources *sources,
-                                   LsmPartitionRecord *records,
-                                   size_t capacity)
+bool lsm_sources_list_partitions_checked(
+    LsmSystemSources *sources, LsmPartitionRecord *records,
+    size_t capacity, size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
     const size_t mount_capacity = 2048U;
     LsmMountRecord *mounts = calloc(mount_capacity, sizeof(*mounts));
-    const size_t mount_count = mounts
-        ? lsm_sources_list_mounts(sources, mounts, mount_capacity) : 0U;
-
+    if (!mounts) return false;
+    size_t mount_count = 0U;
+    if (!lsm_sources_list_mounts_checked(
+            sources, mounts, mount_capacity, &mount_count)) {
+        free(mounts);
+        return false;
+    }
     char root[LSM_PATH_LEN];
     if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/block")) {
         free(mounts);
-        return 0U;
+        return false;
     }
     DIR *directory = opendir(root);
     if (!directory) {
         free(mounts);
-        return 0U;
+        return false;
     }
-
     size_t count = 0U;
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
         if (entry->d_name[0] == '.') continue;
-        char canonical[LSM_PATH_LEN];
-        char class_path[LSM_PATH_LEN];
+        char canonical[LSM_PATH_LEN], class_path[LSM_PATH_LEN];
         if (!child_path(class_path, sizeof(class_path), root, entry->d_name, "") ||
             !lsm_realpath_copy(class_path, canonical, sizeof(canonical)))
             continue;
-
         char partition_path[LSM_PATH_LEN];
         const bool is_partition =
             lsm_join_path(partition_path, sizeof(partition_path), canonical, "/partition") &&
@@ -977,122 +984,109 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
         char parent_name[64] = "";
         if (is_partition) {
             char parent_path[LSM_PATH_LEN];
-            if (!lsm_path_dirname(canonical, parent_path, sizeof(parent_path)))
-                continue;
-            lsm_copy_string(parent_name, sizeof(parent_name),
-                            lsm_path_basename(parent_path));
+            if (!lsm_path_dirname(canonical, parent_path, sizeof(parent_path))) continue;
+            lsm_copy_string(parent_name, sizeof(parent_name), lsm_path_basename(parent_path));
         } else {
             lsm_copy_string(parent_name, sizeof(parent_name), entry->d_name);
         }
         if (ignored_block_name(parent_name)) continue;
-
         bool has_mount = false;
-        for (size_t mount_index = 0U;
-             mount_index < mount_count && count < capacity; mount_index++) {
-            if (strcmp(mounts[mount_index].block_name, entry->d_name) != 0) continue;
+        for (size_t mi = 0U; mi < mount_count && count < capacity; mi++) {
+            if (strcmp(mounts[mi].block_name, entry->d_name) != 0) continue;
             has_mount = true;
-            char device[LSM_PATH_LEN];
-            if (!lsm_join_path(device, sizeof(device),
-                               sources->dev_root, entry->d_name))
+            char device[LSM_PATH_LEN], size_path[LSM_PATH_LEN];
+            if (!lsm_join_path(device, sizeof(device), sources->dev_root, entry->d_name))
                 continue;
-            char size_path[LSM_PATH_LEN];
             uint64_t size_bytes = direct_block_size(sources, entry->d_name);
-            if (!size_bytes &&
-                child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
+            if (!size_bytes && child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
                 size_bytes = sector_count_bytes(lsm_read_u64_or_zero(size_path));
             count = append_partition_record(
-                records, count, capacity, device, mounts[mount_index].target,
-                mounts[mount_index].filesystem, parent_name, size_bytes, true);
+                records, count, capacity, device, mounts[mi].target,
+                mounts[mi].filesystem, parent_name, size_bytes, true);
         }
-
         if (!is_partition || has_mount) continue;
-        char device[LSM_PATH_LEN];
-        if (!lsm_join_path(device, sizeof(device),
-                           sources->dev_root, entry->d_name))
+        char device[LSM_PATH_LEN], size_path[LSM_PATH_LEN];
+        if (!lsm_join_path(device, sizeof(device), sources->dev_root, entry->d_name))
             continue;
-        char size_path[LSM_PATH_LEN];
         uint64_t size_bytes = direct_block_size(sources, entry->d_name);
-        if (!size_bytes &&
-            child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
+        if (!size_bytes && child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
             size_bytes = sector_count_bytes(lsm_read_u64_or_zero(size_path));
         char filesystem[64] = "";
         (void)filesystem_label_from_device_database(
             sources, entry->d_name, filesystem, sizeof(filesystem));
-        count = append_partition_record(records, count, capacity, device, "",
-                                        filesystem, parent_name, size_bytes, false);
+        count = append_partition_record(
+            records, count, capacity, device, "", filesystem,
+            parent_name, size_bytes, false);
     }
-
-    closedir(directory);
+    const bool close_ok = closedir(directory) == 0;
     free(mounts);
-    return count;
+    if (!close_ok) return false;
+    *out_count = count;
+    return true;
+}
+
+size_t lsm_sources_list_partitions(LsmSystemSources *sources,
+                                   LsmPartitionRecord *records,
+                                   size_t capacity)
+{
+    size_t count = 0U;
+    return lsm_sources_list_partitions_checked(
+        sources, records, capacity, &count) ? count : 0U;
 }
 
 /* Network fallback paths are used only when rtnetlink is unavailable or a
  * synthetic fixture deliberately supplies sysfs-only data. */
-static size_t list_networks_sysfs(LsmSystemSources *sources,
-                                  LsmNetworkRecord *records,
-                                  size_t capacity)
+static bool list_networks_sysfs_checked(
+    LsmSystemSources *sources, LsmNetworkRecord *records,
+    size_t capacity, size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
     char root[LSM_PATH_LEN];
-    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return false;
     DIR *directory = opendir(root);
-    if (!directory) return 0U;
-
+    if (!directory) return false;
     size_t count = 0U;
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
         if (entry->d_name[0] == '.' || strcmp(entry->d_name, "lo") == 0) continue;
-        char path[LSM_PATH_LEN];
-        char state[32] = "";
-        if (!child_path(path, sizeof(path), root, entry->d_name, "/operstate") ||
-            !lsm_read_text_file(path, state, sizeof(state)) ||
-            strcmp(state, "up") != 0)
-            continue;
-
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
+        char path[LSM_PATH_LEN];
         if (child_path(path, sizeof(path), root, entry->d_name, "/address"))
             (void)lsm_read_text_file(path, record->mac, sizeof(record->mac));
         network_instance_identity(
             network_ifindex_sysfs(root, entry->d_name), entry->d_name,
-            record->mac, record->instance_identity,
-            sizeof(record->instance_identity));
+            record->mac, record->instance_identity, sizeof(record->instance_identity));
         record->wireless = wireless_interface(record->name);
-
-        char class_device[LSM_PATH_LEN];
-        char hardware[LSM_PATH_LEN] = "";
+        char class_device[LSM_PATH_LEN], hardware[LSM_PATH_LEN] = "";
         if (child_path(class_device, sizeof(class_device), root, entry->d_name, "/device"))
             (void)hardware_parent(class_device, hardware, sizeof(hardware));
         native_device_identity(hardware, record->product, sizeof(record->product),
                                record->vendor, sizeof(record->vendor));
     }
-    closedir(directory);
-    return count;
+    if (closedir(directory) != 0) return false;
+    *out_count = count;
+    return true;
 }
 
-
-static size_t network_counters_sysfs(LsmSystemSources *sources,
-                                      LsmNetworkCounterRecord *records,
-                                      size_t capacity)
+static bool network_counters_sysfs_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
     char root[LSM_PATH_LEN];
-    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return false;
     DIR *directory = opendir(root);
-    if (!directory) return 0U;
+    if (!directory) return false;
     size_t count = 0U;
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
         if (entry->d_name[0] == '.' || strcmp(entry->d_name, "lo") == 0) continue;
         char path[LSM_PATH_LEN];
-        char state[32] = "";
-        if (!child_path(path, sizeof(path), root, entry->d_name, "/operstate") ||
-            !lsm_read_text_file(path, state, sizeof(state)) || strcmp(state, "up") != 0)
-            continue;
-        uint64_t rx_bytes = 0U;
-        uint64_t tx_bytes = 0U;
+        uint64_t rx_bytes = 0U, tx_bytes = 0U;
         if (!child_path(path, sizeof(path), root, entry->d_name, "/statistics/rx_bytes") ||
             !lsm_read_u64_file(path, &rx_bytes) ||
             !child_path(path, sizeof(path), root, entry->d_name, "/statistics/tx_bytes") ||
@@ -1104,83 +1098,94 @@ static size_t network_counters_sysfs(LsmSystemSources *sources,
             (void)lsm_read_text_file(path, mac, sizeof(mac));
         network_instance_identity(
             network_ifindex_sysfs(root, entry->d_name), entry->d_name, mac,
-            records[count].instance_identity,
-            sizeof(records[count].instance_identity));
+            records[count].instance_identity, sizeof(records[count].instance_identity));
         records[count].rx_bytes = rx_bytes;
         records[count].tx_bytes = tx_bytes;
         count++;
     }
-    closedir(directory);
-    return count;
+    if (closedir(directory) != 0) return false;
+    *out_count = count;
+    return true;
+}
+
+bool lsm_sources_list_networks_checked(
+    LsmSystemSources *sources, LsmNetworkRecord *records,
+    size_t capacity, size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
+    if (sources->network_request_fd < 0)
+        return list_networks_sysfs_checked(sources, records, capacity, out_count);
+    LsmRouteLink links[LSM_MAX_NETS];
+    memset(links, 0, sizeof(links));
+    size_t link_count = 0U;
+    if (!route_link_dump(sources, links, LSM_MAX_NETS, &link_count))
+        return list_networks_sysfs_checked(sources, records, capacity, out_count);
+    size_t count = 0U;
+    char root[LSM_PATH_LEN];
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return false;
+    for (size_t index = 0U; index < link_count && count < capacity; index++) {
+        LsmNetworkRecord *record = &records[count++];
+        memset(record, 0, sizeof(*record));
+        lsm_copy_string(record->name, sizeof(record->name), links[index].name);
+        network_instance_identity(links[index].ifindex, links[index].name, links[index].mac,
+                                  record->instance_identity, sizeof(record->instance_identity));
+        lsm_copy_string(record->mac, sizeof(record->mac), links[index].mac);
+        record->wireless = wireless_interface(record->name);
+        char class_device[LSM_PATH_LEN], hardware[LSM_PATH_LEN] = "";
+        if (child_path(class_device, sizeof(class_device), root, record->name, "/device"))
+            (void)hardware_parent(class_device, hardware, sizeof(hardware));
+        native_device_identity(hardware, record->product, sizeof(record->product),
+                               record->vendor, sizeof(record->vendor));
+    }
+    *out_count = count;
+    return true;
 }
 
 size_t lsm_sources_list_networks(LsmSystemSources *sources,
                                  LsmNetworkRecord *records,
                                  size_t capacity)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
-    if (sources->network_request_fd < 0)
-        return list_networks_sysfs(sources, records, capacity);
+    size_t count = 0U;
+    return lsm_sources_list_networks_checked(
+        sources, records, capacity, &count) ? count : 0U;
+}
 
+bool lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
+    if (sources->network_request_fd < 0)
+        return network_counters_sysfs_checked(sources, records, capacity, out_count);
     LsmRouteLink links[LSM_MAX_NETS];
     memset(links, 0, sizeof(links));
-    const size_t link_count = route_link_dump(sources, links, LSM_MAX_NETS);
-    if (link_count == 0U) return list_networks_sysfs(sources, records, capacity);
-
+    size_t link_count = 0U;
+    if (!route_link_dump(sources, links, LSM_MAX_NETS, &link_count))
+        return network_counters_sysfs_checked(sources, records, capacity, out_count);
     size_t count = 0U;
-    char root[LSM_PATH_LEN];
-    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net"))
-        return 0U;
     for (size_t index = 0U; index < link_count && count < capacity; index++) {
-        if (links[index].operstate != IF_OPER_UP &&
-            (links[index].flags & IFF_RUNNING) == 0U)
-            continue;
-        LsmNetworkRecord *record = &records[count++];
-        memset(record, 0, sizeof(*record));
-        lsm_copy_string(record->name, sizeof(record->name), links[index].name);
-        network_instance_identity(
-            links[index].ifindex, links[index].name, links[index].mac,
-            record->instance_identity, sizeof(record->instance_identity));
-        lsm_copy_string(record->mac, sizeof(record->mac), links[index].mac);
-        record->wireless = wireless_interface(record->name);
-
-        char class_device[LSM_PATH_LEN];
-        char hardware[LSM_PATH_LEN] = "";
-        if (child_path(class_device, sizeof(class_device), root,
-                       record->name, "/device"))
-            (void)hardware_parent(class_device, hardware, sizeof(hardware));
-        native_device_identity(hardware, record->product, sizeof(record->product),
-                               record->vendor, sizeof(record->vendor));
+        if (!links[index].counters_available) continue;
+        lsm_copy_string(records[count].name, sizeof(records[count].name), links[index].name);
+        network_instance_identity(links[index].ifindex, links[index].name, links[index].mac,
+                                  records[count].instance_identity,
+                                  sizeof(records[count].instance_identity));
+        records[count].rx_bytes = links[index].rx_bytes;
+        records[count].tx_bytes = links[index].tx_bytes;
+        count++;
     }
-    return count;
+    *out_count = count;
+    return true;
 }
 
 size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
                                          LsmNetworkCounterRecord *records,
                                          size_t capacity)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
-    LsmRouteLink links[LSM_MAX_NETS];
-    memset(links, 0, sizeof(links));
-    const size_t link_count = route_link_dump(sources, links, LSM_MAX_NETS);
-    if (link_count == 0U) return network_counters_sysfs(sources, records, capacity);
     size_t count = 0U;
-    for (size_t index = 0U; index < link_count && count < capacity; index++) {
-        if (!links[index].counters_available) continue;
-        if (links[index].operstate != IF_OPER_UP &&
-            (links[index].flags & IFF_RUNNING) == 0U)
-            continue;
-        lsm_copy_string(records[count].name, sizeof(records[count].name),
-                        links[index].name);
-        network_instance_identity(
-            links[index].ifindex, links[index].name, links[index].mac,
-            records[count].instance_identity,
-            sizeof(records[count].instance_identity));
-        records[count].rx_bytes = links[index].rx_bytes;
-        records[count].tx_bytes = links[index].tx_bytes;
-        count++;
-    }
-    return count;
+    return lsm_sources_read_network_counters_checked(
+        sources, records, capacity, &count) ? count : 0U;
 }
 
 bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
@@ -1227,45 +1232,56 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
 }
 
 /* DRM inventory exposes stable kernel identities without vendor utilities. */
-size_t lsm_sources_list_gpus(LsmSystemSources *sources,
-                             LsmGpuRecord *records,
-                             size_t capacity)
+bool lsm_sources_list_gpus_checked(
+    LsmSystemSources *sources, LsmGpuRecord *records,
+    size_t capacity, size_t *out_count)
 {
-    if (!sources || !records || capacity == 0U) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!sources || !records || capacity == 0U || !out_count) return false;
     char root[LSM_PATH_LEN];
-    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/drm")) return 0U;
+    if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/drm")) return false;
     DIR *directory = opendir(root);
-    if (!directory) return 0U;
-
+    if (!directory) {
+        if (errno == ENOENT) {
+            *out_count = 0U;
+            return true;
+        }
+        return false;
+    }
     size_t count = 0U;
     struct dirent *entry = NULL;
     while (count < capacity && (entry = readdir(directory))) {
         const char *card = entry->d_name;
-        if (!lsm_string_starts_with(card, "card") || !lsm_ascii_is_digit((unsigned char)card[4]) ||
-            strchr(card, '-'))
+        if (!lsm_string_starts_with(card, "card") ||
+            !lsm_ascii_is_digit((unsigned char)card[4]) || strchr(card, '-'))
             continue;
-
-        char class_device[LSM_PATH_LEN];
-        char hardware[LSM_PATH_LEN] = "";
+        char class_device[LSM_PATH_LEN], hardware[LSM_PATH_LEN] = "";
         if (!child_path(class_device, sizeof(class_device), root, card, "/device") ||
             !hardware_parent(class_device, hardware, sizeof(hardware)))
             continue;
-
         LsmGpuRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->card, sizeof(record->card), card);
         lsm_copy_string(record->device_syspath, sizeof(record->device_syspath), hardware);
         native_device_identity(hardware, record->product, sizeof(record->product),
                                record->vendor, sizeof(record->vendor));
-
         char driver_path[LSM_PATH_LEN];
         if (lsm_join_path(driver_path, sizeof(driver_path), hardware, "/driver"))
-            (void)read_symlink_basename(driver_path, record->driver,
-                                        sizeof(record->driver));
+            (void)read_symlink_basename(driver_path, record->driver, sizeof(record->driver));
         if (!record->driver[0]) lsm_copy_string(record->driver, sizeof(record->driver), "unknown");
     }
-    closedir(directory);
-    return count;
+    if (closedir(directory) != 0) return false;
+    *out_count = count;
+    return true;
+}
+
+size_t lsm_sources_list_gpus(LsmSystemSources *sources,
+                             LsmGpuRecord *records,
+                             size_t capacity)
+{
+    size_t count = 0U;
+    return lsm_sources_list_gpus_checked(
+        sources, records, capacity, &count) ? count : 0U;
 }
 
 /* Only sensor providers whose interface name explicitly identifies a CPU or

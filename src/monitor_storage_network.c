@@ -148,39 +148,38 @@ static int compare_partition_devices(const void *left, const void *right)
  * Joining the shared record set once avoids repeating complete partition and
  * mount scans for each physical disk.
  */
-static void update_all_disk_partitions(LsmMonitor *monitor,
-                                       LsmDiskInfo *disks,
-                                       size_t disk_count)
+static bool update_all_disk_partitions(LsmMonitor *monitor,
+                                        LsmDiskInfo *disks,
+                                        size_t disk_count)
 {
-    for (size_t index = 0; index < disk_count; index++) {
-        disks[index].partition_count = 0;
-        disks[index].system_disk = false;
-    }
-
-    const size_t capacity = 2048;
+    const size_t capacity = 2048U;
     LsmPartitionRecord *partitions = calloc(capacity, sizeof(*partitions));
-    if (partitions) {
-        const size_t count = lsm_sources_list_partitions(
-            monitor_system_sources(monitor), partitions, capacity);
-        for (size_t index = 0; index < count; index++) {
-            LsmDiskInfo *disk = find_disk_in_set(
-                disks, disk_count, partitions[index].parent_disk);
-            if (!disk || disk->partition_count >= LSM_MAX_PARTITIONS) continue;
-            append_partition(disk, partitions[index].device,
-                             partitions[index].mount_point,
-                             partitions[index].filesystem,
-                             partitions[index].size_bytes,
-                             partitions[index].mounted);
-            if (partitions[index].mounted &&
-                strcmp(partitions[index].mount_point, "/") == 0)
-                disk->system_disk = true;
-        }
+    if (!partitions) return false;
+    size_t count = 0U;
+    if (!lsm_sources_list_partitions_checked(
+            monitor_system_sources(monitor), partitions, capacity, &count)) {
         free(partitions);
+        return false;
     }
-
+    for (size_t index = 0; index < disk_count; index++) {
+        disks[index].partition_count = 0U;
+        disks[index].system_disk = false;
+        memset(disks[index].partitions, 0, sizeof(disks[index].partitions));
+    }
+    for (size_t index = 0; index < count; index++) {
+        LsmDiskInfo *disk = find_disk_in_set(disks, disk_count, partitions[index].parent_disk);
+        if (!disk || disk->partition_count >= LSM_MAX_PARTITIONS) continue;
+        append_partition(disk, partitions[index].device, partitions[index].mount_point,
+                         partitions[index].filesystem, partitions[index].size_bytes,
+                         partitions[index].mounted);
+        if (partitions[index].mounted && strcmp(partitions[index].mount_point, "/") == 0)
+            disk->system_disk = true;
+    }
+    free(partitions);
     for (size_t index = 0; index < disk_count; index++)
         qsort(disks[index].partitions, disks[index].partition_count,
               sizeof(disks[index].partitions[0]), compare_partition_devices);
+    return true;
 }
 
 /**
@@ -195,8 +194,13 @@ static bool refresh_disks(LsmMonitor *monitor)
     size_t discovered_count = 0;
 
     LsmBlockDeviceRecord records[LSM_MAX_DISKS] = {0};
-    const size_t record_count = lsm_sources_list_block_devices(
-        monitor_system_sources(monitor), records, LSM_MAX_DISKS);
+    size_t record_count = 0U;
+    if (!lsm_sources_list_block_devices_checked(
+            monitor_system_sources(monitor), records, LSM_MAX_DISKS,
+            &record_count)) {
+        free(discovered);
+        return false;
+    }
     for (size_t index = 0; index < record_count; index++) {
         LsmDiskInfo *disk = &discovered[discovered_count++];
         lsm_copy_string(disk->name, sizeof(disk->name), records[index].name);
@@ -229,7 +233,10 @@ static bool refresh_disks(LsmMonitor *monitor)
         }
     }
 
-    update_all_disk_partitions(monitor, discovered, discovered_count);
+    if (!update_all_disk_partitions(monitor, discovered, discovered_count)) {
+        free(discovered);
+        return false;
+    }
     qsort(discovered, discovered_count, sizeof(discovered[0]), compare_disk_names);
     reconcile_disk_states(monitor, discovered, discovered_count);
     bool changed = discovered_count != monitor->disk_count;
@@ -267,42 +274,43 @@ static LsmDiskInfo *find_disk(LsmMonitor *monitor, const char *name)
 static void update_disks(LsmMonitor *monitor, double elapsed)
 {
     FILE *file = fopen("/proc/diskstats", "r");
+    if (!file) {
+        for (size_t index = 0U; index < monitor->disk_count; index++) {
+            LsmLinuxDiskState *state = find_disk_state(monitor, monitor->disks[index].name);
+            if (state) lsm_disk_accounting_update(
+                &monitor->disks[index], &state->accounting, NULL, elapsed);
+        }
+        return;
+    }
     bool sampled[LSM_MAX_DISKS] = {false};
+    LsmDiskCounters snapshots[LSM_MAX_DISKS];
+    memset(snapshots, 0, sizeof(snapshots));
     char line[512], name[64];
-    unsigned major = 0, minor = 0;
-    unsigned long long reads = 0, read_merged = 0, read_sectors = 0, read_ms = 0;
-    unsigned long long writes = 0, write_merged = 0, write_sectors = 0, write_ms = 0;
-    unsigned long long in_progress = 0, io_ms = 0, weighted_ms = 0;
-    while (file && fgets(line, sizeof(line), file)) {
+    unsigned major=0, minor=0;
+    unsigned long long reads=0, read_merged=0, read_sectors=0, read_ms=0;
+    unsigned long long writes=0, write_merged=0, write_sectors=0, write_ms=0;
+    unsigned long long in_progress=0, io_ms=0, weighted_ms=0;
+    while (fgets(line, sizeof(line), file)) {
         int count = sscanf(line, "%u %u %63s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                           &major, &minor, name, &reads, &read_merged, &read_sectors, &read_ms,
-                           &writes, &write_merged, &write_sectors, &write_ms, &in_progress, &io_ms, &weighted_ms);
+                           &major,&minor,name,&reads,&read_merged,&read_sectors,&read_ms,
+                           &writes,&write_merged,&write_sectors,&write_ms,&in_progress,&io_ms,&weighted_ms);
         if (count < 14) continue;
         LsmDiskInfo *disk = find_disk(monitor, name);
         if (!disk) continue;
-        sampled[(size_t)(disk - monitor->disks)] = true;
-        const LsmDiskCounters counters = {
-            .read_operations = reads,
-            .read_sectors = read_sectors,
-            .read_ms = read_ms,
-            .write_operations = writes,
-            .write_sectors = write_sectors,
-            .write_ms = write_ms,
-            .in_progress_operations = in_progress,
-            .io_ms = io_ms,
-            .weighted_io_ms = weighted_ms
+        size_t index=(size_t)(disk-monitor->disks);
+        sampled[index]=true;
+        snapshots[index]=(LsmDiskCounters){
+            .read_operations=reads,.read_sectors=read_sectors,.read_ms=read_ms,
+            .write_operations=writes,.write_sectors=write_sectors,.write_ms=write_ms,
+            .in_progress_operations=in_progress,.io_ms=io_ms,.weighted_io_ms=weighted_ms
         };
-        LsmLinuxDiskState *state = find_disk_state(monitor, name);
-        if (state)
-            lsm_disk_accounting_update(disk, &state->accounting, &counters, elapsed);
     }
-    if (file) fclose(file);
-    for (size_t index = 0U; index < monitor->disk_count; index++) {
-        if (sampled[index]) continue;
-        LsmLinuxDiskState *state = find_disk_state(monitor, monitor->disks[index].name);
-        if (state)
-            lsm_disk_accounting_update(
-                &monitor->disks[index], &state->accounting, NULL, elapsed);
+    const bool complete=!ferror(file) && fclose(file)==0;
+    for(size_t index=0U;index<monitor->disk_count;index++){
+        LsmLinuxDiskState *state=find_disk_state(monitor,monitor->disks[index].name);
+        if(state) lsm_disk_accounting_update(
+            &monitor->disks[index],&state->accounting,
+            complete&&sampled[index]?&snapshots[index]:NULL,elapsed);
     }
 }
 
@@ -378,8 +386,12 @@ static bool refresh_networks(LsmMonitor *monitor)
     size_t discovered_count = 0;
 
     LsmNetworkRecord records[LSM_MAX_NETS] = {0};
-    const size_t count = lsm_sources_list_networks(
-        monitor_system_sources(monitor), records, LSM_MAX_NETS);
+    size_t count = 0U;
+    if (!lsm_sources_list_networks_checked(
+            monitor_system_sources(monitor), records, LSM_MAX_NETS, &count)) {
+        free(discovered);
+        return false;
+    }
     for (size_t index = 0; index < count; index++) {
         LsmNetInfo *net = &discovered[discovered_count++];
         lsm_copy_string(net->name, sizeof(net->name), records[index].name);
@@ -491,65 +503,52 @@ static void update_network_link_details(LsmNetInfo *net)
 }
 
 static void update_networks(LsmMonitor *monitor, double elapsed,
-                            bool refresh_link_metadata)
+                             bool refresh_link_metadata)
 {
     LsmNetworkCounterRecord counters[LSM_MAX_NETS] = {0};
-    const size_t counter_count = lsm_sources_read_network_counters(
-        monitor_system_sources(monitor), counters, LSM_MAX_NETS);
-    for (size_t i = 0; i < monitor->net_count; i++) {
-        LsmNetInfo *net = &monitor->nets[i];
-        uint64_t rx = net->rx_bytes_total;
-        uint64_t tx = net->tx_bytes_total;
-        bool counters_available = false;
-        for (size_t index = 0; index < counter_count; index++) {
-            if (strcmp(net->name, counters[index].name) != 0 ||
-                !network_instance_matches(
-                    net->instance_identity, net->name,
-                    counters[index].instance_identity, counters[index].name))
+    size_t counter_count = 0U;
+    const bool snapshot_ok = lsm_sources_read_network_counters_checked(
+        monitor_system_sources(monitor), counters, LSM_MAX_NETS, &counter_count);
+    for (size_t i=0;i<monitor->net_count;i++) {
+        LsmNetInfo *net=&monitor->nets[i];
+        uint64_t rx=net->rx_bytes_total, tx=net->tx_bytes_total;
+        bool available=false;
+        if(snapshot_ok) for(size_t j=0;j<counter_count;j++){
+            if(strcmp(net->name,counters[j].name)!=0 ||
+               !network_instance_matches(net->instance_identity,net->name,
+                                         counters[j].instance_identity,counters[j].name))
                 continue;
-            rx = counters[index].rx_bytes;
-            tx = counters[index].tx_bytes;
-            counters_available = true;
-            break;
+            rx=counters[j].rx_bytes; tx=counters[j].tx_bytes; available=true; break;
         }
-        LsmLinuxNetworkState *state = find_network_state(monitor, net);
-        net->rx_bytes_per_sec = 0.0;
-        net->tx_bytes_per_sec = 0.0;
-        if (counters_available && state && state->initialized) {
-            (void)lsm_u64_counter_rate(
-                rx, state->previous_rx, 1.0L, elapsed,
-                &net->rx_bytes_per_sec);
-            (void)lsm_u64_counter_rate(
-                tx, state->previous_tx, 1.0L, elapsed,
-                &net->tx_bytes_per_sec);
+        LsmLinuxNetworkState *state=find_network_state(monitor,net);
+        net->rx_bytes_per_sec=NAN; net->tx_bytes_per_sec=NAN;
+        if(available && state && state->initialized){
+            double rr=0.0,tr=0.0;
+            if(lsm_u64_counter_rate(rx,state->previous_rx,1.0L,elapsed,&rr))
+                net->rx_bytes_per_sec=rr;
+            if(lsm_u64_counter_rate(tx,state->previous_tx,1.0L,elapsed,&tr))
+                net->tx_bytes_per_sec=tr;
+        } else if(available) {
+            net->rx_bytes_per_sec=0.0; net->tx_bytes_per_sec=0.0;
         }
-        net->rx_bytes_total = rx;
-        net->tx_bytes_total = tx;
-        if (state) {
-            state->previous_rx = rx;
-            state->previous_tx = tx;
-            /* A missing sample breaks the time interval. Reusing its old
-             * counters would divide several intervals by one on recovery. */
-            state->initialized = counters_available;
+        if(available){net->rx_bytes_total=rx;net->tx_bytes_total=tx;}
+        if(state){
+            if(available){state->previous_rx=rx;state->previous_tx=tx;}
+            state->initialized=available;
         }
-        if (refresh_link_metadata || !net->connection_state[0])
-            update_network_link_details(net);
-        LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
-        if (backend && backend->wifi_metadata)
-            lsm_wifi_metadata_refresh(backend->wifi_metadata, net);
-        if (counters_available && net->link_speed_mbps > 0.0) {
-            const long double bytes_per_second =
-                (long double)net->rx_bytes_per_sec +
-                (long double)net->tx_bytes_per_sec;
-            const long double link_bytes_per_second =
-                (long double)net->link_speed_mbps * 1000000.0L / 8.0L;
-            net->utilisation_percent = (double)fminl(
-                100.0L, fmaxl(0.0L, bytes_per_second * 100.0L /
-                                        link_bytes_per_second));
-            net->utilisation_available = true;
+        if(refresh_link_metadata || !net->connection_state[0]) update_network_link_details(net);
+        LsmLinuxMonitorBackendState *backend=monitor_backend_state(monitor);
+        if(backend && backend->wifi_metadata) lsm_wifi_metadata_refresh(backend->wifi_metadata,net);
+        if(available && isfinite(net->rx_bytes_per_sec) && isfinite(net->tx_bytes_per_sec) &&
+           net->link_speed_mbps>0.0){
+            long double busiest=fmaxl((long double)net->rx_bytes_per_sec,
+                                      (long double)net->tx_bytes_per_sec);
+            long double capacity=(long double)net->link_speed_mbps*1000000.0L/8.0L;
+            net->utilisation_percent=(double)fminl(100.0L,fmaxl(0.0L,busiest*100.0L/capacity));
+            net->utilisation_available=true;
         } else {
-            net->utilisation_percent = 0.0;
-            net->utilisation_available = false;
+            net->utilisation_percent=NAN;
+            net->utilisation_available=false;
         }
     }
 }

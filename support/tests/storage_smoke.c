@@ -739,11 +739,13 @@ int main(void)
     LsmNetworkRecord networks[4] = {0};
     LsmGpuRecord gpus[4] = {0};
 
-    const size_t disk_count = lsm_sources_list_block_devices(sources, disks, 4);
-    const size_t mount_count = lsm_sources_list_mounts(sources, mounts, 8);
-    const size_t partition_count = lsm_sources_list_partitions(sources, partitions, 8);
-    const size_t network_count = lsm_sources_list_networks(sources, networks, 4);
-    const size_t gpu_count = lsm_sources_list_gpus(sources, gpus, 4);
+    size_t disk_count=0U,mount_count=0U,partition_count=0U,network_count=0U,gpu_count=0U;
+    if (!lsm_sources_list_block_devices_checked(sources,disks,4,&disk_count) ||
+        !lsm_sources_list_mounts_checked(sources,mounts,8,&mount_count) ||
+        !lsm_sources_list_partitions_checked(sources,partitions,8,&partition_count) ||
+        !lsm_sources_list_networks_checked(sources,networks,4,&network_count) ||
+        !lsm_sources_list_gpus_checked(sources,gpus,4,&gpu_count))
+        return 11;
     const double temperature = lsm_sources_read_cpu_temperature(sources);
     LsmCpuThermalSample thermal = {0};
     const bool thermal_available =
@@ -753,8 +755,10 @@ int main(void)
         !write_text(path, "303\n"))
         return 7;
     LsmBlockDeviceRecord replacement_disks[4] = {0};
-    const size_t replacement_count =
-        lsm_sources_list_block_devices(sources, replacement_disks, 4);
+    size_t replacement_count=0U;
+    if (!lsm_sources_list_block_devices_checked(
+            sources,replacement_disks,4,&replacement_count))
+        return 12;
     bool replacement_identity_changed = false;
     for (size_t index = 0U; index < replacement_count; index++)
         if (strcmp(replacement_disks[index].name, "sda") == 0 &&
@@ -798,7 +802,9 @@ int main(void)
 
     /* A missing or malformed sysfs counter is not a sampled zero. */
     LsmNetworkCounterRecord counters[4] = {0};
-    if (lsm_sources_read_network_counters(sources, counters, 4U) != 0U)
+    size_t counter_count=0U;
+    if (!lsm_sources_read_network_counters_checked(
+            sources,counters,4U,&counter_count) || counter_count != 0U)
         return 8;
     if (!lsm_join_path(path, sizeof(path), root,
                        "/sys/class/net/eth0/statistics/rx_bytes") ||
@@ -806,12 +812,14 @@ int main(void)
         !lsm_join_path(path, sizeof(path), root,
                        "/sys/class/net/eth0/statistics/tx_bytes") ||
         !write_text(path, "42\n") ||
-        lsm_sources_read_network_counters(sources, counters, 4U) != 1U ||
+        !lsm_sources_read_network_counters_checked(
+            sources,counters,4U,&counter_count) || counter_count != 1U ||
         strcmp(counters[0].instance_identity, "ifindex:7|mac:00:11:22:33:44:55") != 0 ||
         counters[0].rx_bytes != 0U || counters[0].tx_bytes != 42U)
         return 9;
     if (!write_text(path, "invalid\n") ||
-        lsm_sources_read_network_counters(sources, counters, 4U) != 0U)
+        !lsm_sources_read_network_counters_checked(
+            sources,counters,4U,&counter_count) || counter_count != 0U)
         return 10;
 
     bool physical_network = false;

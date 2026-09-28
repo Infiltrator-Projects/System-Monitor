@@ -202,9 +202,11 @@ int main(void)
         return 2;
 
     lsm_disk_accounting_update(&disk, &state, NULL, 2.0);
-    if (state.initialized || disk.read_bytes_per_sec != 0.0 ||
-        disk.write_bytes_per_sec != 0.0 || disk.active_percent != 0.0 ||
-        disk.average_response_ms != 0.0 || disk.queue_length != 0.0)
+    if (state.initialized || !isnan(disk.read_bytes_per_sec) ||
+        !isnan(disk.write_bytes_per_sec) || !isnan(disk.active_percent) ||
+        !isnan(disk.average_response_ms) || !isnan(disk.queue_length) ||
+        disk.read_bytes_total != 1560576U ||
+        disk.write_bytes_total != 3121152U)
         return 5;
     lsm_disk_accounting_update(&disk, &state, &second, 2.0);
     if (!state.initialized || disk.read_bytes_per_sec != 0.0 ||
