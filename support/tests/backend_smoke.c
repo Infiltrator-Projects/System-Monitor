@@ -7,6 +7,7 @@
  * @license GPL-3.0-or-later
  */
 #include "monitor.h"
+#include "common.h"
 #include "monitor_linux_internal.h"
 #include "process_backend.h"
 #include "system_sources.h"
@@ -71,6 +72,11 @@ static bool collector_recovery_valid(void)
     }
     monitor->backend_state = state;
     monitor->cpu.base_frequency_ghz = 3.0;
+    /* This recovery test deliberately has no cpufreq source. Keep the
+     * rediscovery timer fresh so the live CI host cannot leak its own
+     * cpufreq policies into this deterministic unavailable-state fixture. */
+    state->last_cpu_frequency_source_refresh_monotonic =
+        lsm_monotonic_seconds();
     lsm_cpu_memory_update(monitor, 1.0);
     if (monitor->cpu.frequency_ghz != 0.0 ||
         monitor->cpu.max_frequency_ghz != 0.0) {
