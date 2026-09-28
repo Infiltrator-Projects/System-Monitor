@@ -101,7 +101,13 @@ bool lsm_process_inspection_identity_matches(
 bool lsm_process_inspection_open_files_checked(
     LsmProcessId pid, LsmOpenFileInfo **out_items, size_t *out_count);
 
-/** Compatibility wrapper returning zero for either an empty result or failure. */
+/**
+ * Compatibility count-only wrapper for open-descriptor inspection.
+ *
+ * @param [in] pid Process to inspect; values less than one are rejected.
+ * @param [out] out_items Receives a heap array owned by the caller on success.
+ * @return Number of descriptors, or zero for either an empty result or failure.
+ */
 size_t lsm_process_inspection_open_files(LsmProcessId pid,
                                          LsmOpenFileInfo **out_items);
 
@@ -120,7 +126,13 @@ size_t lsm_process_inspection_open_files(LsmProcessId pid,
 bool lsm_process_inspection_memory_maps_checked(
     LsmProcessId pid, LsmMemoryMapInfo **out_items, size_t *out_count);
 
-/** Compatibility wrapper returning zero for either an empty result or failure. */
+/**
+ * Compatibility count-only wrapper for memory-map inspection.
+ *
+ * @param [in] pid Process to inspect; values less than one are rejected.
+ * @param [out] out_items Receives a heap array owned by the caller on success.
+ * @return Number of mappings, or zero for either an empty result or failure.
+ */
 size_t lsm_process_inspection_memory_maps(LsmProcessId pid,
                                           LsmMemoryMapInfo **out_items);
 
@@ -135,7 +147,13 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId pid,
 bool lsm_process_inspection_threads_checked(
     LsmProcessId pid, LsmThreadInfo **out_items, size_t *out_count);
 
-/** Compatibility wrapper returning zero for either an empty result or failure. */
+/**
+ * Compatibility count-only wrapper for thread inspection.
+ *
+ * @param [in] pid Process whose task directory is inspected.
+ * @param [out] out_items Receives a heap array owned by the caller on success.
+ * @return Number of threads, or zero for either an empty result or failure.
+ */
 size_t lsm_process_inspection_threads(LsmProcessId pid,
                                       LsmThreadInfo **out_items);
 
@@ -156,7 +174,13 @@ size_t lsm_process_inspection_threads(LsmProcessId pid,
 bool lsm_process_inspection_find_file_users_checked(
     const char *path, LsmFileUserInfo **out_items, size_t *out_count);
 
-/** Compatibility wrapper returning zero for either no matches or failure. */
+/**
+ * Compatibility count-only wrapper for exact-file user discovery.
+ *
+ * @param [in] path Existing filesystem path to search for.
+ * @param [out] out_items Receives a heap array owned by the caller on success.
+ * @return Number of matches, or zero for either no matches or failure.
+ */
 size_t lsm_process_inspection_find_file_users(const char *path,
                                               LsmFileUserInfo **out_items);
 
