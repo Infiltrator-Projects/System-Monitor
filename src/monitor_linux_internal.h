@@ -115,6 +115,7 @@ typedef struct {
     double last_topology_scan_monotonic;
     double last_battery_update_monotonic;
     double last_memory_detail_monotonic;
+    double last_cpu_frequency_source_refresh_monotonic;
     bool topology_refresh_requested;
 } LsmLinuxMonitorBackendState;
 

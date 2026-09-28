@@ -540,6 +540,8 @@ bool lsm_cpu_memory_initialise(LsmMonitor *monitor)
     monitor->cpu.numa_node_count = read_numa_node_count();
     update_load_average(&monitor->cpu);
     state->cpu_frequency_source = create_cpu_frequency_source();
+    state->last_cpu_frequency_source_refresh_monotonic =
+        lsm_monotonic_seconds();
     if (!read_cpu_counters(monitor, true, 0.0)) return false;
     update_memory(monitor, true);
     state->last_memory_detail_monotonic = lsm_monotonic_seconds();
@@ -554,8 +556,18 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
     if (!state) return;
     (void)read_cpu_counters(monitor, false, elapsed_seconds);
     update_load_average(&monitor->cpu);
-    const double current_frequency =
-        read_cpu_frequency_ghz(monitor, false);
+    const double now = lsm_monotonic_seconds();
+    double current_frequency = read_cpu_frequency_ghz(monitor, false);
+    if (current_frequency <= 0.0 &&
+        lsm_refresh_interval_due(
+            now, state->last_cpu_frequency_source_refresh_monotonic, 30.0)) {
+        destroy_cpu_frequency_source(
+            (LsmCpuFrequencySource *)state->cpu_frequency_source);
+        state->cpu_frequency_source = create_cpu_frequency_source();
+        state->last_cpu_frequency_source_refresh_monotonic = now;
+        current_frequency = read_cpu_frequency_ghz(monitor, false);
+        monitor->cpu.max_frequency_ghz = 0.0;
+    }
     if (current_frequency > 0.0)
         monitor->cpu.frequency_ghz = current_frequency;
     if (monitor->cpu.max_frequency_ghz <= 0.0) {
@@ -565,7 +577,6 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
             monitor->cpu.max_frequency_ghz = maximum_frequency;
     }
     read_cpu_thermal(monitor);
-    const double now = lsm_monotonic_seconds();
     const bool refresh_memory_details = lsm_refresh_interval_due(
         now, state->last_memory_detail_monotonic, 10.0);
     update_memory(monitor, refresh_memory_details);

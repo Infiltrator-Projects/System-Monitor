@@ -2,6 +2,9 @@
 
 ## 1.0.142 - 2026-09-28
 
+
+- Abort grouped Processes publication on any allocation failure instead of presenting a knowingly incomplete group set.
+- Re-discover Linux cpufreq policy paths after sustained read failure so driver reloads and CPU-policy topology changes recover without restarting System Monitor.
 - Make Linux disk, partition, network and GPU discovery transactional: checked source APIs distinguish a valid empty inventory from enumeration failure, so Performance preserves the last completed topology instead of publishing transient device disappearance.
 - Keep disconnected Linux network adapters visible and retain their stable identity; failed disk/network telemetry now becomes an explicit graph gap/N/A instead of synthetic zero activity, while cumulative totals and recovery baselines remain correct.
 - Calculate network utilisation from the busier receive/transmit direction on full-duplex links on Linux and Windows instead of summing independent directions and prematurely clamping at 100%.

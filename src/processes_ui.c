@@ -343,7 +343,11 @@ static GPtrArray *collect_groups(LsmApp *app)
             lsm_copy_string(group->icon, sizeof(group->icon), icon);
             if (!group_append(group, index, process)) {
                 group_destroy(group);
-                continue;
+                g_free(folded_search);
+                g_hash_table_destroy(group_index);
+                g_hash_table_destroy(pid_index);
+                g_ptr_array_free(groups, TRUE);
+                return NULL;
             }
             g_ptr_array_add(groups, group);
             g_hash_table_insert(group_index, group->key, group);
