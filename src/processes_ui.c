@@ -333,6 +333,18 @@ static void group_destroy(gpointer data)
     free(group);
 }
 
+static void group_cache_remove_fast(GPtrArray *cache, guint index)
+{
+    if (!cache || index >= cache->len) return;
+    const guint last = cache->len - 1U;
+    if (index != last) {
+        gpointer removed = cache->pdata[index];
+        cache->pdata[index] = cache->pdata[last];
+        cache->pdata[last] = removed;
+    }
+    g_ptr_array_set_size(cache, (gint)last);
+}
+
 static gboolean group_append(ProcessGroup *group, size_t process_index,
                              const LsmProcessInfo *process)
 {
@@ -381,7 +393,7 @@ static GPtrArray *collect_groups(LsmApp *app)
         ProcessGroup *group =
             g_ptr_array_index(group_cache, index - 1U);
         if (group && group->count == 0U)
-            g_ptr_array_remove_index_fast(group_cache, index - 1U);
+            group_cache_remove_fast(group_cache, index - 1U);
     }
     for (guint index = 0U; index < group_cache->len; index++) {
         ProcessGroup *group = g_ptr_array_index(group_cache, index);
