@@ -3075,6 +3075,20 @@ static void destroy_state(LsmWindowsUiState *state)
     if (state->title_font) DeleteObject(state->title_font);
     if (state->heading_font) DeleteObject(state->heading_font);
     if (state->metric_font) DeleteObject(state->metric_font);
+
+    if (state->backbuffer_dc && state->backbuffer_previous)
+        (void)SelectObject(
+            state->backbuffer_dc, state->backbuffer_previous);
+    if (state->backbuffer_bitmap)
+        DeleteObject(state->backbuffer_bitmap);
+    if (state->backbuffer_dc)
+        DeleteDC(state->backbuffer_dc);
+    state->backbuffer_dc = NULL;
+    state->backbuffer_bitmap = NULL;
+    state->backbuffer_previous = NULL;
+    state->backbuffer_width = 0;
+    state->backbuffer_height = 0;
+
     state->body_font = NULL;
     state->body_bold_font = NULL;
     state->rail_value_font = NULL;
