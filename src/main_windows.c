@@ -2632,12 +2632,22 @@ static void refresh_processes(LsmWindowsUiState *state)
         return;
     }
 
-    lsm_process_list_free(state->processes);
-    state->processes = processes;
-    state->process_count = count;
+    const LsmProcessInfo *previous = state->processes;
+    const size_t previous_count = state->process_count;
+    bool same_structure = previous_count == count;
+    if (same_structure) {
+        for (size_t index = 0U; index < count; index++) {
+            if (previous[index].pid != processes[index].pid ||
+                previous[index].instance_id != processes[index].instance_id) {
+                same_structure = false;
+                break;
+            }
+        }
+    }
 
     SendMessageW(state->process_list, WM_SETREDRAW, FALSE, 0);
-    SendMessageW(state->process_list, LVM_DELETEALLITEMS, 0, 0);
+    if (!same_structure)
+        SendMessageW(state->process_list, LVM_DELETEALLITEMS, 0, 0);
 
     const size_t shown = count > (size_t)INT_MAX ? (size_t)INT_MAX : count;
     for (size_t index = 0U; index < shown; index++) {
@@ -2655,20 +2665,25 @@ static void refresh_processes(LsmWindowsUiState *state)
         if (!name[0]) lstrcpyW(name, L"-");
         if (!user[0]) lstrcpyW(user, L"-");
 
-        LVITEMW item;
-        ZeroMemory(&item, sizeof(item));
-        item.mask = LVIF_TEXT;
-        item.iItem = (int)index;
-        item.iSubItem = 0;
-        item.pszText = name;
-        const LRESULT inserted = SendMessageW(
-            state->process_list, LVM_INSERTITEMW, 0, (LPARAM)&item);
-        if (inserted < 0) continue;
+        if (!same_structure) {
+            LVITEMW item;
+            ZeroMemory(&item, sizeof(item));
+            item.mask = LVIF_TEXT;
+            item.iItem = (int)index;
+            item.iSubItem = 0;
+            item.pszText = name;
+            const LRESULT inserted = SendMessageW(
+                state->process_list, LVM_INSERTITEMW, 0, (LPARAM)&item);
+            if (inserted < 0) continue;
 
-        (void)swprintf(
-            number, sizeof(number) / sizeof(number[0]),
-            L"%llu", (unsigned long long)process->pid);
-        list_view_set_text(state->process_list, (int)index, 1, number);
+            (void)swprintf(
+                number, sizeof(number) / sizeof(number[0]),
+                L"%llu", (unsigned long long)process->pid);
+            list_view_set_text(
+                state->process_list, (int)index, 1, number);
+            list_view_set_text(
+                state->process_list, (int)index, 4, user);
+        }
 
         (void)swprintf(
             number, sizeof(number) / sizeof(number[0]),
@@ -2680,8 +2695,6 @@ static void refresh_processes(LsmWindowsUiState *state)
             L"%.1f%%", process->memory_percent);
         list_view_set_text(state->process_list, (int)index, 3, number);
 
-        list_view_set_text(state->process_list, (int)index, 4, user);
-
         (void)swprintf(
             number, sizeof(number) / sizeof(number[0]),
             L"%u", process->threads);
@@ -2690,6 +2703,10 @@ static void refresh_processes(LsmWindowsUiState *state)
 
     SendMessageW(state->process_list, WM_SETREDRAW, TRUE, 0);
     InvalidateRect(state->process_list, NULL, TRUE);
+
+    lsm_process_list_free(state->processes);
+    state->processes = processes;
+    state->process_count = count;
 
     wchar_t status[160];
     (void)swprintf(

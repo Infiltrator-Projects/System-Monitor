@@ -126,7 +126,6 @@ typedef struct {
     volatile LONG references;
     LsmWindowsMonitorBackendState *native;
     LsmMonitor sample;
-    LsmMonitor completed;
 } LsmWindowsSamplerState;
 
 #define LSM_WINDOWS_SAMPLER_SHUTDOWN_MS 500U
@@ -948,6 +947,60 @@ static bool enumerate_physical_disks(
     return true;
 }
 
+static void mark_disk_performance_unavailable(
+    LsmDiskInfo *disk, LsmWindowsDiskBaseline *baseline)
+{
+    if (!disk || !baseline) return;
+    disk->read_bytes_per_sec = NAN;
+    disk->write_bytes_per_sec = NAN;
+    disk->active_percent = NAN;
+    disk->read_response_ms = NAN;
+    disk->write_response_ms = NAN;
+    disk->average_response_ms = NAN;
+    disk->queue_length = NAN;
+    disk->in_progress_operations = 0U;
+    baseline->valid = false;
+}
+
+/*
+ * Fast disk sampling deliberately avoids SetupAPI, identity queries and volume
+ * enumeration. The retained topology already gives us the physical drive
+ * number; only IOCTL_DISK_PERFORMANCE is required between topology scans.
+ */
+static void update_physical_disk_performance(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return;
+
+    const size_t count = monitor->disk_count < LSM_MAX_DISKS
+        ? monitor->disk_count : LSM_MAX_DISKS;
+    for (size_t index = 0U; index < count; index++) {
+        LsmWindowsDiskBaseline *baseline = &state->disks[index];
+        char path[64];
+        (void)snprintf(
+            path, sizeof(path), "\\\\.\\PhysicalDrive%lu",
+            (unsigned long)baseline->number);
+        HANDLE disk = CreateFileA(
+            path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        if (disk == INVALID_HANDLE_VALUE) {
+            mark_disk_performance_unavailable(
+                &monitor->disks[index], baseline);
+            continue;
+        }
+
+        DISK_PERFORMANCE performance;
+        if (query_disk_performance(disk, &performance))
+            update_disk_performance(
+                &monitor->disks[index], baseline, &performance, elapsed);
+        else
+            mark_disk_performance_unavailable(
+                &monitor->disks[index], baseline);
+        (void)CloseHandle(disk);
+    }
+}
+
 static int physical_disk_index(
     const LsmMonitor *monitor, DWORD disk_number)
 {
@@ -1444,6 +1497,102 @@ static bool enumerate_networks(
     monitor->net_count = count;
     free(addresses);
     return true;
+}
+
+static bool network_luid_from_identity(
+    const char *identity, uint64_t *key)
+{
+    if (!identity || !key) return false;
+    unsigned long long parsed = 0ULL;
+    char trailing = '\0';
+    if (sscanf(identity, "luid:%llx%c", &parsed, &trailing) != 1)
+        return false;
+    *key = (uint64_t)parsed;
+    return true;
+}
+
+/*
+ * GetIfEntry2 supplies live counters, oper-state and negotiated link rate for
+ * an already-discovered LUID. Address/name discovery stays on the slow cadence.
+ */
+static void update_network_counters(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return;
+
+    for (size_t index = 0U; index < monitor->net_count; index++) {
+        LsmNetInfo *net = &monitor->nets[index];
+        uint64_t key = 0U;
+        if (!network_luid_from_identity(net->instance_identity, &key)) {
+            net->rx_bytes_per_sec = NAN;
+            net->tx_bytes_per_sec = NAN;
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+            continue;
+        }
+
+        MIB_IF_ROW2 row;
+        memset(&row, 0, sizeof(row));
+        row.InterfaceLuid.Value = key;
+        if (GetIfEntry2(&row) != NO_ERROR) {
+            LsmWindowsNetBaseline *baseline = net_baseline(state, key);
+            if (baseline) baseline->valid = false;
+            net->rx_bytes_per_sec = NAN;
+            net->tx_bytes_per_sec = NAN;
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+            continue;
+        }
+
+        LsmWindowsNetBaseline *baseline = net_baseline(state, key);
+        net->rx_bytes_per_sec = NAN;
+        net->tx_bytes_per_sec = NAN;
+        if (baseline && baseline->valid && elapsed > 0.0) {
+            double receive_rate = 0.0;
+            double transmit_rate = 0.0;
+            if (infiltratr_u64_counter_rate(
+                    row.InOctets, baseline->rx_bytes, 1.0L, elapsed,
+                    &receive_rate))
+                net->rx_bytes_per_sec = receive_rate;
+            if (infiltratr_u64_counter_rate(
+                    row.OutOctets, baseline->tx_bytes, 1.0L, elapsed,
+                    &transmit_rate))
+                net->tx_bytes_per_sec = transmit_rate;
+        }
+        if (baseline) {
+            baseline->key = key;
+            baseline->rx_bytes = row.InOctets;
+            baseline->tx_bytes = row.OutOctets;
+            baseline->valid = true;
+        }
+
+        net->rx_bytes_total = row.InOctets;
+        net->tx_bytes_total = row.OutOctets;
+        infiltratr_copy_string(
+            net->connection_state, sizeof(net->connection_state),
+            row.OperStatus == IfOperStatusUp ? "Connected" : "Disconnected");
+        const uint64_t link_bits =
+            row.TransmitLinkSpeed > row.ReceiveLinkSpeed
+                ? row.TransmitLinkSpeed : row.ReceiveLinkSpeed;
+        net->link_speed_mbps = (double)link_bits / 1000000.0;
+        if (link_bits > 0U &&
+            isfinite(net->rx_bytes_per_sec) &&
+            isfinite(net->tx_bytes_per_sec)) {
+            const long double current_bits =
+                fmaxl((long double)net->rx_bytes_per_sec,
+                      (long double)net->tx_bytes_per_sec) * 8.0L;
+            long double utilisation =
+                (current_bits * 100.0L) / (long double)link_bits;
+            if (utilisation > 100.0L) utilisation = 100.0L;
+            if (utilisation < 0.0L) utilisation = 0.0L;
+            net->utilisation_percent = (double)utilisation;
+            net->utilisation_available = true;
+        } else {
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+        }
+    }
 }
 
 static bool display_luid_for_name(
@@ -2201,6 +2350,21 @@ static void refresh_topology_and_devices(
         state->last_topology_tick == 0ULL ||
         now - state->last_topology_tick >= LSM_WINDOWS_TOPOLOGY_REFRESH_MS;
 
+    if (!due) {
+        update_physical_disk_performance(monitor, state, elapsed);
+        update_network_counters(monitor, state, elapsed);
+        return;
+    }
+
+    /*
+     * Record the attempt independently of provider success. A persistent
+     * discovery failure must not collapse the topology cadence into a
+     * one-second retry storm.
+     */
+    state->last_topology_tick = now;
+    state->topology_refresh_requested = false;
+
+    bool disks_refreshed = false;
     LsmDiskInfo *disk_backup =
         (LsmDiskInfo *)malloc(sizeof(monitor->disks));
     LsmWindowsDiskBaseline *disk_baseline_backup =
@@ -2212,8 +2376,10 @@ static void refresh_topology_and_devices(
             monitor->topology_generation;
         memcpy(disk_backup, monitor->disks, sizeof(monitor->disks));
         memcpy(disk_baseline_backup, state->disks, sizeof(state->disks));
-        if (!enumerate_physical_disks(monitor, state, elapsed) ||
-            !enumerate_disk_volumes(monitor)) {
+        disks_refreshed =
+            enumerate_physical_disks(monitor, state, elapsed) &&
+            enumerate_disk_volumes(monitor);
+        if (!disks_refreshed) {
             memcpy(monitor->disks, disk_backup, sizeof(monitor->disks));
             monitor->disk_count = disk_count_backup;
             monitor->disk_generation = disk_generation_backup;
@@ -2223,15 +2389,14 @@ static void refresh_topology_and_devices(
     }
     free(disk_baseline_backup);
     free(disk_backup);
+    if (!disks_refreshed)
+        update_physical_disk_performance(monitor, state, elapsed);
 
-    (void)enumerate_networks(monitor, state, elapsed);
-    if (due) {
-        populate_cpu_topology(&monitor->cpu);
-        if (enumerate_gpus(monitor, state)) {
-            state->last_topology_tick = now;
-            state->topology_refresh_requested = false;
-        }
-    }
+    if (!enumerate_networks(monitor, state, elapsed))
+        update_network_counters(monitor, state, elapsed);
+
+    populate_cpu_topology(&monitor->cpu);
+    (void)enumerate_gpus(monitor, state);
 }
 
 static void windows_sampler_release(LsmWindowsSamplerState *sampler)
@@ -2306,11 +2471,8 @@ static DWORD WINAPI windows_sampler_thread(LPVOID user_data)
 
         EnterCriticalSection(&sampler->lock);
         sampler->sample_in_progress = false;
-        if (sampled && !sampler->stop_requested) {
-            sampler->completed = sampler->sample;
-            sampler->completed.backend_state = NULL;
+        if (sampled && !sampler->stop_requested)
             sampler->sample_ready = true;
-        }
         LeaveCriticalSection(&sampler->lock);
     }
     windows_sampler_release(sampler);
@@ -2371,7 +2533,7 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
     EnterCriticalSection(&sampler->lock);
     if (sampler->sample_ready) {
         void *backend_state = monitor->backend_state;
-        *monitor = sampler->completed;
+        *monitor = sampler->sample;
         monitor->backend_state = backend_state;
         sampler->sample_ready = false;
     }

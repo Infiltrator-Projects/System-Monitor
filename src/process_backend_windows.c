@@ -50,6 +50,10 @@ typedef struct {
     bool io_available;
     uint64_t sampled_at_ms;
     unsigned generation;
+    char account_identity[128];
+    char user[64];
+    bool owned_by_current_user;
+    bool account_available;
 } LsmWindowsProcessSample;
 
 struct LsmProcessBackend {
@@ -187,15 +191,15 @@ static PSID copy_process_user_sid(HANDLE process)
     return sid;
 }
 
-static void populate_process_account(LsmProcessBackend *backend,
+static bool populate_process_account(LsmProcessBackend *backend,
                                      HANDLE process,
                                      LsmProcessInfo *info)
 {
     if (!backend || !process || !info || !backend->current_user_sid)
-        return;
+        return false;
 
     PSID sid = copy_process_user_sid(process);
-    if (!sid) return;
+    if (!sid) return false;
 
     info->owned_by_current_user =
         EqualSid(sid, backend->current_user_sid) != FALSE;
@@ -223,6 +227,7 @@ static void populate_process_account(LsmProcessBackend *backend,
         infiltratr_copy_string(info->user, sizeof(info->user), account);
 
     free(sid);
+    return true;
 }
 
 static void wide_to_utf8(const WCHAR *source, char *destination,
@@ -238,14 +243,29 @@ static void wide_to_utf8(const WCHAR *source, char *destination,
         destination[0] = '\0';
 }
 
+static size_t process_sample_lower_bound(
+    const LsmProcessBackend *backend, DWORD pid)
+{
+    size_t left = 0U;
+    size_t right = backend ? backend->sample_count : 0U;
+    while (left < right) {
+        const size_t middle = left + (right - left) / 2U;
+        if (backend->samples[middle].pid < pid)
+            left = middle + 1U;
+        else
+            right = middle;
+    }
+    return left;
+}
+
 static LsmWindowsProcessSample *find_or_create_sample(
     LsmProcessBackend *backend, DWORD pid)
 {
     if (!backend) return NULL;
-    for (size_t index = 0U; index < backend->sample_count; index++) {
-        if (backend->samples[index].pid == pid)
-            return &backend->samples[index];
-    }
+    const size_t position = process_sample_lower_bound(backend, pid);
+    if (position < backend->sample_count &&
+        backend->samples[position].pid == pid)
+        return &backend->samples[position];
 
     if (!infiltratr_array_reserve((void **)&backend->samples,
                            &backend->sample_capacity,
@@ -254,8 +274,15 @@ static LsmWindowsProcessSample *find_or_create_sample(
                            256U))
         return NULL;
 
-    LsmWindowsProcessSample *sample =
-        &backend->samples[backend->sample_count++];
+    if (position < backend->sample_count) {
+        memmove(
+            &backend->samples[position + 1U],
+            &backend->samples[position],
+            (backend->sample_count - position) *
+                sizeof(*backend->samples));
+    }
+    backend->sample_count++;
+    LsmWindowsProcessSample *sample = &backend->samples[position];
     memset(sample, 0, sizeof(*sample));
     sample->pid = pid;
     return sample;
@@ -312,6 +339,7 @@ static bool populate_process_metrics(LsmProcessBackend *backend,
                                      LsmProcessInfo *info,
                                      uint64_t system_delta,
                                      uint64_t now_ms,
+                                     uint64_t now_epoch,
                                      unsigned scan_flags)
 {
     if (!backend || !process || !info) return false;
@@ -324,16 +352,16 @@ static bool populate_process_metrics(LsmProcessBackend *backend,
     info->cpu_time_nanoseconds =
         infiltratr_u64_multiply_saturating(cpu_time, 100ULL);
 
-    FILETIME now_filetime;
-    GetSystemTimeAsFileTime(&now_filetime);
-    const uint64_t now_seconds =
-        filetime_value(now_filetime) / 10000000ULL;
-    const uint64_t windows_to_unix = 11644473600ULL;
-    if (now_seconds >= windows_to_unix && start_epoch > 0) {
-        const uint64_t now_epoch = now_seconds - windows_to_unix;
+    if (start_epoch > 0)
         info->elapsed_seconds = now_epoch >= (uint64_t)start_epoch
             ? now_epoch - (uint64_t)start_epoch : 0U;
-    }
+
+    LsmWindowsProcessSample *sample =
+        find_or_create_sample(backend, (DWORD)info->pid);
+    if (!sample) return false;
+    const bool same_instance =
+        sample->instance_id != 0U &&
+        sample->instance_id == info->instance_id;
 
     PROCESS_MEMORY_COUNTERS_EX memory;
     memset(&memory, 0, sizeof(memory));
@@ -359,15 +387,31 @@ static bool populate_process_metrics(LsmProcessBackend *backend,
     if (priority_class != 0U)
         info->priority = priority_from_class(priority_class);
 
-    populate_process_account(backend, process, info);
+    if (same_instance && sample->account_available) {
+        infiltratr_copy_string(
+            info->account_identity, sizeof(info->account_identity),
+            sample->account_identity);
+        infiltratr_copy_string(
+            info->user, sizeof(info->user), sample->user);
+        info->owned_by_current_user = sample->owned_by_current_user;
+    } else {
+        sample->account_available = false;
+        sample->account_identity[0] = '\0';
+        sample->user[0] = '\0';
+        sample->owned_by_current_user = false;
+        if (populate_process_account(backend, process, info)) {
+            infiltratr_copy_string(
+                sample->account_identity, sizeof(sample->account_identity),
+                info->account_identity);
+            infiltratr_copy_string(
+                sample->user, sizeof(sample->user), info->user);
+            sample->owned_by_current_user = info->owned_by_current_user;
+            sample->account_available = true;
+        }
+    }
     populate_optional_process_fields(process, info, scan_flags);
 
-    LsmWindowsProcessSample *sample =
-        find_or_create_sample(backend, (DWORD)info->pid);
-    if (!sample) return false;
-
-    if (sample->instance_id != 0U &&
-        sample->instance_id == info->instance_id) {
+    if (same_instance) {
         if (cpu_time >= sample->cpu_time_100ns)
             info->cpu_percent = lsm_process_cpu_total_percent(
                 cpu_time - sample->cpu_time_100ns, system_delta);
@@ -444,6 +488,14 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     (void)infiltratr_u64_counter_delta(
         system_cpu, backend->previous_system_cpu_100ns, &system_delta);
     const uint64_t now_ms = (uint64_t)GetTickCount64();
+    FILETIME now_filetime;
+    GetSystemTimeAsFileTime(&now_filetime);
+    const uint64_t now_seconds =
+        filetime_value(now_filetime) / 10000000ULL;
+    const uint64_t windows_to_unix = 11644473600ULL;
+    const uint64_t now_epoch =
+        now_seconds >= windows_to_unix
+            ? now_seconds - windows_to_unix : 0U;
 
     const size_t original_sample_count = backend->sample_count;
     const unsigned original_generation = backend->generation;
@@ -507,7 +559,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         if (process) {
             if (!populate_process_metrics(
                     backend, process, info, system_delta, now_ms,
-                    scan_flags)) {
+                    now_epoch, scan_flags)) {
                 CloseHandle(process);
                 scan_failed = true;
                 scan_error = ERROR_NOT_ENOUGH_MEMORY;
