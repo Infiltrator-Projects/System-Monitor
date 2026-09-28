@@ -174,6 +174,8 @@ bool lsm_storage_initialise(LsmMonitor *monitor);
  * @param [in,out] monitor Snapshot to update.
  * @param [in] elapsed Monotonic seconds since the previous refresh.
  * @param [in] refresh_topology Re-enumerate devices before sampling counters.
+ * @return true when every requested topology refresh completed; false when a
+ *         topology source was incomplete and should be retried.
  */
 bool lsm_storage_update(LsmMonitor *monitor, double elapsed,
                         bool refresh_topology);
@@ -211,6 +213,8 @@ void lsm_battery_shutdown(void);
  * Discover GPU, NPU and temperature sources and initialise retained adapters.
  *
  * @param [in,out] monitor Snapshot receiving hardware topology.
+ * @return true when GPU, Bluetooth, battery and NPU topology discovery
+ *         completed; false when any authoritative inventory was incomplete.
  */
 bool lsm_hardware_initialise(LsmMonitor *monitor);
 /**
@@ -220,6 +224,8 @@ bool lsm_hardware_initialise(LsmMonitor *monitor);
  * @param [in] elapsed Monotonic seconds since the previous update.
  * @param [in] refresh_topology Reconcile hardware before sampling.
  * @param [in] refresh_batteries Perform full battery presentation this cycle.
+ * @return true when every requested topology refresh completed; false when a
+ *         hardware inventory was incomplete and should be retried.
  */
 bool lsm_hardware_update(LsmMonitor *monitor, double elapsed,
                          bool refresh_topology, bool refresh_batteries);
