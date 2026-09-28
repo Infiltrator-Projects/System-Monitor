@@ -761,30 +761,11 @@ static gboolean update_group_children(LsmApp *app, const ProcessGroup *group,
 
 static gboolean update_grouped_model_values(LsmApp *app, GPtrArray *groups)
 {
-    if (!app || !groups || !app->processes.processes_store) return FALSE;
-    GHashTable *group_index =
-        g_hash_table_new(g_str_hash, g_str_equal);
-    GHashTable *pid_index =
-        g_hash_table_new(g_direct_hash, g_direct_equal);
-    if (!group_index || !pid_index) {
-        if (group_index) g_hash_table_destroy(group_index);
-        if (pid_index) g_hash_table_destroy(pid_index);
+    if (!app || !groups || !app->processes.processes_store)
         return FALSE;
-    }
-
-    for (guint index = 0U; index < groups->len; index++) {
-        ProcessGroup *group = g_ptr_array_index(groups, index);
-        g_hash_table_insert(group_index, group->key, group);
-    }
-    for (size_t index = 0U;
-         index < app->process.process_snapshot_count; index++) {
-        const LsmProcessId pid =
-            app->process.process_snapshot[index].pid;
-        if (pid == 0U || pid > UINT_MAX || index >= UINT_MAX) continue;
-        g_hash_table_insert(pid_index,
-                            GUINT_TO_POINTER((guint)pid),
-                            GUINT_TO_POINTER((guint)index + 1U));
-    }
+    GHashTable *group_index = app->processes.process_group_index;
+    GHashTable *pid_index = app->processes.process_pid_index;
+    if (!group_index || !pid_index) return FALSE;
 
     GtkTreeModel *model = GTK_TREE_MODEL(app->processes.processes_store);
     GtkTreeIter category;
@@ -793,43 +774,33 @@ static gboolean update_grouped_model_values(LsmApp *app, GPtrArray *groups)
     size_t updated_groups = 0U;
     while (valid_category) {
         gint kind = PROCESS_ROW_PROCESS;
-        gtk_tree_model_get(model, &category,
-                           GROUPED_COL_KIND, &kind, -1);
-        if (kind != PROCESS_ROW_CATEGORY) {
-            g_hash_table_destroy(group_index);
-            g_hash_table_destroy(pid_index);
-            return FALSE;
-        }
+        gtk_tree_model_get(
+            model, &category, GROUPED_COL_KIND, &kind, -1);
+        if (kind != PROCESS_ROW_CATEGORY) return FALSE;
 
         GtkTreeIter group_iter;
         gboolean valid_group =
             gtk_tree_model_iter_children(model, &group_iter, &category);
         while (valid_group) {
             char *key = NULL;
-            gtk_tree_model_get(model, &group_iter,
-                               GROUPED_COL_KEY, &key, -1);
-            ProcessGroup *group = key
-                ? g_hash_table_lookup(group_index, key) : NULL;
+            gtk_tree_model_get(
+                model, &group_iter, GROUPED_COL_KEY, &key, -1);
+            ProcessGroup *group =
+                key ? g_hash_table_lookup(group_index, key) : NULL;
             g_free(key);
-            if (!group) {
-                g_hash_table_destroy(group_index);
-                g_hash_table_destroy(pid_index);
-                return FALSE;
-            }
-            set_group_row(app, group, &group_iter);
-            if (!update_group_children(app, group, pid_index, &group_iter)) {
-                g_hash_table_destroy(group_index);
-                g_hash_table_destroy(pid_index);
-                return FALSE;
-            }
-            updated_groups++;
-            valid_group = gtk_tree_model_iter_next(model, &group_iter);
-        }
-        valid_category = gtk_tree_model_iter_next(model, &category);
-    }
+            if (!group) return FALSE;
 
-    g_hash_table_destroy(group_index);
-    g_hash_table_destroy(pid_index);
+            set_group_row(app, group, &group_iter);
+            if (!update_group_children(
+                    app, group, pid_index, &group_iter))
+                return FALSE;
+            updated_groups++;
+            valid_group =
+                gtk_tree_model_iter_next(model, &group_iter);
+        }
+        valid_category =
+            gtk_tree_model_iter_next(model, &category);
+    }
     return updated_groups == groups->len;
 }
 
