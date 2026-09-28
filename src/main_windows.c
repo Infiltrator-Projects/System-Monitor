@@ -357,31 +357,35 @@ static void select_font(HDC dc, HFONT font)
 
 static void fill_solid(HDC dc, const RECT *rect, COLORREF colour)
 {
-    HBRUSH brush = CreateSolidBrush(colour);
+    if (!dc || !rect) return;
+    HBRUSH brush = (HBRUSH)GetStockObject(DC_BRUSH);
     if (!brush) return;
+    const COLORREF previous = SetDCBrushColor(dc, colour);
     FillRect(dc, rect, brush);
-    DeleteObject(brush);
+    if (previous != CLR_INVALID)
+        (void)SetDCBrushColor(dc, previous);
 }
 
 static void draw_round_panel(HDC dc, const RECT *rect, COLORREF fill,
                              COLORREF border, int radius)
 {
-    HBRUSH brush = CreateSolidBrush(fill);
-    HPEN pen = CreatePen(PS_SOLID, 1, border);
-    if (!brush || !pen) {
-        if (brush) DeleteObject(brush);
-        if (pen) DeleteObject(pen);
-        return;
-    }
+    if (!dc || !rect) return;
+    HBRUSH brush = (HBRUSH)GetStockObject(DC_BRUSH);
+    HPEN pen = (HPEN)GetStockObject(DC_PEN);
+    if (!brush || !pen) return;
 
     HGDIOBJ previous_brush = SelectObject(dc, brush);
     HGDIOBJ previous_pen = SelectObject(dc, pen);
+    const COLORREF previous_fill = SetDCBrushColor(dc, fill);
+    const COLORREF previous_border = SetDCPenColor(dc, border);
     RoundRect(dc, rect->left, rect->top, rect->right, rect->bottom,
               radius * 2, radius * 2);
+    if (previous_fill != CLR_INVALID)
+        (void)SetDCBrushColor(dc, previous_fill);
+    if (previous_border != CLR_INVALID)
+        (void)SetDCPenColor(dc, previous_border);
     SelectObject(dc, previous_brush);
     SelectObject(dc, previous_pen);
-    DeleteObject(brush);
-    DeleteObject(pen);
 }
 
 static void draw_text(HDC dc, const wchar_t *text, RECT rect, HFONT font,
