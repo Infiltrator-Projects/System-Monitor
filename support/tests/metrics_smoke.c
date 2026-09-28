@@ -105,6 +105,11 @@ int main(void)
     assert(isnan(cpu.user_percent));
     assert(isnan(cpu.kernel_percent));
 
+    LsmCpuAccountingSample unchanged = second;
+    lsm_cpu_accounting_apply(&cpu, &state, &unchanged, false, 1.0);
+    assert(!cpu.usage_available);
+    assert(isnan(cpu.usage_percent));
+
     cpu.usage_percent = 75.0;
     cpu.core_usage[0] = 90.0;
     lsm_cpu_accounting_apply(&cpu, &state, &first, false, 1.0);

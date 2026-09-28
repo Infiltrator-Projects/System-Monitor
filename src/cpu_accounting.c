@@ -149,9 +149,10 @@ void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
             lsm_u64_counter_delta(current->total, previous->total,
                                   &total_delta) &&
             lsm_u64_counter_delta(current->idle, previous->idle,
-                                  &idle_delta)) {
-            const double usage = idle_delta <= total_delta
-                ? lsm_percent_u64(total_delta - idle_delta, total_delta) : 0.0;
+                                  &idle_delta) &&
+            total_delta > 0U && idle_delta <= total_delta) {
+            const double usage =
+                lsm_percent_u64(total_delta - idle_delta, total_delta);
             if (index == 0U) {
                 cpu->usage_percent = usage;
                 cpu->usage_available = true;
