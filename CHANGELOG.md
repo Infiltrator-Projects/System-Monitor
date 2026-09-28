@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.147 - 2026-09-28
+
+- Move native Windows disk and network discovery off the fast monitoring cadence while retaining one-second performance counters.
+- Remove the redundant Windows monitor snapshot copy and retain process ListView rows when process membership is unchanged.
+- Replace Windows process-sample linear lookup with ordered lookup and cache stable user/account metadata per process instance.
+- Cache Linux CPU thermal sensor topology so fast samples read resolved sensor files instead of rescanning hwmon/thermal directories.
+- Preserve Linux network addresses transactionally across transient getifaddrs failures and treat malformed/lost rtnetlink events as topology invalidations.
+- Parse the owned Linux /proc/stat buffer in place and skip unchanged GTK Performance presentation between completed monitor generations.
+- Clean up dense hot-path formatting and redundant implementation comments without removing rationale comments.
+
 ## 1.0.146 - 2026-09-28
 
 - Move native Windows Performance collection off the Win32 message thread into a refcounted completed-snapshot worker, keeping painting, navigation and shutdown responsive when storage, network or GPU providers are slow.
