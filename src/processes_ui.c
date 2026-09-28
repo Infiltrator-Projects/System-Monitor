@@ -376,13 +376,13 @@ static GPtrArray *collect_groups(LsmApp *app)
         return NULL;
     }
 
+    g_hash_table_remove_all(group_index);
     for (guint index = group_cache->len; index > 0U; index--) {
         ProcessGroup *group =
             g_ptr_array_index(group_cache, index - 1U);
         if (group && group->count == 0U)
             g_ptr_array_remove_index_fast(group_cache, index - 1U);
     }
-    g_hash_table_remove_all(group_index);
     for (guint index = 0U; index < group_cache->len; index++) {
         ProcessGroup *group = g_ptr_array_index(group_cache, index);
         group->count = 0U;
