@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.143 - 2026-09-28
+
+- Make the checked mountinfo visitor contract genuinely transactional: a visitor that stops enumeration early now reports an incomplete read instead of allowing a bounded partial mount set to be published as authoritative.
+- Preserve the legacy count-only mountinfo helper's delivered-record count while the checked API separately exposes completeness.
+- Add a storage regression proving early visitor termination cannot be mistaken for successful read-to-EOF publication.
+
+
 ## 1.0.142 - 2026-09-28
 
 

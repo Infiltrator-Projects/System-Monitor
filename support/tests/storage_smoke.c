@@ -64,6 +64,14 @@ static bool collect_mount(const LsmMountInfoEntry *entry, void *user_data)
     return collector->count < 8;
 }
 
+static bool collect_one_mount(const LsmMountInfoEntry *entry, void *user_data)
+{
+    MountCollector *collector = user_data;
+    if (!collector || !entry || collector->count >= 8) return false;
+    collector->entries[collector->count++] = *entry;
+    return false;
+}
+
 int main(void)
 {
     char path[] = "/tmp/lsm-mountinfo-XXXXXX";
@@ -77,8 +85,17 @@ int main(void)
 
     MountCollector collector = {0};
     const size_t visited = lsm_mountinfo_visit_file(path, collect_mount, &collector);
+    if (visited != 3 || collector.count != 3) {
+        unlink(path);
+        return 3;
+    }
+
+    MountCollector partial = {0};
+    size_t partial_count = 0U;
+    const bool completed = lsm_mountinfo_visit_file_checked(
+        path, collect_one_mount, &partial, &partial_count);
     unlink(path);
-    if (visited != 3 || collector.count != 3) return 3;
+    if (completed || partial_count != 1U || partial.count != 1U) return 10;
     if (collector.entries[0].major_number != 259 ||
         collector.entries[0].minor_number != 4) return 4;
     if (strcmp(collector.entries[0].target, "/media/My Drive") != 0) return 5;

@@ -144,20 +144,24 @@ bool lsm_mountinfo_visit_file_checked(const char *path,
     if (!stream) return false;
 
     size_t count = 0U;
+    bool stopped_early = false;
     char *line = NULL;
     size_t line_capacity = 0U;
     while (getline(&line, &line_capacity, stream) >= 0) {
         LsmMountInfoEntry entry = {0};
         if (!parse_mount_line(line, &entry)) continue;
         count++;
-        if (!visitor(&entry, user_data)) break;
+        if (!visitor(&entry, user_data)) {
+            stopped_early = true;
+            break;
+        }
     }
 
     const bool read_ok = !ferror(stream);
     free(line);
     const bool close_ok = fclose(stream) == 0;
     *out_count = count;
-    return read_ok && close_ok;
+    return read_ok && close_ok && !stopped_early;
 }
 
 size_t lsm_mountinfo_visit_file(const char *path,
@@ -165,6 +169,7 @@ size_t lsm_mountinfo_visit_file(const char *path,
                                 void *user_data)
 {
     size_t count = 0U;
-    return lsm_mountinfo_visit_file_checked(
-        path, visitor, user_data, &count) ? count : 0U;
+    (void)lsm_mountinfo_visit_file_checked(
+        path, visitor, user_data, &count);
+    return count;
 }
