@@ -438,6 +438,47 @@ typedef struct {
 } LsmCpuFrequencySource;
 
 /* cpufreq paths are discovered once and reused rather than rescanned. */
+static unsigned cpu_list_weight(const char *text)
+{
+    if (!text) return 0U;
+    const char *cursor = text;
+    uint64_t total = 0U;
+    while (*cursor) {
+        while (*cursor &&
+               (lsm_ascii_is_space((unsigned char)*cursor) ||
+                *cursor == ','))
+            cursor++;
+        if (!*cursor) break;
+
+        uint64_t first = 0U;
+        if (!lsm_parse_u64_token(&cursor, 10U, &first)) {
+            while (*cursor &&
+                   !lsm_ascii_is_space((unsigned char)*cursor) &&
+                   *cursor != ',')
+                cursor++;
+            continue;
+        }
+
+        uint64_t last = first;
+        if (*cursor == '-') {
+            cursor++;
+            uint64_t parsed_last = 0U;
+            if (lsm_parse_u64_token(&cursor, 10U, &parsed_last) &&
+                parsed_last >= first)
+                last = parsed_last;
+        }
+        const uint64_t span = last - first + 1U;
+        total = lsm_u64_add_saturating(total, span);
+        if (total >= UINT_MAX) return UINT_MAX;
+
+        while (*cursor &&
+               !lsm_ascii_is_space((unsigned char)*cursor) &&
+               *cursor != ',')
+            cursor++;
+    }
+    return (unsigned)total;
+}
+
 static unsigned cpu_frequency_policy_weight(const char *policy)
 {
     if (!policy || !policy[0]) return 1U;
@@ -455,26 +496,7 @@ static unsigned cpu_frequency_policy_weight(const char *policy)
         if (written < 0 || (size_t)written >= sizeof(path) ||
             !lsm_read_text_file(path, text, sizeof(text)))
             continue;
-
-        unsigned count = 0U;
-        const char *cursor = text;
-        while (*cursor) {
-            while (lsm_ascii_is_space((unsigned char)*cursor))
-                cursor++;
-            if (!*cursor) break;
-            uint64_t cpu_id = 0U;
-            if (!lsm_parse_u64_token(&cursor, 10U, &cpu_id)) {
-                while (*cursor &&
-                       !lsm_ascii_is_space((unsigned char)*cursor))
-                    cursor++;
-                continue;
-            }
-            (void)cpu_id;
-            if (count < UINT_MAX) count++;
-            while (*cursor &&
-                   !lsm_ascii_is_space((unsigned char)*cursor))
-                cursor++;
-        }
+        const unsigned count = cpu_list_weight(text);
         if (count > 0U) return count;
     }
     return 1U;
