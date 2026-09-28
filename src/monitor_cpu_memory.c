@@ -428,6 +428,7 @@ static void update_load_average(LsmCpuInfo *cpu)
 typedef struct {
     char *current_path;
     char *maximum_path;
+    unsigned weight;
 } LsmCpuFrequencyPath;
 
 typedef struct {
@@ -437,6 +438,48 @@ typedef struct {
 } LsmCpuFrequencySource;
 
 /* cpufreq paths are discovered once and reused rather than rescanned. */
+static unsigned cpu_frequency_policy_weight(const char *policy)
+{
+    if (!policy || !policy[0]) return 1U;
+    static const char *const names[] = {
+        "affected_cpus", "related_cpus"
+    };
+    char path[LSM_PATH_LEN];
+    char text[4096];
+    for (size_t candidate = 0U;
+         candidate < LSM_ARRAY_LENGTH(names); candidate++) {
+        const int written = snprintf(
+            path, sizeof(path),
+            "/sys/devices/system/cpu/cpufreq/%s/%s",
+            policy, names[candidate]);
+        if (written < 0 || (size_t)written >= sizeof(path) ||
+            !lsm_read_text_file(path, text, sizeof(text)))
+            continue;
+
+        unsigned count = 0U;
+        const char *cursor = text;
+        while (*cursor) {
+            while (lsm_ascii_is_space((unsigned char)*cursor))
+                cursor++;
+            if (!*cursor) break;
+            uint64_t cpu_id = 0U;
+            if (!lsm_parse_u64_token(&cursor, 10U, &cpu_id)) {
+                while (*cursor &&
+                       !lsm_ascii_is_space((unsigned char)*cursor))
+                    cursor++;
+                continue;
+            }
+            (void)cpu_id;
+            if (count < UINT_MAX) count++;
+            while (*cursor &&
+                   !lsm_ascii_is_space((unsigned char)*cursor))
+                cursor++;
+        }
+        if (count > 0U) return count;
+    }
+    return 1U;
+}
+
 static void destroy_cpu_frequency_source(LsmCpuFrequencySource *source)
 {
     if (!source) return;
@@ -494,7 +537,8 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
         }
         LsmCpuFrequencyPath candidate = {
             .current_path = strdup(current),
-            .maximum_path = strdup(maximum)
+            .maximum_path = strdup(maximum),
+            .weight = cpu_frequency_policy_weight(entry->d_name)
         };
         if (!candidate.current_path || !candidate.maximum_path) {
             free(candidate.current_path);
@@ -538,7 +582,8 @@ static bool read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum,
         ? (const LsmCpuFrequencySource *)state->cpu_frequency_source : NULL;
     if (!source || source->count == 0U) return false;
 
-    double total_khz = 0.0;
+    long double weighted_khz = 0.0L;
+    uint64_t total_weight = 0U;
     for (size_t index = 0U; index < source->count; index++) {
         const char *path = maximum
             ? source->paths[index].maximum_path
@@ -546,10 +591,15 @@ static bool read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum,
         uint64_t khz = 0U;
         if (!path || !lsm_read_u64_file(path, &khz) || khz == 0U)
             return false;
-        total_khz += (double)khz;
+        const unsigned weight =
+            source->paths[index].weight > 0U
+                ? source->paths[index].weight : 1U;
+        weighted_khz += (long double)khz * (long double)weight;
+        total_weight = lsm_u64_add_saturating(total_weight, weight);
     }
+    if (total_weight == 0U) return false;
     *frequency_ghz =
-        total_khz / (double)source->count / 1000000.0;
+        (double)(weighted_khz / (long double)total_weight / 1000000.0L);
     return isfinite(*frequency_ghz) && *frequency_ghz > 0.0;
 }
 
