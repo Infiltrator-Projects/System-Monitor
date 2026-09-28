@@ -96,7 +96,7 @@ static LsmPciCacheEntry *new_cache_entry(const char vendor_id[5],
 /* Flat developer override grammar:
  * V<TAB>VVVV<TAB>vendor-name
  * D<TAB>VVVV:DDDD<TAB>vendor-name<TAB>device-name */
-static void search_database_file(FILE *database,
+static bool search_database_file(FILE *database,
                                  const char vendor_id[5],
                                  const char device_id[5],
                                  LsmPciCacheEntry *entry)
@@ -131,6 +131,7 @@ static void search_database_file(FILE *database,
         }
         if (entry->vendor[0] && entry->product[0]) break;
     }
+    return ferror(database) == 0;
 }
 
 static void populate_entry(LsmPciCacheEntry *entry,
@@ -140,9 +141,17 @@ static void populate_entry(LsmPciCacheEntry *entry,
     if (override && *override) {
         FILE *database = fopen(override, "r");
         if (database) {
-            search_database_file(database, entry->vendor_id, entry->device_id,
-                                 entry);
-            fclose(database);
+            LsmPciCacheEntry candidate = *entry;
+            const bool complete = search_database_file(
+                database, candidate.vendor_id, candidate.device_id,
+                &candidate);
+            const bool closed = fclose(database) == 0;
+            if (complete && closed) {
+                lsm_copy_string(entry->vendor, sizeof(entry->vendor),
+                                candidate.vendor);
+                lsm_copy_string(entry->product, sizeof(entry->product),
+                                candidate.product);
+            }
         }
     }
 

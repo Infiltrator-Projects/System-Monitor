@@ -91,10 +91,20 @@ static gboolean valid_stack_name(const char *value)
 void lsm_preferences_load(LsmApp *app)
 {
     if (!app || !app->paths.preferences_path[0]) return;
-    FILE *file = fopen(app->paths.preferences_path, "r");
-    if (!file) return;
-    char line[512];
-    while (fgets(line, sizeof(line), file)) {
+    char *content = NULL;
+    size_t length = 0U;
+    if (lsm_read_text_file_alloc(
+            app->paths.preferences_path, &content, &length) !=
+            INFILTRATR_IO_OK)
+        return;
+    if (memchr(content, '\0', length) != NULL) {
+        free(content);
+        return;
+    }
+
+    char *save = NULL;
+    for (char *line = strtok_r(content, "\n", &save); line;
+         line = strtok_r(NULL, "\n", &save)) {
         char *key = NULL;
         char *value = NULL;
         if (infiltratr_config_parse_line(line, &key, &value) !=
@@ -182,7 +192,7 @@ void lsm_preferences_load(LsmApp *app)
                     app->runtime.page_scroll[index]);
         }
     }
-    fclose(file);
+    free(content);
 }
 
 static bool write_preferences(FILE *file, const void *user_data)

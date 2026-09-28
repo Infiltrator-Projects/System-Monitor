@@ -48,23 +48,35 @@ static void read_os_name(char *buffer, size_t size)
 {
     if (!buffer || size == 0U) return;
     lsm_copy_string(buffer, size, "Linux");
-    FILE *file = fopen("/etc/os-release", "r");
-    if (!file) return;
-    char line[512];
-    while (fgets(line, sizeof(line), file)) {
+    char *content = NULL;
+    size_t length = 0U;
+    if (lsm_read_text_file_alloc(
+            "/etc/os-release", &content, &length) != INFILTRATR_IO_OK)
+        return;
+    if (memchr(content, '\0', length) != NULL) {
+        free(content);
+        return;
+    }
+
+    char discovered[LSM_NAME_LEN] = "";
+    char *save = NULL;
+    for (char *line = strtok_r(content, "\n", &save); line;
+         line = strtok_r(NULL, "\n", &save)) {
         static const char prefix[] = "PRETTY_NAME=";
         if (!lsm_string_starts_with(line, prefix)) continue;
         char *value = line + sizeof(prefix) - 1U;
         lsm_trim_line_end(value);
-        const size_t length = strlen(value);
-        if (length >= 2U && value[0] == '"' && value[length - 1U] == '"') {
-            value[length - 1U] = '\0';
+        const size_t value_length = strlen(value);
+        if (value_length >= 2U && value[0] == '"' &&
+            value[value_length - 1U] == '"') {
+            value[value_length - 1U] = '\0';
             value++;
         }
-        lsm_copy_string(buffer, size, value);
+        lsm_copy_string(discovered, sizeof(discovered), value);
         break;
     }
-    fclose(file);
+    free(content);
+    if (discovered[0]) lsm_copy_string(buffer, size, discovered);
 }
 
 static void write_memory_modules(FILE *file, const LsmMemoryInfo *memory)

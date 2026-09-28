@@ -632,6 +632,10 @@ static bool route_link_dump(LsmSystemSources *sources,
                  RTA_OK(attribute, attribute_length);
                  attribute = RTA_NEXT(attribute, attribute_length))
                 apply_route_link_attribute(&record, attribute);
+            if (attribute_length != 0) {
+                failed = true;
+                break;
+            }
             if (!record.name[0]) continue;
             if (count >= capacity) {
                 overflow = true;
