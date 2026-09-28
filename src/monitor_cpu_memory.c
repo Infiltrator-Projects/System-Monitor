@@ -233,9 +233,13 @@ static void read_cpu_static(LsmMonitor *monitor)
 {
     if (lsm_cpu_direct_read_static(&monitor->cpu)) return;
 
-    monitor->cpu.logical_cores = (unsigned)sysconf(_SC_NPROCESSORS_ONLN);
-    if (monitor->cpu.logical_cores == 0 || monitor->cpu.logical_cores > LSM_MAX_CPUS)
-        monitor->cpu.logical_cores = 1;
+    const long online = sysconf(_SC_NPROCESSORS_ONLN);
+    monitor->cpu.logical_cores_total =
+        online > 0 && (unsigned long)online <= (unsigned long)UINT_MAX
+            ? (unsigned)online : 0U;
+    monitor->cpu.logical_cores =
+        monitor->cpu.logical_cores_total > LSM_MAX_CPUS
+            ? LSM_MAX_CPUS : monitor->cpu.logical_cores_total;
 
     FILE *file = fopen("/proc/cpuinfo", "r");
     char line[512];
@@ -243,6 +247,7 @@ static void read_cpu_static(LsmMonitor *monitor)
     bool physical_pairs[256][256] = {{false}};
     int physical_id = 0, core_id = 0;
     unsigned physical_count = 0;
+    bool cpuinfo_complete = file != NULL;
 
     if (file) {
         while (fgets(line, sizeof(line), file)) {
@@ -279,10 +284,12 @@ static void read_cpu_static(LsmMonitor *monitor)
                     monitor->cpu.virtualization = true;
             }
         }
-        fclose(file);
+        if (ferror(file)) cpuinfo_complete = false;
+        if (fclose(file) != 0) cpuinfo_complete = false;
     }
     if (!model_found) snprintf(monitor->cpu.model, sizeof(monitor->cpu.model), "Unknown processor");
-    monitor->cpu.physical_cores = physical_count ? physical_count : monitor->cpu.logical_cores;
+    monitor->cpu.physical_cores =
+        cpuinfo_complete && physical_count ? physical_count : 0U;
 
     read_cpu_cache_totals(&monitor->cpu);
 }
@@ -302,7 +309,7 @@ static unsigned read_cpu_socket_count(void)
         int64_t package = 0;
         if (!infiltratr_read_i64_file(path, &package) ||
             package < INT_MIN || package > INT_MAX)
-            continue;
+            return 0U;
         bool known = false;
         for (size_t current = 0U; current < count; current++)
             if (packages[current] == (int)package) known = true;
@@ -463,33 +470,35 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
     return source;
 }
 
-static double read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum)
+static bool read_cpu_frequency_ghz(const LsmMonitor *monitor, bool maximum,
+                                   double *frequency_ghz)
 {
-    if (!monitor) return 0.0;
+    if (!monitor || !frequency_ghz) return false;
+    *frequency_ghz = 0.0;
     const LsmCpuInfo *cpu = &monitor->cpu;
-    if (maximum && cpu->max_frequency_ghz > 0.0)
-        return cpu->max_frequency_ghz;
+    if (maximum && cpu->max_frequency_ghz > 0.0) {
+        *frequency_ghz = cpu->max_frequency_ghz;
+        return true;
+    }
 
     const LsmLinuxMonitorBackendState *state = monitor_backend_state_const(monitor);
     const LsmCpuFrequencySource *source = state
         ? (const LsmCpuFrequencySource *)state->cpu_frequency_source : NULL;
-    if (source) {
-        double total_khz = 0.0;
-        unsigned count = 0U;
-        for (size_t index = 0U; index < source->count; index++) {
-            const char *path = maximum
-                ? source->paths[index].maximum_path
-                : source->paths[index].current_path;
-            const uint64_t khz = lsm_read_u64_or_zero(path);
-            if (!khz) continue;
-            total_khz += (double)khz;
-            count++;
-        }
-        if (count > 0U) return total_khz / (double)count / 1000000.0;
-    }
+    if (!source || source->count == 0U) return false;
 
-    /* Nominal/base frequency does not establish current or maximum speed. */
-    return 0.0;
+    double total_khz = 0.0;
+    for (size_t index = 0U; index < source->count; index++) {
+        const char *path = maximum
+            ? source->paths[index].maximum_path
+            : source->paths[index].current_path;
+        uint64_t khz = 0U;
+        if (!path || !lsm_read_u64_file(path, &khz) || khz == 0U)
+            return false;
+        total_khz += (double)khz;
+    }
+    *frequency_ghz =
+        total_khz / (double)source->count / 1000000.0;
+    return isfinite(*frequency_ghz) && *frequency_ghz > 0.0;
 }
 
 static void read_cpu_thermal(LsmMonitor *monitor)
@@ -627,23 +636,29 @@ void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds)
     (void)read_cpu_counters(monitor, false, elapsed_seconds);
     update_load_average(&monitor->cpu);
     const double now = lsm_monotonic_seconds();
-    double current_frequency = read_cpu_frequency_ghz(monitor, false);
-    if (current_frequency <= 0.0 &&
+    double current_frequency = 0.0;
+    bool current_frequency_ok =
+        read_cpu_frequency_ghz(monitor, false, &current_frequency);
+    if (!current_frequency_ok &&
         lsm_refresh_interval_due(
             now, state->last_cpu_frequency_source_refresh_monotonic, 30.0)) {
-        destroy_cpu_frequency_source(
-            (LsmCpuFrequencySource *)state->cpu_frequency_source);
-        state->cpu_frequency_source = create_cpu_frequency_source();
+        LsmCpuFrequencySource *candidate = create_cpu_frequency_source();
         state->last_cpu_frequency_source_refresh_monotonic = now;
-        current_frequency = read_cpu_frequency_ghz(monitor, false);
-        monitor->cpu.max_frequency_ghz = 0.0;
+        if (candidate) {
+            destroy_cpu_frequency_source(
+                (LsmCpuFrequencySource *)state->cpu_frequency_source);
+            state->cpu_frequency_source = candidate;
+        }
+        current_frequency_ok =
+            read_cpu_frequency_ghz(monitor, false, &current_frequency);
     }
-    if (current_frequency > 0.0)
-        monitor->cpu.frequency_ghz = current_frequency;
+    monitor->cpu.frequency_available = current_frequency_ok;
+    monitor->cpu.frequency_ghz =
+        current_frequency_ok ? current_frequency : 0.0;
     if (monitor->cpu.max_frequency_ghz <= 0.0) {
-        const double maximum_frequency =
-            read_cpu_frequency_ghz(monitor, true);
-        if (maximum_frequency > 0.0)
+        double maximum_frequency = 0.0;
+        if (read_cpu_frequency_ghz(
+                monitor, true, &maximum_frequency))
             monitor->cpu.max_frequency_ghz = maximum_frequency;
     }
     read_cpu_thermal(monitor);

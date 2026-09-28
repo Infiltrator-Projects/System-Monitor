@@ -50,7 +50,8 @@
 /** Current CPU identity, topology, scheduler metrics and calculated values. */
 typedef struct {
     char model[LSM_NAME_LEN];
-    unsigned logical_cores;
+    unsigned logical_cores;          /**< Per-core slots retained by this build. */
+    unsigned logical_cores_total;    /**< Native logical-processor total, even when detail is capacity-limited. */
     unsigned physical_cores;
     bool virtualization;
     bool virtualization_available;    /**< Backend established virtualization capability state. */
@@ -60,7 +61,9 @@ typedef struct {
     double usage_percent;
     double user_percent;
     double kernel_percent;
+    bool usage_available;            /**< Aggregate utilisation interval is complete and valid. */
     double frequency_ghz;
+    bool frequency_available;        /**< Current frequency is a complete live observation. */
     double base_frequency_ghz;
     double max_frequency_ghz;
     double temperature_c;

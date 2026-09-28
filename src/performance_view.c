@@ -206,9 +206,11 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
     char percent[32];
     char speed[64];
     infiltratr_format_percent(
-        true, cpu->usage_percent, percent, sizeof(percent));
+        cpu->usage_available && isfinite(cpu->usage_percent),
+        cpu->usage_percent, percent, sizeof(percent));
     infiltratr_format_ghz(
-        cpu->frequency_ghz > 0.0, cpu->frequency_ghz,
+        cpu->frequency_available && cpu->frequency_ghz > 0.0,
+        cpu->frequency_ghz,
         speed, sizeof(speed));
     (void)snprintf(
         view->rail_value, sizeof(view->rail_value),
@@ -246,11 +248,11 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         view->metrics[LSM_CPU_METRIC_PRESSURE],
         sizeof(view->metrics[LSM_CPU_METRIC_PRESSURE]));
     (void)infiltratr_format_scalar(
-        true, cpu->user_percent, &one_decimal_percent,
+        isfinite(cpu->user_percent), cpu->user_percent, &one_decimal_percent,
         view->metrics[LSM_CPU_METRIC_USER],
         sizeof(view->metrics[LSM_CPU_METRIC_USER]));
     (void)infiltratr_format_scalar(
-        true, cpu->kernel_percent, &one_decimal_percent,
+        isfinite(cpu->kernel_percent), cpu->kernel_percent, &one_decimal_percent,
         view->metrics[LSM_CPU_METRIC_KERNEL],
         sizeof(view->metrics[LSM_CPU_METRIC_KERNEL]));
 
@@ -258,8 +260,11 @@ void lsm_cpu_performance_view(const LsmMonitor *monitor,
         cpu->physical_cores > 0U, cpu->physical_cores,
         view->details[LSM_CPU_DETAIL_CORES],
         sizeof(view->details[LSM_CPU_DETAIL_CORES]));
+    const unsigned logical_total =
+        cpu->logical_cores_total > 0U
+            ? cpu->logical_cores_total : cpu->logical_cores;
     format_unsigned(
-        cpu->logical_cores > 0U, cpu->logical_cores,
+        logical_total > 0U, logical_total,
         view->details[LSM_CPU_DETAIL_LOGICAL_PROCESSORS],
         sizeof(view->details[LSM_CPU_DETAIL_LOGICAL_PROCESSORS]));
     infiltratr_format_ghz(

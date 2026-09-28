@@ -124,9 +124,14 @@ static void update_cpu_page(LsmApp *app, LsmDevicePage *page)
     }
 
     for (unsigned index = 0U; index < cpu->logical_cores; index++) {
-        lsm_ui_set_label_text(
-            app->performance.cpu_core_labels[index],
-            "CPU %u — %.0f%%", index, cpu->core_usage[index]);
+        if (isfinite(cpu->core_usage[index]))
+            lsm_ui_set_label_text(
+                app->performance.cpu_core_labels[index],
+                "CPU %u — %.0f%%", index, cpu->core_usage[index]);
+        else
+            lsm_ui_set_label_text(
+                app->performance.cpu_core_labels[index],
+                "CPU %u — N/A", index);
     }
 }
 

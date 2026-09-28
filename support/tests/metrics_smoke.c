@@ -72,7 +72,11 @@ int main(void)
     memset(&state, 0, sizeof(state));
     cpu.logical_cores = 2U;
     lsm_cpu_accounting_apply(&cpu, &state, &first, true, 1.0);
-    assert(cpu.usage_percent == 0.0);
+    assert(!cpu.usage_available);
+    assert(isnan(cpu.usage_percent));
+    assert(isnan(cpu.user_percent));
+    assert(isnan(cpu.kernel_percent));
+    assert(isnan(cpu.core_usage[0]));
 
     const char *second_text =
         "cpu 150 30 50 440 20 10 10 10\n"
@@ -83,6 +87,7 @@ int main(void)
     LsmCpuAccountingSample second;
     assert(lsm_cpu_accounting_parse(second_text, &second));
     lsm_cpu_accounting_apply(&cpu, &state, &second, false, 2.0);
+    assert(cpu.usage_available);
     assert(near(cpu.usage_percent, 64.7887));
     assert(near(cpu.user_percent, 42.2535));
     assert(near(cpu.kernel_percent, 20.4225));
@@ -95,15 +100,17 @@ int main(void)
     idle_reset.cpus[0].total += 20U;
     idle_reset.cpus[0].idle -= 1U;
     lsm_cpu_accounting_apply(&cpu, &state, &idle_reset, false, 1.0);
-    assert(cpu.usage_percent == 0.0);
-    assert(cpu.user_percent == 0.0);
-    assert(cpu.kernel_percent == 0.0);
+    assert(!cpu.usage_available);
+    assert(isnan(cpu.usage_percent));
+    assert(isnan(cpu.user_percent));
+    assert(isnan(cpu.kernel_percent));
 
     cpu.usage_percent = 75.0;
     cpu.core_usage[0] = 90.0;
     lsm_cpu_accounting_apply(&cpu, &state, &first, false, 1.0);
-    assert(cpu.usage_percent == 0.0);
-    assert(cpu.core_usage[0] == 0.0);
+    assert(!cpu.usage_available);
+    assert(isnan(cpu.usage_percent));
+    assert(isnan(cpu.core_usage[0]));
     lsm_cpu_accounting_apply(&cpu, &state, &second, false, 2.0);
     assert(near(cpu.usage_percent, 64.7887));
 

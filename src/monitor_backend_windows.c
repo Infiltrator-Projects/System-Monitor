@@ -114,6 +114,23 @@ typedef struct {
     LsmWindowsNetBaseline nets[LSM_MAX_NETS];
 } LsmWindowsMonitorBackendState;
 
+typedef struct {
+    HANDLE thread;
+    HANDLE request_event;
+    CRITICAL_SECTION lock;
+    bool lock_initialised;
+    bool stop_requested;
+    bool request_pending;
+    bool sample_in_progress;
+    bool sample_ready;
+    volatile LONG references;
+    LsmWindowsMonitorBackendState *native;
+    LsmMonitor sample;
+    LsmMonitor completed;
+} LsmWindowsSamplerState;
+
+#define LSM_WINDOWS_SAMPLER_SHUTDOWN_MS 500U
+
 static uint64_t filetime_value(FILETIME value)
 {
     return ((uint64_t)value.dwHighDateTime << 32U) |
@@ -198,13 +215,17 @@ static void populate_cpu_topology(LsmCpuInfo *cpu)
 
     DWORD active = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
     if (active != 0U && active != 0xffffffffU) {
+        cpu->logical_cores_total = (unsigned)active;
         cpu->logical_cores =
             active > (DWORD)LSM_MAX_CPUS ? LSM_MAX_CPUS : (unsigned)active;
     } else {
         SYSTEM_INFO system_info;
         GetNativeSystemInfo(&system_info);
-        cpu->logical_cores =
+        cpu->logical_cores_total =
             (unsigned)system_info.dwNumberOfProcessors;
+        cpu->logical_cores =
+            cpu->logical_cores_total > LSM_MAX_CPUS
+                ? LSM_MAX_CPUS : cpu->logical_cores_total;
     }
 
     DWORD length = 0U;
@@ -313,9 +334,12 @@ static void populate_cpu_registry_identity(LsmCpuInfo *cpu)
     RegCloseKey(key);
 }
 
-static void update_cpu_power(LsmCpuInfo *cpu)
+static bool update_cpu_power(LsmCpuInfo *cpu)
 {
-    if (!cpu || cpu->logical_cores == 0U) return;
+    if (!cpu) return false;
+    cpu->frequency_available = false;
+    cpu->frequency_ghz = 0.0;
+    if (cpu->logical_cores == 0U) return false;
 
     const unsigned processor_count =
         cpu->logical_cores > LSM_MAX_CPUS ? LSM_MAX_CPUS : cpu->logical_cores;
@@ -327,7 +351,7 @@ static void update_cpu_power(LsmCpuInfo *cpu)
     if (CallNtPowerInformation(
             ProcessorInformation, NULL, 0U,
             power, bytes) != 0)
-        return;
+        return false;
 
     uint64_t current_total_mhz = 0U;
     unsigned current_count = 0U;
@@ -345,9 +369,11 @@ static void update_cpu_power(LsmCpuInfo *cpu)
     if (current_count > 0U) {
         cpu->frequency_ghz =
             ((double)current_total_mhz / (double)current_count) / 1000.0;
+        cpu->frequency_available = true;
     }
     if (maximum_mhz > 0U)
         cpu->max_frequency_ghz = (double)maximum_mhz / 1000.0;
+    return cpu->frequency_available;
 }
 
 static void populate_cpu_identity(LsmMonitor *monitor)
@@ -400,14 +426,25 @@ static bool update_cpu_snapshot(LsmMonitor *monitor,
         const uint64_t busy_delta =
             infiltratr_u64_add_saturating(user_delta, busy_kernel_delta);
 
-        monitor->cpu.usage_percent = infiltratr_percent_u64(busy_delta, total_delta);
-        monitor->cpu.user_percent = infiltratr_percent_u64(user_delta, total_delta);
-        monitor->cpu.kernel_percent =
-            infiltratr_percent_u64(busy_kernel_delta, total_delta);
+        if (total_delta > 0U && idle_delta <= total_delta) {
+            monitor->cpu.usage_percent =
+                infiltratr_percent_u64(busy_delta, total_delta);
+            monitor->cpu.user_percent =
+                infiltratr_percent_u64(user_delta, total_delta);
+            monitor->cpu.kernel_percent =
+                infiltratr_percent_u64(busy_kernel_delta, total_delta);
+            monitor->cpu.usage_available = true;
+        } else {
+            monitor->cpu.usage_percent = NAN;
+            monitor->cpu.user_percent = NAN;
+            monitor->cpu.kernel_percent = NAN;
+            monitor->cpu.usage_available = false;
+        }
     } else {
-        monitor->cpu.usage_percent = 0.0;
-        monitor->cpu.user_percent = 0.0;
-        monitor->cpu.kernel_percent = 0.0;
+        monitor->cpu.usage_percent = NAN;
+        monitor->cpu.user_percent = NAN;
+        monitor->cpu.kernel_percent = NAN;
+        monitor->cpu.usage_available = false;
     }
 
     state->idle_time = idle;
@@ -2177,41 +2214,30 @@ static void refresh_topology_and_devices(
     }
 }
 
-bool lsm_monitor_platform_init(LsmMonitor *monitor)
+static void windows_sampler_release(LsmWindowsSamplerState *sampler)
 {
-    if (!monitor) return false;
-    memset(monitor, 0, sizeof(*monitor));
+    if (!sampler || InterlockedDecrement(&sampler->references) != 0)
+        return;
 
-    LsmWindowsMonitorBackendState *state =
-        (LsmWindowsMonitorBackendState *)calloc(1U, sizeof(*state));
-    if (!state) return false;
-    monitor->backend_state = state;
-
-    WSADATA winsock;
-    memset(&winsock, 0, sizeof(winsock));
-    if (WSAStartup(MAKEWORD(2, 2), &winsock) == 0)
-        state->winsock_started = true;
-
-    populate_cpu_identity(monitor);
-    if (!update_cpu_snapshot(monitor, state) ||
-        !update_memory_snapshot(monitor)) {
-        lsm_monitor_platform_destroy(monitor);
-        return false;
-    }
-
-    state->previous_sample_tick = GetTickCount64();
-    refresh_topology_and_devices(monitor, state, 0.0, true);
-    monitor->sample_generation = 1U;
-    monitor->sample_monotonic_seconds =
-        (double)state->previous_sample_tick / 1000.0;
-    return true;
+    LsmWindowsMonitorBackendState *state = sampler->native;
+    if (state && state->gpu_query)
+        PdhCloseQuery(state->gpu_query);
+    if (state && state->winsock_started)
+        WSACleanup();
+    free(state);
+    if (sampler->request_event) CloseHandle(sampler->request_event);
+    if (sampler->lock_initialised) DeleteCriticalSection(&sampler->lock);
+    free(sampler);
 }
 
-bool lsm_monitor_platform_update(LsmMonitor *monitor)
+static bool windows_sample_once(LsmWindowsSamplerState *sampler,
+                                bool force_topology)
 {
-    if (!monitor || !monitor->backend_state) return false;
-    LsmWindowsMonitorBackendState *state =
-        (LsmWindowsMonitorBackendState *)monitor->backend_state;
+    if (!sampler || !sampler->native) return false;
+    LsmWindowsMonitorBackendState *state = sampler->native;
+    LsmMonitor *sample = &sampler->sample;
+    if (sample->sample_generation == 0U && !sample->cpu.model[0])
+        populate_cpu_identity(sample);
 
     const ULONGLONG now = GetTickCount64();
     const double elapsed =
@@ -2220,38 +2246,159 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
             : 0.0;
     state->previous_sample_tick = now;
 
-    const bool cpu_ok = update_cpu_snapshot(monitor, state);
-    const bool memory_ok = update_memory_snapshot(monitor);
-    refresh_topology_and_devices(monitor, state, elapsed, false);
-    update_gpu_engine_metrics(monitor, state);
-    update_gpu_dxgi_memory(monitor, state);
-    if (cpu_ok && memory_ok) {
-        monitor->sample_generation++;
-        if (monitor->sample_generation == 0U)
-            monitor->sample_generation = 1U;
-        monitor->sample_monotonic_seconds = (double)now / 1000.0;
-        return true;
+    const bool cpu_ok = update_cpu_snapshot(sample, state);
+    const bool memory_ok = update_memory_snapshot(sample);
+    refresh_topology_and_devices(sample, state, elapsed, force_topology);
+    update_gpu_engine_metrics(sample, state);
+    update_gpu_dxgi_memory(sample, state);
+    if (!cpu_ok || !memory_ok) return false;
+
+    sample->sample_generation++;
+    if (sample->sample_generation == 0U)
+        sample->sample_generation = 1U;
+    sample->sample_monotonic_seconds = (double)now / 1000.0;
+    return true;
+}
+
+static DWORD WINAPI windows_sampler_thread(LPVOID user_data)
+{
+    LsmWindowsSamplerState *sampler = user_data;
+    if (!sampler) return 0U;
+    for (;;) {
+        (void)WaitForSingleObject(sampler->request_event, INFINITE);
+        EnterCriticalSection(&sampler->lock);
+        if (sampler->stop_requested) {
+            LeaveCriticalSection(&sampler->lock);
+            break;
+        }
+        if (!sampler->request_pending) {
+            LeaveCriticalSection(&sampler->lock);
+            continue;
+        }
+        sampler->request_pending = false;
+        sampler->sample_in_progress = true;
+        const bool force_topology =
+            sampler->native->topology_refresh_requested;
+        sampler->native->topology_refresh_requested = false;
+        LeaveCriticalSection(&sampler->lock);
+
+        const bool sampled = windows_sample_once(sampler, force_topology);
+
+        EnterCriticalSection(&sampler->lock);
+        sampler->sample_in_progress = false;
+        if (sampled && !sampler->stop_requested) {
+            sampler->completed = sampler->sample;
+            sampler->completed.backend_state = NULL;
+            sampler->sample_ready = true;
+        }
+        LeaveCriticalSection(&sampler->lock);
     }
-    return false;
+    windows_sampler_release(sampler);
+    return 0U;
+}
+
+bool lsm_monitor_platform_init(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+    memset(monitor, 0, sizeof(*monitor));
+
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)calloc(1U, sizeof(*sampler));
+    LsmWindowsMonitorBackendState *state =
+        (LsmWindowsMonitorBackendState *)calloc(1U, sizeof(*state));
+    if (!sampler || !state) {
+        free(state);
+        free(sampler);
+        return false;
+    }
+    sampler->native = state;
+    sampler->sample.backend_state = state;
+    InitializeCriticalSection(&sampler->lock);
+    sampler->lock_initialised = true;
+    sampler->request_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!sampler->request_event) {
+        sampler->references = 1;
+        windows_sampler_release(sampler);
+        return false;
+    }
+
+    WSADATA winsock;
+    memset(&winsock, 0, sizeof(winsock));
+    if (WSAStartup(MAKEWORD(2, 2), &winsock) == 0)
+        state->winsock_started = true;
+
+    sampler->request_pending = true;
+    sampler->references = 2;
+    sampler->thread = CreateThread(
+        NULL, 0U, windows_sampler_thread, sampler, 0U, NULL);
+    if (!sampler->thread) {
+        sampler->references = 1;
+        windows_sampler_release(sampler);
+        return false;
+    }
+
+    monitor->backend_state = sampler;
+    SetEvent(sampler->request_event);
+    return true;
+}
+
+bool lsm_monitor_platform_update(LsmMonitor *monitor)
+{
+    if (!monitor || !monitor->backend_state) return false;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
+    bool signal = false;
+    EnterCriticalSection(&sampler->lock);
+    if (sampler->sample_ready) {
+        void *backend_state = monitor->backend_state;
+        *monitor = sampler->completed;
+        monitor->backend_state = backend_state;
+        sampler->sample_ready = false;
+    }
+    if (!sampler->stop_requested &&
+        !sampler->request_pending &&
+        !sampler->sample_in_progress) {
+        sampler->request_pending = true;
+        signal = true;
+    }
+    LeaveCriticalSection(&sampler->lock);
+    if (signal) SetEvent(sampler->request_event);
+    return true;
 }
 
 void lsm_monitor_platform_request_topology_refresh(LsmMonitor *monitor)
 {
     if (!monitor || !monitor->backend_state) return;
-    LsmWindowsMonitorBackendState *state =
-        (LsmWindowsMonitorBackendState *)monitor->backend_state;
-    state->topology_refresh_requested = true;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
+    EnterCriticalSection(&sampler->lock);
+    sampler->native->topology_refresh_requested = true;
+    if (!sampler->stop_requested) {
+        sampler->request_pending = true;
+        SetEvent(sampler->request_event);
+    }
+    LeaveCriticalSection(&sampler->lock);
 }
 
 void lsm_monitor_platform_destroy(LsmMonitor *monitor)
 {
-    if (!monitor) return;
-    LsmWindowsMonitorBackendState *state =
-        (LsmWindowsMonitorBackendState *)monitor->backend_state;
-    if (state && state->gpu_query)
-        PdhCloseQuery(state->gpu_query);
-    if (state && state->winsock_started)
-        WSACleanup();
-    free(state);
+    if (!monitor || !monitor->backend_state) return;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
     monitor->backend_state = NULL;
+
+    EnterCriticalSection(&sampler->lock);
+    sampler->stop_requested = true;
+    sampler->request_pending = false;
+    LeaveCriticalSection(&sampler->lock);
+    SetEvent(sampler->request_event);
+
+    if (sampler->thread) {
+        (void)CancelSynchronousIo(sampler->thread);
+        (void)WaitForSingleObject(
+            sampler->thread, LSM_WINDOWS_SAMPLER_SHUTDOWN_MS);
+        CloseHandle(sampler->thread);
+        sampler->thread = NULL;
+    }
+    windows_sampler_release(sampler);
 }

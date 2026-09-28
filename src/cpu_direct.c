@@ -17,6 +17,7 @@
 #include "common.h"
 
 #include <stdbool.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -204,11 +205,20 @@ bool lsm_cpu_direct_read_static(LsmCpuInfo *cpu)
     }
 
     const long configured = sysconf(_SC_NPROCESSORS_ONLN);
-    cpu->logical_cores = configured > 0 && configured <= LSM_MAX_CPUS
-        ? (unsigned)configured : 1U;
+    cpu->logical_cores_total =
+        configured > 0 && (unsigned long)configured <= (unsigned long)UINT_MAX
+            ? (unsigned)configured : 0U;
+    cpu->logical_cores =
+        cpu->logical_cores_total > LSM_MAX_CPUS
+            ? LSM_MAX_CPUS : cpu->logical_cores_total;
+    const bool topology_supported =
+        cpu->logical_cores_total > 0U &&
+        cpu->logical_cores_total <= LSM_MAX_CPUS;
 
     cpu_set_t original;
-    const bool have_affinity = sched_getaffinity(0, sizeof(original), &original) == 0;
+    const bool have_affinity =
+        topology_supported &&
+        sched_getaffinity(0, sizeof(original), &original) == 0;
     uint32_t cores[LSM_MAX_CPUS] = {0};
     size_t core_count = 0U;
     LsmDirectCache caches[LSM_MAX_DIRECT_CACHES] = {{0}};
@@ -234,7 +244,7 @@ bool lsm_cpu_direct_read_static(LsmCpuInfo *cpu)
         (void)sched_setaffinity(0, sizeof(original), &original);
     }
 
-    if (cache_count == 0U) {
+    if (cache_count == 0U && topology_supported) {
         uint32_t apic_id = 0U;
         unsigned smt_shift = 0U;
         (void)direct_topology(&apic_id, &smt_shift);
@@ -243,7 +253,7 @@ bool lsm_cpu_direct_read_static(LsmCpuInfo *cpu)
     }
 
     if (core_count > 0U) cpu->physical_cores = (unsigned)core_count;
-    else cpu->physical_cores = cpu->logical_cores;
+    else cpu->physical_cores = topology_supported ? cpu->logical_cores : 0U;
 
     uint64_t totals[4] = {0U, 0U, 0U, 0U};
     unsigned instances[4] = {0U, 0U, 0U, 0U};

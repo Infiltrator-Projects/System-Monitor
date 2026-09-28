@@ -111,14 +111,15 @@ bool lsm_cpu_accounting_read(const char *path,
     return okay;
 }
 
-static double counter_percent(uint64_t current, uint64_t previous,
-                              uint64_t total_delta)
+static bool counter_percent(uint64_t current, uint64_t previous,
+                            uint64_t total_delta, double *percent)
 {
     uint64_t delta = 0U;
-    if (total_delta == 0U ||
+    if (!percent || total_delta == 0U ||
         !lsm_u64_counter_delta(current, previous, &delta))
-        return 0.0;
-    return lsm_percent_u64(delta, total_delta);
+        return false;
+    *percent = lsm_percent_u64(delta, total_delta);
+    return true;
 }
 
 void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
@@ -132,10 +133,12 @@ void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
     /* A reset must not retain the preceding busy sample. Idle includes
      * iowait, which Linux can decrease; reject that interval instead of
      * interpreting the failed delta as zero idle (100% busy). */
-    cpu->usage_percent = 0.0;
-    cpu->user_percent = 0.0;
-    cpu->kernel_percent = 0.0;
-    memset(cpu->core_usage, 0, sizeof(cpu->core_usage));
+    cpu->usage_percent = NAN;
+    cpu->user_percent = NAN;
+    cpu->kernel_percent = NAN;
+    cpu->usage_available = false;
+    for (size_t index = 0U; index < LSM_MAX_CPUS; index++)
+        cpu->core_usage[index] = NAN;
     for (size_t index = 0U;
          index < usable && index < LSM_MAX_CPUS + 1U; index++) {
         const LsmCpuCounters *current = &sample->cpus[index];
@@ -151,10 +154,14 @@ void lsm_cpu_accounting_apply(LsmCpuInfo *cpu,
                 ? lsm_percent_u64(total_delta - idle_delta, total_delta) : 0.0;
             if (index == 0U) {
                 cpu->usage_percent = usage;
-                cpu->user_percent = counter_percent(
-                    current->user, previous->user, total_delta);
-                cpu->kernel_percent = counter_percent(
-                    current->kernel, previous->kernel, total_delta);
+                cpu->usage_available = true;
+                double share = 0.0;
+                if (counter_percent(
+                        current->user, previous->user, total_delta, &share))
+                    cpu->user_percent = share;
+                if (counter_percent(
+                        current->kernel, previous->kernel, total_delta, &share))
+                    cpu->kernel_percent = share;
             } else {
                 cpu->core_usage[index - 1U] = usage;
             }
