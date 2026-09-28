@@ -161,11 +161,14 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
         LSM_BATTERY_UPDATE_INTERVAL_SECONDS);
 
     lsm_cpu_memory_update(sample, elapsed);
-    lsm_storage_update(sample, elapsed, refresh_topology);
+    const bool storage_complete =
+        lsm_storage_update(sample, elapsed, refresh_topology);
     (void)lsm_pressure_read("/proc/pressure/cpu", &sample->cpu_pressure);
     (void)lsm_pressure_read("/proc/pressure/memory", &sample->memory_pressure);
     (void)lsm_pressure_read("/proc/pressure/io", &sample->io_pressure);
-    lsm_hardware_update(sample, elapsed, refresh_topology, refresh_batteries);
+    const bool hardware_complete =
+        lsm_hardware_update(
+            sample, elapsed, refresh_topology, refresh_batteries);
 
     /* Publish completion identity only after every collector for this native
      * sample has returned. Presentation can therefore distinguish a genuinely
@@ -175,7 +178,7 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
         sample->sample_generation = 1U;
     sample->sample_monotonic_seconds = now;
 
-    if (refresh_topology)
+    if (refresh_topology && storage_complete && hardware_complete)
         state->last_topology_scan_monotonic = now;
     if (refresh_batteries)
         state->last_battery_update_monotonic = now;
@@ -212,12 +215,15 @@ static void *sampler_thread_main(void *user_data)
     /* Storage topology can enter statvfs() on slow or blocked mounts and
      * hardware discovery can touch device interfaces. Perform both only after
      * the worker owns execution so GTK activation can construct the window. */
-    if (!lsm_storage_initialise(&sampler->sample)) {
+    const bool storage_complete =
+        lsm_storage_initialise(&sampler->sample);
+    const bool hardware_complete =
+        lsm_hardware_initialise(&sampler->sample);
+    if (!storage_complete || !hardware_complete) {
         (void)pthread_mutex_lock(&sampler->mutex);
         sampler->backend->topology_refresh_requested = true;
         (void)pthread_mutex_unlock(&sampler->mutex);
     }
-    lsm_hardware_initialise(&sampler->sample);
 
     for (;;) {
         bool force_topology = false;

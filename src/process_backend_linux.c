@@ -775,14 +775,37 @@ static bool count_process_fds(pid_t pid, unsigned *count)
     if (!directory) return false;
 
     unsigned value = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
-        if (value < UINT_MAX) value++;
+        if (value == UINT_MAX) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
+        value++;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *count = value;
     return true;
 }

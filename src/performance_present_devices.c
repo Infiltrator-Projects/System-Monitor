@@ -467,9 +467,11 @@ static void update_system_battery_details(LsmBatteryPageWidgets *widgets,
     if (battery->cycle_count)
         lsm_ui_set_label_text(widgets->detail_9, "%u", battery->cycle_count);
     else lsm_ui_set_label_text(widgets->detail_9, "N/A");
-    lsm_ui_set_label_text(widgets->power_source, "%s",
-                          battery->on_ac_power
-                              ? "AC connected" : "Battery power");
+    lsm_ui_set_label_text(
+        widgets->power_source, "%s",
+        battery->on_ac_power_available
+            ? (battery->on_ac_power ? "AC connected" : "Battery power")
+            : "N/A");
     if (isfinite(battery->temperature_c))
         lsm_ui_set_label_text(widgets->temperature, "%.1f °C",
                               battery->temperature_c);

@@ -36,14 +36,27 @@ static const char *power_supply_root(void)
     return root && root[0] ? root : "/sys/class/power_supply";
 }
 
-static bool power_supply_online(void)
+static bool power_supply_online(bool *online)
 {
+    if (!online) return false;
+    *online = false;
     const char *root = power_supply_root();
     DIR *directory = opendir(root);
     if (!directory) return false;
-    bool online = false;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.') continue;
         char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
         if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
@@ -53,13 +66,21 @@ static bool power_supply_online(void)
             continue;
         if (!lsm_join_path(path, sizeof(path), base, "online"))
             continue;
-        if (lsm_read_u64_or_zero(path) != 0) {
-            online = true;
+        uint64_t value = 0U;
+        if (lsm_read_u64_file(path, &value) && value != 0U) {
+            *online = true;
             break;
         }
     }
-    closedir(directory);
-    return online;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
+    return true;
 }
 
 static double battery_energy_wh(const char *base, const char *energy_name,
@@ -553,7 +574,8 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
 
 void lsm_battery_update(LsmMonitor *monitor)
 {
-    const bool ac = power_supply_online();
+    bool ac = false;
+    const bool ac_available = power_supply_online(&ac);
     const char *root = power_supply_root();
     for (size_t i = 0; i < monitor->battery_count; i++) {
         LsmBatteryInfo *battery = &monitor->batteries[i];
@@ -634,7 +656,10 @@ void lsm_battery_update(LsmMonitor *monitor)
         const uint64_t cycle_count = lsm_read_u64_or_zero(path);
         battery->cycle_count = cycle_count > UINT_MAX
             ? UINT_MAX : (unsigned)cycle_count;
-        battery->on_ac_power = !battery->is_peripheral && ac;
+        battery->on_ac_power_available =
+            !battery->is_peripheral && ac_available;
+        if (battery->on_ac_power_available)
+            battery->on_ac_power = ac;
 
         uint64_t seconds = 0;
         const bool charging =

@@ -561,18 +561,23 @@ bool lsm_storage_initialise(LsmMonitor *monitor)
     return true;
 }
 
-void lsm_storage_update(LsmMonitor *monitor, double elapsed,
+bool lsm_storage_update(LsmMonitor *monitor, double elapsed,
                         bool refresh_topology)
 {
-    if (!monitor) return;
+    if (!monitor) return false;
+    bool complete = true;
     if (refresh_topology) {
-        (void)refresh_disks(monitor);
+        if (!refresh_disks(monitor))
+            complete = false;
         if (lsm_sources_network_topology_changed(
                 monitor_system_sources(monitor))) {
-            (void)refresh_networks(monitor);
-            update_interface_addresses(monitor);
+            if (refresh_networks(monitor))
+                update_interface_addresses(monitor);
+            else
+                complete = false;
         }
     }
     update_disks(monitor, elapsed);
     update_networks(monitor, elapsed, refresh_topology);
+    return complete;
 }

@@ -489,8 +489,8 @@ static double read_active_dpm_clock(const char *path)
             break;
         }
     }
-    fclose(file);
-    return clock;
+    const bool complete = ferror(file) == 0 && fclose(file) == 0;
+    return complete ? clock : NAN;
 }
 
 static bool read_gpu_engine_busy(const LsmGpuTelemetryCache *cache,
@@ -825,8 +825,9 @@ static void update_npus(LsmMonitor *monitor, double elapsed)
 
 /** Rescan optional hardware while retaining live metric baselines by stable ID. */
 /* Rebuild into temporary arrays, carry forward matching state, then commit. */
-static void refresh_hardware_topology(LsmMonitor *monitor)
+static bool refresh_hardware_topology(LsmMonitor *monitor)
 {
+    if (!monitor) return false;
     LsmGpuInfo old_gpus[LSM_MAX_GPUS];
     LsmBatteryInfo old_batteries[LSM_MAX_BATTERIES];
     LsmNpuInfo old_npus[LSM_MAX_NPUS];
@@ -841,11 +842,11 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
     memcpy(old_bluetooth_devices, monitor->bluetooth_devices,
            sizeof(old_bluetooth_devices));
 
-    (void)enumerate_gpus(monitor);
+    const bool gpu_complete = enumerate_gpus(monitor);
     lsm_bluetooth_enumerate(monitor);
     lsm_monitor_bluetooth_reconcile_states(monitor);
-    (void)lsm_battery_enumerate(monitor);
-    (void)enumerate_npus(monitor);
+    const bool battery_complete = lsm_battery_enumerate(monitor);
+    const bool npu_complete = enumerate_npus(monitor);
     const bool changed = lsm_hardware_topology_reconcile(
         monitor, old_gpus, old_gpu_count, old_batteries, old_battery_count,
         old_npus, old_npu_count) ||
@@ -866,33 +867,37 @@ static void refresh_hardware_topology(LsmMonitor *monitor)
         memset(&monitor->npus[monitor->npu_count], 0,
                (LSM_MAX_NPUS - monitor->npu_count) * sizeof(monitor->npus[0]));
     if (changed) monitor->topology_generation++;
+    return gpu_complete && battery_complete && npu_complete;
 }
 
 /* Public hardware lifecycle. */
-void lsm_hardware_initialise(LsmMonitor *monitor)
+bool lsm_hardware_initialise(LsmMonitor *monitor)
 {
-    if (!monitor) return;
+    if (!monitor) return false;
     LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
-    if (!backend) return;
+    if (!backend) return false;
     if (!backend->hardware_state)
         backend->hardware_state = calloc(1U, sizeof(*backend->hardware_state));
 
     lsm_battery_start();
-    refresh_hardware_topology(monitor);
+    const bool topology_complete = refresh_hardware_topology(monitor);
     lsm_monitor_bluetooth_update_traffic(monitor, 0.0);
     lsm_battery_update(monitor);
     update_npus(monitor, 1.0);
+    return topology_complete;
 }
 
-void lsm_hardware_update(LsmMonitor *monitor, double elapsed,
+bool lsm_hardware_update(LsmMonitor *monitor, double elapsed,
                          bool refresh_topology, bool refresh_batteries)
 {
-    if (!monitor) return;
-    if (refresh_topology) refresh_hardware_topology(monitor);
+    if (!monitor) return false;
+    const bool topology_complete =
+        !refresh_topology || refresh_hardware_topology(monitor);
     lsm_monitor_bluetooth_update_traffic(monitor, elapsed);
     update_gpus(monitor, elapsed);
     if (refresh_batteries) lsm_battery_update(monitor);
     update_npus(monitor, elapsed);
+    return topology_complete;
 }
 
 void lsm_hardware_shutdown(LsmMonitor *monitor)

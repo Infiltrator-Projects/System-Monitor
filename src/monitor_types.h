@@ -314,6 +314,7 @@ typedef struct {
     unsigned cycle_count;
     bool has_supplemental_capacity;
     bool on_ac_power;
+    bool on_ac_power_available;      /**< AC-source enumeration completed for this sample. */
     bool is_peripheral;
     bool paired;
     bool trusted;

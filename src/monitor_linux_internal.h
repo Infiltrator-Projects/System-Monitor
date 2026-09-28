@@ -175,7 +175,7 @@ bool lsm_storage_initialise(LsmMonitor *monitor);
  * @param [in] elapsed Monotonic seconds since the previous refresh.
  * @param [in] refresh_topology Re-enumerate devices before sampling counters.
  */
-void lsm_storage_update(LsmMonitor *monitor, double elapsed,
+bool lsm_storage_update(LsmMonitor *monitor, double elapsed,
                         bool refresh_topology);
 
 /**
@@ -212,7 +212,7 @@ void lsm_battery_shutdown(void);
  *
  * @param [in,out] monitor Snapshot receiving hardware topology.
  */
-void lsm_hardware_initialise(LsmMonitor *monitor);
+bool lsm_hardware_initialise(LsmMonitor *monitor);
 /**
  * Refresh hardware telemetry with independently controlled slow-path work.
  *
@@ -221,7 +221,7 @@ void lsm_hardware_initialise(LsmMonitor *monitor);
  * @param [in] refresh_topology Reconcile hardware before sampling.
  * @param [in] refresh_batteries Perform full battery presentation this cycle.
  */
-void lsm_hardware_update(LsmMonitor *monitor, double elapsed,
+bool lsm_hardware_update(LsmMonitor *monitor, double elapsed,
                          bool refresh_topology, bool refresh_batteries);
 /**
  * Release dynamic hardware adapters and stop associated in-process workers.
