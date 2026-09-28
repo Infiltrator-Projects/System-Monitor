@@ -193,6 +193,7 @@ void lsm_bluetooth_enumerate(LsmMonitor *monitor);
  * Rebuild the bounded battery inventory from native driver interfaces.
  *
  * @param [in,out] monitor Snapshot whose battery topology is replaced.
+ * @return true when native enumeration completed; false preserves the prior snapshot.
  */
 bool lsm_battery_enumerate(LsmMonitor *monitor);
 /**

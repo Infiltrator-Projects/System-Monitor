@@ -106,11 +106,20 @@ void lsm_sources_destroy(LsmSystemSources *sources);
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of records written, never greater than @p capacity.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
  */
 bool lsm_sources_list_block_devices_checked(
     LsmSystemSources *sources, LsmBlockDeviceRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only physical block-device enumeration.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
                                       LsmBlockDeviceRecord *records,
                                       size_t capacity);
@@ -120,11 +129,20 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of records written.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
  */
 bool lsm_sources_list_mounts_checked(
     LsmSystemSources *sources, LsmMountRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only mount enumeration.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_list_mounts(LsmSystemSources *sources,
                                LsmMountRecord *records,
                                size_t capacity);
@@ -134,11 +152,20 @@ size_t lsm_sources_list_mounts(LsmSystemSources *sources,
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of records written.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
  */
 bool lsm_sources_list_partitions_checked(
     LsmSystemSources *sources, LsmPartitionRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only partition enumeration.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_list_partitions(LsmSystemSources *sources,
                                    LsmPartitionRecord *records,
                                    size_t capacity);
@@ -148,11 +175,20 @@ size_t lsm_sources_list_partitions(LsmSystemSources *sources,
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of records written.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
  */
 bool lsm_sources_list_networks_checked(
     LsmSystemSources *sources, LsmNetworkRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only network-interface enumeration.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_list_networks(LsmSystemSources *sources,
                                  LsmNetworkRecord *records,
                                  size_t capacity);
@@ -162,11 +198,20 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of counter records written.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when the counter snapshot completed, including zero records.
  */
 bool lsm_sources_read_network_counters_checked(
     LsmSystemSources *sources, LsmNetworkCounterRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only network counter snapshot.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
                                          LsmNetworkCounterRecord *records,
                                          size_t capacity);
@@ -184,11 +229,20 @@ bool lsm_sources_network_topology_changed(LsmSystemSources *sources);
  * @param [in] sources Native-source context.
  * @param [out] records Destination array.
  * @param [in] capacity Number of records available.
- * @return Number of adapters written.
+ * @param [out] out_count Receives the number of adapters written.
+ * @return true when enumeration completed, including a valid empty result.
  */
 bool lsm_sources_list_gpus_checked(
     LsmSystemSources *sources, LsmGpuRecord *records,
     size_t capacity, size_t *out_count);
+/**
+ * Compatibility count-only GPU enumeration.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @return Number of records written; zero also represents source failure.
+ */
 size_t lsm_sources_list_gpus(LsmSystemSources *sources,
                              LsmGpuRecord *records,
                              size_t capacity);
