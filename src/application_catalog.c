@@ -15,6 +15,8 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +24,7 @@
 struct LsmApplicationCatalog {
     GHashTable *by_executable;
     GPtrArray *entries;
+    bool complete;
 };
 
 static char *desktop_string(GKeyFile *file, const char *key)
@@ -211,6 +214,8 @@ static void load_desktop_file(LsmApplicationCatalog *catalog,
         register_identity(catalog, entry->executable, entry);
         register_desktop_id_aliases(catalog, entry->id, entry);
         register_identity(catalog, startup_class, entry);
+    } else {
+        catalog->complete = false;
     }
 
     g_free(name);
@@ -223,26 +228,39 @@ static void load_desktop_file(LsmApplicationCatalog *catalog,
 static void scan_application_directory(LsmApplicationCatalog *catalog,
                                        const char *directory)
 {
+    errno = 0;
     DIR *stream = opendir(directory);
-    if (!stream) return;
+    if (!stream) {
+        if (errno != ENOENT) catalog->complete = false;
+        return;
+    }
     struct dirent *item = NULL;
-    while ((item = readdir(stream))) {
+    for (;;) {
+        errno = 0;
+        item = readdir(stream);
+        if (!item) {
+            if (errno != 0) catalog->complete = false;
+            break;
+        }
         const size_t length = strlen(item->d_name);
         if (length <= 8U ||
             strcmp(item->d_name + length - 8U, ".desktop") != 0)
             continue;
         char path[LSM_PATH_LEN];
-        if (!lsm_join_path(path, sizeof(path), directory, item->d_name))
+        if (!lsm_join_path(path, sizeof(path), directory, item->d_name)) {
+            catalog->complete = false;
             continue;
+        }
         load_desktop_file(catalog, path, item->d_name);
     }
-    closedir(stream);
+    if (closedir(stream) != 0) catalog->complete = false;
 }
 
 LsmApplicationCatalog *lsm_application_catalog_create(void)
 {
     LsmApplicationCatalog *catalog = calloc(1U, sizeof(*catalog));
     if (!catalog) return NULL;
+    catalog->complete = true;
     catalog->by_executable = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, NULL);
     catalog->entries = g_ptr_array_new_with_free_func(free);
@@ -272,6 +290,13 @@ LsmApplicationCatalog *lsm_application_catalog_create(void)
                 scan_application_directory(catalog, path);
         }
         free(copy);
+    } else {
+        catalog->complete = false;
+    }
+    if (!catalog->complete) {
+        lsm_application_catalog_destroy(catalog);
+        errno = errno != 0 ? errno : ENOMEM;
+        return NULL;
     }
     return catalog;
 }

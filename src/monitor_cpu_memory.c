@@ -84,15 +84,28 @@ static int compare_cpu_ids(const void *left, const void *right)
 /* Kernel CPU identifiers are not guaranteed to be dense after hotplug or on
  * systems that expose sparse topology. Enumerate the actual online cpuN
  * directories instead of assuming the IDs are 0..logical_cores-1. */
-static size_t read_online_cpu_ids(unsigned ids[LSM_MAX_CPUS])
+static bool read_online_cpu_ids(unsigned ids[LSM_MAX_CPUS],
+                                size_t *out_count)
 {
-    if (!ids) return 0U;
+    if (out_count) *out_count = 0U;
+    if (!ids || !out_count) return false;
     DIR *directory = opendir("/sys/devices/system/cpu");
-    if (!directory) return 0U;
+    if (!directory) return false;
 
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < LSM_MAX_CPUS && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "cpu") ||
             !lsm_ascii_is_digit((unsigned char)entry->d_name[3]))
             continue;
@@ -112,19 +125,32 @@ static size_t read_online_cpu_ids(unsigned ids[LSM_MAX_CPUS])
                 online = reported;
         }
         if (online == 0) continue;
+        if (count >= LSM_MAX_CPUS) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         ids[count++] = (unsigned)parsed;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     if (count > 1U)
         qsort(ids, count, sizeof(ids[0]), compare_cpu_ids);
-    return count;
+    *out_count = count;
+    return true;
 }
 
 static size_t cpu_ids_or_dense_fallback(const LsmCpuInfo *cpu,
                                         unsigned ids[LSM_MAX_CPUS])
 {
-    size_t count = read_online_cpu_ids(ids);
-    if (count > 0U) return count;
+    size_t count = 0U;
+    if (read_online_cpu_ids(ids, &count) && count > 0U) return count;
     const unsigned logical =
         cpu && cpu->logical_cores > 0U && cpu->logical_cores <= LSM_MAX_CPUS
             ? cpu->logical_cores : 1U;
@@ -352,8 +378,15 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
         return NULL;
     }
 
+    bool failed = false;
     struct dirent *entry = NULL;
-    while ((entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) failed = true;
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "policy"))
             continue;
         uint64_t policy_index = 0U;
@@ -385,6 +418,8 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
         if (!candidate.current_path || !candidate.maximum_path) {
             free(candidate.current_path);
             free(candidate.maximum_path);
+            failed = true;
+            errno = ENOMEM;
             break;
         }
         if (!lsm_array_reserve((void **)&source->paths, &source->capacity,
@@ -392,12 +427,14 @@ static LsmCpuFrequencySource *create_cpu_frequency_source(void)
                                16U)) {
             free(candidate.current_path);
             free(candidate.maximum_path);
+            failed = true;
+            if (errno == 0) errno = ENOMEM;
             break;
         }
         source->paths[source->count++] = candidate;
     }
-    closedir(directory);
-    if (source->count == 0U) {
+    if (closedir(directory) != 0) failed = true;
+    if (failed || source->count == 0U) {
         destroy_cpu_frequency_source(source);
         return NULL;
     }

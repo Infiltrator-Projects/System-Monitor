@@ -975,14 +975,25 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
     const double sampled_at = lsm_monotonic_seconds();
 
     bool scan_failed = false;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    int scan_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                scan_failed = true;
+                scan_error = errno;
+            }
+            break;
+        }
         pid_t pid = 0;
         if (!parse_proc_pid(entry->d_name, &pid)) continue;
 
         if (!lsm_array_reserve((void **)&processes, &capacity,
                                sizeof(*processes), count + 1U, 512U)) {
             scan_failed = true;
+            scan_error = errno != 0 ? errno : ENOMEM;
             break;
         }
 
@@ -999,6 +1010,7 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
             backend, searchable_sample_count, pid);
         if (!sample) {
             scan_failed = true;
+            scan_error = errno != 0 ? errno : ENOMEM;
             break;
         }
         const size_t sample_index = (size_t)(sample - backend->samples);
@@ -1176,13 +1188,17 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         }
         processes[count++] = process;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && !scan_failed) {
+        scan_failed = true;
+        scan_error = errno != 0 ? errno : EIO;
+    }
     if (scan_failed) {
         rollback_sample_mutations(
             backend, mutations, mutation_count,
             original_sample_count, original_generation);
         free(mutations);
         free(processes);
+        errno = scan_error != 0 ? scan_error : EIO;
         return 0U;
     }
 
@@ -1565,18 +1581,40 @@ bool lsm_process_control_tree(LsmProcessId root_id,
         return false;
     }
 
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool enumeration_failed = false;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                enumeration_failed = true;
+                enumeration_error = errno;
+            }
+            break;
+        }
         pid_t pid = 0;
         if (!parse_proc_pid(entry->d_name, &pid)) continue;
         PidParent item = {0};
         if (pid <= 1 || !read_pid_parent(pid, &item)) continue;
         if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                               count + 1U, 256U))
+                               count + 1U, 256U)) {
+            enumeration_failed = true;
+            enumeration_error = errno != 0 ? errno : ENOMEM;
             break;
+        }
         items[count++] = item;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && !enumeration_failed) {
+        enumeration_failed = true;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (enumeration_failed) {
+        free(items);
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     if (!process_identity_pid(root_id, root_instance_id, &root_pid)) {
         free(items);
         return false;

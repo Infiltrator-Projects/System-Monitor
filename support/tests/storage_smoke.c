@@ -763,6 +763,44 @@ int main(void)
         !lsm_sources_list_networks_checked(sources,networks,4,&network_count) ||
         !lsm_sources_list_gpus_checked(sources,gpus,4,&gpu_count))
         return 11;
+    /*
+     * Checked inventory APIs must reject bounded truncation rather than
+     * publishing a prefix as an authoritative topology.
+     */
+    LsmBlockDeviceRecord one_disk[1] = {0};
+    LsmMountRecord one_mount[1] = {0};
+    LsmPartitionRecord one_partition[1] = {0};
+    LsmNetworkRecord one_network[1] = {0};
+    LsmGpuRecord one_gpu[1] = {0};
+    size_t bounded_count = 99U;
+    errno = 0;
+    if (lsm_sources_list_block_devices_checked(
+            sources, one_disk, 1U, &bounded_count) ||
+        bounded_count != 0U || errno != EOVERFLOW)
+        return 13;
+    bounded_count = 99U;
+    if (lsm_sources_list_mounts_checked(
+            sources, one_mount, 1U, &bounded_count) ||
+        bounded_count != 0U)
+        return 14;
+    bounded_count = 99U;
+    errno = 0;
+    if (lsm_sources_list_partitions_checked(
+            sources, one_partition, 1U, &bounded_count) ||
+        bounded_count != 0U || errno != EOVERFLOW)
+        return 15;
+    bounded_count = 99U;
+    if (lsm_sources_list_networks_checked(
+            sources, one_network, 1U, &bounded_count) ||
+        bounded_count != 0U)
+        return 16;
+    bounded_count = 99U;
+    errno = 0;
+    if (lsm_sources_list_gpus_checked(
+            sources, one_gpu, 1U, &bounded_count) ||
+        bounded_count != 0U || errno != EOVERFLOW)
+        return 17;
+
     const double temperature = lsm_sources_read_cpu_temperature(sources);
     LsmCpuThermalSample thermal = {0};
     const bool thermal_available =

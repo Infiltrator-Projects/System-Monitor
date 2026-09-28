@@ -170,26 +170,39 @@ static int compare_open_file(const void *left, const void *right)
     return (a->descriptor > b->descriptor) - (a->descriptor < b->descriptor);
 }
 
-size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInfo **out_items)
+bool lsm_process_inspection_open_files_checked(
+    LsmProcessId process_id, LsmOpenFileInfo **out_items, size_t *out_count)
 {
     pid_t pid = 0;
-    if (!out_items || !native_pid(process_id, &pid)) {
+    if (!out_items || !out_count || !native_pid(process_id, &pid)) {
         errno = EINVAL;
-        return 0U;
+        return false;
     }
     *out_items = NULL;
+    *out_count = 0U;
     char directory_path[PATH_MAX];
     if (!process_path(directory_path, sizeof(directory_path), pid, "fd")) {
         errno = ENAMETOOLONG;
-        return 0U;
+        return false;
     }
     DIR *directory = opendir(directory_path);
-    if (!directory) return 0U;
+    if (!directory) return false;
 
     LsmOpenFileInfo *items = NULL;
     size_t count = 0U, capacity = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         uint64_t descriptor = 0U;
         if (!lsm_parse_u64_range(entry->d_name, 10U, 0U,
                                  (uint64_t)INT_MAX, &descriptor))
@@ -203,8 +216,11 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
         if (length < 0) continue;
         target[length] = '\0';
         if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                               count + 1U, 32U))
+                               count + 1U, 32U)) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : ENOMEM;
             break;
+        }
         LsmOpenFileInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
         item->descriptor = (int)descriptor;
@@ -212,10 +228,28 @@ size_t lsm_process_inspection_open_files(LsmProcessId process_id, LsmOpenFileInf
                         descriptor_kind(pid, target));
         lsm_copy_string(item->target, sizeof(item->target), target);
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(items);
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     if (count > 1U) qsort(items, count, sizeof(*items), compare_open_file);
     *out_items = items;
-    return count;
+    *out_count = count;
+    errno = 0;
+    return true;
+}
+
+size_t lsm_process_inspection_open_files(LsmProcessId process_id,
+                                         LsmOpenFileInfo **out_items)
+{
+    size_t count = 0U;
+    return lsm_process_inspection_open_files_checked(
+        process_id, out_items, &count) ? count : 0U;
 }
 
 static bool parse_smaps_bytes(const char *line, const char *prefix,
@@ -232,33 +266,37 @@ static bool parse_smaps_bytes(const char *line, const char *prefix,
     return lsm_u64_multiply_checked(kib, 1024U, bytes);
 }
 
-size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapInfo **out_items)
+bool lsm_process_inspection_memory_maps_checked(
+    LsmProcessId process_id, LsmMemoryMapInfo **out_items, size_t *out_count)
 {
     pid_t pid = 0;
-    if (!out_items || !native_pid(process_id, &pid)) {
+    if (!out_items || !out_count || !native_pid(process_id, &pid)) {
         errno = EINVAL;
-        return 0U;
+        return false;
     }
     *out_items = NULL;
+    *out_count = 0U;
     char path[PATH_MAX];
     if (!process_path(path, sizeof(path), pid, "smaps")) {
         errno = ENAMETOOLONG;
-        return 0U;
+        return false;
     }
     FILE *file = fopen(path, "r");
     bool detailed = file != NULL;
     if (!file) {
         if (!process_path(path, sizeof(path), pid, "maps")) {
             errno = ENAMETOOLONG;
-            return 0U;
+            return false;
         }
         file = fopen(path, "r");
     }
-    if (!file) return 0U;
+    if (!file) return false;
 
     LsmMemoryMapInfo *items = NULL;
     size_t count = 0U, capacity = 0U;
     LsmMemoryMapInfo *current = NULL;
+    bool complete = true;
+    int read_error = 0;
     char line[4096];
     while (fgets(line, sizeof(line), file)) {
         unsigned long long start = 0U, end = 0U, offset = 0U, inode = 0U;
@@ -277,8 +315,11 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapI
             memcpy(pathname, tail, tail_length);
             pathname[tail_length] = '\0';
             if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                                   count + 1U, 32U))
+                                   count + 1U, 32U)) {
+                complete = false;
+                read_error = errno != 0 ? errno : ENOMEM;
                 break;
+            }
             current = &items[count++];
             memset(current, 0, sizeof(*current));
             current->start_address = (uint64_t)start;
@@ -308,9 +349,31 @@ size_t lsm_process_inspection_memory_maps(LsmProcessId process_id, LsmMemoryMapI
             current->accounting_available = true;
         }
     }
-    fclose(file);
+    if (ferror(file) && complete) {
+        complete = false;
+        read_error = errno != 0 ? errno : EIO;
+    }
+    if (fclose(file) != 0 && complete) {
+        complete = false;
+        read_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(items);
+        errno = read_error != 0 ? read_error : EIO;
+        return false;
+    }
     *out_items = items;
-    return count;
+    *out_count = count;
+    errno = 0;
+    return true;
+}
+
+size_t lsm_process_inspection_memory_maps(LsmProcessId process_id,
+                                          LsmMemoryMapInfo **out_items)
+{
+    size_t count = 0U;
+    return lsm_process_inspection_memory_maps_checked(
+        process_id, out_items, &count) ? count : 0U;
 }
 
 static void read_thread_state(const char *path, char *state, size_t state_size)
@@ -336,26 +399,39 @@ static int compare_thread(const void *left, const void *right)
     return (a->tid > b->tid) - (a->tid < b->tid);
 }
 
-size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **out_items)
+bool lsm_process_inspection_threads_checked(
+    LsmProcessId process_id, LsmThreadInfo **out_items, size_t *out_count)
 {
     pid_t pid = 0;
-    if (!out_items || !native_pid(process_id, &pid)) {
+    if (!out_items || !out_count || !native_pid(process_id, &pid)) {
         errno = EINVAL;
-        return 0U;
+        return false;
     }
     *out_items = NULL;
+    *out_count = 0U;
     char task_path[PATH_MAX];
     if (!process_path(task_path, sizeof(task_path), pid, "task")) {
         errno = ENAMETOOLONG;
-        return 0U;
+        return false;
     }
     DIR *directory = opendir(task_path);
-    if (!directory) return 0U;
+    if (!directory) return false;
 
     LsmThreadInfo *items = NULL;
     size_t count = 0U, capacity = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(directory))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         uint64_t tid = 0U;
         if (!lsm_parse_u64_range(entry->d_name, 10U, 1U, UINT64_MAX, &tid))
             continue;
@@ -364,8 +440,11 @@ size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **o
                            task_path, entry->d_name))
             continue;
         if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                               count + 1U, 32U))
+                               count + 1U, 32U)) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : ENOMEM;
             break;
+        }
         LsmThreadInfo *item = &items[count++];
         memset(item, 0, sizeof(*item));
         item->tid = (LsmProcessId)tid;
@@ -378,12 +457,31 @@ size_t lsm_process_inspection_threads(LsmProcessId process_id, LsmThreadInfo **o
                      (unsigned long long)item->tid);
         if (lsm_join_path(path, sizeof(path), thread_path, "status"))
             read_thread_state(path, item->state, sizeof(item->state));
-        if (!item->state[0]) lsm_copy_string(item->state, sizeof(item->state), "Unknown");
+        if (!item->state[0])
+            lsm_copy_string(item->state, sizeof(item->state), "Unknown");
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(items);
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     if (count > 1U) qsort(items, count, sizeof(*items), compare_thread);
     *out_items = items;
-    return count;
+    *out_count = count;
+    errno = 0;
+    return true;
+}
+
+size_t lsm_process_inspection_threads(LsmProcessId process_id,
+                                      LsmThreadInfo **out_items)
+{
+    size_t count = 0U;
+    return lsm_process_inspection_threads_checked(
+        process_id, out_items, &count) ? count : 0U;
 }
 
 static void read_process_name(pid_t pid, char *name, size_t size)
@@ -403,59 +501,104 @@ static int compare_file_user(const void *left, const void *right)
            (a->descriptor < b->descriptor);
 }
 
-size_t lsm_process_inspection_find_file_users(const char *path,
-                                              LsmFileUserInfo **out_items)
+bool lsm_process_inspection_find_file_users_checked(
+    const char *path, LsmFileUserInfo **out_items, size_t *out_count)
 {
-    if (!path || !*path || !out_items) {
+    if (!path || !*path || !out_items || !out_count) {
         errno = EINVAL;
-        return 0U;
+        return false;
     }
     *out_items = NULL;
+    *out_count = 0U;
     struct stat requested;
-    if (stat(path, &requested) != 0) return 0U;
+    if (stat(path, &requested) != 0) return false;
 
     DIR *proc = opendir(procfs_root());
-    if (!proc) return 0U;
+    if (!proc) return false;
     LsmFileUserInfo *items = NULL;
     size_t count = 0U, capacity = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(proc))) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(proc);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         uint64_t parsed_pid = 0U;
         if (!lsm_parse_u64_range(entry->d_name, 10U, 1U,
                                  (uint64_t)INT_MAX, &parsed_pid))
             continue;
         const pid_t pid = (pid_t)parsed_pid;
         LsmOpenFileInfo *files = NULL;
-        const size_t file_count = lsm_process_inspection_open_files(
-            (LsmProcessId)pid, &files);
+        size_t file_count = 0U;
+        if (!lsm_process_inspection_open_files_checked(
+                (LsmProcessId)pid, &files, &file_count)) {
+            const int failure = errno;
+            if (failure == ENOMEM || failure == EIO || failure == EOVERFLOW) {
+                complete = false;
+                enumeration_error = failure;
+                break;
+            }
+            continue;
+        }
         for (size_t index = 0U; index < file_count; index++) {
             char descriptor_path[PATH_MAX];
             char suffix[64];
-            (void)snprintf(suffix, sizeof(suffix), "fd/%d", files[index].descriptor);
+            (void)snprintf(suffix, sizeof(suffix), "fd/%d",
+                           files[index].descriptor);
             struct stat opened;
-            /* /proc/PID/fd refers to the opened inode, including unlinked
-             * files. Path text misses hard links and can falsely match a
-             * replacement created under a deleted file's former name. */
-            if (!process_path(descriptor_path, sizeof(descriptor_path), pid, suffix) ||
+            if (!process_path(descriptor_path, sizeof(descriptor_path), pid,
+                              suffix) ||
                 stat(descriptor_path, &opened) != 0 ||
-                opened.st_dev != requested.st_dev || opened.st_ino != requested.st_ino)
+                opened.st_dev != requested.st_dev ||
+                opened.st_ino != requested.st_ino)
                 continue;
             if (!lsm_array_reserve((void **)&items, &capacity, sizeof(*items),
-                                   count + 1U, 32U))
+                                   count + 1U, 32U)) {
+                complete = false;
+                enumeration_error = errno != 0 ? errno : ENOMEM;
                 break;
+            }
             LsmFileUserInfo *item = &items[count++];
             memset(item, 0, sizeof(*item));
             item->pid = (LsmProcessId)pid;
             item->descriptor = files[index].descriptor;
-            read_process_name(pid, item->process_name, sizeof(item->process_name));
-            lsm_copy_string(item->target, sizeof(item->target), files[index].target);
+            read_process_name(pid, item->process_name,
+                              sizeof(item->process_name));
+            lsm_copy_string(item->target, sizeof(item->target),
+                            files[index].target);
         }
         free(files);
+        if (!complete) break;
     }
-    closedir(proc);
+    if (closedir(proc) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        free(items);
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     if (count > 1U) qsort(items, count, sizeof(*items), compare_file_user);
     *out_items = items;
-    return count;
+    *out_count = count;
+    errno = 0;
+    return true;
+}
+
+size_t lsm_process_inspection_find_file_users(const char *path,
+                                              LsmFileUserInfo **out_items)
+{
+    size_t count = 0U;
+    return lsm_process_inspection_find_file_users_checked(
+        path, out_items, &count) ? count : 0U;
 }
 
 void lsm_process_inspection_free(void *items)

@@ -464,8 +464,10 @@ int main(void)
     }
 
     LsmOpenFileInfo *files = NULL;
-    const size_t file_count = lsm_process_inspection_open_files(123, &files);
-    if (file_count != 2U || files[0].descriptor != 3 ||
+    size_t file_count = 0U;
+    if (!lsm_process_inspection_open_files_checked(
+            123, &files, &file_count) ||
+        file_count != 2U || files[0].descriptor != 3 ||
         strcmp(files[0].kind, "File") != 0 ||
         strcmp(files[1].kind, "Local socket") != 0) {
         lsm_process_inspection_free(files);
@@ -475,8 +477,10 @@ int main(void)
     lsm_process_inspection_free(files);
 
     LsmMemoryMapInfo *maps = NULL;
-    const size_t map_count = lsm_process_inspection_memory_maps(123, &maps);
-    if (map_count != 2U || maps[0].start_address != 0x00400000ULL ||
+    size_t map_count = 0U;
+    if (!lsm_process_inspection_memory_maps_checked(
+            123, &maps, &map_count) ||
+        map_count != 2U || maps[0].start_address != 0x00400000ULL ||
         strcmp(maps[0].permissions, "r-xp") != 0 ||
         !maps[0].accounting_available ||
         maps[0].private_clean_bytes != 4096U ||
@@ -492,8 +496,10 @@ int main(void)
     lsm_process_inspection_free(maps);
 
     LsmThreadInfo *threads = NULL;
-    const size_t thread_count = lsm_process_inspection_threads(123, &threads);
-    if (thread_count != 2U || threads[0].tid != 123 || threads[1].tid != 124 ||
+    size_t thread_count = 0U;
+    if (!lsm_process_inspection_threads_checked(
+            123, &threads, &thread_count) ||
+        thread_count != 2U || threads[0].tid != 123 || threads[1].tid != 124 ||
         strcmp(threads[1].name, "worker") != 0 ||
         strstr(threads[1].state, "sleeping") == NULL) {
         lsm_process_inspection_free(threads);
@@ -503,8 +509,10 @@ int main(void)
     lsm_process_inspection_free(threads);
 
     LsmFileUserInfo *users = NULL;
-    const size_t user_count = lsm_process_inspection_find_file_users(target, &users);
-    if (user_count != 2U || users[0].pid != 123 || users[1].pid != 456) {
+    size_t user_count = 0U;
+    if (!lsm_process_inspection_find_file_users_checked(
+            target, &users, &user_count) ||
+        user_count != 2U || users[0].pid != 123 || users[1].pid != 456) {
         lsm_process_inspection_free(users);
         remove_tree(root);
         return 10;

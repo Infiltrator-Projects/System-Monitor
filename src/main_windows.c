@@ -107,6 +107,7 @@ typedef struct {
     HANDLE process_event;
     CRITICAL_SECTION process_lock;
     bool process_lock_initialised;
+    bool process_worker_abandoned;
     bool process_stop_requested;
     bool process_request_pending;
     unsigned process_requested_flags;
@@ -2568,9 +2569,9 @@ static bool take_process_snapshot(LsmWindowsUiState *state,
     return true;
 }
 
-static void stop_process_worker(LsmWindowsUiState *state)
+static bool stop_process_worker(LsmWindowsUiState *state)
 {
-    if (!state || !state->process_lock_initialised) return;
+    if (!state || !state->process_lock_initialised) return true;
 
     EnterCriticalSection(&state->process_lock);
     state->process_stop_requested = true;
@@ -2581,11 +2582,14 @@ static void stop_process_worker(LsmWindowsUiState *state)
         (void)CancelSynchronousIo(state->process_thread);
         const DWORD stopped = WaitForSingleObject(state->process_thread, 500U);
         if (stopped != WAIT_OBJECT_0) {
-            /* Shutdown remains bounded. The worker references only this UI
-             * state and its private process backend; WinMain returns directly
-             * after teardown, so process termination safely reclaims a native
-             * query that ignored cancellation without freeing state beneath it. */
-            return;
+            /*
+             * Some native queries cannot be cancelled. Keep the process-worker
+             * synchronization objects and containing UI state alive until
+             * process exit instead of freeing memory that the worker can still
+             * dereference. The normal path below remains leak-free.
+             */
+            state->process_worker_abandoned = true;
+            return false;
         }
         CloseHandle(state->process_thread);
         state->process_thread = NULL;
@@ -2601,6 +2605,7 @@ static void stop_process_worker(LsmWindowsUiState *state)
     state->process_completed_ready = false;
     DeleteCriticalSection(&state->process_lock);
     state->process_lock_initialised = false;
+    return true;
 }
 
 static void refresh_processes(LsmWindowsUiState *state)
@@ -2999,12 +3004,13 @@ static void destroy_state(LsmWindowsUiState *state)
     if (!state) return;
 
     if (state->window) KillTimer(state->window, LSM_WINDOWS_TIMER_ID);
-    stop_process_worker(state);
+    const bool process_worker_stopped = stop_process_worker(state);
     lsm_process_list_free(state->processes);
     state->processes = NULL;
     state->process_count = 0U;
 
-    state->process_backend = NULL;
+    if (process_worker_stopped)
+        state->process_backend = NULL;
     lsm_overview_history_destroy(state->overview_history);
     state->overview_history = NULL;
 
@@ -3556,6 +3562,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     }
 
     const int status = (int)message.wParam;
-    free(state);
+    /*
+     * A process worker that ignored cancellation still owns process-related
+     * members of this state until process termination. Intentionally leave
+     * that one state allocation to the OS in this exceptional shutdown path;
+     * freeing it here would create a use-after-free race.
+     */
+    if (!state->process_worker_abandoned)
+        free(state);
     return status;
 }

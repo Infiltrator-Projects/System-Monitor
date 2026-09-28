@@ -575,7 +575,7 @@ static bool route_link_dump(LsmSystemSources *sources,
         return false;
 
     size_t count = 0U;
-    bool complete = false, failed = false;
+    bool complete = false, failed = false, overflow = false;
     while (!complete && !failed) {
         _Alignas(struct nlmsghdr) unsigned char buffer[32768];
         struct iovec vector = {.iov_base = buffer, .iov_len = sizeof(buffer)};
@@ -632,12 +632,19 @@ static bool route_link_dump(LsmSystemSources *sources,
                  RTA_OK(attribute, attribute_length);
                  attribute = RTA_NEXT(attribute, attribute_length))
                 apply_route_link_attribute(&record, attribute);
-            if (!record.name[0] || count >= capacity) continue;
+            if (!record.name[0]) continue;
+            if (count >= capacity) {
+                overflow = true;
+                continue;
+            }
             records[count++] = record;
         }
         if (!complete && !failed && remaining != 0) failed = true;
     }
-    if (!complete || failed) return false;
+    if (!complete || failed || overflow) {
+        if (overflow && !failed) errno = EOVERFLOW;
+        return false;
+    }
     *out_count = count;
     return true;
 }
@@ -775,13 +782,29 @@ bool lsm_sources_list_block_devices_checked(
     DIR *directory = opendir(root);
     if (!directory) return false;
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < capacity && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.' || ignored_block_name(entry->d_name)) continue;
         char device_path[LSM_PATH_LEN];
         if (!child_path(device_path, sizeof(device_path), root, entry->d_name, "") ||
             !directory_entry(device_path))
             continue;
+        if (count >= capacity) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         LsmBlockDeviceRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
@@ -808,7 +831,14 @@ bool lsm_sources_list_block_devices_checked(
         combine_identity(record->model, sizeof(record->model),
                          vendor, model, entry->d_name);
     }
-    if (closedir(directory) != 0) return false;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *out_count = count;
     return true;
 }
@@ -868,8 +898,12 @@ typedef struct {
 static bool collect_mount(const LsmMountInfoEntry *entry, void *user_data)
 {
     LsmMountCollector *collector = user_data;
-    if (!collector || collector->count >= collector->capacity) return false;
+    if (!collector) return false;
     if (entry->major_number == 0U) return true;
+    if (collector->count >= collector->capacity) {
+        errno = EOVERFLOW;
+        return false;
+    }
 
     LsmMountRecord *record = &collector->records[collector->count];
     memset(record, 0, sizeof(*record));
@@ -892,7 +926,7 @@ static bool collect_mount(const LsmMountInfoEntry *entry, void *user_data)
                             precise_filesystem);
     }
     collector->count++;
-    return collector->count < collector->capacity;
+    return true;
 }
 
 bool lsm_sources_list_mounts_checked(
@@ -970,8 +1004,19 @@ bool lsm_sources_list_partitions_checked(
         return false;
     }
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < capacity && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.') continue;
         char canonical[LSM_PATH_LEN], class_path[LSM_PATH_LEN];
         if (!child_path(class_path, sizeof(class_path), root, entry->d_name, "") ||
@@ -991,7 +1036,7 @@ bool lsm_sources_list_partitions_checked(
         }
         if (ignored_block_name(parent_name)) continue;
         bool has_mount = false;
-        for (size_t mi = 0U; mi < mount_count && count < capacity; mi++) {
+        for (size_t mi = 0U; mi < mount_count; mi++) {
             if (strcmp(mounts[mi].block_name, entry->d_name) != 0) continue;
             has_mount = true;
             char device[LSM_PATH_LEN], size_path[LSM_PATH_LEN];
@@ -1000,6 +1045,11 @@ bool lsm_sources_list_partitions_checked(
             uint64_t size_bytes = direct_block_size(sources, entry->d_name);
             if (!size_bytes && child_path(size_path, sizeof(size_path), root, entry->d_name, "/size"))
                 size_bytes = sector_count_bytes(lsm_read_u64_or_zero(size_path));
+            if (count >= capacity) {
+                complete = false;
+                enumeration_error = EOVERFLOW;
+                continue;
+            }
             count = append_partition_record(
                 records, count, capacity, device, mounts[mi].target,
                 mounts[mi].filesystem, parent_name, size_bytes, true);
@@ -1014,13 +1064,24 @@ bool lsm_sources_list_partitions_checked(
         char filesystem[64] = "";
         (void)filesystem_label_from_device_database(
             sources, entry->d_name, filesystem, sizeof(filesystem));
+        if (count >= capacity) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         count = append_partition_record(
             records, count, capacity, device, "", filesystem,
             parent_name, size_bytes, false);
     }
-    const bool close_ok = closedir(directory) == 0;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
     free(mounts);
-    if (!close_ok) return false;
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *out_count = count;
     return true;
 }
@@ -1047,9 +1108,25 @@ static bool list_networks_sysfs_checked(
     DIR *directory = opendir(root);
     if (!directory) return false;
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < capacity && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.' || strcmp(entry->d_name, "lo") == 0) continue;
+        if (count >= capacity) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), entry->d_name);
@@ -1066,7 +1143,14 @@ static bool list_networks_sysfs_checked(
         native_device_identity(hardware, record->product, sizeof(record->product),
                                record->vendor, sizeof(record->vendor));
     }
-    if (closedir(directory) != 0) return false;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *out_count = count;
     return true;
 }
@@ -1082,8 +1166,19 @@ static bool network_counters_sysfs_checked(
     DIR *directory = opendir(root);
     if (!directory) return false;
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < capacity && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (entry->d_name[0] == '.' || strcmp(entry->d_name, "lo") == 0) continue;
         char path[LSM_PATH_LEN];
         uint64_t rx_bytes = 0U, tx_bytes = 0U;
@@ -1092,6 +1187,11 @@ static bool network_counters_sysfs_checked(
             !child_path(path, sizeof(path), root, entry->d_name, "/statistics/tx_bytes") ||
             !lsm_read_u64_file(path, &tx_bytes))
             continue;
+        if (count >= capacity) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         lsm_copy_string(records[count].name, sizeof(records[count].name), entry->d_name);
         char mac[32] = "";
         if (child_path(path, sizeof(path), root, entry->d_name, "/address"))
@@ -1103,7 +1203,14 @@ static bool network_counters_sysfs_checked(
         records[count].tx_bytes = tx_bytes;
         count++;
     }
-    if (closedir(directory) != 0) return false;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *out_count = count;
     return true;
 }
@@ -1121,10 +1228,14 @@ bool lsm_sources_list_networks_checked(
     size_t link_count = 0U;
     if (!route_link_dump(sources, links, LSM_MAX_NETS, &link_count))
         return list_networks_sysfs_checked(sources, records, capacity, out_count);
+    if (link_count > capacity) {
+        errno = EOVERFLOW;
+        return false;
+    }
     size_t count = 0U;
     char root[LSM_PATH_LEN];
     if (!lsm_join_path(root, sizeof(root), sources->sysfs_root, "/class/net")) return false;
-    for (size_t index = 0U; index < link_count && count < capacity; index++) {
+    for (size_t index = 0U; index < link_count; index++) {
         LsmNetworkRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->name, sizeof(record->name), links[index].name);
@@ -1165,8 +1276,12 @@ bool lsm_sources_read_network_counters_checked(
     if (!route_link_dump(sources, links, LSM_MAX_NETS, &link_count))
         return network_counters_sysfs_checked(sources, records, capacity, out_count);
     size_t count = 0U;
-    for (size_t index = 0U; index < link_count && count < capacity; index++) {
+    for (size_t index = 0U; index < link_count; index++) {
         if (!links[index].counters_available) continue;
+        if (count >= capacity) {
+            errno = EOVERFLOW;
+            return false;
+        }
         lsm_copy_string(records[count].name, sizeof(records[count].name), links[index].name);
         network_instance_identity(links[index].ifindex, links[index].name, links[index].mac,
                                   records[count].instance_identity,
@@ -1249,8 +1364,19 @@ bool lsm_sources_list_gpus_checked(
         return false;
     }
     size_t count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while (count < capacity && (entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         const char *card = entry->d_name;
         if (!lsm_string_starts_with(card, "card") ||
             !lsm_ascii_is_digit((unsigned char)card[4]) || strchr(card, '-'))
@@ -1259,6 +1385,11 @@ bool lsm_sources_list_gpus_checked(
         if (!child_path(class_device, sizeof(class_device), root, card, "/device") ||
             !hardware_parent(class_device, hardware, sizeof(hardware)))
             continue;
+        if (count >= capacity) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         LsmGpuRecord *record = &records[count++];
         memset(record, 0, sizeof(*record));
         lsm_copy_string(record->card, sizeof(record->card), card);
@@ -1270,7 +1401,14 @@ bool lsm_sources_list_gpus_checked(
             (void)read_symlink_basename(driver_path, record->driver, sizeof(record->driver));
         if (!record->driver[0]) lsm_copy_string(record->driver, sizeof(record->driver), "unknown");
     }
-    if (closedir(directory) != 0) return false;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     *out_count = count;
     return true;
 }

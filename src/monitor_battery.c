@@ -219,7 +219,7 @@ static void apply_bluetooth_details(
 }
 
 /* BlueZ records enrich or append Bluetooth devices without blocking GTK. */
-static void merge_bluez_batteries(LsmMonitor *monitor)
+static bool merge_bluez_batteries(LsmMonitor *monitor)
 {
     LsmBluetoothBatteryRecord records[LSM_BLUETOOTH_BATTERY_MAX] = {0};
     const size_t count = lsm_bluetooth_battery_snapshot(
@@ -237,7 +237,10 @@ static void merge_bluez_batteries(LsmMonitor *monitor)
             apply_bluetooth_details(battery, record);
             continue;
         }
-        if (monitor->battery_count >= LSM_MAX_BATTERIES) break;
+        if (monitor->battery_count >= LSM_MAX_BATTERIES) {
+            errno = EOVERFLOW;
+            return false;
+        }
 
         battery = &monitor->batteries[monitor->battery_count++];
         memset(battery, 0, sizeof(*battery));
@@ -260,6 +263,7 @@ static void merge_bluez_batteries(LsmMonitor *monitor)
         if (state) state->bluez_record = true;
         battery->present = record->connected;
     }
+    return true;
 }
 
 void lsm_bluetooth_enumerate(LsmMonitor *monitor)
@@ -428,17 +432,38 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
     if (!directory && errno != ENOENT)
         return false;
 
-    monitor->battery_count = 0U;
+    LsmBatteryInfo previous_batteries[LSM_MAX_BATTERIES];
+    memcpy(previous_batteries, monitor->batteries, sizeof(previous_batteries));
+    const size_t previous_battery_count = monitor->battery_count;
+
     LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
+    LsmLinuxBatteryState previous_states[LSM_MAX_BATTERIES];
+    size_t previous_state_count = 0U;
+    if (backend) {
+        memcpy(previous_states, backend->batteries, sizeof(previous_states));
+        previous_state_count = backend->battery_count;
+    }
+
+    monitor->battery_count = 0U;
     if (backend) {
         memset(backend->batteries, 0, sizeof(backend->batteries));
         backend->battery_count = 0U;
     }
 
+    bool complete = true;
+    int enumeration_error = 0;
     if (directory) {
-        struct dirent *entry;
-        while ((entry = readdir(directory)) &&
-               monitor->battery_count < LSM_MAX_BATTERIES) {
+        struct dirent *entry = NULL;
+        for (;;) {
+            errno = 0;
+            entry = readdir(directory);
+            if (!entry) {
+                if (errno != 0) {
+                    complete = false;
+                    enumeration_error = errno;
+                }
+                break;
+            }
             if (entry->d_name[0] == '.') continue;
             char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
             if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
@@ -446,6 +471,12 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
                 !lsm_read_text_file(path, type, sizeof(type)) ||
                 strcmp(type, "Battery") != 0)
                 continue;
+
+            if (monitor->battery_count >= LSM_MAX_BATTERIES) {
+                complete = false;
+                enumeration_error = EOVERFLOW;
+                continue;
+            }
 
             LsmBatteryInfo *battery =
                 &monitor->batteries[monitor->battery_count++];
@@ -487,10 +518,30 @@ bool lsm_battery_enumerate(LsmMonitor *monitor)
                                     "Logitech HID++");
             }
         }
-        if (closedir(directory) != 0)
-            return false;
+        if (closedir(directory) != 0 && complete) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : EIO;
+        }
     }
-    merge_bluez_batteries(monitor);
+
+    if (complete && !merge_bluez_batteries(monitor)) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EOVERFLOW;
+    }
+
+    if (!complete) {
+        memcpy(monitor->batteries, previous_batteries,
+               sizeof(previous_batteries));
+        monitor->battery_count = previous_battery_count;
+        if (backend) {
+            memcpy(backend->batteries, previous_states,
+                   sizeof(previous_states));
+            backend->battery_count = previous_state_count;
+        }
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
+
     track_hidpp_batteries(monitor);
     return true;
 }

@@ -207,25 +207,35 @@ static gboolean scan_directory(const char *directory, gboolean user_entry,
     DIR *dir = opendir(directory);
     if (!dir) return errno == ENOENT;
 
+    bool complete = true;
     struct dirent *item = NULL;
-    while ((item = readdir(dir))) {
+    for (;;) {
+        errno = 0;
+        item = readdir(dir);
+        if (!item) {
+            if (errno != 0) complete = false;
+            break;
+        }
         if (strlen(item->d_name) <= sizeof(".desktop") - 1U ||
             !lsm_string_ends_with(item->d_name, ".desktop"))
             continue;
         if (find_entry(*entries, *count, item->d_name) >= 0) continue;
 
         char path[LSM_PATH_LEN];
-        if (!lsm_join_path(path, sizeof(path), directory, item->d_name))
-            continue;
+        if (!lsm_join_path(path, sizeof(path), directory, item->d_name)) {
+            errno = ENAMETOOLONG;
+            complete = false;
+            break;
+        }
         LsmStartupEntry entry;
         if (load_startup_entry(path, item->d_name, user_entry, &entry) &&
             !append_entry(entries, count, capacity, &entry)) {
-            closedir(dir);
+            (void)closedir(dir);
             return FALSE;
         }
     }
-    closedir(dir);
-    return TRUE;
+    if (closedir(dir) != 0) complete = false;
+    return complete ? TRUE : FALSE;
 }
 
 bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,

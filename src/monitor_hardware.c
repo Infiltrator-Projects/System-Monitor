@@ -662,10 +662,26 @@ static bool enumerate_npus(LsmMonitor *monitor)
     LsmNpuInfo discovered[LSM_MAX_NPUS];
     memset(discovered, 0, sizeof(discovered));
     size_t count = 0U;
-    struct dirent *entry;
-    while ((entry = readdir(directory)) && count < LSM_MAX_NPUS) {
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         if (!lsm_string_starts_with(entry->d_name, "accel") ||
             !lsm_ascii_is_digit((unsigned char)entry->d_name[5])) continue;
+        if (count >= LSM_MAX_NPUS) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            continue;
+        }
         LsmNpuInfo *npu = &discovered[count];
         lsm_copy_string(npu->display_identifier, sizeof(npu->display_identifier),
                         entry->d_name);
@@ -716,7 +732,14 @@ static bool enumerate_npus(LsmMonitor *monitor)
         }
         count++;
     }
-    if (closedir(directory) != 0) return false;
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     memcpy(monitor->npus, discovered, count * sizeof(discovered[0]));
     if (count < LSM_MAX_NPUS)
         memset(&monitor->npus[count], 0,

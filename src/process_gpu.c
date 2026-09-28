@@ -22,6 +22,7 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -55,11 +56,11 @@ static char *field_value(char *line)
     return value;
 }
 
-static void add_engine(LsmProcessGpuEngine *engines, size_t *count,
+static bool add_engine(LsmProcessGpuEngine *engines, size_t *count,
                        const char *name, uint64_t time_ns,
                        unsigned capacity, bool have_time)
 {
-    if (!engines || !count || !name || !*name) return;
+    if (!engines || !count || !name || !*name) return false;
     for (size_t index = 0U; index < *count; index++) {
         if (strcmp(engines[index].name, name) != 0) continue;
         if (have_time) {
@@ -69,38 +70,42 @@ static void add_engine(LsmProcessGpuEngine *engines, size_t *count,
         }
         if (capacity > engines[index].capacity)
             engines[index].capacity = capacity;
-        return;
+        return true;
     }
-    if (*count >= LSM_PROCESS_GPU_MAX_ENGINES) return;
+    if (*count >= LSM_PROCESS_GPU_MAX_ENGINES) return false;
     LsmProcessGpuEngine *engine = &engines[(*count)++];
     memset(engine, 0, sizeof(*engine));
     lsm_copy_string(engine->name, sizeof(engine->name), name);
     engine->time_ns = time_ns;
     engine->capacity = capacity > 0U ? capacity : 1U;
     engine->time_available = have_time;
+    return true;
 }
 
-static void set_memory_region(LsmDrmClient *client, const char *name,
+static bool set_memory_region(LsmDrmClient *client, const char *name,
                               uint64_t bytes, bool resident)
 {
-    if (!client || !name || !*name) return;
+    if (!client || !name || !*name) return false;
     for (size_t index = 0U; index < client->region_count; index++) {
         LsmDrmMemoryRegion *region = &client->regions[index];
         if (strcmp(region->name, name) != 0) continue;
         if (resident || !region->resident_preferred) region->bytes = bytes;
         region->resident_preferred = region->resident_preferred || resident;
-        return;
+        return true;
     }
-    if (client->region_count >= LSM_PROCESS_GPU_MAX_REGIONS) return;
+    if (client->region_count >= LSM_PROCESS_GPU_MAX_REGIONS) return false;
     LsmDrmMemoryRegion *region = &client->regions[client->region_count++];
     memset(region, 0, sizeof(*region));
     lsm_copy_string(region->name, sizeof(region->name), name);
     region->bytes = bytes;
     region->resident_preferred = resident;
+    return true;
 }
 
-static bool read_client_file(const char *path, LsmDrmClient *client)
+static bool read_client_file(const char *path, LsmDrmClient *client,
+                             bool *complete)
 {
+    if (complete) *complete = true;
     FILE *file = fopen(path, "r");
     if (!file) return false;
 
@@ -135,11 +140,14 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
                 capacity == 0U)
                 continue;
             *separator = '\0';
-            add_engine(client->engines, &client->engine_count,
-                       line + 20U, 0U,
-                       capacity > (uint64_t)UINT_MAX
-                           ? UINT_MAX : (unsigned)capacity,
-                       false);
+            if (!add_engine(client->engines, &client->engine_count,
+                            line + 20U, 0U,
+                            capacity > (uint64_t)UINT_MAX
+                                ? UINT_MAX : (unsigned)capacity,
+                            false) && complete) {
+                *complete = false;
+                errno = EOVERFLOW;
+            }
         } else if (lsm_string_starts_with(line, "drm-engine-")) {
             char *separator = strchr(line, ':');
             uint64_t time_ns = 0U;
@@ -147,8 +155,11 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
             if (!cursor || !lsm_parse_u64_token(&cursor, 10U, &time_ns))
                 continue;
             *separator = '\0';
-            add_engine(client->engines, &client->engine_count,
-                       line + 11U, time_ns, 1U, true);
+            if (!add_engine(client->engines, &client->engine_count,
+                            line + 11U, time_ns, 1U, true) && complete) {
+                *complete = false;
+                errno = EOVERFLOW;
+            }
             recognised = true;
         } else if (lsm_string_starts_with(line, "drm-resident-") ||
                    lsm_string_starts_with(line, "drm-memory-")) {
@@ -161,12 +172,20 @@ static bool read_client_file(const char *path, LsmDrmClient *client)
                 !infiltratr_parse_binary_quantity_u64(value, &bytes))
                 continue;
             *separator = '\0';
-            set_memory_region(client, line + prefix, bytes, resident);
+            if (!set_memory_region(client, line + prefix, bytes, resident) &&
+                complete) {
+                *complete = false;
+                errno = EOVERFLOW;
+            }
             client->memory_available = true;
             recognised = true;
         }
     }
-    fclose(file);
+    const bool read_complete = ferror(file) == 0;
+    if (fclose(file) != 0 || !read_complete) {
+        if (complete) *complete = false;
+        if (errno == 0) errno = EIO;
+    }
     if (!recognised) return false;
 
     (void)snprintf(client->device_key, sizeof(client->device_key), "%s:%s",
@@ -203,8 +222,19 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
 
     char seen[LSM_PROCESS_GPU_MAX_CLIENTS][192];
     size_t seen_count = 0U;
+    bool complete = true;
+    int enumeration_error = 0;
     struct dirent *entry = NULL;
-    while ((entry = readdir(directory))) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
         uint64_t descriptor = 0U;
         if (!lsm_parse_u64_range(entry->d_name, 10U, 0U,
                                  (uint64_t)INT_MAX, &descriptor))
@@ -214,13 +244,26 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
             continue;
         LsmDrmClient client;
         memset(&client, 0, sizeof(client));
-        if (!read_client_file(path, &client) ||
-            client_seen(seen, seen_count, client.key))
+        bool client_complete = true;
+        const bool recognised =
+            read_client_file(path, &client, &client_complete);
+        if (!client_complete) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : EOVERFLOW;
+            break;
+        }
+        if (!recognised)
+            continue;
+        if (client_seen(seen, seen_count, client.key))
             continue;
         /* Every accumulated client must also have a retained deduplication
          * key. Stop at the bounded working set instead of accepting clients
          * that subsequent descriptors could count again. */
-        if (seen_count >= LSM_PROCESS_GPU_MAX_CLIENTS) break;
+        if (seen_count >= LSM_PROCESS_GPU_MAX_CLIENTS) {
+            complete = false;
+            enumeration_error = EOVERFLOW;
+            break;
+        }
         lsm_copy_string(seen[seen_count], sizeof(seen[seen_count]),
                         client.key);
         seen_count++;
@@ -229,17 +272,30 @@ bool lsm_process_gpu_read(const char *proc_root, LsmProcessId pid,
             char engine_key[256];
             (void)snprintf(engine_key, sizeof(engine_key), "%.120s:%.120s",
                            client.device_key, client.engines[index].name);
-            add_engine(snapshot->engines, &snapshot->engine_count,
-                       engine_key, client.engines[index].time_ns,
-                       client.engines[index].capacity, true);
+            if (!add_engine(snapshot->engines, &snapshot->engine_count,
+                            engine_key, client.engines[index].time_ns,
+                            client.engines[index].capacity, true)) {
+                complete = false;
+                enumeration_error = EOVERFLOW;
+                break;
+            }
         }
+        if (!complete) break;
         for (size_t index = 0U; index < client.region_count; index++)
             snapshot->memory_bytes = lsm_u64_add_saturating(
                 snapshot->memory_bytes, client.regions[index].bytes);
         snapshot->memory_available = snapshot->memory_available ||
                                      client.memory_available;
     }
-    closedir(directory);
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        memset(snapshot, 0, sizeof(*snapshot));
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
     snapshot->engine_counters_available = snapshot->engine_count > 0U;
     return snapshot->engine_counters_available || snapshot->memory_available;
 }

@@ -19,6 +19,7 @@
 #include "ui_helpers.h"
 
 #include <gio/gio.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -30,6 +31,7 @@ typedef struct {
     char *path;
     LsmFileUserInfo *items;
     size_t count;
+    int failure;
 } FileUsersResult;
 
 static void show_file_users_results(GtkWindow *parent, const char *path,
@@ -109,8 +111,9 @@ static void file_users_worker(GTask *task, gpointer source_object,
     const FileUsersRequest *request = task_data;
     FileUsersResult *result = g_new0(FileUsersResult, 1U);
     result->path = g_strdup(request->path);
-    result->count = lsm_process_inspection_find_file_users(
-        request->path, &result->items);
+    if (!lsm_process_inspection_find_file_users_checked(
+            request->path, &result->items, &result->count))
+        result->failure = errno != 0 ? errno : EIO;
     g_task_return_pointer(task, result, file_users_result_free);
 }
 
@@ -122,9 +125,15 @@ static void file_users_complete(GObject *source_object,
     FileUsersResult *result =
         g_task_propagate_pointer(G_TASK(async_result), NULL);
     if (result && source_object &&
-        gtk_widget_get_mapped((GtkWidget *)source_object))
-        show_file_users_results(GTK_WINDOW(source_object), result->path,
-                                result->items, result->count);
+        gtk_widget_get_mapped((GtkWidget *)source_object)) {
+        if (result->failure != 0)
+            lsm_ui_show_error(GTK_WINDOW(source_object),
+                              "Unable to complete file-user search", "%s",
+                              g_strerror(result->failure));
+        else
+            show_file_users_results(GTK_WINDOW(source_object), result->path,
+                                    result->items, result->count);
+    }
     file_users_result_free(result);
 }
 

@@ -85,10 +85,13 @@ typedef struct {
     gboolean details_valid;
     LsmOpenFileInfo *open_files;
     size_t open_file_count;
+    gboolean open_files_valid;
     LsmMemoryMapInfo *maps;
     size_t map_count;
+    gboolean maps_valid;
     LsmThreadInfo *threads;
     size_t thread_count;
+    gboolean threads_valid;
 } ProcessInventoryResult;
 
 #define LSM_INSPECTOR_OBJECT_KEY "lsm-process-inspector"
@@ -245,7 +248,8 @@ static void process_inventory_result_free(gpointer data)
 }
 
 static void present_open_files(ProcessInspector *inspector,
-                               const LsmOpenFileInfo *items, size_t count)
+                               const LsmOpenFileInfo *items, size_t count,
+                               gboolean complete)
 {
     gtk_list_store_clear(inspector->open_files_store);
     for (size_t index = 0U; index < count; index++) {
@@ -257,17 +261,18 @@ static void present_open_files(ProcessInspector *inspector,
                            0, descriptor, 1, items[index].kind,
                            2, items[index].target, -1);
     }
-    if (count != 0U)
+    if (!complete)
+        lsm_ui_set_label_text(inspector->open_files_status,
+            "Open-descriptor inventory unavailable or incomplete");
+    else
         lsm_ui_set_label_text(inspector->open_files_status,
                               "%zu open descriptor%s", count,
                               count == 1U ? "" : "s");
-    else
-        lsm_ui_set_label_text(inspector->open_files_status,
-            "No readable descriptors — the process may have exited or access may be restricted");
 }
 
 static void present_maps(ProcessInspector *inspector,
-                         const LsmMemoryMapInfo *items, size_t count)
+                         const LsmMemoryMapInfo *items, size_t count,
+                         gboolean complete)
 {
     gtk_list_store_clear(inspector->maps_store);
     for (size_t index = 0U; index < count; index++) {
@@ -309,17 +314,18 @@ static void present_maps(ProcessInspector *inspector,
                            8, shared_clean, 9, shared_dirty,
                            10, items[index].device, 11, inode, -1);
     }
-    if (count != 0U)
+    if (!complete)
+        lsm_ui_set_label_text(inspector->maps_status,
+                              "Memory-map inventory unavailable or incomplete");
+    else
         lsm_ui_set_label_text(inspector->maps_status,
                               "%zu virtual-memory area%s", count,
                               count == 1U ? "" : "s");
-    else
-        lsm_ui_set_label_text(inspector->maps_status,
-            "Memory map unavailable — the process may have exited or access may be restricted");
 }
 
 static void present_threads(ProcessInspector *inspector,
-                            const LsmThreadInfo *items, size_t count)
+                            const LsmThreadInfo *items, size_t count,
+                            gboolean complete)
 {
     gtk_list_store_clear(inspector->threads_store);
     for (size_t index = 0U; index < count; index++) {
@@ -332,12 +338,12 @@ static void present_threads(ProcessInspector *inspector,
                            0, tid, 1, items[index].name,
                            2, items[index].state, -1);
     }
-    if (count != 0U)
+    if (!complete)
+        lsm_ui_set_label_text(inspector->threads_status,
+                              "Thread inventory unavailable or incomplete");
+    else
         lsm_ui_set_label_text(inspector->threads_status, "%zu thread%s", count,
                               count == 1U ? "" : "s");
-    else
-        lsm_ui_set_label_text(inspector->threads_status,
-                              "Thread information unavailable");
 }
 
 static void populate_family(ProcessInspector *inspector)
@@ -423,12 +429,12 @@ static void process_inventory_worker(GTask *task, gpointer source_object,
         result->details = details;
         result->details_valid = TRUE;
     }
-    result->open_file_count = lsm_process_inspection_open_files(
-        request->pid, &result->open_files);
-    result->map_count = lsm_process_inspection_memory_maps(
-        request->pid, &result->maps);
-    result->thread_count = lsm_process_inspection_threads(
-        request->pid, &result->threads);
+    result->open_files_valid = lsm_process_inspection_open_files_checked(
+        request->pid, &result->open_files, &result->open_file_count);
+    result->maps_valid = lsm_process_inspection_memory_maps_checked(
+        request->pid, &result->maps, &result->map_count);
+    result->threads_valid = lsm_process_inspection_threads_checked(
+        request->pid, &result->threads, &result->thread_count);
     result->identity_valid = lsm_process_inspection_identity_matches(
         request->pid, request->instance_id);
     g_task_return_pointer(task, result, process_inventory_result_free);
@@ -463,9 +469,12 @@ static void process_inventory_complete(GObject *source_object,
     inspector->technical_details_valid = result->details_valid;
     if (result->details_valid)
         inspector->technical_details = result->details;
-    present_open_files(inspector, result->open_files, result->open_file_count);
-    present_maps(inspector, result->maps, result->map_count);
-    present_threads(inspector, result->threads, result->thread_count);
+    present_open_files(inspector, result->open_files, result->open_file_count,
+                       result->open_files_valid);
+    present_maps(inspector, result->maps, result->map_count,
+                 result->maps_valid);
+    present_threads(inspector, result->threads, result->thread_count,
+                    result->threads_valid);
     populate_family(inspector);
     process_inventory_result_free(result);
 }
