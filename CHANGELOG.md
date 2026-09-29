@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.150 - 2026-09-29
+
+- Keep ordinary GTK button foreground-state rules scoped to each button's direct label/icon child so hovered, active or disabled composite controls cannot overwrite the semantic text colours of nested Overview content.
+- Preserve Night-mode readability for CPU, Memory, Disk, Network, GPU, temperature and pressure cards while retaining the normal button hover treatment for simple controls.
+- Add a source-policy regression that rejects broad descendant button-state selectors in the shell theme.
+
 ## 1.0.149 - 2026-09-29
 
 - Restore the strict C17 build after the grouped-process filter optimisation by removing its const-discarding pointer-array access.

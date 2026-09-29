@@ -549,6 +549,35 @@ static void check_startup_page_boundary(const char *path, const char *text)
     }
 }
 
+static void check_composite_button_theme_policy(const char *path,
+                                                const char *text)
+{
+    if (strcmp(path, "src/app_shell.c") != 0) return;
+
+    static const char *const forbidden[] = {
+        "\"button label, button image, combobox button label, combobox button image {\"",
+        "\"button:hover label, button:hover image {\"",
+        "\"button:active label, button:active image,\"",
+        "\"button:checked label, button:checked image {\"",
+        "\"button:disabled label, button:disabled image {\""
+    };
+    for (size_t index = 0U;
+         index < sizeof(forbidden) / sizeof(forbidden[0]); index++) {
+        const char *found = strstr(text, forbidden[index]);
+        if (found)
+            report_error(
+                "%s:%zu: button state selector must not recolour nested composite content",
+                path, line_number_at(text, found));
+    }
+
+    static const char required[] =
+        "\"button:hover > label, button:hover > image { color: @lsm_button_foreground; }\"";
+    if (!strstr(text, required))
+        report_error(
+            "%s: composite-button hover policy is missing its direct-child selector",
+            path);
+}
+
 static void check_process_platform_boundary(const char *path, const char *text)
 {
     static const char *const contract_files[] = {
@@ -635,6 +664,7 @@ static void check_source_file(const char *path)
     check_user_page_boundary(path, text);
     check_startup_page_boundary(path, text);
     check_process_platform_boundary(path, text);
+    check_composite_button_theme_policy(path, text);
 
     size_t line_number = 1U;
     const char *line_start = text;
