@@ -104,20 +104,26 @@ int main(void)
 {
     LsmServiceEntry *services = NULL;
     size_t count = 0, capacity = 0;
+    GHashTable *service_index =
+        g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    assert(service_index != NULL);
     GVariant *units = sample_units();
-    merge_loaded_units(units, &services, &count, &capacity);
+    assert(merge_loaded_units(
+        units, &services, &count, &capacity, service_index));
     g_variant_unref(units);
     GVariant *files = sample_unit_files();
-    merge_unit_files(files, &services, &count, &capacity);
+    assert(merge_unit_files(
+        files, &services, &count, &capacity, service_index));
     g_variant_unref(files);
     assert(count == 2);
-    ssize_t alpha = service_find(services, count, "alpha.service");
-    ssize_t beta = service_find(services, count, "beta.service");
+    ssize_t alpha = service_find(service_index, count, "alpha.service");
+    ssize_t beta = service_find(service_index, count, "beta.service");
     assert(alpha >= 0 && beta >= 0);
     assert(strcmp(services[alpha].description, "Alpha Service") == 0);
     assert(strcmp(services[alpha].active, "active") == 0);
     assert(strcmp(services[alpha].startup, "enabled") == 0);
     assert(strcmp(services[beta].startup, "disabled") == 0);
+    g_hash_table_destroy(service_index);
     free(services);
 
     GVariant *sessions_reply = sample_sessions();
