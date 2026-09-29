@@ -578,6 +578,27 @@ static void check_composite_button_theme_policy(const char *path,
             path);
 }
 
+
+static void check_day_menu_theme_policy(const char *path, const char *text)
+{
+    if (strcmp(path, "src/app_shell.c") != 0) return;
+
+    static const char *const required[] = {
+        "\"menu menuitem label { color: #111418; }\"",
+        "\"menu menuitem:disabled label { color: #59636c; }\"",
+        "\"menu menuitem:hover label { color: #111418; }\"",
+        "\"popover.menu modelbutton:disabled,\"",
+        "\"menu separator { background-color: #c7cdd3; min-height: 1px; }\""
+    };
+    for (size_t index = 0U;
+         index < sizeof(required) / sizeof(required[0]); index++) {
+        if (!strstr(text, required[index]))
+            report_error(
+                "%s: Day-mode menu contrast contract is missing required selector %s",
+                path, required[index]);
+    }
+}
+
 static void check_process_platform_boundary(const char *path, const char *text)
 {
     static const char *const contract_files[] = {
@@ -665,6 +686,7 @@ static void check_source_file(const char *path)
     check_startup_page_boundary(path, text);
     check_process_platform_boundary(path, text);
     check_composite_button_theme_policy(path, text);
+    check_day_menu_theme_policy(path, text);
 
     size_t line_number = 1U;
     const char *line_start = text;

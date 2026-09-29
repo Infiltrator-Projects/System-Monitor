@@ -921,14 +921,43 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}");
 
     /*
-     * Day mode deliberately calms the Overview surfaces without touching the
-     * Night palette. Semantic colours remain on graphs, gauges and icons; the
-     * cards themselves use a common neutral face with restrained category
-     * borders so the data, rather than the chrome, carries the colour.
+     * Day mode deliberately calms the Overview surfaces and gives menus an
+     * explicit high-contrast face without touching the Night palette.
+     * Semantic colours remain on graphs, gauges and icons; neutral chrome
+     * keeps the data legible while disabled menu actions remain visibly muted.
      */
     if (!night_theme) {
         g_string_append(
             css,
+            "menubar > menuitem, menubar > menuitem label { color: #20252b; }"
+            "menubar > menuitem:hover {"
+            " background-image: none; background-color: #eef3f6; color: #111418;"
+            "}"
+            "menubar > menuitem:hover label { color: #111418; }"
+            "menu {"
+            " background-image: none; background-color: #ffffff;"
+            " color: #111418; border-color: #b8c1c9;"
+            "}"
+            "menu menuitem { color: #111418; }"
+            "menu menuitem label { color: #111418; }"
+            "menu menuitem:hover {"
+            " background-image: none; background-color: #dceaf2; color: #111418;"
+            "}"
+            "menu menuitem:hover label { color: #111418; }"
+            "menu menuitem:disabled { color: #59636c; }"
+            "menu menuitem:disabled label { color: #59636c; }"
+            "menu menuitem check, menu menuitem radio { color: #20252b; }"
+            "menu menuitem:disabled check, menu menuitem:disabled radio { color: #737d86; }"
+            "menu separator { background-color: #c7cdd3; min-height: 1px; }"
+            "popover.menu {"
+            " background-image: none; background-color: #ffffff;"
+            " color: #111418; border-color: #b8c1c9;"
+            "}"
+            "popover.menu modelbutton, popover.menu modelbutton label { color: #111418; }"
+            "popover.menu modelbutton:hover { background-color: #dceaf2; color: #111418; }"
+            "popover.menu modelbutton:hover label { color: #111418; }"
+            "popover.menu modelbutton:disabled,"
+            "popover.menu modelbutton:disabled label { color: #59636c; }"
             ".lsm-overview-card {"
             " background-image: none; background-color: @lsm_card;"
             " box-shadow: 0 1px 5px alpha(#000000, 0.07);"

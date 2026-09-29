@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.153 - 2026-09-29
+
+- Give Day-mode menu bars, popup menus and menu popovers an explicit high-contrast light palette instead of relying on inherited GTK theme colours.
+- Keep normal and hovered menu text dark, make disabled actions visibly muted rather than nearly invisible, and strengthen popup separators and borders.
+- Leave the Night-mode menu path unchanged and add a source-policy regression for the Day-mode menu contrast selectors.
+
 ## 1.0.152 - 2026-09-29
 
 - Refine Overview Day mode with neutral card surfaces, lighter shadows and substantially quieter category borders while preserving the vivid graph, gauge and icon colours.
