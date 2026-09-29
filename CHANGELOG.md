@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.151 - 2026-09-29
+
+- Make central APT publication part of the release contract instead of reporting success after a single catalogue check.
+- Dispatch verified System Monitor releases directly to Infiltrator-Repository when the cross-repository token is available.
+- Fall back to the central five-minute publisher when immediate dispatch is unavailable, but keep the release workflow running until the exact System Monitor version is visible in the APT catalogue or fail after 20 minutes.
+
 ## 1.0.150 - 2026-09-29
 
 - Keep ordinary GTK button foreground-state rules scoped to each button's direct label/icon child so hovered, active or disabled composite controls cannot overwrite the semantic text colours of nested Overview content.
