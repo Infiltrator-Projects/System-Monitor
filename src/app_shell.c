@@ -490,6 +490,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     }
 
     const gboolean system_dark = lsm_system_prefers_dark();
+    const gboolean night_theme =
+        app->runtime.theme_mode == INFILTRATR_THEME_NIGHT ||
+        (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
     const InfiltratrTypography *typography = infiltratr_typography();
@@ -916,6 +919,43 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " background-color: alpha(@lsm_fault, 0.08);"
         " border-color: alpha(@lsm_fault, 0.38); color: @lsm_fault;"
         "}");
+
+    /*
+     * Day mode deliberately calms the Overview surfaces without touching the
+     * Night palette. Semantic colours remain on graphs, gauges and icons; the
+     * cards themselves use a common neutral face with restrained category
+     * borders so the data, rather than the chrome, carries the colour.
+     */
+    if (!night_theme) {
+        g_string_append(
+            css,
+            ".lsm-overview-card {"
+            " background-image: none; background-color: @lsm_card;"
+            " box-shadow: 0 1px 5px alpha(#000000, 0.07);"
+            " border-color: alpha(@lsm_border, 0.78);"
+            "}"
+            ".lsm-overview-card:hover {"
+            " box-shadow: 0 2px 9px alpha(#000000, 0.10);"
+            "}"
+            ".lsm-overview-stat-caption { color: @lsm_summary; }"
+            ".lsm-overview-cpu { border-color: alpha(#00adef, 0.24); }"
+            ".lsm-overview-memory { border-color: alpha(#8a63ff, 0.24); }"
+            ".lsm-overview-disk { border-color: alpha(#72d93c, 0.20); }"
+            ".lsm-overview-network { border-color: alpha(#ff5aa9, 0.21); }"
+            ".lsm-overview-gpu { border-color: alpha(#de68f2, 0.23); }"
+            ".lsm-overview-temperature { border-color: alpha(#ffae42, 0.23); }"
+            ".lsm-overview-cpu-pressure { border-color: alpha(#00adef, 0.16); }"
+            ".lsm-overview-memory-pressure { border-color: alpha(#7c5cff, 0.16); }"
+            ".lsm-overview-io-pressure { border-color: alpha(#64d946, 0.16); }"
+            "#lsm-overview-process-card {"
+            " background-image: none; background-color: @lsm_card;"
+            "}"
+            ".lsm-overview-process-row {"
+            " background-image: linear-gradient(to right,"
+            " alpha(@lsm_neutral, 0.035), alpha(@lsm_card, 0.01));"
+            " border-color: alpha(@lsm_border, 0.60);"
+            "}");
+    }
 
     g_string_append_printf(
         css,

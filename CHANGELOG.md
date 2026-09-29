@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.152 - 2026-09-29
+
+- Refine Overview Day mode with neutral card surfaces, lighter shadows and substantially quieter category borders while preserving the vivid graph, gauge and icon colours.
+- Increase the contrast of small Day-mode Overview stat captions for easier reading.
+- Keep Night mode on its existing palette and styling path unchanged, including when Follow system resolves to a dark desktop.
+
 ## 1.0.151 - 2026-09-29
 
 - Make central APT publication part of the release contract instead of reporting success after a single catalogue check.
