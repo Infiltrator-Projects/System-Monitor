@@ -959,7 +959,7 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
                 write_delta = process->write_bytes - sample->write_bytes;
         } else {
             LsmHistoryProcessKey *stored_key =
-                g_new(LsmHistoryProcessKey, 1);
+                g_new0(LsmHistoryProcessKey, 1);
             sample = g_new0(LsmHistorySample, 1);
             if (!stored_key || !sample) {
                 g_free(stored_key);

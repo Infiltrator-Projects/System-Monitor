@@ -17,6 +17,7 @@
 #include "common.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -45,7 +46,7 @@ static ssize_t service_find(GHashTable *by_name, size_t count,
     if (!by_name || !name) return -1;
     const gpointer value = g_hash_table_lookup(by_name, name);
     if (!value) return -1;
-    const size_t index = GPOINTER_TO_SIZE(value) - 1U;
+    const size_t index = (size_t)GPOINTER_TO_UINT(value) - 1U;
     return index < count ? (ssize_t)index : -1;
 }
 
@@ -55,6 +56,10 @@ static LsmServiceEntry *service_get(LsmServiceEntry **entries, size_t *count,
 {
     const ssize_t existing = service_find(by_name, *count, name);
     if (existing >= 0) return &(*entries)[existing];
+    if (*count >= (size_t)UINT_MAX) {
+        errno = EOVERFLOW;
+        return NULL;
+    }
     if (!lsm_array_reserve((void **)entries, capacity, sizeof(**entries),
                            *count + 1U, 128U))
         return NULL;
@@ -68,7 +73,8 @@ static LsmServiceEntry *service_get(LsmServiceEntry **entries, size_t *count,
     lsm_copy_string(entry->substate, sizeof(entry->substate), "dead");
     lsm_copy_string(entry->startup, sizeof(entry->startup), "unknown");
     g_hash_table_insert(
-        by_name, g_strdup(name), GSIZE_TO_POINTER(index + 1U));
+        by_name, g_strdup(name),
+        GUINT_TO_POINTER((guint)index + 1U));
     return entry;
 }
 
