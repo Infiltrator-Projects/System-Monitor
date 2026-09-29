@@ -483,8 +483,10 @@ typedef struct {
     GHashTable *app_history_samples;
     char history_path[LSM_PATH_LEN];
     double history_last_sample;
+    double history_last_present_monotonic;
     guint history_initialise_source;
     guint history_save_timer;
+    guint history_search_timer;
     guint history_generation;
     guint history_entry_count;
     guint history_mutation_generation;

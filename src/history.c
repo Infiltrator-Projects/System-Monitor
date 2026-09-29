@@ -25,6 +25,7 @@
 #include "common.h"
 #include "temporal_presentation.h"
 #include "numeric_io.h"
+#include "refresh_policy.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/core.h>
@@ -58,6 +59,12 @@ typedef struct {
 } LsmHistoryEntry;
 
 #define LSM_HISTORY_MAX_ENTRIES 4096U
+#define LSM_HISTORY_PRESENT_INTERVAL_SECONDS 2.0
+
+typedef struct {
+    LsmProcessId pid;
+    LsmProcessInstanceId instance_id;
+} LsmHistoryProcessKey;
 
 typedef struct {
     uint64_t cpu_time_nanoseconds;
@@ -138,6 +145,25 @@ static void history_entry_free(gpointer data)
 static void history_sample_free(gpointer data)
 {
     g_free(data);
+}
+
+static guint history_process_key_hash(gconstpointer data)
+{
+    const LsmHistoryProcessKey *key = data;
+    if (!key) return 0U;
+    uint64_t hash = LSM_FNV1A64_OFFSET_BASIS;
+    hash = lsm_fnv1a64_mix_u64_le(hash, (uint64_t)key->pid);
+    hash = lsm_fnv1a64_mix_u64_le(hash, key->instance_id);
+    return (guint)(hash ^ (hash >> 32U));
+}
+
+static gboolean history_process_key_equal(gconstpointer left,
+                                          gconstpointer right)
+{
+    const LsmHistoryProcessKey *a = left;
+    const LsmHistoryProcessKey *b = right;
+    return a && b && a->pid == b->pid &&
+           a->instance_id == b->instance_id;
 }
 
 static gboolean remove_history_key(gpointer key, gpointer value,
@@ -771,7 +797,8 @@ static gboolean history_model_initialise(LsmApp *app)
     }
     if (!app->history.app_history_samples) {
         app->history.app_history_samples = g_hash_table_new_full(
-            g_str_hash, g_str_equal, g_free, history_sample_free);
+            history_process_key_hash, history_process_key_equal,
+            g_free, history_sample_free);
     }
     if (!app->history.history_save_coordinator)
         app->history.history_save_coordinator = history_coordinator_create();
@@ -915,12 +942,12 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
         entry->current_rss_bytes = lsm_u64_add_saturating(
             entry->current_rss_bytes, process->rss_bytes);
 
-        char sample_key[96];
-        snprintf(sample_key, sizeof(sample_key), "%llu:%llu",
-                 (unsigned long long)process->pid,
-                 (unsigned long long)process->instance_id);
+        const LsmHistoryProcessKey sample_key = {
+            .pid = process->pid,
+            .instance_id = process->instance_id
+        };
         LsmHistorySample *sample = g_hash_table_lookup(
-            app->history.app_history_samples, sample_key);
+            app->history.app_history_samples, &sample_key);
         uint64_t cpu_delta = 0U, read_delta = 0U, write_delta = 0U;
         if (sample) {
             if (process->cpu_time_nanoseconds >= sample->cpu_time_nanoseconds)
@@ -931,11 +958,17 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
             if (process->write_bytes >= sample->write_bytes)
                 write_delta = process->write_bytes - sample->write_bytes;
         } else {
+            LsmHistoryProcessKey *stored_key =
+                g_new(LsmHistoryProcessKey, 1);
             sample = g_new0(LsmHistorySample, 1);
-            if (!sample) continue;
+            if (!stored_key || !sample) {
+                g_free(stored_key);
+                g_free(sample);
+                continue;
+            }
+            *stored_key = sample_key;
             g_hash_table_insert(
-                app->history.app_history_samples,
-                g_strdup(sample_key), sample);
+                app->history.app_history_samples, stored_key, sample);
         }
         sample->cpu_time_nanoseconds = process->cpu_time_nanoseconds;
         sample->read_bytes = process->read_bytes;
@@ -975,7 +1008,10 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
 
     if (app->history.history_tree &&
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) ==
-            LSM_TAB_APP_HISTORY)
+            LSM_TAB_APP_HISTORY &&
+        lsm_refresh_interval_due(
+            now_mono, app->history.history_last_present_monotonic,
+            LSM_HISTORY_PRESENT_INTERVAL_SECONDS))
         lsm_history_refresh(app);
 }
 
@@ -997,6 +1033,8 @@ void lsm_history_refresh(LsmApp *app)
     gtk_list_store_clear(app->history.history_store);
     const char *search = app->history.history_search
         ? gtk_entry_get_text(GTK_ENTRY(app->history.history_search)) : "";
+    char *folded_search =
+        search && *search ? g_utf8_casefold(search, -1) : NULL;
     guint shown = 0;
 
     GHashTableIter iterator;
@@ -1005,9 +1043,11 @@ void lsm_history_refresh(LsmApp *app)
     while (g_hash_table_iter_next(&iterator, &key, &value)) {
         (void)key;
         LsmHistoryEntry *entry = value;
-        if (*search && !lsm_ui_text_matches(entry->name, search) &&
-            !lsm_ui_text_matches(entry->user, search) &&
-            !lsm_ui_text_matches(entry->identity, search)) continue;
+        if (folded_search &&
+            !lsm_ui_text_matches_folded(entry->name, folded_search) &&
+            !lsm_ui_text_matches_folded(entry->user, folded_search) &&
+            !lsm_ui_text_matches_folded(entry->identity, folded_search))
+            continue;
         GtkTreeIter row;
         gtk_list_store_append(app->history.history_store, &row);
         gtk_list_store_set(app->history.history_store, &row,
@@ -1030,14 +1070,31 @@ void lsm_history_refresh(LsmApp *app)
     if (had_sort)
         gtk_tree_sortable_set_sort_column_id(
             sortable, sort_column, sort_order);
-    lsm_ui_set_label_text(app->history.history_count_label, "%u applications", shown);
+    g_free(folded_search);
+    app->history.history_last_present_monotonic = lsm_monotonic_seconds();
+    lsm_ui_set_label_text(
+        app->history.history_count_label, "%u applications", shown);
 }
 
 /* GTK construction and user actions. */
+static gboolean history_search_timeout(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    app->history.history_search_timer = 0U;
+    lsm_history_refresh(app);
+    return G_SOURCE_REMOVE;
+}
+
 static void history_search_changed(GtkEditable *editable, gpointer user_data)
 {
     (void)editable;
-    lsm_history_refresh(user_data);
+    LsmApp *app = user_data;
+    if (!app) return;
+    if (app->history.history_search_timer)
+        g_source_remove(app->history.history_search_timer);
+    app->history.history_search_timer = g_timeout_add(
+        LSM_SEARCH_DEBOUNCE_MS, history_search_timeout, app);
 }
 
 static void history_reset(GtkButton *button, gpointer user_data)
@@ -1122,6 +1179,10 @@ void lsm_history_destroy(LsmApp *app)
     if (app->history.history_save_timer) {
         g_source_remove(app->history.history_save_timer);
         app->history.history_save_timer = 0U;
+    }
+    if (app->history.history_search_timer) {
+        g_source_remove(app->history.history_search_timer);
+        app->history.history_search_timer = 0U;
     }
     if (app->shell.window)
         g_object_set_data(G_OBJECT(app->shell.window),

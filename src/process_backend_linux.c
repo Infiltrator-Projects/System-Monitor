@@ -119,6 +119,8 @@ struct LsmProcessBackend {
     PreviousProcessSample *samples;
     size_t sample_count;
     size_t sample_capacity;
+    PreviousProcessMutation *mutations;
+    size_t mutation_capacity;
     unsigned generation;
     uint64_t previous_total_cpu_ticks;
 
@@ -131,8 +133,9 @@ struct LsmProcessBackend {
     /* A desktop normally has hundreds of processes but only a handful of UIDs.
      * Caching NSS results avoids a getpwuid_r() lookup for every row on every
      * refresh while preserving numeric fallback for unknown identities. */
-    UidNameEntry uid_names[64];
+    UidNameEntry *uid_names;
     size_t uid_name_count;
+    size_t uid_name_capacity;
     char *passwd_buffer;
     size_t passwd_buffer_size;
     uid_t current_uid;
@@ -460,8 +463,12 @@ static void resolve_process_user(LsmProcessBackend *backend, uid_t uid,
         (void)snprintf(resolved_name, sizeof(resolved_name), "%llu",
                        (unsigned long long)uid);
 
-    if (backend->uid_name_count < LSM_ARRAY_LENGTH(backend->uid_names)) {
-        UidNameEntry *entry = &backend->uid_names[backend->uid_name_count++];
+    if (lsm_array_reserve(
+            (void **)&backend->uid_names, &backend->uid_name_capacity,
+            sizeof(*backend->uid_names),
+            backend->uid_name_count + 1U, 16U)) {
+        UidNameEntry *entry =
+            &backend->uid_names[backend->uid_name_count++];
         entry->uid = uid;
         lsm_copy_string(entry->name, sizeof(entry->name), resolved_name);
     }
@@ -980,13 +987,15 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         closedir(directory);
         return 0;
     }
-    PreviousProcessMutation *mutations = searchable_sample_count > 0U
-        ? calloc(searchable_sample_count, sizeof(*mutations)) : NULL;
-    if (searchable_sample_count > 0U && !mutations) {
+    if (searchable_sample_count > backend->mutation_capacity &&
+        !lsm_array_reserve(
+            (void **)&backend->mutations, &backend->mutation_capacity,
+            sizeof(*backend->mutations), searchable_sample_count, 1024U)) {
         free(processes);
         closedir(directory);
         return 0;
     }
+    PreviousProcessMutation *mutations = backend->mutations;
     size_t mutation_count = 0U;
     backend->generation++;
     if (backend->generation == 0U) backend->generation = 1U;
@@ -1219,14 +1228,12 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
         rollback_sample_mutations(
             backend, mutations, mutation_count,
             original_sample_count, original_generation);
-        free(mutations);
         free(processes);
         errno = scan_error != 0 ? scan_error : EIO;
         return 0U;
     }
 
     commit_sample_mutations(backend, mutations, mutation_count);
-    free(mutations);
 
     /* Commit the aggregate CPU baseline only after a complete process scan.
      * A transient /proc or allocation failure must not poison the next delta. */
@@ -1718,6 +1725,8 @@ void lsm_process_backend_destroy(LsmProcessBackend *backend)
     for (size_t index = 0U; index < backend->sample_count; index++)
         sample_metadata_free(&backend->samples[index]);
     free(backend->passwd_buffer);
+    free(backend->uid_names);
+    free(backend->mutations);
     free(backend->samples);
     free(backend);
 }

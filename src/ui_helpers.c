@@ -111,16 +111,26 @@ GdkRGBA lsm_ui_background_colour(GtkWidget *widget)
     return background;
 }
 
-gboolean lsm_ui_text_matches(const char *text, const char *needle)
+gboolean lsm_ui_text_matches_folded(const char *text,
+                                    const char *folded_needle)
 {
-    if (!needle || !*needle) return TRUE;
+    if (!folded_needle || !*folded_needle) return TRUE;
     if (!text) return FALSE;
 
     char *folded_text = g_utf8_casefold(text, -1);
-    char *folded_needle = g_utf8_casefold(needle, -1);
     const gboolean matches =
-        folded_text && folded_needle && strstr(folded_text, folded_needle) != NULL;
+        folded_text && strstr(folded_text, folded_needle) != NULL;
     g_free(folded_text);
+    return matches;
+}
+
+gboolean lsm_ui_text_matches(const char *text, const char *needle)
+{
+    if (!needle || !*needle) return TRUE;
+    char *folded_needle = g_utf8_casefold(needle, -1);
+    if (!folded_needle) return FALSE;
+    const gboolean matches =
+        lsm_ui_text_matches_folded(text, folded_needle);
     g_free(folded_needle);
     return matches;
 }

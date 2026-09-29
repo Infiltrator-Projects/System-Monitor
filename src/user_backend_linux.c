@@ -120,18 +120,28 @@ static void fill_account_identity(LsmLinuxSessionRecord *record)
                    sizeof(record->session.account_identity),
                    "uid:%llu", (unsigned long long)record->uid);
 
-    struct passwd *password = getpwuid(record->uid);
-    if (password && password->pw_gecos && password->pw_gecos[0]) {
+    struct passwd password_record;
+    struct passwd *password = NULL;
+    char password_buffer[4096];
+    const int status = getpwuid_r(
+        record->uid, &password_record, password_buffer,
+        sizeof(password_buffer), &password);
+    if (status == 0 && password &&
+        password->pw_gecos && password->pw_gecos[0]) {
         char gecos[LSM_NAME_LEN];
         lsm_copy_string(gecos, sizeof(gecos), password->pw_gecos);
         char *comma = strchr(gecos, ',');
         if (comma) *comma = '\0';
-        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name), gecos);
-    } else if (password && password->pw_name && password->pw_name[0]) {
-        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name),
+        lsm_copy_string(record->session.display_name,
+                        sizeof(record->session.display_name), gecos);
+    } else if (status == 0 && password &&
+               password->pw_name && password->pw_name[0]) {
+        lsm_copy_string(record->session.display_name,
+                        sizeof(record->session.display_name),
                         password->pw_name);
     } else {
-        lsm_copy_string(record->session.display_name, sizeof(record->session.display_name),
+        lsm_copy_string(record->session.display_name,
+                        sizeof(record->session.display_name),
                         record->session.username);
     }
 }

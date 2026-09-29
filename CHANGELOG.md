@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.149 - 2026-09-29
+
+- Restore the strict C17 build after the grouped-process filter optimisation by removing its const-discarding pointer-array access.
+- Reuse Linux process rollback storage and grow the UID-name cache dynamically instead of allocating a full mutation journal every refresh or stopping account caching after 64 identities.
+- Reuse Windows process rollback storage, publish completed process snapshots in stable PID/instance order, cache resolved SID account names across processes and retry transient friendly-name failures without losing stable SID identity.
+- Replace quadratic systemd service merging with a temporary name index while preserving the final deterministic service ordering.
+- Keep App History accounting at the process cadence while throttling its expensive visible GTK rebuild, debounce History search, and replace formatted PID/instance hash keys with fixed binary identities.
+- Stop rebuilding the Details process tree when only mutable name, user or command text changes; retained rows now update those values in place.
+- Reuse the retained Processes PID index for grouped process-tree actions instead of repeatedly walking the process snapshot.
+- Revalidate cached GPU sysfs/hwmon paths during topology reconciliation so driver/hwmon path recreation recovers without an application restart.
+- Use binary lookup for the already-sorted Linux disk set while parsing diskstats.
+- Copy only live Windows disk partition records when publishing completed monitor snapshots instead of copying each fixed-capacity partition array.
+
 ## 1.0.148 - 2026-09-29
 
 - Publish completed Windows monitor snapshots by copying only active device ranges instead of the full fixed-capacity monitor object, reducing lock-held memory traffic on every sample.

@@ -675,9 +675,6 @@ static uint64_t process_structure_signature(const LsmApp *app)
         row = lsm_fnv1a64_mix_u64_le(row, (uint64_t)process->pid);
         row = lsm_fnv1a64_mix_u64_le(row, process->instance_id);
         row = lsm_fnv1a64_mix_u64_le(row, (uint64_t)process->ppid);
-        row = lsm_fnv1a64_mix_text(row, process->name);
-        row = lsm_fnv1a64_mix_text(row, process->user);
-        row = lsm_fnv1a64_mix_text(row, process->command);
         const unsigned shift = (unsigned)(process->pid % 63U) + 1U;
         const uint64_t rotated =
             (row << shift) | (row >> (64U - shift));

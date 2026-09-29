@@ -330,6 +330,36 @@ static void build_gpu_telemetry_cache(const LsmGpuInfo *gpu,
         cache->pwm_max_cached = true;
 }
 
+static bool telemetry_metric_path_valid(const char *path)
+{
+    return !path || access(path, F_OK) == 0;
+}
+
+static bool gpu_telemetry_cache_paths_valid(
+    const LsmGpuTelemetryCache *cache)
+{
+    if (!cache) return false;
+    if (!telemetry_metric_path_valid(cache->gpu_busy) ||
+        !telemetry_metric_path_valid(cache->vram_used) ||
+        !telemetry_metric_path_valid(cache->vram_total) ||
+        !telemetry_metric_path_valid(cache->memory_busy) ||
+        !telemetry_metric_path_valid(cache->core_clock) ||
+        !telemetry_metric_path_valid(cache->core_clock_dpm) ||
+        !telemetry_metric_path_valid(cache->memory_clock) ||
+        !telemetry_metric_path_valid(cache->memory_clock_dpm) ||
+        !telemetry_metric_path_valid(cache->temperature) ||
+        !telemetry_metric_path_valid(cache->temperature_warning) ||
+        !telemetry_metric_path_valid(cache->temperature_critical) ||
+        !telemetry_metric_path_valid(cache->power) ||
+        !telemetry_metric_path_valid(cache->pwm) ||
+        !telemetry_metric_path_valid(cache->pwm_max))
+        return false;
+    for (size_t index = 0U; index < cache->engine_count; index++)
+        if (!telemetry_metric_path_valid(cache->engine_busy[index]))
+            return false;
+    return true;
+}
+
 static void build_npu_telemetry_cache(const LsmNpuInfo *npu,
                                       LsmNpuTelemetryCache *cache)
 {
@@ -360,12 +390,18 @@ static void synchronise_telemetry_caches(LsmMonitor *monitor)
                 break;
             }
         }
-        if (old_index < state->gpu_telemetry_count) {
+        if (old_index < state->gpu_telemetry_count &&
+            gpu_telemetry_cache_paths_valid(
+                &state->gpu_telemetry[old_index])) {
             next_gpu[index] = state->gpu_telemetry[old_index];
             memset(&state->gpu_telemetry[old_index], 0,
                    sizeof(state->gpu_telemetry[old_index]));
         } else {
-            build_gpu_telemetry_cache(&monitor->gpus[index], &next_gpu[index]);
+            if (old_index < state->gpu_telemetry_count)
+                destroy_gpu_telemetry(
+                    &state->gpu_telemetry[old_index]);
+            build_gpu_telemetry_cache(
+                &monitor->gpus[index], &next_gpu[index]);
         }
     }
     for (size_t index = 0U; index < state->gpu_telemetry_count; index++)

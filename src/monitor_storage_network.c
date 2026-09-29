@@ -266,9 +266,20 @@ static bool refresh_disks(LsmMonitor *monitor)
 
 static LsmDiskInfo *find_disk(LsmMonitor *monitor, const char *name)
 {
-    for (size_t i = 0; i < monitor->disk_count; i++)
-        if (strcmp(monitor->disks[i].name, name) == 0) return &monitor->disks[i];
-    return NULL;
+    if (!monitor || !name) return NULL;
+    size_t low = 0U;
+    size_t high = monitor->disk_count;
+    while (low < high) {
+        const size_t middle = low + (high - low) / 2U;
+        const int order = strcmp(monitor->disks[middle].name, name);
+        if (order < 0)
+            low = middle + 1U;
+        else
+            high = middle;
+    }
+    return low < monitor->disk_count &&
+           strcmp(monitor->disks[low].name, name) == 0
+        ? &monitor->disks[low] : NULL;
 }
 
 static void update_disks(LsmMonitor *monitor, double elapsed)

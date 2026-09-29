@@ -39,30 +39,36 @@ static GVariant *manager_call_on_bus(GDBusConnection *bus, const char *method,
         error);
 }
 
-static ssize_t service_find(LsmServiceEntry *entries, size_t count,
+static ssize_t service_find(GHashTable *by_name, size_t count,
                             const char *name)
 {
-    for (size_t index = 0U; index < count; index++)
-        if (strcmp(entries[index].name, name) == 0) return (ssize_t)index;
-    return -1;
+    if (!by_name || !name) return -1;
+    const gpointer value = g_hash_table_lookup(by_name, name);
+    if (!value) return -1;
+    const size_t index = GPOINTER_TO_SIZE(value) - 1U;
+    return index < count ? (ssize_t)index : -1;
 }
 
 static LsmServiceEntry *service_get(LsmServiceEntry **entries, size_t *count,
-                                    size_t *capacity, const char *name)
+                                    size_t *capacity, GHashTable *by_name,
+                                    const char *name)
 {
-    const ssize_t existing = service_find(*entries, *count, name);
+    const ssize_t existing = service_find(by_name, *count, name);
     if (existing >= 0) return &(*entries)[existing];
     if (!lsm_array_reserve((void **)entries, capacity, sizeof(**entries),
                            *count + 1U, 128U))
         return NULL;
 
-    LsmServiceEntry *entry = &(*entries)[(*count)++];
+    const size_t index = (*count)++;
+    LsmServiceEntry *entry = &(*entries)[index];
     memset(entry, 0, sizeof(*entry));
     lsm_copy_string(entry->name, sizeof(entry->name), name);
     lsm_copy_string(entry->description, sizeof(entry->description), name);
     lsm_copy_string(entry->active, sizeof(entry->active), "inactive");
     lsm_copy_string(entry->substate, sizeof(entry->substate), "dead");
     lsm_copy_string(entry->startup, sizeof(entry->startup), "unknown");
+    g_hash_table_insert(
+        by_name, g_strdup(name), GSIZE_TO_POINTER(index + 1U));
     return entry;
 }
 
@@ -74,7 +80,8 @@ static int service_compare(const void *left, const void *right)
 }
 
 static bool merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
-                                size_t *count, size_t *capacity)
+                                size_t *count, size_t *capacity,
+                                GHashTable *by_name)
 {
     GVariantIter *iter = NULL;
     g_variant_get(units, "(a(ssssssouso))", &iter);
@@ -101,7 +108,7 @@ static bool merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
         (void)job_path;
         const size_t length = strlen(name);
         if (length < 8U || strcmp(name + length - 8U, ".service") != 0) continue;
-        LsmServiceEntry *entry = service_get(entries, count, capacity, name);
+        LsmServiceEntry *entry = service_get(entries, count, capacity, by_name, name);
         if (!entry) {
             g_variant_iter_free(iter);
             return false;
@@ -115,7 +122,8 @@ static bool merge_loaded_units(GVariant *units, LsmServiceEntry **entries,
 }
 
 static bool merge_unit_files(GVariant *files, LsmServiceEntry **entries,
-                             size_t *count, size_t *capacity)
+                             size_t *count, size_t *capacity,
+                             GHashTable *by_name)
 {
     GVariantIter *iter = NULL;
     g_variant_get(files, "(a(ss))", &iter);
@@ -126,7 +134,7 @@ static bool merge_unit_files(GVariant *files, LsmServiceEntry **entries,
         const char *unit = lsm_path_basename(path);
         const size_t length = strlen(unit);
         if (length < 8U || strcmp(unit + length - 8U, ".service") != 0) continue;
-        LsmServiceEntry *entry = service_get(entries, count, capacity, unit);
+        LsmServiceEntry *entry = service_get(entries, count, capacity, by_name, unit);
         if (!entry) {
             g_variant_iter_free(iter);
             return false;
@@ -144,12 +152,24 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
     LsmServiceEntry *entries = NULL;
     size_t count = 0U;
     size_t capacity = 0U;
+    GHashTable *by_name =
+        g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    if (!by_name) {
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
+                    "%s", "Unable to allocate the service index");
+        return NULL;
+    }
 
     GVariant *units = manager_call_on_bus(
         bus, "ListUnits", NULL, LSM_DBUS_QUERY_TIMEOUT_MS, cancellable, error);
-    if (!units) return NULL;
-    if (!merge_loaded_units(units, &entries, &count, &capacity)) {
+    if (!units) {
+        g_hash_table_destroy(by_name);
+        return NULL;
+    }
+    if (!merge_loaded_units(
+            units, &entries, &count, &capacity, by_name)) {
         g_variant_unref(units);
+        g_hash_table_destroy(by_name);
         free(entries);
         g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
                     "%s", "Unable to allocate the complete service inventory");
@@ -162,9 +182,11 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
         bus, "ListUnitFiles", NULL, LSM_DBUS_QUERY_TIMEOUT_MS, cancellable,
         &files_error);
     if (files) {
-        if (!merge_unit_files(files, &entries, &count, &capacity)) {
+        if (!merge_unit_files(
+                files, &entries, &count, &capacity, by_name)) {
             g_variant_unref(files);
             if (files_error) g_error_free(files_error);
+            g_hash_table_destroy(by_name);
             free(entries);
             g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(ENOMEM),
                         "%s", "Unable to allocate the complete service inventory");
@@ -173,6 +195,7 @@ static LsmServiceEntry *collect_services(GDBusConnection *bus,
         g_variant_unref(files);
     }
     if (files_error) g_error_free(files_error);
+    g_hash_table_destroy(by_name);
 
     if (count > 1U) qsort(entries, count, sizeof(*entries), service_compare);
     *out_count = count;

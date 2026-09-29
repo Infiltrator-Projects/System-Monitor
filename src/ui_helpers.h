@@ -57,6 +57,8 @@ GdkRGBA lsm_ui_background_colour(GtkWidget *widget);
  * @param [in] needle Search text, or NULL/empty to match all candidates.
  * @return TRUE when @p needle is empty or occurs in @p text.
  */
+gboolean lsm_ui_text_matches_folded(const char *text,
+                                    const char *folded_needle);
 gboolean lsm_ui_text_matches(const char *text, const char *needle);
 /**
  * Set a preferred window size clamped to the usable primary-monitor work area.

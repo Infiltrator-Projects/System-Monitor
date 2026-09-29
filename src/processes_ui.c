@@ -106,6 +106,15 @@ static const char *category_icon(ProcessCategory category)
 
 static ssize_t snapshot_index_for_pid(const LsmApp *app, LsmProcessId pid)
 {
+    if (!app) return -1;
+    if (app->processes.process_pid_index &&
+        pid > 0U && pid <= (LsmProcessId)UINT_MAX) {
+        gpointer value = g_hash_table_lookup(
+            app->processes.process_pid_index,
+            GUINT_TO_POINTER((guint)pid));
+        if (value)
+            return (ssize_t)(GPOINTER_TO_UINT(value) - 1U);
+    }
     for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
         if (app->process.process_snapshot[index].pid == pid) return (ssize_t)index;
     return -1;
@@ -216,8 +225,7 @@ static gboolean process_excluded(
 {
     if (!folded_filters) return FALSE;
     for (guint index = 0U; index < folded_filters->len; index++) {
-        const char *filter =
-            g_ptr_array_index((GPtrArray *)folded_filters, index);
+        const char *filter = folded_filters->pdata[index];
         if (filter && *filter &&
             folded_process_contains(folded_process, filter))
             return TRUE;

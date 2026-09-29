@@ -41,6 +41,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2524,6 +2525,20 @@ bool lsm_monitor_platform_init(LsmMonitor *monitor)
     return true;
 }
 
+static void copy_disk_snapshot(LsmDiskInfo *destination,
+                               const LsmDiskInfo *source)
+{
+    if (!destination || !source) return;
+    memcpy(destination, source, offsetof(LsmDiskInfo, partitions));
+    const size_t partition_count =
+        source->partition_count < LSM_MAX_PARTITIONS
+            ? source->partition_count : LSM_MAX_PARTITIONS;
+    if (partition_count > 0U)
+        memcpy(destination->partitions, source->partitions,
+               partition_count * sizeof(destination->partitions[0]));
+    destination->partition_count = partition_count;
+}
+
 static void publish_monitor_snapshot(
     LsmMonitor *destination, const LsmMonitor *source)
 {
@@ -2544,14 +2559,17 @@ static void publish_monitor_snapshot(
     destination->memory_pressure = source->memory_pressure;
     destination->io_pressure = source->io_pressure;
 
-    if (source->disk_count > 0U)
-        memcpy(destination->disks, source->disks,
-               source->disk_count * sizeof(destination->disks[0]));
-    if (source->disk_count < old_disk_count)
-        memset(&destination->disks[source->disk_count], 0,
-               (old_disk_count - source->disk_count) *
+    const size_t disk_count =
+        source->disk_count < LSM_MAX_DISKS
+            ? source->disk_count : LSM_MAX_DISKS;
+    for (size_t index = 0U; index < disk_count; index++)
+        copy_disk_snapshot(&destination->disks[index],
+                           &source->disks[index]);
+    if (disk_count < old_disk_count)
+        memset(&destination->disks[disk_count], 0,
+               (old_disk_count - disk_count) *
                    sizeof(destination->disks[0]));
-    destination->disk_count = source->disk_count;
+    destination->disk_count = disk_count;
     destination->disk_generation = source->disk_generation;
     destination->topology_generation = source->topology_generation;
 

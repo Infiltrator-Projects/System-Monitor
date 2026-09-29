@@ -42,6 +42,11 @@
 #include <string.h>
 
 typedef struct {
+    char account_identity[128];
+    char user[64];
+} LsmWindowsAccountCacheEntry;
+
+typedef struct {
     DWORD pid;
     LsmProcessInstanceId instance_id;
     uint64_t cpu_time_100ns;
@@ -60,6 +65,11 @@ struct LsmProcessBackend {
     LsmWindowsProcessSample *samples;
     size_t sample_count;
     size_t sample_capacity;
+    LsmWindowsProcessSample *sample_backup;
+    size_t sample_backup_capacity;
+    LsmWindowsAccountCacheEntry *accounts;
+    size_t account_count;
+    size_t account_capacity;
     unsigned generation;
     uint64_t previous_system_cpu_100ns;
     uint64_t total_memory_bytes;
@@ -191,6 +201,39 @@ static PSID copy_process_user_sid(HANDLE process)
     return sid;
 }
 
+static const char *cached_account_name(
+    const LsmProcessBackend *backend, const char *account_identity)
+{
+    if (!backend || !account_identity || !*account_identity) return NULL;
+    for (size_t index = 0U; index < backend->account_count; index++) {
+        if (strcmp(
+                backend->accounts[index].account_identity,
+                account_identity) == 0)
+            return backend->accounts[index].user;
+    }
+    return NULL;
+}
+
+static void cache_account_name(LsmProcessBackend *backend,
+                               const char *account_identity,
+                               const char *user)
+{
+    if (!backend || !account_identity || !*account_identity ||
+        !user || !*user)
+        return;
+    if (!infiltratr_array_reserve(
+            (void **)&backend->accounts, &backend->account_capacity,
+            sizeof(*backend->accounts), backend->account_count + 1U, 16U))
+        return;
+    LsmWindowsAccountCacheEntry *entry =
+        &backend->accounts[backend->account_count++];
+    memset(entry, 0, sizeof(*entry));
+    infiltratr_copy_string(
+        entry->account_identity, sizeof(entry->account_identity),
+        account_identity);
+    infiltratr_copy_string(entry->user, sizeof(entry->user), user);
+}
+
 static bool populate_process_account(LsmProcessBackend *backend,
                                      HANDLE process,
                                      LsmProcessInfo *info)
@@ -204,6 +247,7 @@ static bool populate_process_account(LsmProcessBackend *backend,
     info->owned_by_current_user =
         EqualSid(sid, backend->current_user_sid) != FALSE;
 
+    bool identity_available = false;
     LPSTR sid_text = NULL;
     if (ConvertSidToStringSidA(sid, &sid_text) && sid_text) {
         static const char prefix[] = "sid:";
@@ -213,21 +257,34 @@ static bool populate_process_account(LsmProcessBackend *backend,
             memcpy(info->account_identity, prefix, prefix_length);
             memcpy(info->account_identity + prefix_length, sid_text,
                    sid_length + 1U);
+            identity_available = true;
         }
         LocalFree(sid_text);
     }
 
-    char account[256];
-    char domain[256];
-    DWORD account_length = (DWORD)sizeof(account);
-    DWORD domain_length = (DWORD)sizeof(domain);
-    SID_NAME_USE use = SidTypeUnknown;
-    if (LookupAccountSidA(NULL, sid, account, &account_length,
-                          domain, &domain_length, &use))
-        infiltratr_copy_string(info->user, sizeof(info->user), account);
+    if (identity_available) {
+        const char *cached =
+            cached_account_name(backend, info->account_identity);
+        if (cached) {
+            infiltratr_copy_string(info->user, sizeof(info->user), cached);
+        } else {
+            char account[256];
+            char domain[256];
+            DWORD account_length = (DWORD)sizeof(account);
+            DWORD domain_length = (DWORD)sizeof(domain);
+            SID_NAME_USE use = SidTypeUnknown;
+            if (LookupAccountSidA(NULL, sid, account, &account_length,
+                                  domain, &domain_length, &use)) {
+                infiltratr_copy_string(
+                    info->user, sizeof(info->user), account);
+                cache_account_name(
+                    backend, info->account_identity, info->user);
+            }
+        }
+    }
 
     free(sid);
-    return true;
+    return identity_available;
 }
 
 static void wide_to_utf8(const WCHAR *source, char *destination,
@@ -286,6 +343,16 @@ static LsmWindowsProcessSample *find_or_create_sample(
     memset(sample, 0, sizeof(*sample));
     sample->pid = pid;
     return sample;
+}
+
+static int compare_process_identity(const void *left, const void *right)
+{
+    const LsmProcessInfo *a = left;
+    const LsmProcessInfo *b = right;
+    if (a->pid != b->pid) return a->pid < b->pid ? -1 : 1;
+    if (a->instance_id != b->instance_id)
+        return a->instance_id < b->instance_id ? -1 : 1;
+    return 0;
 }
 
 static void prune_process_samples(LsmProcessBackend *backend)
@@ -394,6 +461,11 @@ static bool populate_process_metrics(LsmProcessBackend *backend,
         infiltratr_copy_string(
             info->user, sizeof(info->user), sample->user);
         info->owned_by_current_user = sample->owned_by_current_user;
+        if (!info->user[0] &&
+            populate_process_account(backend, process, info) &&
+            info->user[0])
+            infiltratr_copy_string(
+                sample->user, sizeof(sample->user), info->user);
     } else {
         sample->account_available = false;
         sample->account_identity[0] = '\0';
@@ -406,7 +478,7 @@ static bool populate_process_metrics(LsmProcessBackend *backend,
             infiltratr_copy_string(
                 sample->user, sizeof(sample->user), info->user);
             sample->owned_by_current_user = info->owned_by_current_user;
-            sample->account_available = true;
+            sample->account_available = info->account_identity[0] != '\0';
         }
     }
     populate_optional_process_fields(process, info, scan_flags);
@@ -468,6 +540,8 @@ LsmProcessBackend *lsm_process_backend_create(void)
 void lsm_process_backend_destroy(LsmProcessBackend *backend)
 {
     if (!backend) return;
+    free(backend->accounts);
+    free(backend->sample_backup);
     free(backend->samples);
     free(backend->current_user_sid);
     free(backend);
@@ -499,13 +573,16 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
 
     const size_t original_sample_count = backend->sample_count;
     const unsigned original_generation = backend->generation;
-    LsmWindowsProcessSample *sample_backup = original_sample_count > 0U
-        ? malloc(original_sample_count * sizeof(*sample_backup)) : NULL;
-    if (original_sample_count > 0U && !sample_backup) {
+    if (original_sample_count > backend->sample_backup_capacity &&
+        !infiltratr_array_reserve(
+            (void **)&backend->sample_backup,
+            &backend->sample_backup_capacity,
+            sizeof(*backend->sample_backup), original_sample_count, 256U)) {
         SetLastError(ERROR_NOT_ENOUGH_MEMORY);
         return 0U;
     }
-    if (sample_backup)
+    LsmWindowsProcessSample *sample_backup = backend->sample_backup;
+    if (original_sample_count > 0U)
         memcpy(sample_backup, backend->samples,
                original_sample_count * sizeof(*sample_backup));
 
@@ -523,7 +600,6 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                    original_sample_count * sizeof(*sample_backup));
         backend->sample_count = original_sample_count;
         backend->generation = original_generation;
-        free(sample_backup);
         return 0U;
     }
 
@@ -590,14 +666,15 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
                    original_sample_count * sizeof(*sample_backup));
         backend->sample_count = original_sample_count;
         backend->generation = original_generation;
-        free(sample_backup);
         SetLastError(scan_error);
         return 0U;
     }
 
-    free(sample_backup);
     backend->previous_system_cpu_100ns = system_cpu;
     prune_process_samples(backend);
+    if (count > 1U)
+        qsort(processes, count, sizeof(*processes),
+              compare_process_identity);
 
     if (count == 0U) {
         free(processes);
