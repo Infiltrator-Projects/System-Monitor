@@ -51,24 +51,25 @@ void lsm_ui_show_error(GtkWindow *parent, const char *title,
  */
 GdkRGBA lsm_ui_background_colour(GtkWidget *widget);
 /**
+ * Match UTF-8 text against a query that has already been case-folded.
+ *
+ * This avoids repeatedly folding the same search term while filtering a
+ * collection with several searchable fields per row.
+ *
+ * @param [in] text Candidate UTF-8 text, or NULL.
+ * @param [in] folded_needle Pre-case-folded query, or NULL/empty to match all.
+ * @return TRUE when @p folded_needle is empty or occurs in @p text.
+ */
+gboolean lsm_ui_text_matches_folded(const char *text,
+                                    const char *folded_needle);
+
+/**
  * Perform the application's case-insensitive substring filter comparison.
  *
  * @param [in] text Candidate text, or NULL.
  * @param [in] needle Search text, or NULL/empty to match all candidates.
  * @return TRUE when @p needle is empty or occurs in @p text.
  */
-/**
- * Match UTF-8 text against a query that has already been case-folded.
- *
- * This avoids repeatedly folding the same search term while filtering a
- * collection with several searchable fields per row.
- *
- * @param text Candidate UTF-8 text.
- * @param folded_needle Pre-case-folded UTF-8 query.
- * @return TRUE when the query is empty or occurs in the folded candidate.
- */
-gboolean lsm_ui_text_matches_folded(const char *text,
-                                    const char *folded_needle);
 gboolean lsm_ui_text_matches(const char *text, const char *needle);
 /**
  * Set a preferred window size clamped to the usable primary-monitor work area.
