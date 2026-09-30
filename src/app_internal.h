@@ -322,6 +322,9 @@ typedef struct {
     GtkWidget *navigation_resource_buttons[LSM_PAGE_COUNT];
     gboolean navigation_syncing;
     GtkWidget *pause_indicator;
+    GtkWidget *pause_menu_item;
+    GtkWidget *always_on_top_menu_item;
+    GtkWidget *compact_summary_menu_item;
     GtkCssProvider *theme_provider;
     GtkWidget *summary_bar;
     GtkWidget *summary_cpu;

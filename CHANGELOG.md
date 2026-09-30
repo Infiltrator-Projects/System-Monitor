@@ -1,12 +1,5 @@
 # Changelog
 
-## 1.0.155 - 2026-09-30
-
-- Remove the redundant GTK Options and View menus; the main menu now contains only File, Tools and Help.
-- Add the dedicated title-bar Settings button as the single graphical entry point for monitor-local presentation settings.
-- Move Follow system/Day/Night theme selection into Settings alongside refresh speed, graph direction, compact mode and always-on-top controls.
-- Keep Space pause/resume and F5 one-shot refresh independent of menu widgets, and apply compact-mode/always-on-top changes directly from Settings.
-
 ## 1.0.154 - 2026-09-30
 
 - Fix the Details process-tree PID retrieval width mismatch so a 64-bit GTK model value can no longer overwrite a 32-bit stack variable, and use unsigned pointer keys consistently for retained PID indexes.

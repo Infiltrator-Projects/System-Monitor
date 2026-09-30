@@ -59,12 +59,6 @@ static void close_window(GtkButton *button, gpointer user_data)
     gtk_window_close(GTK_WINDOW(user_data));
 }
 
-static void open_settings(GtkButton *button, gpointer user_data)
-{
-    (void)button;
-    lsm_preferences_show(user_data);
-}
-
 static GtkWidget *make_window_control(const char *icon_name,
                                       const char *tooltip,
                                       const char *css_class)
@@ -95,8 +89,6 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
     GtkWidget *title = gtk_label_new(LSM_PROGRAM_NAME);
     GtkWidget *subtitle = gtk_label_new("Infiltrator OS");
     GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    GtkWidget *settings = make_window_control(
-        "preferences-system-symbolic", "Settings", NULL);
     GtkWidget *minimize = make_window_control(
         "window-minimize-symbolic", "Minimize", NULL);
     GtkWidget *maximize = make_window_control(
@@ -126,21 +118,17 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
 
     gtk_widget_set_name(header_end, "lsm-header-end");
     g_signal_connect(
-        settings, "clicked", G_CALLBACK(open_settings), app);
-    g_signal_connect(
         minimize, "clicked", G_CALLBACK(minimize_window), window);
     g_signal_connect(
         maximize, "clicked", G_CALLBACK(toggle_maximize_window), window);
     g_signal_connect(
         close, "clicked", G_CALLBACK(close_window), window);
-    gtk_box_pack_start(GTK_BOX(header_end), settings, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), minimize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), maximize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), close, FALSE, FALSE, 0);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
 
     g_object_set_data(G_OBJECT(window), "lsm-shell-header", header);
-    g_object_set_data(G_OBJECT(window), "lsm-settings-button", settings);
     g_object_set_data(G_OBJECT(window), "lsm-minimize-button", minimize);
     g_object_set_data(G_OBJECT(window), "lsm-maximize-button", maximize);
     g_object_set_data(G_OBJECT(window), "lsm-close-button", close);
@@ -1315,11 +1303,8 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
 
     GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
     if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
-        app->runtime.paused = !app->runtime.paused;
-        if (app->shell.pause_indicator)
-            gtk_widget_set_visible(
-                app->shell.pause_indicator,
-                app->runtime.paused && !app->runtime.compact_summary);
+        gtk_check_menu_item_set_active(
+            GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item), !app->runtime.paused);
         return TRUE;
     }
     const gint current =
