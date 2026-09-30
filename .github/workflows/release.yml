@@ -57,6 +57,12 @@ jobs:
           git fetch origin main --tags
           head_commit=$(git rev-parse HEAD)
           test "$head_commit" = "$EXPECTED_SHA"
+          current_main=$(git rev-parse origin/main)
+          if [[ "$current_main" != "$EXPECTED_SHA" ]]; then
+            printf 'Refusing to publish stale tested commit %s; current main is %s.\n' \
+              "$EXPECTED_SHA" "$current_main" >&2
+            exit 1
+          fi
           version=$(tr -d '[:space:]' < support/VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           subject=$(git log -1 --format=%s "$head_commit")
