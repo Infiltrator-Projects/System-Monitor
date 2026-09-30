@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.154 - 2026-09-30
+
+- Fix the Details process-tree PID retrieval width mismatch so a 64-bit GTK model value can no longer overwrite a 32-bit stack variable, and use unsigned pointer keys consistently for retained PID indexes.
+- Publish Linux monitor samples directly from the worker-owned completed buffer, removing one large fixed-capacity monitor copy from each completed sample while preserving the no-I/O-on-GTK-thread contract.
+- Keep failed Linux topology refreshes promptly retryable with bounded 1/2/4/5-second backoff instead of hammering a permanently blocked source every fast sample.
+- Throttle negative per-process DRM/GPU discovery to a slower cadence while retaining two-second refresh for processes with known GPU telemetry.
+- Deliver completed process snapshots into the GTK main context immediately without starting the next scan early, separating presentation latency from the configured sampling cadence.
+- Keep Services, Users and File Systems periodic timers alive only while their owning slow page is active, eliminating idle wakeups after those pages have merely been visited.
+- Reuse the Windows PDH GPU formatted-counter buffer across samples rather than allocating and freeing it every refresh.
+- Report GTK CSS parser failures explicitly instead of silently discarding malformed theme diagnostics.
+
 ## 1.0.153 - 2026-09-29
 
 - Give Day-mode menu bars, popup menus and menu popovers an explicit high-contrast light palette instead of relying on inherited GTK theme colours.
