@@ -237,7 +237,7 @@ bool lsm_process_scanner_request(LsmProcessScanner *scanner,
             scanner->request_pending = true;
         }
         (void)pthread_mutex_unlock(&scanner->mutex);
-        return false;
+        return true;
     }
     scanner->requested_flags = scan_flags;
     if (!scanner->request_pending) {

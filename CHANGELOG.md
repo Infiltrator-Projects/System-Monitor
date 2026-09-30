@@ -6,7 +6,7 @@
 - Publish Linux monitor samples directly from the worker-owned retained sample buffer, removing one large fixed-capacity monitor copy from each completed sample while preserving the no-I/O-on-GTK-thread contract.
 - Keep failed Linux topology refreshes promptly retryable with bounded 1/2/4/5-second backoff instead of hammering a permanently blocked source every fast sample.
 - Throttle negative per-process DRM/GPU discovery to a slower cadence while retaining two-second refresh for processes with known GPU telemetry.
-- Deliver completed process snapshots into the GTK main context immediately without starting the next scan early, separating presentation latency from the configured sampling cadence.
+- Deliver completed process snapshots into the GTK main context immediately without starting the next scan early, separating presentation latency from the configured sampling cadence, and make coalesced in-flight scan requests obey the scanner API's accepted-request return contract.
 - Keep Services, Users and File Systems periodic timers alive only while their owning slow page is active, eliminating idle wakeups after those pages have merely been visited.
 - Reuse the Windows PDH GPU formatted-counter buffer directly across samples rather than allocating/freeing it or repeating the sizing query every refresh, and replace linear per-engine aggregation lookup with a fixed open-addressed index.
 - Cache stable process grouping identity by PID plus process-instance identity for five seconds, invalidating it when application metadata changes and pruning it when processes disappear.

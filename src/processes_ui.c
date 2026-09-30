@@ -624,12 +624,12 @@ static GPtrArray *collect_groups(LsmApp *app)
     g_free(folded_search);
     if (folded_filters) g_ptr_array_free(folded_filters, TRUE);
     if (app->processes.process_identity_cache) {
-        const uint64_t generation =
+        uint64_t generation =
             app->process.process_snapshot_generation;
         g_hash_table_foreach_remove(
             app->processes.process_identity_cache,
             process_identity_cache_remove_stale,
-            (gpointer)&generation);
+            &generation);
     }
     g_ptr_array_sort(groups, compare_groups);
     return groups;
