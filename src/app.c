@@ -316,6 +316,14 @@ static gboolean restore_initial_tab_after_first_paint(gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
+static void process_snapshot_ready(void *user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || app->runtime.shutting_down || app->runtime.paused)
+        return;
+    lsm_processes_present_ready_snapshot(app);
+}
+
 LsmApp *lsm_app_create(void)
 {
     return calloc(1U, sizeof(LsmApp));
@@ -375,6 +383,8 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
         lsm_monitor_destroy(&app->monitor);
         return;
     }
+    lsm_process_scanner_set_ready_callback(
+        app->process_scanner, process_snapshot_ready, app);
 #ifdef LSM_TEST_14_CORES
     app->monitor.cpu.logical_cores = 14;
     app->monitor.cpu.physical_cores = 12;

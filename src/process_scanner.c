@@ -16,6 +16,8 @@
 
 #include "process_backend.h"
 
+#include <glib.h>
+
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -30,9 +32,12 @@ struct LsmProcessScanner {
     unsigned requested_flags;
     unsigned active_flags;
     atomic_uint references;
+    LsmProcessScannerReadyCallback ready_callback;
+    void *ready_callback_data;
     bool request_pending;
     bool scan_in_progress;
     bool result_ready;
+    bool ready_dispatch_pending;
     bool stop_requested;
 };
 
@@ -47,6 +52,44 @@ static void scanner_release(LsmProcessScanner *scanner)
     (void)pthread_cond_destroy(&scanner->condition);
     (void)pthread_mutex_destroy(&scanner->mutex);
     free(scanner);
+}
+
+static void scanner_retain(LsmProcessScanner *scanner)
+{
+    if (!scanner) return;
+    (void)atomic_fetch_add_explicit(
+        &scanner->references, 1U, memory_order_relaxed);
+}
+
+static gboolean scanner_ready_dispatch(gpointer user_data)
+{
+    LsmProcessScanner *scanner = user_data;
+    if (!scanner) return G_SOURCE_REMOVE;
+
+    LsmProcessScannerReadyCallback callback = NULL;
+    void *callback_data = NULL;
+    (void)pthread_mutex_lock(&scanner->mutex);
+    scanner->ready_dispatch_pending = false;
+    if (!scanner->stop_requested) {
+        callback = scanner->ready_callback;
+        callback_data = scanner->ready_callback_data;
+    }
+    (void)pthread_mutex_unlock(&scanner->mutex);
+
+    if (callback) callback(callback_data);
+    return G_SOURCE_REMOVE;
+}
+
+static void scanner_ready_dispatch_destroy(gpointer user_data)
+{
+    scanner_release(user_data);
+}
+
+static void scanner_queue_ready_dispatch(LsmProcessScanner *scanner)
+{
+    g_main_context_invoke_full(
+        NULL, G_PRIORITY_DEFAULT, scanner_ready_dispatch, scanner,
+        scanner_ready_dispatch_destroy);
 }
 
 static void *scanner_thread_main(void *user_data)
@@ -74,6 +117,7 @@ static void *scanner_thread_main(void *user_data)
             scanner->backend, &processes, flags);
         const bool scan_succeeded = processes != NULL;
 
+        bool dispatch_ready = false;
         (void)pthread_mutex_lock(&scanner->mutex);
         scanner->scan_in_progress = false;
         if (scanner->stop_requested) {
@@ -86,12 +130,20 @@ static void *scanner_thread_main(void *user_data)
             scanner->completed = processes;
             scanner->completed_count = count;
             scanner->result_ready = true;
+            if (scanner->ready_callback &&
+                !scanner->ready_dispatch_pending) {
+                scanner->ready_dispatch_pending = true;
+                scanner_retain(scanner);
+                dispatch_ready = true;
+            }
         } else {
             /* Keep the last completed snapshot authoritative. A backend failure
              * is not the same thing as a valid machine with zero processes. */
             lsm_process_list_free(processes);
         }
         (void)pthread_mutex_unlock(&scanner->mutex);
+        if (dispatch_ready)
+            scanner_queue_ready_dispatch(scanner);
     }
 
     scanner_release(scanner);
@@ -140,6 +192,31 @@ LsmProcessScanner *lsm_process_scanner_create(void)
         return NULL;
     }
     return scanner;
+}
+
+void lsm_process_scanner_set_ready_callback(
+    LsmProcessScanner *scanner,
+    LsmProcessScannerReadyCallback callback,
+    void *user_data)
+{
+    if (!scanner) return;
+
+    bool dispatch_ready = false;
+    (void)pthread_mutex_lock(&scanner->mutex);
+    if (!scanner->stop_requested) {
+        scanner->ready_callback = callback;
+        scanner->ready_callback_data = callback ? user_data : NULL;
+        if (callback && scanner->result_ready &&
+            !scanner->ready_dispatch_pending) {
+            scanner->ready_dispatch_pending = true;
+            scanner_retain(scanner);
+            dispatch_ready = true;
+        }
+    }
+    (void)pthread_mutex_unlock(&scanner->mutex);
+
+    if (dispatch_ready)
+        scanner_queue_ready_dispatch(scanner);
 }
 
 bool lsm_process_scanner_request(LsmProcessScanner *scanner,
@@ -197,6 +274,8 @@ void lsm_process_scanner_destroy(LsmProcessScanner *scanner)
     if (!scanner) return;
     (void)pthread_mutex_lock(&scanner->mutex);
     scanner->stop_requested = true;
+    scanner->ready_callback = NULL;
+    scanner->ready_callback_data = NULL;
     scanner->request_pending = false;
     (void)pthread_cond_signal(&scanner->condition);
     (void)pthread_mutex_unlock(&scanner->mutex);

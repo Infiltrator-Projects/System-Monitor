@@ -16,6 +16,7 @@
 #include <stddef.h>
 
 typedef struct LsmProcessScanner LsmProcessScanner;
+typedef void (*LsmProcessScannerReadyCallback)(void *user_data);
 
 /**
  * Create a detached scanner that exclusively owns its process backend.
@@ -23,6 +24,22 @@ typedef struct LsmProcessScanner LsmProcessScanner;
  * @return New scanner, or NULL when allocation/backend/thread creation fails.
  */
 LsmProcessScanner *lsm_process_scanner_create(void);
+
+/**
+ * Arrange main-context delivery when a completed snapshot becomes available.
+ *
+ * Delivery is coalesced: if several scans complete before GTK consumes the
+ * result, only one callback is queued and the newest completed snapshot wins.
+ * Passing NULL disables future callbacks.
+ *
+ * @param [in,out] scanner Scanner worker.
+ * @param [in] callback Main-context notification callback, or NULL.
+ * @param [in] user_data Opaque callback data.
+ */
+void lsm_process_scanner_set_ready_callback(
+    LsmProcessScanner *scanner,
+    LsmProcessScannerReadyCallback callback,
+    void *user_data);
 
 /**
  * Request a process scan, coalescing with any request already in progress.

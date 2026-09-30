@@ -1178,19 +1178,16 @@ static void append_record_if_needed(LsmApp *app,
     (void)lsm_process_record_append(app, found);
 }
 
-gboolean lsm_processes_update(gpointer user_data)
+static gboolean consume_completed_process_snapshot(LsmApp *app)
 {
-    LsmApp *app = user_data;
     if (!app || app->runtime.paused || !app->process_scanner)
-        return G_SOURCE_CONTINUE;
+        return FALSE;
 
     LsmProcessInfo *processes = NULL;
     size_t count = 0U;
-    const gboolean have_snapshot = lsm_process_scanner_take(
-        app->process_scanner, &processes, &count);
-    (void)lsm_process_scanner_request(
-        app->process_scanner, process_scan_flags(app));
-    if (!have_snapshot) return G_SOURCE_CONTINUE;
+    if (!lsm_process_scanner_take(
+            app->process_scanner, &processes, &count))
+        return FALSE;
 
     lsm_monitor_set_process_totals(&app->monitor, processes, count);
     append_record_if_needed(app, processes, count);
@@ -1207,7 +1204,25 @@ gboolean lsm_processes_update(gpointer user_data)
     lsm_overview_refresh(app);
     if (lsm_processes_page_visible(app))
         lsm_processes_present_snapshot(app);
-    if (details_page_visible(app)) lsm_details_present_snapshot(app);
+    if (details_page_visible(app))
+        lsm_details_present_snapshot(app);
+    return TRUE;
+}
+
+void lsm_processes_present_ready_snapshot(LsmApp *app)
+{
+    (void)consume_completed_process_snapshot(app);
+}
+
+gboolean lsm_processes_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app || app->runtime.paused || !app->process_scanner)
+        return G_SOURCE_CONTINUE;
+
+    (void)consume_completed_process_snapshot(app);
+    (void)lsm_process_scanner_request(
+        app->process_scanner, process_scan_flags(app));
     return G_SOURCE_CONTINUE;
 }
 

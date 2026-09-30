@@ -34,6 +34,15 @@ void lsm_details_build(LsmApp *app, GtkWidget *container);
  */
 gboolean lsm_processes_update(gpointer user_data);
 /**
+ * Consume and present a completed background process snapshot immediately.
+ *
+ * This does not request another scan, so worker completion latency is separated
+ * from the configured process-sampling cadence.
+ *
+ * @param [in,out] app Application receiving the completed snapshot.
+ */
+void lsm_processes_present_ready_snapshot(LsmApp *app);
+/**
  * Rebuild the visible process model from the newest retained snapshot.
  *
  * @param [in,out] app Application whose process tree is presented.
