@@ -47,6 +47,7 @@ struct LsmLinuxSamplerState {
 };
 
 #define LSM_SAMPLER_SHUTDOWN_WAIT_MS 250L
+#define LSM_TOPOLOGY_RETRY_INITIAL_SECONDS 1.0
 
 static void copy_disk_snapshot(LsmDiskInfo *destination,
                                const LsmDiskInfo *source)
@@ -141,6 +142,14 @@ static void copy_public_snapshot(LsmMonitor *destination,
     }
 }
 
+static double topology_retry_delay(unsigned failures)
+{
+    if (failures <= 1U) return LSM_TOPOLOGY_RETRY_INITIAL_SECONDS;
+    if (failures == 2U) return 2.0;
+    if (failures == 3U) return 4.0;
+    return LSM_TOPOLOGY_SCAN_INTERVAL_SECONDS;
+}
+
 static bool sample_once(LsmLinuxMonitorBackendState *state,
                         LsmMonitor *sample, bool force_topology)
 {
@@ -151,21 +160,29 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
     const double elapsed = now - state->last_update_monotonic;
     state->last_update_monotonic = now;
 
-    const bool refresh_topology = force_topology ||
+    const bool retry_topology =
+        state->topology_retry_pending &&
+        now >= state->topology_retry_not_before_monotonic;
+    const bool scheduled_topology =
+        !state->topology_retry_pending &&
         lsm_refresh_interval_due(
             now, state->last_topology_scan_monotonic,
             LSM_TOPOLOGY_SCAN_INTERVAL_SECONDS);
+    const bool refresh_topology =
+        force_topology || retry_topology || scheduled_topology;
     const bool refresh_batteries = lsm_refresh_interval_due(
         now, state->last_battery_update_monotonic,
         LSM_BATTERY_UPDATE_INTERVAL_SECONDS);
 
     lsm_cpu_memory_update(sample, elapsed);
-    (void)lsm_storage_update(sample, elapsed, refresh_topology);
+    const bool storage_complete =
+        lsm_storage_update(sample, elapsed, refresh_topology);
     (void)lsm_pressure_read("/proc/pressure/cpu", &sample->cpu_pressure);
     (void)lsm_pressure_read("/proc/pressure/memory", &sample->memory_pressure);
     (void)lsm_pressure_read("/proc/pressure/io", &sample->io_pressure);
-    (void)lsm_hardware_update(
-        sample, elapsed, refresh_topology, refresh_batteries);
+    const bool hardware_complete =
+        lsm_hardware_update(
+            sample, elapsed, refresh_topology, refresh_batteries);
 
     /* Publish completion identity only after every collector for this native
      * sample has returned. Presentation can therefore distinguish a genuinely
@@ -175,14 +192,26 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
         sample->sample_generation = 1U;
     sample->sample_monotonic_seconds = now;
 
-    /*
-     * Pace topology by attempt time, not only by successful completion.
-     * Individual collectors retain their last authoritative topology on a
-     * transient failure, so retrying the expensive slow path on every fast
-     * sample only hammers the same blocked or incomplete source.
-     */
-    if (refresh_topology)
-        state->last_topology_scan_monotonic = now;
+    if (refresh_topology) {
+        if (storage_complete && hardware_complete) {
+            state->last_topology_scan_monotonic = now;
+            state->topology_retry_pending = false;
+            state->topology_retry_failures = 0U;
+            state->topology_retry_not_before_monotonic = 0.0;
+        } else {
+            /*
+             * Retry promptly, but back off repeated failures so a permanently
+             * blocked mount/device cannot turn the topology slow path into a
+             * one-second hot loop. Collectors retain the last complete
+             * topology until a later attempt succeeds.
+             */
+            if (state->topology_retry_failures < UINT_MAX)
+                state->topology_retry_failures++;
+            state->topology_retry_pending = true;
+            state->topology_retry_not_before_monotonic =
+                now + topology_retry_delay(state->topology_retry_failures);
+        }
+    }
     if (refresh_batteries)
         state->last_battery_update_monotonic = now;
     return true;

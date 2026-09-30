@@ -113,6 +113,9 @@ typedef struct {
     size_t battery_count;
     double last_update_monotonic;
     double last_topology_scan_monotonic;
+    double topology_retry_not_before_monotonic;
+    unsigned topology_retry_failures;
+    bool topology_retry_pending;
     double last_battery_update_monotonic;
     double last_memory_detail_monotonic;
     double last_cpu_frequency_source_refresh_monotonic;
