@@ -38,7 +38,6 @@ struct LsmLinuxSamplerState {
     pthread_cond_t condition;
     LsmLinuxMonitorBackendState *backend;
     LsmMonitor sample;
-    LsmMonitor completed;
     bool thread_started;
     bool request_pending;
     bool sample_in_progress;
@@ -143,10 +142,8 @@ static void copy_public_snapshot(LsmMonitor *destination,
 }
 
 static bool sample_once(LsmLinuxMonitorBackendState *state,
-                        LsmMonitor *sample, bool force_topology,
-                        bool *topology_retry)
+                        LsmMonitor *sample, bool force_topology)
 {
-    if (topology_retry) *topology_retry = false;
     if (!state || !sample) return false;
     const double now = lsm_monotonic_seconds();
     if (!isfinite(now) || now <= state->last_update_monotonic)
@@ -163,14 +160,12 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
         LSM_BATTERY_UPDATE_INTERVAL_SECONDS);
 
     lsm_cpu_memory_update(sample, elapsed);
-    const bool storage_complete =
-        lsm_storage_update(sample, elapsed, refresh_topology);
+    (void)lsm_storage_update(sample, elapsed, refresh_topology);
     (void)lsm_pressure_read("/proc/pressure/cpu", &sample->cpu_pressure);
     (void)lsm_pressure_read("/proc/pressure/memory", &sample->memory_pressure);
     (void)lsm_pressure_read("/proc/pressure/io", &sample->io_pressure);
-    const bool hardware_complete =
-        lsm_hardware_update(
-            sample, elapsed, refresh_topology, refresh_batteries);
+    (void)lsm_hardware_update(
+        sample, elapsed, refresh_topology, refresh_batteries);
 
     /* Publish completion identity only after every collector for this native
      * sample has returned. Presentation can therefore distinguish a genuinely
@@ -180,10 +175,14 @@ static bool sample_once(LsmLinuxMonitorBackendState *state,
         sample->sample_generation = 1U;
     sample->sample_monotonic_seconds = now;
 
-    if (refresh_topology && storage_complete && hardware_complete)
+    /*
+     * Pace topology by attempt time, not only by successful completion.
+     * Individual collectors retain their last authoritative topology on a
+     * transient failure, so retrying the expensive slow path on every fast
+     * sample only hammers the same blocked or incomplete source.
+     */
+    if (refresh_topology)
         state->last_topology_scan_monotonic = now;
-    else if (refresh_topology && topology_retry)
-        *topology_retry = true;
     if (refresh_batteries)
         state->last_battery_update_monotonic = now;
     return true;
@@ -244,20 +243,13 @@ static void *sampler_thread_main(void *user_data)
         sampler->backend->topology_refresh_requested = false;
         (void)pthread_mutex_unlock(&sampler->mutex);
 
-        bool topology_retry = false;
         const bool sampled = sample_once(
-            sampler->backend, &sampler->sample, force_topology,
-            &topology_retry);
+            sampler->backend, &sampler->sample, force_topology);
 
         (void)pthread_mutex_lock(&sampler->mutex);
         sampler->sample_in_progress = false;
-        if (topology_retry)
-            sampler->backend->topology_refresh_requested = true;
-        if (sampled && !sampler->stop_requested) {
-            copy_public_snapshot(
-                &sampler->completed, &sampler->sample, NULL, false);
+        if (sampled && !sampler->stop_requested)
             sampler->sample_ready = true;
-        }
         (void)pthread_mutex_unlock(&sampler->mutex);
         if (!sampled) continue;
     }
@@ -377,10 +369,12 @@ bool lsm_monitor_platform_update(LsmMonitor *monitor)
 
     (void)pthread_mutex_lock(&sampler->mutex);
     if (sampler->sample_ready) {
-        /* The completed slot already lives in heap-owned sampler state. Copy it
-         * directly while holding the short publication lock rather than placing
-         * another multi-megabyte LsmMonitor on the caller's stack. */
-        copy_public_snapshot(monitor, &sampler->completed, state, true);
+        /*
+         * The worker does not touch sample again until a new request is
+         * signalled below. Publish directly from that retained buffer, avoiding
+         * the former sample -> completed -> public double copy.
+         */
+        copy_public_snapshot(monitor, &sampler->sample, state, true);
         sampler->sample_ready = false;
     }
     if (!sampler->request_pending && !sampler->sample_in_progress) {
@@ -406,8 +400,17 @@ void lsm_monitor_platform_request_topology_refresh(LsmMonitor *monitor)
     }
     (void)pthread_mutex_lock(&sampler->mutex);
     state->topology_refresh_requested = true;
-    sampler->request_pending = true;
-    (void)pthread_cond_signal(&sampler->condition);
+    /*
+     * Do not let a topology request overwrite an unread completed sample.
+     * lsm_monitor_platform_update() will publish it first and then wake the
+     * worker with the retained topology request.
+     */
+    if (!sampler->sample_ready &&
+        !sampler->request_pending &&
+        !sampler->sample_in_progress) {
+        sampler->request_pending = true;
+        (void)pthread_cond_signal(&sampler->condition);
+    }
     (void)pthread_mutex_unlock(&sampler->mutex);
 }
 

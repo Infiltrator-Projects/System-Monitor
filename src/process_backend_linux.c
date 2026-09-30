@@ -57,6 +57,7 @@
 #define LSM_IOPRIO_VALUE(class_id, data) (((class_id) << IOPRIO_CLASS_SHIFT) | (data))
 #define LSM_PROCESS_METADATA_REFRESH_SECONDS 5.0
 #define LSM_PROCESS_GPU_REFRESH_SECONDS 2.0
+#define LSM_PROCESS_GPU_NEGATIVE_REFRESH_SECONDS 10.0
 
 typedef struct {
     uint64_t cpu_ticks;
@@ -1162,10 +1163,14 @@ size_t lsm_process_scan(LsmProcessBackend *backend,
             if ((scan_flags & LSM_PROCESS_SCAN_GPU) != 0U) {
                 const double gpu_interval =
                     sampled_at - sample->gpu_sampled_at;
+                const double gpu_refresh_interval =
+                    same_process && !sample->gpu_snapshot_valid
+                        ? LSM_PROCESS_GPU_NEGATIVE_REFRESH_SECONDS
+                        : LSM_PROCESS_GPU_REFRESH_SECONDS;
                 const bool gpu_due =
                     !same_process || sample->gpu_sampled_at <= 0.0 ||
                     gpu_interval < 0.0 ||
-                    gpu_interval >= LSM_PROCESS_GPU_REFRESH_SECONDS;
+                    gpu_interval >= gpu_refresh_interval;
 
                 if (gpu_due) {
                     LsmProcessGpuSnapshot gpu;

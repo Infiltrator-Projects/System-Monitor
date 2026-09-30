@@ -33,6 +33,7 @@
 
 #include <infiltratr/design.h>
 
+#include <stdio.h>
 #include <string.h>
 
 static void minimize_window(GtkButton *button, gpointer user_data)
@@ -1016,8 +1017,15 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->control_radius);
 
-    gtk_css_provider_load_from_data(
-        app->shell.theme_provider, css->str, (gssize)css->len, NULL);
+    GError *css_error = NULL;
+    if (!gtk_css_provider_load_from_data(
+            app->shell.theme_provider, css->str, (gssize)css->len,
+            &css_error)) {
+        fprintf(stderr, "Unable to apply System Monitor theme CSS: %s\n",
+                css_error && css_error->message
+                    ? css_error->message : "unknown CSS parser error");
+        g_clear_error(&css_error);
+    }
     g_string_free(css, TRUE);
     if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
 }

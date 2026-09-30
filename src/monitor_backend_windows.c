@@ -108,6 +108,8 @@ typedef struct {
     bool winsock_started;
     PDH_HQUERY gpu_query;
     PDH_HCOUNTER gpu_engine_counter;
+    PPDH_FMT_COUNTERVALUE_ITEM_W gpu_engine_items;
+    DWORD gpu_engine_items_capacity;
     bool gpu_query_ready;
     LUID gpu_luids[LSM_MAX_GPUS];
     bool gpu_luid_valid[LSM_MAX_GPUS];
@@ -1917,6 +1919,22 @@ static void initialise_gpu_query(
     state->gpu_query_ready = true;
 }
 
+static bool ensure_gpu_engine_item_capacity(
+    LsmWindowsMonitorBackendState *state, DWORD required)
+{
+    if (!state || required == 0U) return false;
+    if (required <= state->gpu_engine_items_capacity &&
+        state->gpu_engine_items)
+        return true;
+
+    void *grown = realloc(state->gpu_engine_items, (size_t)required);
+    if (!grown) return false;
+    state->gpu_engine_items =
+        (PPDH_FMT_COUNTERVALUE_ITEM_W)grown;
+    state->gpu_engine_items_capacity = required;
+    return true;
+}
+
 static void update_gpu_engine_metrics(
     LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
 {
@@ -1936,20 +1954,26 @@ static void update_gpu_engine_metrics(
     PDH_STATUS status = PdhGetFormattedCounterArrayW(
         state->gpu_engine_counter, PDH_FMT_DOUBLE,
         &buffer_size, &item_count, NULL);
-    if (status != (PDH_STATUS)PDH_MORE_DATA || buffer_size == 0U)
+    if (status != (PDH_STATUS)PDH_MORE_DATA || buffer_size == 0U ||
+        !ensure_gpu_engine_item_capacity(state, buffer_size))
         return;
 
-    PPDH_FMT_COUNTERVALUE_ITEM_W items =
-        (PPDH_FMT_COUNTERVALUE_ITEM_W)malloc(buffer_size);
-    if (!items) return;
-
-    status = PdhGetFormattedCounterArrayW(
-        state->gpu_engine_counter, PDH_FMT_DOUBLE,
-        &buffer_size, &item_count, items);
-    if (status != ERROR_SUCCESS) {
-        free(items);
-        return;
+    for (unsigned attempt = 0U; attempt < 3U; attempt++) {
+        buffer_size = state->gpu_engine_items_capacity;
+        item_count = 0U;
+        status = PdhGetFormattedCounterArrayW(
+            state->gpu_engine_counter, PDH_FMT_DOUBLE,
+            &buffer_size, &item_count, state->gpu_engine_items);
+        if (status != (PDH_STATUS)PDH_MORE_DATA)
+            break;
+        if (buffer_size <= state->gpu_engine_items_capacity ||
+            !ensure_gpu_engine_item_capacity(state, buffer_size))
+            return;
     }
+    if (status != ERROR_SUCCESS)
+        return;
+
+    PPDH_FMT_COUNTERVALUE_ITEM_W items = state->gpu_engine_items;
 
     LsmWindowsGpuEngineSample engines[
         LSM_WINDOWS_GPU_ENGINE_LIMIT];
@@ -2012,7 +2036,6 @@ static void update_gpu_engine_metrics(
         engines[engine].utilisation += value;
     }
 
-    free(items);
     if (!engine_inventory_complete) {
         for (size_t index = 0U; index < monitor->gpu_count; index++)
             reset_gpu_engine_metrics(&monitor->gpus[index]);
@@ -2408,6 +2431,11 @@ static void windows_sampler_release(LsmWindowsSamplerState *sampler)
     LsmWindowsMonitorBackendState *state = sampler->native;
     if (state && state->gpu_query)
         PdhCloseQuery(state->gpu_query);
+    if (state) {
+        free(state->gpu_engine_items);
+        state->gpu_engine_items = NULL;
+        state->gpu_engine_items_capacity = 0U;
+    }
     if (state && state->winsock_started)
         WSACleanup();
     free(state);

@@ -732,8 +732,11 @@ static gboolean update_details_model_values(LsmApp *app)
 
 static ssize_t process_index_for_pid(ProcessBuildContext *context, LsmProcessId pid)
 {
-    gpointer value = g_hash_table_lookup(context->pid_to_index, GINT_TO_POINTER(pid));
-    return value ? (ssize_t)(GPOINTER_TO_UINT(value) - 1u) : -1;
+    if (!context || pid == 0U || pid > (LsmProcessId)UINT_MAX)
+        return -1;
+    gpointer value = g_hash_table_lookup(
+        context->pid_to_index, GUINT_TO_POINTER((guint)pid));
+    return value ? (ssize_t)(GPOINTER_TO_UINT(value) - 1U) : -1;
 }
 
 static void append_process_recursive(ProcessBuildContext *context, size_t index)
@@ -768,9 +771,11 @@ static void collect_expanded_pid(GtkTreeView *tree, GtkTreePath *path, gpointer 
     GtkTreeIter iter;
     GtkTreeModel *model = gtk_tree_view_get_model(tree);
     if (gtk_tree_model_get_iter(model, &iter, path)) {
-        gint pid = 0;
+        guint64 pid = 0U;
         gtk_tree_model_get(model, &iter, PROC_COL_PID, &pid, -1);
-        if (pid > 0) g_hash_table_add(expanded, GINT_TO_POINTER(pid));
+        if (pid > 0U && pid <= UINT_MAX)
+            g_hash_table_add(
+                expanded, GUINT_TO_POINTER((guint)pid));
     }
 }
 
@@ -812,9 +817,13 @@ static void rebuild_details_model(LsmApp *app)
     GHashTable *pid_to_index = g_hash_table_new(g_direct_hash, g_direct_equal);
 
     for (size_t i = 0; i < count; i++) {
-        g_hash_table_insert(pid_to_index, GINT_TO_POINTER(app->process.process_snapshot[i].pid),
-                            GUINT_TO_POINTER((guint)i + 1u));
-        direct[i] = process_directly_visible(app, &app->process.process_snapshot[i]);
+        const LsmProcessId pid = app->process.process_snapshot[i].pid;
+        if (pid > 0U && pid <= (LsmProcessId)UINT_MAX && i < UINT_MAX)
+            g_hash_table_insert(
+                pid_to_index, GUINT_TO_POINTER((guint)pid),
+                GUINT_TO_POINTER((guint)i + 1U));
+        direct[i] = process_directly_visible(
+            app, &app->process.process_snapshot[i]);
         visible[i] = direct[i];
     }
 
@@ -826,7 +835,9 @@ static void rebuild_details_model(LsmApp *app)
             if (!direct[i]) continue;
             LsmProcessId parent = app->process.process_snapshot[i].ppid;
             for (size_t guard = 0; parent > 0 && guard < count; guard++) {
-                gpointer value = g_hash_table_lookup(pid_to_index, GINT_TO_POINTER(parent));
+                if (parent > (LsmProcessId)UINT_MAX) break;
+                gpointer value = g_hash_table_lookup(
+                    pid_to_index, GUINT_TO_POINTER((guint)parent));
                 if (!value) break;
                 size_t parent_index = GPOINTER_TO_UINT(value) - 1u;
                 visible[parent_index] = TRUE;
@@ -862,7 +873,12 @@ static void rebuild_details_model(LsmApp *app)
             select_sorted_path(app, &iters[i], FALSE);
         if (app->details.details_tree_mode &&
             (searching ||
-             g_hash_table_contains(expanded, GINT_TO_POINTER(app->process.process_snapshot[i].pid)) ||
+             (app->process.process_snapshot[i].pid <=
+                  (LsmProcessId)UINT_MAX &&
+              g_hash_table_contains(
+                  expanded,
+                  GUINT_TO_POINTER(
+                      (guint)app->process.process_snapshot[i].pid))) ||
              (visible[i] && !direct[i])))
             select_sorted_path(app, &iters[i], TRUE);
     }

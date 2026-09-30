@@ -71,6 +71,8 @@ static gboolean process_timer_update(gpointer user_data)
     return lsm_app_refresh_processes_if_due(user_data, FALSE);
 }
 
+static void remove_source(guint *source);
+
 static void reschedule_process_timer(LsmApp *app)
 {
     if (!app || !app->shell.window || app->runtime.shutting_down)
@@ -108,6 +110,46 @@ static gboolean filesystem_timer_update(gpointer user_data)
     return lsm_filesystems_update(app);
 }
 
+static void reschedule_slow_page_timer(LsmApp *app)
+{
+    if (!app) return;
+    remove_source(&app->runtime.services_timer);
+    remove_source(&app->runtime.users_timer);
+    remove_source(&app->runtime.filesystem_timer);
+
+    if (!app->shell.window || app->runtime.shutting_down)
+        return;
+
+    switch ((LsmTabIndex)app->runtime.active_tab) {
+        case LSM_TAB_SERVICES:
+            if (app->runtime.page_built[LSM_TAB_SERVICES])
+                app->runtime.services_timer = g_timeout_add_seconds(
+                    LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
+                    services_timer_update, app);
+            break;
+        case LSM_TAB_USERS:
+            if (app->runtime.page_built[LSM_TAB_USERS])
+                app->runtime.users_timer = g_timeout_add_seconds(
+                    LSM_USER_UPDATE_INTERVAL_SECONDS,
+                    users_timer_update, app);
+            break;
+        case LSM_TAB_FILESYSTEMS:
+            if (app->runtime.page_built[LSM_TAB_FILESYSTEMS])
+                app->runtime.filesystem_timer = g_timeout_add(
+                    app->runtime.filesystem_update_interval_ms,
+                    filesystem_timer_update, app);
+            break;
+        case LSM_TAB_PERFORMANCE:
+        case LSM_TAB_PROCESSES:
+        case LSM_TAB_APP_HISTORY:
+        case LSM_TAB_STARTUP:
+        case LSM_TAB_DETAILS:
+        case LSM_TAB_OVERVIEW:
+        case LSM_TAB_COUNT:
+            break;
+    }
+}
+
 void lsm_app_refresh_all(LsmApp *app)
 {
     if (!app) return;
@@ -137,51 +179,23 @@ void lsm_app_preferences_changed(LsmApp *app)
     app->runtime.performance_timer = g_timeout_add(
         app->runtime.update_interval_ms, lsm_performance_update, app);
     reschedule_process_timer(app);
-    if (app->runtime.filesystem_timer) {
-        g_source_remove(app->runtime.filesystem_timer);
-        app->runtime.filesystem_timer = g_timeout_add(
-            app->runtime.filesystem_update_interval_ms,
-            filesystem_timer_update, app);
-    }
+    reschedule_slow_page_timer(app);
 }
 
 void lsm_app_runtime_navigation_changed(LsmApp *app)
 {
-    if (!app || !app->runtime.process_timer) return;
-    reschedule_process_timer(app);
+    if (!app) return;
+    if (app->runtime.process_timer)
+        reschedule_process_timer(app);
+    reschedule_slow_page_timer(app);
 }
 
 void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
 {
-    if (!app || app->runtime.shutting_down) return;
-    switch (page) {
-        case LSM_TAB_SERVICES:
-            if (!app->runtime.services_timer)
-                app->runtime.services_timer = g_timeout_add_seconds(
-                    LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
-                    services_timer_update, app);
-            break;
-        case LSM_TAB_USERS:
-            if (!app->runtime.users_timer)
-                app->runtime.users_timer = g_timeout_add_seconds(
-                    LSM_USER_UPDATE_INTERVAL_SECONDS,
-                    users_timer_update, app);
-            break;
-        case LSM_TAB_FILESYSTEMS:
-            if (!app->runtime.filesystem_timer)
-                app->runtime.filesystem_timer = g_timeout_add(
-                    app->runtime.filesystem_update_interval_ms,
-                    filesystem_timer_update, app);
-            break;
-        case LSM_TAB_PERFORMANCE:
-        case LSM_TAB_PROCESSES:
-        case LSM_TAB_APP_HISTORY:
-        case LSM_TAB_STARTUP:
-        case LSM_TAB_DETAILS:
-        case LSM_TAB_OVERVIEW:
-        case LSM_TAB_COUNT:
-            break;
-    }
+    if (!app || app->runtime.shutting_down || page >= LSM_TAB_COUNT)
+        return;
+    if ((unsigned)app->runtime.active_tab == page)
+        reschedule_slow_page_timer(app);
 }
 
 void lsm_app_runtime_start(LsmApp *app)
@@ -190,10 +204,7 @@ void lsm_app_runtime_start(LsmApp *app)
     app->runtime.performance_timer = g_timeout_add(
         app->runtime.update_interval_ms, lsm_performance_update, app);
     reschedule_process_timer(app);
-    for (gint page = 0; page < LSM_TAB_COUNT; page++) {
-        if (app->runtime.page_built[page])
-            lsm_app_runtime_page_built(app, (LsmTabIndex)page);
-    }
+    reschedule_slow_page_timer(app);
 }
 
 static void remove_source(guint *source)
