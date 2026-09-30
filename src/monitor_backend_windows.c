@@ -1962,26 +1962,43 @@ static void update_gpu_engine_metrics(
         PdhCollectQueryData(state->gpu_query) != ERROR_SUCCESS)
         return;
 
-    DWORD buffer_size = 0U;
+    DWORD buffer_size = state->gpu_engine_items_capacity;
     DWORD item_count = 0U;
-    PDH_STATUS status = PdhGetFormattedCounterArrayW(
-        state->gpu_engine_counter, PDH_FMT_DOUBLE,
-        &buffer_size, &item_count, NULL);
-    if (status != (PDH_STATUS)PDH_MORE_DATA || buffer_size == 0U ||
-        !ensure_gpu_engine_item_capacity(state, buffer_size))
-        return;
+    PDH_STATUS status = (PDH_STATUS)PDH_MORE_DATA;
 
-    for (unsigned attempt = 0U; attempt < 3U; attempt++) {
-        buffer_size = state->gpu_engine_items_capacity;
-        item_count = 0U;
+    if (state->gpu_engine_items && buffer_size > 0U) {
         status = PdhGetFormattedCounterArrayW(
             state->gpu_engine_counter, PDH_FMT_DOUBLE,
             &buffer_size, &item_count, state->gpu_engine_items);
-        if (status != (PDH_STATUS)PDH_MORE_DATA)
-            break;
-        if (buffer_size <= state->gpu_engine_items_capacity ||
-            !ensure_gpu_engine_item_capacity(state, buffer_size))
+        if (status != ERROR_SUCCESS &&
+            status != (PDH_STATUS)PDH_MORE_DATA)
             return;
+    }
+
+    if (status == (PDH_STATUS)PDH_MORE_DATA) {
+        if (buffer_size == 0U) {
+            status = PdhGetFormattedCounterArrayW(
+                state->gpu_engine_counter, PDH_FMT_DOUBLE,
+                &buffer_size, &item_count, NULL);
+            if (status != (PDH_STATUS)PDH_MORE_DATA ||
+                buffer_size == 0U)
+                return;
+        }
+        if (!ensure_gpu_engine_item_capacity(state, buffer_size))
+            return;
+
+        for (unsigned attempt = 0U; attempt < 3U; attempt++) {
+            buffer_size = state->gpu_engine_items_capacity;
+            item_count = 0U;
+            status = PdhGetFormattedCounterArrayW(
+                state->gpu_engine_counter, PDH_FMT_DOUBLE,
+                &buffer_size, &item_count, state->gpu_engine_items);
+            if (status != (PDH_STATUS)PDH_MORE_DATA)
+                break;
+            if (buffer_size <= state->gpu_engine_items_capacity ||
+                !ensure_gpu_engine_item_capacity(state, buffer_size))
+                return;
+        }
     }
     if (status != ERROR_SUCCESS)
         return;

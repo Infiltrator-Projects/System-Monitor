@@ -385,8 +385,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
         lsm_monitor_destroy(&app->monitor);
         return;
     }
-    lsm_process_scanner_set_ready_callback(
-        app->process_scanner, process_snapshot_ready, app);
 #ifdef LSM_TEST_14_CORES
     app->monitor.cpu.logical_cores = 14;
     app->monitor.cpu.physical_cores = 12;
@@ -461,6 +459,13 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.shell_shown = TRUE;
     lsm_app_shell_sync_navigation(app);
     g_object_set_data(G_OBJECT(app->shell.window), "lsm-app", app);
+    /*
+     * Register completed-process delivery only after the shell exists. If the
+     * initial worker scan already completed, the scanner immediately schedules
+     * that retained result into this now-valid main-context presentation path.
+     */
+    lsm_process_scanner_set_ready_callback(
+        app->process_scanner, process_snapshot_ready, app);
     gtk_window_set_keep_above(GTK_WINDOW(app->shell.window), app->runtime.always_on_top);
     lsm_app_shell_apply_compact_summary(app);
 #ifdef LSM_TEST_PERFORMANCE

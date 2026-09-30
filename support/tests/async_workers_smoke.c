@@ -11,6 +11,8 @@
 #include "process_scanner.h"
 #include "process_backend.h"
 
+#include <glib.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +30,23 @@ static void short_pause(void)
         .tv_nsec = WORKER_POLL_NS
     };
     (void)nanosleep(&pause, NULL);
+}
+
+static void scanner_ready(void *user_data)
+{
+    unsigned *notifications = user_data;
+    if (notifications) (*notifications)++;
+}
+
+static int wait_for_ready(unsigned *notifications)
+{
+    for (unsigned attempt = 0U; attempt < WORKER_POLL_ATTEMPTS; attempt++) {
+        while (g_main_context_iteration(NULL, FALSE)) {
+        }
+        if (notifications && *notifications > 0U) return 0;
+        short_pause();
+    }
+    return ETIMEDOUT;
 }
 
 static int wait_for_snapshot(LsmProcessScanner *scanner,
@@ -67,8 +86,18 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    unsigned ready_notifications = 0U;
+    lsm_process_scanner_set_ready_callback(
+        scanner, scanner_ready, &ready_notifications);
+
     if (!lsm_process_scanner_request(scanner, LSM_PROCESS_SCAN_NONE)) {
         fputs("Unable to request base process scan.\n", stderr);
+        lsm_process_scanner_destroy(scanner);
+        return EXIT_FAILURE;
+    }
+
+    if (wait_for_ready(&ready_notifications) != 0) {
+        fputs("Detached process scan did not notify completion.\n", stderr);
         lsm_process_scanner_destroy(scanner);
         return EXIT_FAILURE;
     }
