@@ -10,7 +10,6 @@
 #include "app_menu.h"
 #include "app_internal.h"
 #include "app_runtime.h"
-#include "app_shell.h"
 #include "common.h"
 
 #include "details_page.h"
@@ -18,7 +17,6 @@
 #include "process_export.h"
 #include "process_file_users.h"
 #include "project_info.h"
-#include "preferences.h"
 #include "system_snapshot.h"
 #include "task_launcher.h"
 #include "ui_helpers.h"
@@ -91,71 +89,6 @@ void lsm_app_menu_refresh(GtkMenuItem *item, gpointer user_data)
     lsm_app_refresh_all(user_data);
 }
 
-static void on_speed_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    app->runtime.update_interval_ms = GPOINTER_TO_UINT(user_data);
-    lsm_preferences_save(app);
-    lsm_app_preferences_changed(app);
-}
-
-static void on_pause_toggled(GtkCheckMenuItem *item, gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.paused = gtk_check_menu_item_get_active(item);
-    if (app->shell.pause_indicator)
-        gtk_widget_set_visible(app->shell.pause_indicator,
-                               app->runtime.paused && !app->runtime.compact_summary);
-}
-
-static void on_always_on_top_toggled(GtkCheckMenuItem *item,
-                                     gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.always_on_top = gtk_check_menu_item_get_active(item);
-    if (app->shell.window)
-        gtk_window_set_keep_above(GTK_WINDOW(app->shell.window),
-                                  app->runtime.always_on_top);
-    lsm_preferences_save(app);
-}
-
-static void on_compact_summary_toggled(GtkCheckMenuItem *item,
-                                       gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.compact_summary = gtk_check_menu_item_get_active(item);
-    lsm_app_shell_apply_compact_summary(app);
-    lsm_preferences_save(app);
-}
-
-static void on_direction_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    app->runtime.newer_on_right = GPOINTER_TO_INT(user_data) != 0;
-    lsm_preferences_save(app);
-}
-
-static void on_theme_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    if (!app) return;
-    const int mode = GPOINTER_TO_INT(user_data);
-    if (mode < INFILTRATR_THEME_SYSTEM || mode > INFILTRATR_THEME_NIGHT)
-        return;
-    app->runtime.theme_mode = (InfiltratrThemeMode)mode;
-    lsm_app_shell_apply_theme(app);
-    lsm_preferences_save(app);
-}
-
-static void on_preferences(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    lsm_preferences_show(user_data);
-}
-
 static void on_help(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
@@ -172,12 +105,6 @@ static void on_filters(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     lsm_process_filters_dialog(user_data);
-}
-
-static void on_process_columns(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    lsm_details_show_columns(user_data);
 }
 
 static void on_record_process(GtkCheckMenuItem *item, gpointer user_data)
@@ -425,7 +352,7 @@ static GtkWidget *menu_item(const char *label, GCallback callback, gpointer data
     return item;
 }
 
-/* Menu construction keeps all global application actions in one place. */
+/* The permanent menu bar contains only document/task, process-tool and help actions. */
 GtkWidget *lsm_app_menu_build(LsmApp *app)
 {
     GtkWidget *bar = gtk_menu_bar_new();
@@ -447,105 +374,6 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
         menu_item("_Quit", G_CALLBACK(on_quit), app));
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_root), file_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(bar), file_root);
-
-    GtkWidget *options_root = gtk_menu_item_new_with_mnemonic("_Options");
-    GtkWidget *options_menu = gtk_menu_new();
-    app->shell.pause_menu_item =
-        gtk_check_menu_item_new_with_mnemonic("_Pause updates");
-    g_signal_connect(app->shell.pause_menu_item, "toggled",
-                     G_CALLBACK(on_pause_toggled), app);
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-                          app->shell.pause_menu_item);
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-                          gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-        menu_item("_Preferences…", G_CALLBACK(on_preferences), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(options_root), options_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), options_root);
-
-    GtkWidget *view_root = gtk_menu_item_new_with_mnemonic("_View");
-    GtkWidget *view_menu = gtk_menu_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), menu_item("_Refresh now", G_CALLBACK(lsm_app_menu_refresh), app));
-    app->shell.always_on_top_menu_item =
-        gtk_check_menu_item_new_with_label("Always on top");
-    g_signal_connect(app->shell.always_on_top_menu_item, "toggled",
-                     G_CALLBACK(on_always_on_top_toggled), app);
-    gtk_check_menu_item_set_active(
-        GTK_CHECK_MENU_ITEM(app->shell.always_on_top_menu_item), app->runtime.always_on_top);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          app->shell.always_on_top_menu_item);
-    app->shell.compact_summary_menu_item =
-        gtk_check_menu_item_new_with_label("Compact summary mode");
-    g_signal_connect(app->shell.compact_summary_menu_item, "toggled",
-                     G_CALLBACK(on_compact_summary_toggled), app);
-    gtk_check_menu_item_set_active(
-        GTK_CHECK_MENU_ITEM(app->shell.compact_summary_menu_item),
-        app->runtime.compact_summary);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          app->shell.compact_summary_menu_item);
-
-    GtkWidget *theme_root = gtk_menu_item_new_with_label("Theme");
-    GtkWidget *theme_menu = gtk_menu_new();
-    GSList *theme_group = NULL;
-    for (int mode = INFILTRATR_THEME_SYSTEM;
-         mode <= INFILTRATR_THEME_NIGHT; mode++) {
-        const char *label = mode == INFILTRATR_THEME_SYSTEM
-            ? "Follow system"
-            : infiltratr_theme_mode_name((InfiltratrThemeMode)mode);
-        GtkWidget *radio = gtk_radio_menu_item_new_with_label(
-            theme_group, label);
-        theme_group = gtk_radio_menu_item_get_group(
-            GTK_RADIO_MENU_ITEM(radio));
-        g_object_set_data(G_OBJECT(radio), "lsm-app", app);
-        g_signal_connect(radio, "toggled",
-                         G_CALLBACK(on_theme_selected), GINT_TO_POINTER(mode));
-        gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), radio);
-        if (mode == (int)app->runtime.theme_mode)
-            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(radio), TRUE);
-    }
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_root), theme_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_root);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          gtk_separator_menu_item_new());
-
-    GtkWidget *speed_root =
-        gtk_menu_item_new_with_label("Performance refresh speed");
-    GtkWidget *speed_menu = gtk_menu_new();
-    GSList *speed_group = NULL;
-    struct { const char *name; guint milliseconds; } speeds[] = {
-        {"Fast (0.5 seconds)", 500}, {"Normal (1 second)", 1000},
-        {"Low (2 seconds)", 2000}, {"Very low (5 seconds)", 5000}
-    };
-    for (size_t i = 0; i < G_N_ELEMENTS(speeds); i++) {
-        GtkWidget *radio = gtk_radio_menu_item_new_with_label(speed_group, speeds[i].name);
-        speed_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(radio));
-        g_object_set_data(G_OBJECT(radio), "lsm-app", app);
-        g_signal_connect(radio, "toggled", G_CALLBACK(on_speed_selected), GUINT_TO_POINTER(speeds[i].milliseconds));
-        gtk_menu_shell_append(GTK_MENU_SHELL(speed_menu), radio);
-        if (speeds[i].milliseconds == app->runtime.update_interval_ms)
-            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(radio), TRUE);
-    }
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(speed_root), speed_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), speed_root);
-
-    GtkWidget *direction_root = gtk_menu_item_new_with_label("Graph direction");
-    GtkWidget *direction_menu = gtk_menu_new();
-    GtkWidget *right = gtk_radio_menu_item_new_with_label(NULL, "New values on the right");
-    GtkWidget *left = gtk_radio_menu_item_new_with_label_from_widget(GTK_RADIO_MENU_ITEM(right), "New values on the left");
-    g_object_set_data(G_OBJECT(right), "lsm-app", app);
-    g_object_set_data(G_OBJECT(left), "lsm-app", app);
-    g_signal_connect(right, "toggled", G_CALLBACK(on_direction_selected), GINT_TO_POINTER(1));
-    g_signal_connect(left, "toggled", G_CALLBACK(on_direction_selected), GINT_TO_POINTER(0));
-    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(
-        app->runtime.newer_on_right ? right : left), TRUE);
-    gtk_menu_shell_append(GTK_MENU_SHELL(direction_menu), right);
-    gtk_menu_shell_append(GTK_MENU_SHELL(direction_menu), left);
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(direction_root), direction_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), direction_root);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-        menu_item("Process _columns…", G_CALLBACK(on_process_columns), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_root), view_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), view_root);
 
     GtkWidget *tools_root = gtk_menu_item_new_with_mnemonic("_Tools");
     GtkWidget *tools_menu = gtk_menu_new();

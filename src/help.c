@@ -38,9 +38,9 @@ static const HelpTopic topics[] = {
         "System Monitor is a complete graphical system-management application. "
         "Use the tabs across the top to move between Performance, Processes, App History, "
         "Startup Apps, Users, Details, Services, File Systems and Overview. "
-        "Values update automatically; Options > Pause updates freezes presentation without "
-        "closing the program. A visible banner confirms when updates are paused; F5 "
-        "performs one refresh without resuming automatic updates."
+        "Values update automatically; press Space from a data view to pause or resume "
+        "presentation. A visible banner confirms when updates are paused; F5 performs one "
+        "refresh without resuming automatic updates."
     },
     {
         "Performance",
@@ -164,9 +164,10 @@ static const HelpTopic topics[] = {
     },
     {
         "Refresh speed and units",
-        "Open Options > Preferences to choose the performance refresh interval, graph direction, "
-        "network units, process CPU scale, process heat-map shading and the default file "
-        "system visibility. Total-computer process CPU remains between 0 and 100 percent; "
+        "Use the Settings button in the title bar to choose the theme, performance refresh "
+        "interval, graph direction, network units, process CPU scale, process heat-map shading "
+        "and the default file-system visibility. Total-computer process CPU remains between "
+        "0 and 100 percent; "
         "per-core mode may exceed 100 percent for multi-threaded processes."
     },
     {
