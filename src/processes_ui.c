@@ -80,6 +80,51 @@ typedef struct {
     unsigned depth;
 } PidDepth;
 
+typedef struct {
+    LsmProcessId pid;
+    LsmProcessInstanceId instance_id;
+} ProcessIdentityCacheKey;
+
+typedef struct {
+    ProcessCategory category;
+    char key[LSM_NAME_LEN * 2U];
+    char name[LSM_NAME_LEN];
+    char icon[LSM_NAME_LEN];
+    double refreshed_at;
+    uint64_t seen_generation;
+} ProcessIdentityCacheEntry;
+
+#define LSM_PROCESS_IDENTITY_CACHE_SECONDS 5.0
+
+static guint process_identity_cache_hash(gconstpointer data)
+{
+    const ProcessIdentityCacheKey *key = data;
+    if (!key) return 0U;
+    uint64_t hash = LSM_FNV1A64_OFFSET_BASIS;
+    hash = lsm_fnv1a64_mix_u64_le(hash, (uint64_t)key->pid);
+    hash = lsm_fnv1a64_mix_u64_le(hash, key->instance_id);
+    return (guint)(hash ^ (hash >> 32U));
+}
+
+static gboolean process_identity_cache_equal(gconstpointer left,
+                                             gconstpointer right)
+{
+    const ProcessIdentityCacheKey *a = left;
+    const ProcessIdentityCacheKey *b = right;
+    return a && b && a->pid == b->pid &&
+           a->instance_id == b->instance_id;
+}
+
+static gboolean process_identity_cache_remove_stale(
+    gpointer key, gpointer value, gpointer user_data)
+{
+    (void)key;
+    const ProcessIdentityCacheEntry *entry = value;
+    const uint64_t *generation = user_data;
+    return !entry || !generation ||
+           entry->seen_generation != *generation;
+}
+
 /* Group construction is independent of GTK row lifetime: build semantic
  * groups from the retained process snapshot first, then render them. */
 static const char *category_name(ProcessCategory category)
@@ -295,7 +340,8 @@ static gboolean cgroup_path_has_slice(const char *path,
     return FALSE;
 }
 
-static void process_identity(const LsmApp *app, size_t process_index,
+static void process_identity_uncached(
+                             const LsmApp *app, size_t process_index,
                              GHashTable *pid_index,
                              ProcessCategory *category, char *key,
                              size_t key_size, char *name, size_t name_size,
@@ -331,6 +377,91 @@ static void process_identity(const LsmApp *app, size_t process_index,
     }
     lsm_copy_string(name, name_size, process->name);
     lsm_copy_string(icon, icon_size, category_icon(*category));
+}
+
+static void process_identity(LsmApp *app, size_t process_index,
+                             GHashTable *pid_index,
+                             ProcessCategory *category, char *key,
+                             size_t key_size, char *name, size_t name_size,
+                             char *icon, size_t icon_size)
+{
+    if (!app || process_index >= app->process.process_snapshot_count ||
+        !category || !key || key_size == 0U ||
+        !name || name_size == 0U || !icon || icon_size == 0U)
+        return;
+
+    if (!app->processes.process_identity_cache)
+        app->processes.process_identity_cache = g_hash_table_new_full(
+            process_identity_cache_hash, process_identity_cache_equal,
+            g_free, g_free);
+
+    const LsmProcessInfo *process =
+        &app->process.process_snapshot[process_index];
+    const ProcessIdentityCacheKey lookup = {
+        .pid = process->pid,
+        .instance_id = process->instance_id
+    };
+    ProcessIdentityCacheEntry *cached =
+        app->processes.process_identity_cache
+            ? g_hash_table_lookup(
+                  app->processes.process_identity_cache, &lookup)
+            : NULL;
+    const double now = lsm_monotonic_seconds();
+    const gboolean fresh =
+        cached && now > 0.0 && cached->refreshed_at > 0.0 &&
+        now >= cached->refreshed_at &&
+        now - cached->refreshed_at < LSM_PROCESS_IDENTITY_CACHE_SECONDS;
+
+    if (!fresh) {
+        ProcessCategory resolved_category = PROCESS_CATEGORY_BACKGROUND;
+        char resolved_key[LSM_NAME_LEN * 2U] = "";
+        char resolved_name[LSM_NAME_LEN] = "";
+        char resolved_icon[LSM_NAME_LEN] = "";
+        process_identity_uncached(
+            app, process_index, pid_index, &resolved_category,
+            resolved_key, sizeof(resolved_key),
+            resolved_name, sizeof(resolved_name),
+            resolved_icon, sizeof(resolved_icon));
+
+        if (!cached && app->processes.process_identity_cache) {
+            ProcessIdentityCacheKey *stored_key =
+                g_new0(ProcessIdentityCacheKey, 1U);
+            ProcessIdentityCacheEntry *stored =
+                g_new0(ProcessIdentityCacheEntry, 1U);
+            if (stored_key && stored) {
+                *stored_key = lookup;
+                g_hash_table_insert(
+                    app->processes.process_identity_cache,
+                    stored_key, stored);
+                cached = stored;
+            } else {
+                g_free(stored_key);
+                g_free(stored);
+            }
+        }
+        if (cached) {
+            cached->category = resolved_category;
+            lsm_copy_string(
+                cached->key, sizeof(cached->key), resolved_key);
+            lsm_copy_string(
+                cached->name, sizeof(cached->name), resolved_name);
+            lsm_copy_string(
+                cached->icon, sizeof(cached->icon), resolved_icon);
+            cached->refreshed_at = now > 0.0 ? now : 0.0;
+        } else {
+            *category = resolved_category;
+            lsm_copy_string(key, key_size, resolved_key);
+            lsm_copy_string(name, name_size, resolved_name);
+            lsm_copy_string(icon, icon_size, resolved_icon);
+            return;
+        }
+    }
+
+    cached->seen_generation = app->process.process_snapshot_generation;
+    *category = cached->category;
+    lsm_copy_string(key, key_size, cached->key);
+    lsm_copy_string(name, name_size, cached->name);
+    lsm_copy_string(icon, icon_size, cached->icon);
 }
 
 static void group_destroy(gpointer data)
@@ -492,6 +623,14 @@ static GPtrArray *collect_groups(LsmApp *app)
 
     g_free(folded_search);
     if (folded_filters) g_ptr_array_free(folded_filters, TRUE);
+    if (app->processes.process_identity_cache) {
+        const uint64_t generation =
+            app->process.process_snapshot_generation;
+        g_hash_table_foreach_remove(
+            app->processes.process_identity_cache,
+            process_identity_cache_remove_stale,
+            (gpointer)&generation);
+    }
     g_ptr_array_sort(groups, compare_groups);
     return groups;
 }
@@ -1302,4 +1441,7 @@ void lsm_processes_destroy(LsmApp *app)
     if (app->processes.process_group_cache)
         g_ptr_array_free(app->processes.process_group_cache, TRUE);
     app->processes.process_group_cache = NULL;
+    if (app->processes.process_identity_cache)
+        g_hash_table_destroy(app->processes.process_identity_cache);
+    app->processes.process_identity_cache = NULL;
 }

@@ -53,6 +53,7 @@
 #define LSM_WINDOWS_EXTENTS_BUFFER 4096U
 #define LSM_WINDOWS_EXTENTS_BUFFER_MAX (1024U * 1024U)
 #define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
+#define LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE 512U
 
 /*
  * GUID_DEVINTERFACE_DISK ({53F56307-B6BF-11D0-94F2-00A0C91EFB8B})
@@ -1779,6 +1780,18 @@ typedef struct {
     double utilisation;
 } LsmWindowsGpuEngineSample;
 
+static size_t gpu_engine_lookup_start(
+    size_t gpu_index, DWORD physical_index, DWORD engine_index,
+    LsmWindowsGpuEngineType type)
+{
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = (hash ^ (uint64_t)gpu_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)physical_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)engine_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)type) * UINT64_C(1099511628211);
+    return (size_t)(hash % LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE);
+}
+
 static void reset_gpu_engine_metrics(LsmGpuInfo *gpu)
 {
     if (!gpu) return;
@@ -1978,6 +1991,10 @@ static void update_gpu_engine_metrics(
     LsmWindowsGpuEngineSample engines[
         LSM_WINDOWS_GPU_ENGINE_LIMIT];
     memset(engines, 0, sizeof(engines));
+    size_t engine_lookup[LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE];
+    for (size_t slot = 0U;
+         slot < LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE; slot++)
+        engine_lookup[slot] = SIZE_MAX;
     size_t engine_count = 0U;
     bool engine_inventory_complete = true;
 
@@ -2012,26 +2029,41 @@ static void update_gpu_engine_metrics(
         if (type == LSM_WINDOWS_GPU_ENGINE_OTHER)
             continue;
 
-        size_t engine = 0U;
-        for (; engine < engine_count; engine++) {
-            if (engines[engine].gpu_index == (size_t)matched_gpu &&
-                engines[engine].physical_index == physical_index &&
-                engines[engine].engine_index == engine_index &&
-                engines[engine].type == type)
-                break;
-        }
-        if (engine == engine_count) {
-            if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT) {
-                engine_inventory_complete = false;
+        size_t lookup_slot = gpu_engine_lookup_start(
+            (size_t)matched_gpu, physical_index, engine_index, type);
+        size_t engine = SIZE_MAX;
+        for (size_t probe = 0U;
+             probe < LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE; probe++) {
+            const size_t candidate = engine_lookup[lookup_slot];
+            if (candidate == SIZE_MAX) {
+                if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT) {
+                    engine_inventory_complete = false;
+                    break;
+                }
+                engine = engine_count++;
+                engines[engine].used = true;
+                engines[engine].gpu_index = (size_t)matched_gpu;
+                engines[engine].physical_index = physical_index;
+                engines[engine].engine_index = engine_index;
+                engines[engine].type = type;
+                engines[engine].utilisation = 0.0;
+                engine_lookup[lookup_slot] = engine;
                 break;
             }
-            engines[engine].used = true;
-            engines[engine].gpu_index = (size_t)matched_gpu;
-            engines[engine].physical_index = physical_index;
-            engines[engine].engine_index = engine_index;
-            engines[engine].type = type;
-            engines[engine].utilisation = 0.0;
-            engine_count++;
+            if (candidate < engine_count &&
+                engines[candidate].gpu_index == (size_t)matched_gpu &&
+                engines[candidate].physical_index == physical_index &&
+                engines[candidate].engine_index == engine_index &&
+                engines[candidate].type == type) {
+                engine = candidate;
+                break;
+            }
+            lookup_slot =
+                (lookup_slot + 1U) % LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE;
+        }
+        if (!engine_inventory_complete || engine == SIZE_MAX) {
+            engine_inventory_complete = false;
+            break;
         }
         engines[engine].utilisation += value;
     }

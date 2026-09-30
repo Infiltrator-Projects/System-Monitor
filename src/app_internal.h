@@ -429,6 +429,7 @@ typedef struct {
     GPtrArray *process_group_cache;
     GHashTable *process_group_index;
     GHashTable *process_pid_index;
+    GHashTable *process_identity_cache;
 } LsmProcessesState;
 
 /** Process snapshot, selection, filtering and recording shared by process pages. */

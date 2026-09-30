@@ -398,6 +398,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         support/tests/async_workers_smoke.c src/process_scanner.c
         src/process_recorder.c ${LSM_PROCESS_CORE_SOURCES}
         ${LSM_PROCESS_PLATFORM_SOURCES})
+    target_link_libraries(lsm-async-workers-smoke PRIVATE PkgConfig::GTK3)
     add_executable(lsm-process-scan-benchmark support/tests/process_scan_benchmark.c
         ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES})
     add_executable(lsm-runtime-stability-smoke support/tests/runtime_stability_smoke.c

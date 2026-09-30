@@ -24,6 +24,7 @@
 #include "system_sources.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <pthread.h>
 #include <stddef.h>

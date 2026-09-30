@@ -233,6 +233,8 @@ static void application_catalog_complete(GObject *source_object,
     if (!catalog) return;
     lsm_application_catalog_destroy(app->process.application_catalog);
     app->process.application_catalog = catalog;
+    if (app->processes.process_identity_cache)
+        g_hash_table_remove_all(app->processes.process_identity_cache);
     app->processes.processes_structure_valid = FALSE;
     app->processes.processes_model_dirty = TRUE;
     if (app->runtime.active_tab == LSM_TAB_PROCESSES &&

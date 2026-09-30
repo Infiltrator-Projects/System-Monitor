@@ -533,10 +533,10 @@ temporal-presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	./$(BUILD_DIR)/temporal-presentation-smoke
 
 async-workers-smoke: | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/async_workers_smoke.c src/process_scanner.c \
 		src/process_recorder.c $(PROCESS_SOURCES)  \
-		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/async-workers-smoke
 	./$(BUILD_DIR)/async-workers-smoke
 
