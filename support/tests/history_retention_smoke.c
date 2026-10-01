@@ -202,6 +202,24 @@ int main(void)
     if (!lsm_history_test_contains(live, "uid:1000|/live/4096"))
         return fail("live application history was not protected from eviction");
 
+    /*
+     * Refill the bounded table with a burst of new live identities. They must
+     * all survive while the same number of older inactive entries are removed
+     * in one retention operation.
+     */
+    enum { BURST_HISTORY_ENTRIES = 128U };
+    LsmProcessInfo *burst = calloc(
+        BURST_HISTORY_ENTRIES, sizeof(*burst));
+    if (!burst) return fail("unable to allocate burst-history fixture");
+    for (unsigned index = 0U; index < BURST_HISTORY_ENTRIES; index++)
+        fill_live_process(&burst[index], 10000U + index);
+    lsm_app_history_ingest(live, burst, BURST_HISTORY_ENTRIES);
+    free(burst);
+    if (lsm_history_test_retained_count(live) != TEST_HISTORY_LIMIT)
+        return fail("burst history trim did not preserve the retention bound");
+    if (!lsm_history_test_contains(live, "uid:1000|/live/10127"))
+        return fail("burst history trim evicted a current live identity");
+
     lsm_history_save(live);
     if (!count_persisted_rows(directory, &persisted_rows) ||
         persisted_rows != TEST_HISTORY_LIMIT)

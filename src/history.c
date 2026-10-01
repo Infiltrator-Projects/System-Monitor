@@ -217,12 +217,70 @@ static gboolean history_remove_oldest(LsmApp *app,
     return TRUE;
 }
 
+static int history_entry_pointer_recency_compare(const void *left,
+                                                 const void *right)
+{
+    const LsmHistoryEntry *const *a = left;
+    const LsmHistoryEntry *const *b = right;
+    return history_entry_recency_compare(*a, *b);
+}
+
 static gboolean history_trim_to_limit(LsmApp *app,
                                       unsigned protected_generation)
 {
+    if (!app || !app->history.app_history ||
+        app->history.history_entry_count <= LSM_HISTORY_MAX_ENTRIES)
+        return FALSE;
+
+    const size_t excess =
+        (size_t)app->history.history_entry_count - LSM_HISTORY_MAX_ENTRIES;
+    const size_t capacity = app->history.history_entry_count;
+    LsmHistoryEntry **candidates =
+        g_try_new(LsmHistoryEntry *, capacity);
+
+    /*
+     * Retention overflow is uncommon, but when it happens it can involve many
+     * identities at once (for example after the asynchronous persisted-history
+     * merge). Select the eviction set in one table walk and one sort rather
+     * than rescanning all retained history once for every entry removed.
+     */
+    if (candidates) {
+        size_t candidate_count = 0U;
+        GHashTableIter iterator;
+        gpointer key = NULL;
+        gpointer value = NULL;
+        g_hash_table_iter_init(&iterator, app->history.app_history);
+        while (g_hash_table_iter_next(&iterator, &key, &value)) {
+            (void)key;
+            LsmHistoryEntry *entry = value;
+            if (protected_generation != 0U &&
+                entry->live_generation == protected_generation)
+                continue;
+            candidates[candidate_count++] = entry;
+        }
+
+        qsort(candidates, candidate_count, sizeof(*candidates),
+              history_entry_pointer_recency_compare);
+        const size_t remove_count =
+            excess < candidate_count ? excess : candidate_count;
+        size_t removed = 0U;
+        for (size_t index = 0U; index < remove_count; index++) {
+            const char *entry_key = candidates[index]->key;
+            if (entry_key &&
+                g_hash_table_remove(app->history.app_history, entry_key))
+                removed++;
+        }
+        g_free(candidates);
+        if (removed > app->history.history_entry_count)
+            app->history.history_entry_count = 0U;
+        else
+            app->history.history_entry_count -= (guint)removed;
+        return removed > 0U;
+    }
+
+    /* Allocation failure must not disable the retention bound. */
     gboolean changed = FALSE;
-    while (app && app->history.app_history &&
-           app->history.history_entry_count > LSM_HISTORY_MAX_ENTRIES) {
+    while (app->history.history_entry_count > LSM_HISTORY_MAX_ENTRIES) {
         if (!history_remove_oldest(app, protected_generation)) break;
         changed = TRUE;
     }
@@ -1037,11 +1095,13 @@ static LsmHistoryEntry *history_entry_get(
     LsmHistoryEntry *entry = g_hash_table_lookup(app->history.app_history, key);
     if (entry) return entry;
 
-    if (app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        (void)history_remove_oldest(
-            app, app->history.history_generation);
-    }
-
+    /*
+     * Do not evict here. A single process snapshot can introduce many new
+     * identities; evicting one-by-one would rescan the complete retained
+     * history for every insertion. The end-of-sample batch trim protects all
+     * identities touched by the current generation and chooses the complete
+     * eviction set in one pass.
+     */
     entry = g_new0(LsmHistoryEntry, 1);
     entry->key = g_strdup(key);
     entry->name = g_strdup(process->name);

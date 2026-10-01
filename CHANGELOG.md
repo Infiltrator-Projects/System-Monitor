@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.157 - 2026-10-02
+
+- Batch App History retention overflow into one candidate scan and recency sort instead of rescanning the full 4096-entry table once per eviction, removing a remaining GTK-main-context latency spike after large live-process bursts or asynchronous persisted-history merges.
+- Defer retention eviction until the end of each process snapshot so every identity touched by that generation is protected before pruning and a burst of new identities is handled as one operation.
+- Extend the history-retention regression with a 128-identity burst at the retention ceiling to prove the bound and current-live protection survive the batched path.
+
 ## 1.0.156 - 2026-10-01
 
 - Move persisted App History file I/O and parsing off the GTK main context, merge the worker result transactionally with live process accounting collected meanwhile, defer saves until that merge is complete, and avoid overwriting persisted history during shutdown if loading is still in flight.
