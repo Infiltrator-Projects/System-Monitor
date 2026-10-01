@@ -244,14 +244,6 @@ bool lsm_process_inspection_open_files_checked(
     return true;
 }
 
-size_t lsm_process_inspection_open_files(LsmProcessId process_id,
-                                         LsmOpenFileInfo **out_items)
-{
-    size_t count = 0U;
-    return lsm_process_inspection_open_files_checked(
-        process_id, out_items, &count) ? count : 0U;
-}
-
 static bool parse_smaps_bytes(const char *line, const char *prefix,
                               uint64_t *bytes)
 {
@@ -368,14 +360,6 @@ bool lsm_process_inspection_memory_maps_checked(
     return true;
 }
 
-size_t lsm_process_inspection_memory_maps(LsmProcessId process_id,
-                                          LsmMemoryMapInfo **out_items)
-{
-    size_t count = 0U;
-    return lsm_process_inspection_memory_maps_checked(
-        process_id, out_items, &count) ? count : 0U;
-}
-
 static void read_thread_state(const char *path, char *state, size_t state_size)
 {
     FILE *file = fopen(path, "r");
@@ -474,14 +458,6 @@ bool lsm_process_inspection_threads_checked(
     *out_count = count;
     errno = 0;
     return true;
-}
-
-size_t lsm_process_inspection_threads(LsmProcessId process_id,
-                                      LsmThreadInfo **out_items)
-{
-    size_t count = 0U;
-    return lsm_process_inspection_threads_checked(
-        process_id, out_items, &count) ? count : 0U;
 }
 
 static void read_process_name(pid_t pid, char *name, size_t size)
@@ -591,14 +567,6 @@ bool lsm_process_inspection_find_file_users_checked(
     *out_count = count;
     errno = 0;
     return true;
-}
-
-size_t lsm_process_inspection_find_file_users(const char *path,
-                                              LsmFileUserInfo **out_items)
-{
-    size_t count = 0U;
-    return lsm_process_inspection_find_file_users_checked(
-        path, out_items, &count) ? count : 0U;
 }
 
 void lsm_process_inspection_free(void *items)

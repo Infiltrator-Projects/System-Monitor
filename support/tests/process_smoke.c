@@ -530,7 +530,12 @@ int main(void)
         return 11;
     }
     users = NULL;
-    const size_t alias_count = lsm_process_inspection_find_file_users(alias, &users);
+    size_t alias_count = 0U;
+    if (!lsm_process_inspection_find_file_users_checked(
+            alias, &users, &alias_count)) {
+        remove_tree(root);
+        return 12;
+    }
     lsm_process_inspection_free(users);
     if (alias_count != 2U) {
         remove_tree(root);
@@ -544,8 +549,13 @@ int main(void)
         return 13;
     }
     users = NULL;
-    const size_t replacement_count = lsm_process_inspection_find_file_users(target, &users);
-    const bool replacement_ok = replacement_count == 1U && users[0].pid == 456U;
+    size_t replacement_count = 0U;
+    const bool replacement_complete =
+        lsm_process_inspection_find_file_users_checked(
+            target, &users, &replacement_count);
+    const bool replacement_ok =
+        replacement_complete && replacement_count == 1U &&
+        users[0].pid == 456U;
     lsm_process_inspection_free(users);
     if (!replacement_ok) {
         remove_tree(root);
