@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.156 - 2026-10-01
+
+- Move persisted App History file I/O and parsing off the GTK main context, merge the worker result transactionally with live process accounting collected meanwhile, defer saves until that merge is complete, and avoid overwriting persisted history during shutdown if loading is still in flight.
+- Remove the full retained-history walk from every process sample by charging active time and peak RSS only to identities touched by that sample; make oldest-entry eviction one direct hash removal instead of a second full-table scan.
+- Correct the built-in help text so the normal Overview and Compact Summary behaviour no longer describes the superseded all-tabs summary strip.
+
 ## 1.0.155 - 2026-10-01
 
 - Make the Overview resource tiers genuinely equal-width: CPU/Memory split the first row 50/50, Disk/Network/GPU split the second row into thirds, and Temperature/CPU Pressure/Memory Pressure/I/O Pressure split the third row into quarters.
