@@ -494,6 +494,7 @@ typedef struct {
     guint history_save_generation;
     LsmHistorySaveCoordinator *history_save_coordinator;
     gboolean history_dirty;
+    gboolean history_load_pending;
     gboolean history_save_pending;
     gboolean history_save_again;
     gboolean history_save_error_reported;

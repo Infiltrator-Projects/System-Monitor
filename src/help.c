@@ -52,11 +52,11 @@ static const HelpTopic topics[] = {
         "current kernel or driver; a measured zero is displayed as zero."
     },
     {
-        "Live summary and compact mode",
-        "The strip below the menu keeps CPU, memory, busiest-disk, combined-network and "
-        "available GPU activity visible on every tab. Choose View > Compact summary mode "
-        "for a small summary-only window, or View > Always on top to keep the monitor "
-        "above ordinary windows. Both choices are remembered."
+        "Overview and compact mode",
+        "Overview is the normal whole-system summary for CPU, memory, disk, network, GPU, "
+        "temperature and pressure. Choose View > Compact summary mode for the small "
+        "five-resource headline strip, or View > Always on top to keep the monitor above "
+        "ordinary windows. Both choices are remembered."
     },
     {
         "CPU and memory",

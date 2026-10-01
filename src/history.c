@@ -166,15 +166,6 @@ static gboolean history_process_key_equal(gconstpointer left,
            a->instance_id == b->instance_id;
 }
 
-static gboolean remove_history_key(gpointer key, gpointer value,
-                                   gpointer user_data)
-{
-    (void)value;
-    const char *candidate = key;
-    const char *target = user_data;
-    return candidate && target && strcmp(candidate, target) == 0;
-}
-
 static int history_entry_recency_compare(const LsmHistoryEntry *left,
                                          const LsmHistoryEntry *right)
 {
@@ -185,8 +176,8 @@ static int history_entry_recency_compare(const LsmHistoryEntry *left,
     return strcmp(left->key, right->key);
 }
 
-static char *history_oldest_key(const LsmApp *app,
-                                unsigned protected_generation)
+static const char *history_oldest_key(const LsmApp *app,
+                                      unsigned protected_generation)
 {
     if (!app || !app->history.app_history ||
         app->history.history_entry_count == 0U)
@@ -210,22 +201,19 @@ static char *history_oldest_key(const LsmApp *app,
             oldest_key = key;
         }
     }
-    return oldest_key ? g_strdup(oldest_key) : NULL;
+    return oldest_key;
 }
 
 static gboolean history_remove_oldest(LsmApp *app,
                                       unsigned protected_generation)
 {
-    char *oldest_key = history_oldest_key(app, protected_generation);
-    if (!oldest_key) return FALSE;
-
-    const guint removed = g_hash_table_foreach_remove(
-        app->history.app_history, remove_history_key, oldest_key);
-    g_free(oldest_key);
-    if (removed == 0U) return FALSE;
-    app->history.history_entry_count -=
-        removed > app->history.history_entry_count
-            ? app->history.history_entry_count : removed;
+    const char *oldest_key =
+        history_oldest_key(app, protected_generation);
+    if (!oldest_key ||
+        !g_hash_table_remove(app->history.app_history, oldest_key))
+        return FALSE;
+    if (app->history.history_entry_count > 0U)
+        app->history.history_entry_count--;
     return TRUE;
 }
 
@@ -568,18 +556,16 @@ static gboolean history_load_record(LsmApp *app, char *line)
         app->history.app_history, entry->key);
     if (!existed &&
         app->history.history_entry_count >= LSM_HISTORY_MAX_ENTRIES) {
-        char *oldest_key = history_oldest_key(app, 0U);
+        const char *oldest_key = history_oldest_key(app, 0U);
         LsmHistoryEntry *oldest = oldest_key
             ? g_hash_table_lookup(app->history.app_history, oldest_key)
             : NULL;
         if (!oldest ||
             history_entry_recency_compare(entry, oldest) <= 0) {
             history_entry_free(entry);
-            g_free(oldest_key);
             g_strfreev(fields);
             return TRUE;
         }
-        g_free(oldest_key);
         if (!history_remove_oldest(app, 0U)) {
             history_entry_free(entry);
             g_strfreev(fields);
@@ -595,30 +581,43 @@ static gboolean history_load_record(LsmApp *app, char *line)
     return truncated;
 }
 
-/* Stream the persistence file so a malformed oversized file cannot be copied
- * wholesale into the GTK process before the bounded-retention policy applies. */
-static void history_load(LsmApp *app)
-{
-    FILE *file = fopen(app->history.history_path, "r");
-    if (!file) return;
+/* Stream persistence into isolated state. The desktop path runs this parser
+ * on a GTask worker so startup disk I/O and bounded-history parsing never
+ * occupy the GTK main context. The non-visual test API uses the same loader
+ * synchronously. */
+typedef struct {
+    char path[LSM_PATH_LEN];
+} LsmHistoryLoadRequest;
 
-    /*
-     * Load into temporary retained state. A short read or close failure must
-     * not replace the last complete in-memory history with a file prefix that
-     * could later be persisted as if it were authoritative.
-     */
-    GHashTable *original = app->history.app_history;
-    const guint original_count = app->history.history_entry_count;
-    const gboolean original_dirty = app->history.history_dirty;
+typedef struct {
+    GHashTable *entries;
+    guint count;
+    gboolean truncated;
+    int failure;
+} LsmHistoryLoadResult;
+
+static int history_load_path(const char *path, GHashTable **out_entries,
+                             guint *out_count, gboolean *out_truncated)
+{
+    if (!path || !*path || !out_entries || !out_count || !out_truncated)
+        return EINVAL;
+    *out_entries = NULL;
+    *out_count = 0U;
+    *out_truncated = FALSE;
+
+    FILE *file = fopen(path, "r");
+    if (!file)
+        return errno == ENOENT ? 0 : (errno != 0 ? errno : EIO);
+
     GHashTable *loaded = g_hash_table_new_full(
         g_str_hash, g_str_equal, g_free, history_entry_free);
     if (!loaded) {
         (void)fclose(file);
-        return;
+        return ENOMEM;
     }
-    app->history.app_history = loaded;
-    app->history.history_entry_count = 0U;
 
+    LsmApp loader = {0};
+    loader.history.app_history = loaded;
     gboolean truncated = FALSE;
     char line[LSM_HISTORY_MAX_LINE_BYTES];
     while (fgets(line, sizeof(line), file)) {
@@ -635,19 +634,170 @@ static void history_load(LsmApp *app)
                (line[length - 1U] == '\n' ||
                 line[length - 1U] == '\r'))
             line[--length] = '\0';
-        if (history_load_record(app, line)) truncated = TRUE;
+        if (history_load_record(&loader, line)) truncated = TRUE;
     }
-    const gboolean read_complete = !ferror(file) && fclose(file) == 0;
-    if (!read_complete) {
+
+    const int stream_failure = ferror(file)
+        ? (errno != 0 ? errno : EIO) : 0;
+    const int close_failure = fclose(file) == 0
+        ? 0 : (errno != 0 ? errno : EIO);
+    if (stream_failure != 0 || close_failure != 0) {
         g_hash_table_destroy(loaded);
-        app->history.app_history = original;
-        app->history.history_entry_count = original_count;
-        app->history.history_dirty = original_dirty;
+        return stream_failure != 0 ? stream_failure : close_failure;
+    }
+
+    *out_entries = loaded;
+    *out_count = loader.history.history_entry_count;
+    *out_truncated = truncated;
+    return 0;
+}
+
+static void history_load(LsmApp *app)
+{
+    if (!app) return;
+    GHashTable *loaded = NULL;
+    guint count = 0U;
+    gboolean truncated = FALSE;
+    if (history_load_path(
+            app->history.history_path, &loaded, &count, &truncated) != 0 ||
+        !loaded)
+        return;
+
+    if (app->history.app_history)
+        g_hash_table_destroy(app->history.app_history);
+    app->history.app_history = loaded;
+    app->history.history_entry_count = count;
+    if (truncated) history_mark_dirty(app);
+}
+
+static void history_load_result_free(gpointer data)
+{
+    LsmHistoryLoadResult *result = data;
+    if (!result) return;
+    if (result->entries) g_hash_table_destroy(result->entries);
+    g_free(result);
+}
+
+static void history_load_worker(GTask *task, gpointer source_object,
+                                gpointer task_data,
+                                GCancellable *cancellable)
+{
+    (void)source_object;
+    (void)cancellable;
+    const LsmHistoryLoadRequest *request = task_data;
+    LsmHistoryLoadResult *result = g_new0(LsmHistoryLoadResult, 1U);
+    if (!result) {
+        g_task_return_new_error(
+            task, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+            "Unable to allocate App History load result");
+        return;
+    }
+    result->failure = request
+        ? history_load_path(
+              request->path, &result->entries, &result->count,
+              &result->truncated)
+        : EINVAL;
+    g_task_return_pointer(task, result, history_load_result_free);
+}
+
+static void history_merge_loaded(LsmApp *app, LsmHistoryLoadResult *result)
+{
+    if (!app || !result || result->failure != 0 || !result->entries)
+        return;
+
+    GHashTableIter iterator;
+    gpointer key = NULL;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iterator, result->entries);
+    while (g_hash_table_iter_next(&iterator, &key, &value)) {
+        LsmHistoryEntry *loaded = value;
+        LsmHistoryEntry *current = g_hash_table_lookup(
+            app->history.app_history, loaded->key);
+        if (!current) {
+            g_hash_table_iter_steal(&iterator);
+            g_hash_table_insert(app->history.app_history, key, loaded);
+            app->history.history_entry_count++;
+            continue;
+        }
+
+        const double seconds_limit = (double)UINT64_MAX;
+        current->cpu_seconds = fmin(
+            seconds_limit, current->cpu_seconds + loaded->cpu_seconds);
+        current->active_seconds = fmin(
+            seconds_limit, current->active_seconds + loaded->active_seconds);
+        current->read_bytes = lsm_u64_add_saturating(
+            current->read_bytes, loaded->read_bytes);
+        current->write_bytes = lsm_u64_add_saturating(
+            current->write_bytes, loaded->write_bytes);
+        if (loaded->peak_rss_bytes > current->peak_rss_bytes)
+            current->peak_rss_bytes = loaded->peak_rss_bytes;
+        if (loaded->first_seen > 0 &&
+            (current->first_seen <= 0 ||
+             loaded->first_seen < current->first_seen))
+            current->first_seen = loaded->first_seen;
+        if (loaded->last_seen > current->last_seen)
+            current->last_seen = loaded->last_seen;
+    }
+
+    const gboolean trimmed = history_trim_to_limit(
+        app, app->history.history_generation);
+    if (result->truncated || trimmed)
+        history_mark_dirty(app);
+}
+
+static void history_load_complete(GObject *source_object,
+                                  GAsyncResult *async_result,
+                                  gpointer user_data)
+{
+    (void)user_data;
+    GError *error = NULL;
+    LsmHistoryLoadResult *result = g_task_propagate_pointer(
+        G_TASK(async_result), &error);
+    LsmApp *app = source_object
+        ? g_object_get_data(source_object, "lsm-history-app") : NULL;
+    if (!app) {
+        g_clear_error(&error);
+        history_load_result_free(result);
         return;
     }
 
-    if (original) g_hash_table_destroy(original);
-    if (truncated) history_mark_dirty(app);
+    app->history.history_load_pending = FALSE;
+    if (!error && result)
+        history_merge_loaded(app, result);
+    g_clear_error(&error);
+    history_load_result_free(result);
+
+    if (app->history.history_tree && app->shell.notebook &&
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook)) ==
+            LSM_TAB_APP_HISTORY)
+        lsm_history_refresh(app);
+
+    if (app->history.history_save_again &&
+        !app->runtime.shutting_down) {
+        app->history.history_save_again = FALSE;
+        lsm_history_save(app);
+    }
+}
+
+static void history_load_async(LsmApp *app)
+{
+    if (!app || !app->shell.window || app->history.history_load_pending)
+        return;
+
+    LsmHistoryLoadRequest *request = g_new0(LsmHistoryLoadRequest, 1U);
+    if (!request) {
+        history_load(app);
+        return;
+    }
+    lsm_copy_string(
+        request->path, sizeof(request->path), app->history.history_path);
+    app->history.history_load_pending = TRUE;
+
+    GTask *task = g_task_new(
+        G_OBJECT(app->shell.window), NULL, history_load_complete, NULL);
+    g_task_set_task_data(task, request, g_free);
+    g_task_run_in_thread(task, history_load_worker);
+    g_object_unref(task);
 }
 
 static void history_save_worker(GTask *task, gpointer source_object,
@@ -745,6 +895,10 @@ static int history_save_checked_sync(LsmApp *app)
 void lsm_history_save(LsmApp *app)
 {
     if (!app || !app->history.history_dirty) return;
+    if (app->history.history_load_pending) {
+        app->history.history_save_again = TRUE;
+        return;
+    }
 #ifdef LSM_HISTORY_TEST_API
     const int test_failure = history_save_checked_sync(app);
     if (test_failure != 0) history_report_save_failure(app, test_failure);
@@ -803,21 +957,24 @@ static gboolean history_model_initialise(LsmApp *app)
     if (!app->history.history_save_coordinator)
         app->history.history_save_coordinator = history_coordinator_create();
 
+    if (app->shell.window)
+        g_object_set_data(G_OBJECT(app->shell.window),
+                          "lsm-history-app", app);
+
     if (!app->history.history_path[0]) {
         if (!lsm_join_path(app->history.history_path,
                            sizeof(app->history.history_path),
                            app->paths.config_dir, "app-history.tsv"))
             return FALSE;
-        history_load(app);
+        if (app->shell.window)
+            history_load_async(app);
+        else
+            history_load(app);
     }
 
-    if (app->shell.window) {
-        g_object_set_data(G_OBJECT(app->shell.window),
-                          "lsm-history-app", app);
-        if (!app->history.history_save_timer)
-            app->history.history_save_timer = g_timeout_add_seconds(
-                30U, history_save_timer, app);
-    }
+    if (app->shell.window && !app->history.history_save_timer)
+        app->history.history_save_timer = g_timeout_add_seconds(
+            30U, history_save_timer, app);
     return app->history.app_history && app->history.app_history_samples;
 }
 
@@ -938,9 +1095,12 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
         if (entry->live_generation != app->history.history_generation) {
             entry->live_generation = app->history.history_generation;
             entry->current_rss_bytes = 0U;
+            entry->active_seconds += elapsed;
         }
         entry->current_rss_bytes = lsm_u64_add_saturating(
             entry->current_rss_bytes, process->rss_bytes);
+        if (entry->current_rss_bytes > entry->peak_rss_bytes)
+            entry->peak_rss_bytes = entry->current_rss_bytes;
 
         const LsmHistoryProcessKey sample_key = {
             .pid = process->pid,
@@ -983,20 +1143,6 @@ void lsm_app_history_ingest(LsmApp *app, const LsmProcessInfo *processes, size_t
         if (cpu_delta || read_delta || write_delta ||
             process->cpu_percent > 0.05)
             entry->last_seen = now_epoch;
-    }
-
-    GHashTableIter iterator;
-    gpointer key = NULL;
-    gpointer value = NULL;
-    g_hash_table_iter_init(&iterator, app->history.app_history);
-    while (g_hash_table_iter_next(&iterator, &key, &value)) {
-        (void)key;
-        LsmHistoryEntry *entry = value;
-        if (entry->live_generation != app->history.history_generation)
-            continue;
-        entry->active_seconds += elapsed;
-        if (entry->current_rss_bytes > entry->peak_rss_bytes)
-            entry->peak_rss_bytes = entry->current_rss_bytes;
     }
 
     g_hash_table_foreach_remove(
@@ -1188,7 +1334,8 @@ void lsm_history_destroy(LsmApp *app)
         g_object_set_data(G_OBJECT(app->shell.window),
                           "lsm-history-app", NULL);
 
-    if (app->history.history_dirty) {
+    if (app->history.history_dirty &&
+        !app->history.history_load_pending) {
         const int failure = history_save_checked_sync(app);
         if (failure != 0)
             fprintf(stderr,
@@ -1208,6 +1355,7 @@ void lsm_history_destroy(LsmApp *app)
     app->history.app_history_samples = NULL;
     app->history.history_store = NULL;
     app->history.history_entry_count = 0U;
+    app->history.history_load_pending = FALSE;
     app->history.history_save_pending = FALSE;
     app->history.history_save_again = FALSE;
 }
