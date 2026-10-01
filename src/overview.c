@@ -1397,7 +1397,7 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
      * detail text and graphs are already width-bounded/ellipsized so changing
      * telemetry cannot renegotiate those sibling allocations.
      */
-    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
+    g_object_set(G_OBJECT(grid), "column-homogeneous", TRUE, NULL);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_widget_set_hexpand(grid, TRUE);
