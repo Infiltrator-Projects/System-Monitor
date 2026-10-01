@@ -687,9 +687,7 @@ static void history_load_worker(GTask *task, gpointer source_object,
     const LsmHistoryLoadRequest *request = task_data;
     LsmHistoryLoadResult *result = g_new0(LsmHistoryLoadResult, 1U);
     if (!result) {
-        g_task_return_new_error(
-            task, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
-            "Unable to allocate App History load result");
+        g_task_return_pointer(task, NULL, NULL);
         return;
     }
     result->failure = request
