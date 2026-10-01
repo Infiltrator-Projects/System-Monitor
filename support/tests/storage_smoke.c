@@ -84,8 +84,10 @@ int main(void)
     }
 
     MountCollector collector = {0};
-    const size_t visited = lsm_mountinfo_visit_file(path, collect_mount, &collector);
-    if (visited != 3 || collector.count != 3) {
+    size_t visited = 0U;
+    if (!lsm_mountinfo_visit_file_checked(
+            path, collect_mount, &collector, &visited) ||
+        visited != 3U || collector.count != 3U) {
         unlink(path);
         return 3;
     }
@@ -816,10 +818,11 @@ int main(void)
         bounded_count != 0U || errno != EOVERFLOW)
         return 17;
 
-    const double temperature = lsm_sources_read_cpu_temperature(sources);
     LsmCpuThermalSample thermal = {0};
     const bool thermal_available =
         lsm_sources_read_cpu_thermal(sources, &thermal);
+    const double temperature =
+        thermal_available ? thermal.temperature_c : NAN;
 
     if (!lsm_join_path(path, sizeof(path), root, "/sys/block/sda/diskseq") ||
         !write_text(path, "303\n"))

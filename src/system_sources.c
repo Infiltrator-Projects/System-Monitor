@@ -860,15 +860,6 @@ bool lsm_sources_list_block_devices_checked(
     return true;
 }
 
-size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
-                                      LsmBlockDeviceRecord *records,
-                                      size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_list_block_devices_checked(
-        sources, records, capacity, &count) ? count : 0U;
-}
-
 static void resolve_block_identity(LsmSystemSources *sources,
                                    unsigned major_number, unsigned minor_number,
                                    char *block_name, size_t block_name_size,
@@ -964,15 +955,6 @@ bool lsm_sources_list_mounts_checked(
     (void)visited;
     *out_count = collector.count;
     return true;
-}
-
-size_t lsm_sources_list_mounts(LsmSystemSources *sources,
-                               LsmMountRecord *records,
-                               size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_list_mounts_checked(
-        sources, records, capacity, &count) ? count : 0U;
 }
 
 static size_t append_partition_record(LsmPartitionRecord *records, size_t count,
@@ -1101,15 +1083,6 @@ bool lsm_sources_list_partitions_checked(
     }
     *out_count = count;
     return true;
-}
-
-size_t lsm_sources_list_partitions(LsmSystemSources *sources,
-                                   LsmPartitionRecord *records,
-                                   size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_list_partitions_checked(
-        sources, records, capacity, &count) ? count : 0U;
 }
 
 /* Network fallback paths are used only when rtnetlink is unavailable or a
@@ -1270,15 +1243,6 @@ bool lsm_sources_list_networks_checked(
     return true;
 }
 
-size_t lsm_sources_list_networks(LsmSystemSources *sources,
-                                 LsmNetworkRecord *records,
-                                 size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_list_networks_checked(
-        sources, records, capacity, &count) ? count : 0U;
-}
-
 bool lsm_sources_read_network_counters_checked(
     LsmSystemSources *sources, LsmNetworkCounterRecord *records,
     size_t capacity, size_t *out_count)
@@ -1309,15 +1273,6 @@ bool lsm_sources_read_network_counters_checked(
     }
     *out_count = count;
     return true;
-}
-
-size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
-                                         LsmNetworkCounterRecord *records,
-                                         size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_read_network_counters_checked(
-        sources, records, capacity, &count) ? count : 0U;
 }
 
 bool lsm_sources_network_topology_changed(LsmSystemSources *sources)
@@ -1433,15 +1388,6 @@ bool lsm_sources_list_gpus_checked(
     }
     *out_count = count;
     return true;
-}
-
-size_t lsm_sources_list_gpus(LsmSystemSources *sources,
-                             LsmGpuRecord *records,
-                             size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_sources_list_gpus_checked(
-        sources, records, capacity, &count) ? count : 0U;
 }
 
 /* Only sensor providers whose interface name explicitly identifies a CPU or
@@ -1797,9 +1743,3 @@ bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
     return false;
 }
 
-double lsm_sources_read_cpu_temperature(LsmSystemSources *sources)
-{
-    LsmCpuThermalSample sample;
-    return lsm_sources_read_cpu_thermal(sources, &sample)
-        ? sample.temperature_c : NAN;
-}

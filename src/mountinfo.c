@@ -164,12 +164,3 @@ bool lsm_mountinfo_visit_file_checked(const char *path,
     return read_ok && close_ok && !stopped_early;
 }
 
-size_t lsm_mountinfo_visit_file(const char *path,
-                                LsmMountInfoVisitor visitor,
-                                void *user_data)
-{
-    size_t count = 0U;
-    (void)lsm_mountinfo_visit_file_checked(
-        path, visitor, user_data, &count);
-    return count;
-}

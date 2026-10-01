@@ -113,17 +113,6 @@ bool lsm_sources_list_block_devices_checked(
     LsmSystemSources *sources, LsmBlockDeviceRecord *records,
     size_t capacity, size_t *out_count);
 /**
- * Compatibility count-only physical block-device enumeration.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
-                                      LsmBlockDeviceRecord *records,
-                                      size_t capacity);
-/**
  * Enumerate current mount records through the internal mountinfo parser.
  *
  * @param [in] sources Native-source context.
@@ -135,17 +124,6 @@ size_t lsm_sources_list_block_devices(LsmSystemSources *sources,
 bool lsm_sources_list_mounts_checked(
     LsmSystemSources *sources, LsmMountRecord *records,
     size_t capacity, size_t *out_count);
-/**
- * Compatibility count-only mount enumeration.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_list_mounts(LsmSystemSources *sources,
-                               LsmMountRecord *records,
-                               size_t capacity);
 /**
  * Enumerate mounted and unmounted child partitions for physical disks.
  *
@@ -159,17 +137,6 @@ bool lsm_sources_list_partitions_checked(
     LsmSystemSources *sources, LsmPartitionRecord *records,
     size_t capacity, size_t *out_count);
 /**
- * Compatibility count-only partition enumeration.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_list_partitions(LsmSystemSources *sources,
-                                   LsmPartitionRecord *records,
-                                   size_t capacity);
-/**
  * Enumerate active network interfaces and resolve hardware identity.
  *
  * @param [in] sources Native-source context.
@@ -182,17 +149,6 @@ bool lsm_sources_list_networks_checked(
     LsmSystemSources *sources, LsmNetworkRecord *records,
     size_t capacity, size_t *out_count);
 /**
- * Compatibility count-only network-interface enumeration.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_list_networks(LsmSystemSources *sources,
-                                 LsmNetworkRecord *records,
-                                 size_t capacity);
-/**
  * Read one rtnetlink counter snapshot for active interfaces.
  *
  * @param [in] sources Native-source context.
@@ -204,17 +160,6 @@ size_t lsm_sources_list_networks(LsmSystemSources *sources,
 bool lsm_sources_read_network_counters_checked(
     LsmSystemSources *sources, LsmNetworkCounterRecord *records,
     size_t capacity, size_t *out_count);
-/**
- * Compatibility count-only network counter snapshot.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_read_network_counters(LsmSystemSources *sources,
-                                         LsmNetworkCounterRecord *records,
-                                         size_t capacity);
 /**
  * Drain queued link/address events and report whether topology changed.
  *
@@ -236,18 +181,6 @@ bool lsm_sources_list_gpus_checked(
     LsmSystemSources *sources, LsmGpuRecord *records,
     size_t capacity, size_t *out_count);
 /**
- * Compatibility count-only GPU enumeration.
- *
- * @param [in] sources Native-source context.
- * @param [out] records Destination array.
- * @param [in] capacity Number of records available.
- * @return Number of records written; zero also represents source failure.
- */
-size_t lsm_sources_list_gpus(LsmSystemSources *sources,
-                             LsmGpuRecord *records,
-                             size_t capacity);
-
-/**
  * Read the best available CPU/package temperature and native limits.
  *
  * @param [in,out] sources Native-source context supplying the sysfs root.
@@ -256,13 +189,5 @@ size_t lsm_sources_list_gpus(LsmSystemSources *sources,
  */
 bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
                                   LsmCpuThermalSample *sample);
-
-/**
- * Read only the best available CPU/package temperature.
- *
- * @param [in,out] sources Native-source context supplying the sysfs root.
- * @return Temperature in degrees Celsius, or NAN when unavailable.
- */
-double lsm_sources_read_cpu_temperature(LsmSystemSources *sources);
 
 #endif

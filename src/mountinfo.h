@@ -31,21 +31,6 @@ typedef struct {
 typedef bool (*LsmMountInfoVisitor)(const LsmMountInfoEntry *entry, void *user_data);
 
 /**
- * Parse a Linux mountinfo file and invoke a visitor for each valid record.
- *
- * The parser decodes mountinfo escaping and ignores malformed individual lines
- * so one corrupt record cannot discard the complete mount inventory.
- *
- * @param [in] path Mountinfo file to parse.
- * @param [in] visitor Callback invoked synchronously for each valid record.
- * @param [in,out] user_data Opaque value forwarded to @p visitor.
- * @return Number of valid records delivered to the visitor.
- */
-size_t lsm_mountinfo_visit_file(const char *path,
-                                LsmMountInfoVisitor visitor,
-                                void *user_data);
-
-/**
  * Parse a mountinfo stream while preserving the distinction between a valid
  * empty namespace and an I/O failure.
  *
