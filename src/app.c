@@ -127,6 +127,49 @@ static gboolean capture_overview_geometry_and_expand_labels(gpointer user_data)
             return G_SOURCE_CONTINUE;
     }
 
+    static const LsmOverviewMetric equal_width_rows[3][4] = {
+        {
+            LSM_OVERVIEW_CPU,
+            LSM_OVERVIEW_MEMORY,
+            LSM_OVERVIEW_METRIC_COUNT,
+            LSM_OVERVIEW_METRIC_COUNT
+        },
+        {
+            LSM_OVERVIEW_DISK,
+            LSM_OVERVIEW_NETWORK,
+            LSM_OVERVIEW_GPU,
+            LSM_OVERVIEW_METRIC_COUNT
+        },
+        {
+            LSM_OVERVIEW_TEMPERATURE,
+            LSM_OVERVIEW_CPU_PRESSURE,
+            LSM_OVERVIEW_MEMORY_PRESSURE,
+            LSM_OVERVIEW_IO_PRESSURE
+        }
+    };
+    static const size_t equal_width_counts[3] = { 2U, 3U, 4U };
+    for (size_t row = 0U; row < 3U; row++) {
+        gint expected_width = -1;
+        for (size_t item = 0U; item < equal_width_counts[row]; item++) {
+            GtkWidget *card =
+                app->overview.buttons[equal_width_rows[row][item]];
+            if (!card) exit(EXIT_FAILURE);
+
+            GtkAllocation allocation;
+            gtk_widget_get_allocation(card, &allocation);
+            if (allocation.width <= 0) return G_SOURCE_CONTINUE;
+            if (expected_width < 0) {
+                expected_width = allocation.width;
+            } else if (allocation.width != expected_width) {
+                fprintf(
+                    stderr,
+                    "Overview row %zu has unequal card widths: expected %d, got %d\n",
+                    row, expected_width, allocation.width);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
     for (size_t metric = 0U; metric < LSM_OVERVIEW_METRIC_COUNT; metric++) {
         gtk_label_set_text(
             GTK_LABEL(app->overview.values[metric]),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.155 - 2026-10-01
+
+- Make the Overview resource tiers genuinely equal-width: CPU/Memory split the first row 50/50, Disk/Network/GPU split the second row into thirds, and Temperature/CPU Pressure/Memory Pressure/I/O Pressure split the third row into quarters.
+- Restore homogeneous twelve-column sizing now that no tier contains unequal spans, so sibling cards shrink together instead of letting individual content widths skew the row.
+- Extend the Xvfb Overview geometry regression to assert equal card widths in all three tiers in addition to the existing live-label graph-allocation stability checks.
+
 ## 1.0.154 - 2026-09-30
 
 - Fix the Details process-tree PID retrieval width mismatch so a 64-bit GTK model value can no longer overwrite a 32-bit stack variable, and use unsigned pointer keys consistently for retained PID indexes.

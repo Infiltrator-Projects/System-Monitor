@@ -44,11 +44,13 @@ static const char *const overview_style_classes[LSM_OVERVIEW_METRIC_COUNT] = {
     "lsm-overview-io-pressure"
 };
 
-/* Dashboard geometry is intentionally asymmetric.  The primary resources
- * occupy the wide first row, the device/activity cards share the second row,
- * and compact diagnostic cards form the third row.  This mirrors the approved
- * graphical north star and, on a 1080-line desktop, keeps the whole Overview
- * visible without turning every metric into the same-sized procedural tile. */
+/*
+ * The Overview uses a twelve-column base grid, but equality is defined within
+ * each visual tier: CPU/Memory are halves, Disk/Network/GPU are thirds, and
+ * temperature plus the three pressure cards are quarters.  Equal spans keep
+ * sibling cards shrinking together instead of allowing one card's natural
+ * content width to dominate the row.
+ */
 typedef struct {
     LsmOverviewMetric metric;
     gint column;
@@ -57,13 +59,13 @@ typedef struct {
 } LsmOverviewPlacement;
 
 static const LsmOverviewPlacement overview_layout[LSM_OVERVIEW_METRIC_COUNT] = {
-    { LSM_OVERVIEW_CPU,             0, 0, 7 },
-    { LSM_OVERVIEW_MEMORY,          7, 0, 5 },
-    { LSM_OVERVIEW_DISK,            0, 1, 5 },
-    { LSM_OVERVIEW_NETWORK,         5, 1, 4 },
-    { LSM_OVERVIEW_GPU,             9, 1, 3 },
-    { LSM_OVERVIEW_TEMPERATURE,     0, 2, 4 },
-    { LSM_OVERVIEW_CPU_PRESSURE,    4, 2, 2 },
+    { LSM_OVERVIEW_CPU,             0, 0, 6 },
+    { LSM_OVERVIEW_MEMORY,          6, 0, 6 },
+    { LSM_OVERVIEW_DISK,            0, 1, 4 },
+    { LSM_OVERVIEW_NETWORK,         4, 1, 4 },
+    { LSM_OVERVIEW_GPU,             8, 1, 4 },
+    { LSM_OVERVIEW_TEMPERATURE,     0, 2, 3 },
+    { LSM_OVERVIEW_CPU_PRESSURE,    3, 2, 3 },
     { LSM_OVERVIEW_MEMORY_PRESSURE, 6, 2, 3 },
     { LSM_OVERVIEW_IO_PRESSURE,     9, 2, 3 }
 };
@@ -813,7 +815,7 @@ static GtkWidget *overview_make_card(LsmApp *app, LsmOverviewMetric metric)
     /*
      * Overview lives inside a horizontally non-propagating scroller. Give its
      * graphs a vertical minimum only: a per-card 220px horizontal minimum is
-     * multiplied by the asymmetric twelve-column span constraints and can
+     * multiplied by shared twelve-column span constraints and can
      * force the toplevel wider than a 1024px work area. The surrounding card
      * allocation remains stable because live labels are layout-inert.
      */
@@ -1390,12 +1392,12 @@ void lsm_overview_build(LsmApp *app, GtkWidget *container)
 
     GtkWidget *grid = gtk_grid_new();
     /*
-     * Keep the asymmetric twelve-column layout content-flexible. Homogeneous
-     * columns amplify the minimum width of narrow two-column cards across all
-     * twelve columns, which can force a maximised window wider than the work
-     * area. Stable live-label allocations above stop graph breathing without
-     * turning the grid itself into a minimum-width multiplier.
+     * All cards in a tier use equal column spans, so homogeneous base columns
+     * make the requested 1/2, 1/3 and 1/4 row divisions exact.  Live labels,
+     * detail text and graphs are already width-bounded/ellipsized so changing
+     * telemetry cannot renegotiate those sibling allocations.
      */
+    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_widget_set_hexpand(grid, TRUE);
