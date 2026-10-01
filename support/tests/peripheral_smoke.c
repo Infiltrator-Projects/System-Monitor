@@ -85,12 +85,16 @@ int main(void)
     LsmBluetoothBatteryRecord records[4] = {0};
     LsmBluetoothAdapterRecord adapters[2] = {0};
     LsmBluetoothDeviceRecord devices[4] = {0};
-    const size_t count = lsm_bluetooth_battery_parse_objects(
-        objects, records, 4U);
-    const size_t adapter_count = lsm_bluetooth_adapter_parse_objects(
-        objects, adapters, 2U);
-    const size_t device_count = lsm_bluetooth_device_parse_objects(
-        objects, devices, 4U);
+    size_t count = 0U;
+    size_t adapter_count = 0U;
+    size_t device_count = 0U;
+    const bool complete_sets =
+        lsm_bluetooth_battery_parse_objects_checked(
+            objects, records, 4U, &count) &&
+        lsm_bluetooth_adapter_parse_objects_checked(
+            objects, adapters, 2U, &adapter_count) &&
+        lsm_bluetooth_device_parse_objects_checked(
+            objects, devices, 4U, &device_count);
 
     LsmBluetoothDeviceRecord too_small[2] = {0};
     size_t checked_count = SIZE_MAX;
@@ -99,15 +103,6 @@ int main(void)
         !lsm_bluetooth_device_parse_objects_checked(
             objects, too_small, 2U, &checked_count) &&
         errno == EOVERFLOW && checked_count == 0U;
-    size_t checked_adapter_count = 0U;
-    size_t checked_battery_count = 0U;
-    const bool checked_sets =
-        lsm_bluetooth_adapter_parse_objects_checked(
-            objects, adapters, 2U, &checked_adapter_count) &&
-        lsm_bluetooth_battery_parse_objects_checked(
-            objects, records, 4U, &checked_battery_count) &&
-        checked_adapter_count == adapter_count &&
-        checked_battery_count == count;
     g_variant_unref(objects);
 
     const bool adapter_ok = adapter_count == 1U &&
@@ -135,7 +130,7 @@ int main(void)
         strcmp(devices[2].address, "01:02:03:04:05:06") == 0 &&
         !devices[2].connected;
 
-    const bool ok = overflow_rejected && checked_sets &&
+    const bool ok = overflow_rejected && complete_sets &&
         adapter_ok && devices_ok && count == 1U &&
         strcmp(records[0].address, "10:20:30:40:50:60") == 0 &&
         strcmp(records[0].name, "Marshall Headphones") == 0 &&

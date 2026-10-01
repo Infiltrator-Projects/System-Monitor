@@ -248,14 +248,6 @@ bool lsm_bluetooth_adapter_parse_objects_checked(
     return true;
 }
 
-size_t lsm_bluetooth_adapter_parse_objects(
-    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_bluetooth_adapter_parse_objects_checked(
-        objects, records, capacity, &count) ? count : 0U;
-}
-
 bool lsm_bluetooth_device_parse_objects_checked(
     GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity,
     size_t *out_count)
@@ -342,14 +334,6 @@ bool lsm_bluetooth_device_parse_objects_checked(
     }
     *out_count = count;
     return true;
-}
-
-size_t lsm_bluetooth_device_parse_objects(
-    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_bluetooth_device_parse_objects_checked(
-        objects, records, capacity, &count) ? count : 0U;
 }
 
 bool lsm_bluetooth_battery_parse_objects_checked(
@@ -450,14 +434,6 @@ bool lsm_bluetooth_battery_parse_objects_checked(
     }
     *out_count = count;
     return true;
-}
-
-size_t lsm_bluetooth_battery_parse_objects(
-    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity)
-{
-    size_t count = 0U;
-    return lsm_bluetooth_battery_parse_objects_checked(
-        objects, records, capacity, &count) ? count : 0U;
 }
 
 static bool collect_bluez_snapshot(

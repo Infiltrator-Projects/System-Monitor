@@ -155,38 +155,4 @@ bool lsm_bluetooth_battery_parse_objects_checked(
     GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity,
     size_t *out_count);
 
-/**
- * Parse BlueZ ObjectManager data into controller and connected-device records.
- *
- * @param [in] objects BlueZ ObjectManager result variant.
- * @param [out] records Caller-owned controller destination array.
- * @param [in] capacity Number of records available in @p records.
- * @return Number of Adapter1 controller records written.
- */
-size_t lsm_bluetooth_adapter_parse_objects(
-    GVariant *objects, LsmBluetoothAdapterRecord *records, size_t capacity);
-/**
- * Parse BlueZ ObjectManager data into bounded Device1 records.
- *
- * @param [in] objects BlueZ ObjectManager result variant.
- * @param [out] records Caller-owned Device1 destination array.
- * @param [in] capacity Number of records available in @p records.
- * @return Number of Device1 records written.
- */
-size_t lsm_bluetooth_device_parse_objects(
-    GVariant *objects, LsmBluetoothDeviceRecord *records, size_t capacity);
-/**
- * Parse ObjectManager.GetManagedObjects output into bounded battery records.
- *
- * Exposed for deterministic protocol regression tests; it performs no D-Bus
- * calls and borrows @p objects for the duration of the call only.
- *
- * @param [in] objects BlueZ ObjectManager result variant.
- * @param [out] records Caller-owned destination array.
- * @param [in] capacity Number of records available in @p records.
- * @return Number of valid Battery1 records written.
- */
-size_t lsm_bluetooth_battery_parse_objects(
-    GVariant *objects, LsmBluetoothBatteryRecord *records, size_t capacity);
-
 #endif
