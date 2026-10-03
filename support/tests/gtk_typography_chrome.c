@@ -8,11 +8,20 @@
  */
 #include "app_internal.h"
 #include "app_shell.h"
+#include "preferences.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static unsigned int settings_opened;
+
+void lsm_preferences_show(LsmApp *app)
+{
+    if (!app || !app->shell.window) exit(EXIT_FAILURE);
+    settings_opened++;
+}
 
 static GtkWidget *find_named(GtkWidget *widget, const char *name)
 {
@@ -87,7 +96,8 @@ int main(int argc, char **argv)
         GTK_STATE_FLAG_ACTIVE, GTK_STATE_FLAG_BACKDROP
     };
     const char *keys[] = {
-        "lsm-minimize-button", "lsm-maximize-button", "lsm-close-button"
+        "lsm-minimize-button", "lsm-maximize-button", "lsm-close-button",
+        "lsm-settings-button"
     };
     for (size_t mode = 0U; mode < G_N_ELEMENTS(modes); mode++) {
         app->runtime.theme_mode = modes[mode];
@@ -111,6 +121,11 @@ int main(int argc, char **argv)
             }
         }
     }
+    GtkWidget *settings = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-settings-button");
+    if (!settings || !gtk_widget_get_visible(settings)) return EXIT_FAILURE;
+    gtk_button_clicked(GTK_BUTTON(settings));
+    if (settings_opened != 1U) return EXIT_FAILURE;
     gtk_widget_destroy(app->shell.window);
     g_object_unref(app->shell.theme_provider);
     g_free(app);

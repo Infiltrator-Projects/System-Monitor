@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.161 - 2026-10-03
+
+- Restore the always-visible Settings gear in the titlebar, opening the existing preferences dialog.
+- Include Settings in rendered Day/Night icon colour checks and verify its click handler.
+
 ## 1.0.160 - 2026-10-03
 
 - Install all three supplied MB Corpo faces with both the DEB and hardware-native installer, verifying the local archive and extracted files against Common's canonical SHA-256 values.
