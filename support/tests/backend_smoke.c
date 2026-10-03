@@ -39,6 +39,8 @@ bool __real_lsm_sources_read_network_counters_checked(
 
 static atomic_uint sources_destroyed;
 static bool joined_timeout_thread;
+static pthread_t shutdown_thread;
+static bool shutdown_thread_pending;
 static bool network_fixture;
 static bool network_sample_available;
 static uint64_t network_sample_bytes;
@@ -193,7 +195,11 @@ int __wrap_pthread_detach(pthread_t thread)
         joined_timeout_thread = false;
         return 0;
     }
-    return __real_pthread_detach(thread);
+    /* Keep a test-only joinable handle to verify worker cleanup after the
+     * caller has released its reference. Production detaches immediately. */
+    shutdown_thread = thread;
+    shutdown_thread_pending = true;
+    return 0;
 }
 
 void __wrap_lsm_sources_destroy(LsmSystemSources *sources)
@@ -274,8 +280,12 @@ int main(void)
     lsm_process_list_free(processes);
     lsm_process_backend_destroy(backend);
     lsm_monitor_destroy(monitor);
+    if (shutdown_thread_pending) {
+        if (pthread_join(shutdown_thread, NULL) != 0) monitor_valid = false;
+        shutdown_thread_pending = false;
+    }
     if (atomic_load(&sources_destroyed) != 1U || monitor->backend_state) {
-        fputs("sampler timeout/exit race leaked native source ownership\n", stderr);
+        fputs("sampler asynchronous exit leaked native source ownership\n", stderr);
         monitor_valid = false;
     }
     free(monitor);
