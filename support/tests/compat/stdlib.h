@@ -12,4 +12,12 @@
 #pragma GCC system_header
 #include_next <stdlib.h>
 
+/* Only the deliberately minimal GTK compatibility surface needs a stand-in
+ * for GLib's checked allocation helper. Real GLib owns g_try_new in ordinary
+ * and peripheral-smoke builds, so defining it globally here would collide with
+ * gmem.h and turn the compatibility layer itself into a build regression. */
+#if defined(LSM_MINIMAL_GTK3_H) && !defined(g_try_new)
+#define g_try_new(type, count) ((type *)malloc((count) * sizeof(type)))
+#endif
+
 #endif
