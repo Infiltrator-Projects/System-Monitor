@@ -346,14 +346,6 @@ static GtkTreeViewColumn *history_column(GtkTreeView *tree, const char *title,
     return column;
 }
 
-static char *sanitise_field(const char *text)
-{
-    char *copy = g_strdup(text ? text : "");
-    for (char *p = copy; *p; p++)
-        if (*p == '\t' || *p == '\r' || *p == '\n') *p = ' ';
-    return copy;
-}
-
 static void history_mark_dirty(LsmApp *app)
 {
     if (!app) return;
@@ -463,6 +455,9 @@ static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
             const size_t length = strlen(source) + 1U; \
             copy->member = cursor; \
             memcpy(cursor, source, length); \
+            for (size_t byte = 0U; byte + 1U < length; byte++) \
+                if (cursor[byte] == '\t' || cursor[byte] == '\r' || \
+                    cursor[byte] == '\n') cursor[byte] = ' '; \
             cursor += length; \
         } while (0)
         COPY_HISTORY_STRING(key);
@@ -490,6 +485,14 @@ static int history_write_request(LsmHistorySaveRequest *request,
 {
     if (written) *written = FALSE;
     if (!request) return EINVAL;
+    if (request->coordinator &&
+        (request->generation < atomic_load_explicit(
+            &request->coordinator->latest_scheduled_generation,
+            memory_order_acquire) ||
+         request->generation <= atomic_load_explicit(
+            &request->coordinator->latest_written_generation,
+            memory_order_acquire)))
+        return 0;
     const int mkdir_failure =
         lsm_mkdir_parents(request->config_dir, 0700U);
     if (mkdir_failure != 0) return mkdir_failure;
@@ -497,10 +500,6 @@ static int history_write_request(LsmHistorySaveRequest *request,
     GString *output = g_string_new("# System-Monitor App History v1\n");
     for (size_t index = 0U; index < request->count; index++) {
         const LsmHistoryPersistEntry *entry = &request->entries[index];
-        char *safe_key = sanitise_field(entry->key);
-        char *safe_name = sanitise_field(entry->name);
-        char *safe_user = sanitise_field(entry->user);
-        char *safe_identity = sanitise_field(entry->identity);
         char cpu_seconds[64];
         char active_seconds[64];
         if (!infiltratr_format_fixed_ascii(
@@ -508,25 +507,17 @@ static int history_write_request(LsmHistorySaveRequest *request,
             !infiltratr_format_fixed_ascii(
                 entry->active_seconds, 6U, active_seconds,
                 sizeof(active_seconds))) {
-            g_free(safe_key);
-            g_free(safe_name);
-            g_free(safe_user);
-            g_free(safe_identity);
             g_string_free(output, TRUE);
             return ERANGE;
         }
         g_string_append_printf(output,
             "%s\t%s\t%s\t%s\t%s\t%s\t%llu\t%llu\t%llu\t%lld\t%lld\n",
-            safe_key, safe_name, safe_user, safe_identity,
+            entry->key, entry->name, entry->user, entry->identity,
             cpu_seconds, active_seconds,
             (unsigned long long)entry->read_bytes,
             (unsigned long long)entry->write_bytes,
             (unsigned long long)entry->peak_rss_bytes,
             (long long)entry->first_seen, (long long)entry->last_seen);
-        g_free(safe_key);
-        g_free(safe_name);
-        g_free(safe_user);
-        g_free(safe_identity);
     }
 
     int failure = 0;

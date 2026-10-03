@@ -47,7 +47,6 @@ struct LsmLinuxSamplerState {
     atomic_uint references;
 };
 
-#define LSM_SAMPLER_SHUTDOWN_WAIT_MS 250L
 #define LSM_TOPOLOGY_RETRY_INITIAL_SECONDS 1.0
 
 static void copy_disk_snapshot(LsmDiskInfo *destination,
@@ -297,22 +296,10 @@ static void destroy_sampler(LsmLinuxMonitorBackendState *state)
         (void)pthread_cond_signal(&sampler->condition);
         (void)pthread_mutex_unlock(&sampler->mutex);
 
-        struct timespec deadline;
-        int join_result = lsm_posix_deadline_after_milliseconds(
-            CLOCK_REALTIME, (uint64_t)LSM_SAMPLER_SHUTDOWN_WAIT_MS,
-            &deadline);
-        if (join_result == 0)
-            join_result = pthread_timedjoin_np(
-                sampler->thread, NULL, &deadline);
-
-        if (join_result != 0) {
-            /* Both parties own a reference from thread creation onward. A
-             * timeout may race with worker exit, so cleanup cannot depend on
-             * a flag transferred after the timed join. The last reference
-             * releases the backend in either order, including a blocked
-             * collector that finishes after the GUI has relinquished it. */
-            (void)pthread_detach(sampler->thread);
-        }
+        /* The worker owns its backend reference and uses no application or
+         * widget state. Let it release that reference after observing stop,
+         * without holding shutdown behind an in-flight device read. */
+        (void)pthread_detach(sampler->thread);
     }
     sampler_release(sampler);
 }

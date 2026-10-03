@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.162 - 2026-10-03
+
+- Stop sampling immediately after runtime timers stop and release the GUI's backend ownership without waiting for device reads; the sampler retains its own lifetime reference.
+- Sanitise history fields once while copying the immutable save snapshot, eliminating four temporary allocations and frees per saved entry.
+- Skip obsolete or already-persisted history generations before directory creation and serialisation, retaining the publication mutex check and durable final save.
+
 ## 1.0.161 - 2026-10-03
 
 - Restore the always-visible Settings gear in the titlebar, opening the existing preferences dialog.

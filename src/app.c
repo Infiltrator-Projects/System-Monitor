@@ -556,6 +556,7 @@ void lsm_app_shutdown(LsmApp *app)
         lsm_preferences_save(app);
     }
     lsm_app_runtime_stop(app);
+    lsm_monitor_destroy(&app->monitor);
     if (app->startup.startup_search_timer) g_source_remove(app->startup.startup_search_timer);
     if (app->services.services_search_timer) g_source_remove(app->services.services_search_timer);
     lsm_app_shell_cancel_pending(app);
@@ -578,5 +579,4 @@ void lsm_app_shutdown(LsmApp *app)
     lsm_overview_destroy(app);
     lsm_performance_destroy(app);
     if (app->process.filters) g_ptr_array_free(app->process.filters, TRUE);
-    lsm_monitor_destroy(&app->monitor);
 }
