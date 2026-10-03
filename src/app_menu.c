@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_menu.c
- * @brief Global menu construction and user-invoked application actions.
+ * @brief Specialist tools/help menu and user-invoked application actions.
+ *
+ * Primary presentation settings live in the graphical Preferences dialog and
+ * ordinary window lifecycle lives in the InfiltratorOS-style header.  This
+ * menu therefore contains only specialist tools and help actions that do not
+ * belong in the persistent shell chrome.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -10,7 +15,6 @@
 #include "app_menu.h"
 #include "app_internal.h"
 #include "app_runtime.h"
-#include "app_shell.h"
 #include "common.h"
 
 #include "details_page.h"
@@ -18,7 +22,6 @@
 #include "process_export.h"
 #include "process_file_users.h"
 #include "project_info.h"
-#include "preferences.h"
 #include "system_snapshot.h"
 #include "task_launcher.h"
 #include "ui_helpers.h"
@@ -31,13 +34,6 @@
 #include <stdlib.h>
 
 /* Menu callbacks contain presentation policy only; feature modules own data. */
-static void on_quit(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    LsmApp *app = user_data;
-    g_application_quit(G_APPLICATION(app->application));
-}
-
 static void on_run_new_task(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
@@ -84,76 +80,10 @@ static void on_export_selected(GtkMenuItem *item, gpointer user_data)
     lsm_process_export_selected_dialog(user_data);
 }
 
-
 void lsm_app_menu_refresh(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     lsm_app_refresh_all(user_data);
-}
-
-static void on_speed_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    app->runtime.update_interval_ms = GPOINTER_TO_UINT(user_data);
-    lsm_preferences_save(app);
-    lsm_app_preferences_changed(app);
-}
-
-static void on_pause_toggled(GtkCheckMenuItem *item, gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.paused = gtk_check_menu_item_get_active(item);
-    if (app->shell.pause_indicator)
-        gtk_widget_set_visible(app->shell.pause_indicator,
-                               app->runtime.paused && !app->runtime.compact_summary);
-}
-
-static void on_always_on_top_toggled(GtkCheckMenuItem *item,
-                                     gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.always_on_top = gtk_check_menu_item_get_active(item);
-    if (app->shell.window)
-        gtk_window_set_keep_above(GTK_WINDOW(app->shell.window),
-                                  app->runtime.always_on_top);
-    lsm_preferences_save(app);
-}
-
-static void on_compact_summary_toggled(GtkCheckMenuItem *item,
-                                       gpointer user_data)
-{
-    LsmApp *app = user_data;
-    app->runtime.compact_summary = gtk_check_menu_item_get_active(item);
-    lsm_app_shell_apply_compact_summary(app);
-    lsm_preferences_save(app);
-}
-
-static void on_direction_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    app->runtime.newer_on_right = GPOINTER_TO_INT(user_data) != 0;
-    lsm_preferences_save(app);
-}
-
-static void on_theme_selected(GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    LsmApp *app = g_object_get_data(G_OBJECT(item), "lsm-app");
-    if (!app) return;
-    const int mode = GPOINTER_TO_INT(user_data);
-    if (mode < INFILTRATR_THEME_SYSTEM || mode > INFILTRATR_THEME_NIGHT)
-        return;
-    app->runtime.theme_mode = (InfiltratrThemeMode)mode;
-    lsm_app_shell_apply_theme(app);
-    lsm_preferences_save(app);
-}
-
-static void on_preferences(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    lsm_preferences_show(user_data);
 }
 
 static void on_help(GtkMenuItem *item, gpointer user_data)
@@ -203,10 +133,14 @@ static void on_open_logs(GtkMenuItem *item, gpointer user_data)
     char *uri = g_filename_to_uri(path, NULL, NULL);
     if (uri) {
         GError *error = NULL;
-        if (!gtk_show_uri_on_window(GTK_WINDOW(app->shell.window), uri, GDK_CURRENT_TIME, &error) && error) {
-            GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(app->shell.window), GTK_DIALOG_MODAL,
-                GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "Unable to open the log directory");
-            gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", error->message);
+        if (!gtk_show_uri_on_window(GTK_WINDOW(app->shell.window), uri,
+                                    GDK_CURRENT_TIME, &error) && error) {
+            GtkWidget *dialog = gtk_message_dialog_new(
+                GTK_WINDOW(app->shell.window), GTK_DIALOG_MODAL,
+                GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
+                "Unable to open the log directory");
+            gtk_message_dialog_format_secondary_text(
+                GTK_MESSAGE_DIALOG(dialog), "%s", error->message);
             gtk_dialog_run(GTK_DIALOG(dialog));
             gtk_widget_destroy(dialog);
             g_error_free(error);
@@ -215,7 +149,6 @@ static void on_open_logs(GtkMenuItem *item, gpointer user_data)
     }
     g_free(path);
 }
-
 
 static void graph_window_destroy(GtkWidget *widget, gpointer user_data)
 {
@@ -281,7 +214,6 @@ static void process_log_plot_worker(GTask *task, gpointer source_object,
         }
         double cpu = 0.0;
         double memory = 0.0;
-        /* The graph contract uses only CPU and memory from the recorder CSV. */
         if (sscanf(line, "%*95[^,],%*d,%lf,%lf", &cpu, &memory) != 2)
             continue;
         result->cpu[result->next] = cpu;
@@ -354,9 +286,10 @@ static void on_plot_log(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     LsmApp *app = user_data;
-    GtkWidget *chooser = gtk_file_chooser_dialog_new("Plot process log",
-        GTK_WINDOW(app->shell.window), GTK_FILE_CHOOSER_ACTION_OPEN,
-        "Cancel", GTK_RESPONSE_CANCEL, "Open", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(
+        "Plot process log", GTK_WINDOW(app->shell.window),
+        GTK_FILE_CHOOSER_ACTION_OPEN, "Cancel", GTK_RESPONSE_CANCEL,
+        "Open", GTK_RESPONSE_ACCEPT, NULL);
     char log_dir[LSM_PATH_LEN];
     char home[LSM_PATH_LEN];
     if (lsm_home_directory(home, sizeof(home)) &&
@@ -400,7 +333,8 @@ static void on_about(GtkMenuItem *item, gpointer user_data)
         "Shannon Smith — Author and project maintainer",
         NULL
     };
-    gtk_show_about_dialog(GTK_WINDOW(app->shell.window),
+    gtk_show_about_dialog(
+        GTK_WINDOW(app->shell.window),
         "program-name", info->program_name,
         "version", info->version,
         "comments", comments,
@@ -418,6 +352,7 @@ static void on_about(GtkMenuItem *item, gpointer user_data)
         "logo-icon-name", info->icon_name,
         NULL);
 }
+
 static GtkWidget *menu_item(const char *label, GCallback callback, gpointer data)
 {
     GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
@@ -425,137 +360,37 @@ static GtkWidget *menu_item(const char *label, GCallback callback, gpointer data
     return item;
 }
 
-/* Menu construction keeps all global application actions in one place. */
 GtkWidget *lsm_app_menu_build(LsmApp *app)
 {
     GtkWidget *bar = gtk_menu_bar_new();
 
-    GtkWidget *file_root = gtk_menu_item_new_with_mnemonic("_File");
-    GtkWidget *file_menu = gtk_menu_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-        menu_item("_Run new task…", G_CALLBACK(on_run_new_task), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-                          gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-        menu_item("_Save system snapshot…", G_CALLBACK(lsm_app_menu_save_snapshot), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-        menu_item("_Export selected process rows…",
-                  G_CALLBACK(on_export_selected), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-                          gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),
-        menu_item("_Quit", G_CALLBACK(on_quit), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_root), file_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), file_root);
-
-    GtkWidget *options_root = gtk_menu_item_new_with_mnemonic("_Options");
-    GtkWidget *options_menu = gtk_menu_new();
-    app->shell.pause_menu_item =
-        gtk_check_menu_item_new_with_mnemonic("_Pause updates");
-    g_signal_connect(app->shell.pause_menu_item, "toggled",
-                     G_CALLBACK(on_pause_toggled), app);
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-                          app->shell.pause_menu_item);
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-                          gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(options_menu),
-        menu_item("_Preferences…", G_CALLBACK(on_preferences), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(options_root), options_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), options_root);
-
-    GtkWidget *view_root = gtk_menu_item_new_with_mnemonic("_View");
-    GtkWidget *view_menu = gtk_menu_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), menu_item("_Refresh now", G_CALLBACK(lsm_app_menu_refresh), app));
-    app->shell.always_on_top_menu_item =
-        gtk_check_menu_item_new_with_label("Always on top");
-    g_signal_connect(app->shell.always_on_top_menu_item, "toggled",
-                     G_CALLBACK(on_always_on_top_toggled), app);
-    gtk_check_menu_item_set_active(
-        GTK_CHECK_MENU_ITEM(app->shell.always_on_top_menu_item), app->runtime.always_on_top);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          app->shell.always_on_top_menu_item);
-    app->shell.compact_summary_menu_item =
-        gtk_check_menu_item_new_with_label("Compact summary mode");
-    g_signal_connect(app->shell.compact_summary_menu_item, "toggled",
-                     G_CALLBACK(on_compact_summary_toggled), app);
-    gtk_check_menu_item_set_active(
-        GTK_CHECK_MENU_ITEM(app->shell.compact_summary_menu_item),
-        app->runtime.compact_summary);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          app->shell.compact_summary_menu_item);
-
-    GtkWidget *theme_root = gtk_menu_item_new_with_label("Theme");
-    GtkWidget *theme_menu = gtk_menu_new();
-    GSList *theme_group = NULL;
-    for (int mode = INFILTRATR_THEME_SYSTEM;
-         mode <= INFILTRATR_THEME_NIGHT; mode++) {
-        const char *label = mode == INFILTRATR_THEME_SYSTEM
-            ? "Follow system"
-            : infiltratr_theme_mode_name((InfiltratrThemeMode)mode);
-        GtkWidget *radio = gtk_radio_menu_item_new_with_label(
-            theme_group, label);
-        theme_group = gtk_radio_menu_item_get_group(
-            GTK_RADIO_MENU_ITEM(radio));
-        g_object_set_data(G_OBJECT(radio), "lsm-app", app);
-        g_signal_connect(radio, "toggled",
-                         G_CALLBACK(on_theme_selected), GINT_TO_POINTER(mode));
-        gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), radio);
-        if (mode == (int)app->runtime.theme_mode)
-            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(radio), TRUE);
-    }
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_root), theme_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_root);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-                          gtk_separator_menu_item_new());
-
-    GtkWidget *speed_root =
-        gtk_menu_item_new_with_label("Performance refresh speed");
-    GtkWidget *speed_menu = gtk_menu_new();
-    GSList *speed_group = NULL;
-    struct { const char *name; guint milliseconds; } speeds[] = {
-        {"Fast (0.5 seconds)", 500}, {"Normal (1 second)", 1000},
-        {"Low (2 seconds)", 2000}, {"Very low (5 seconds)", 5000}
-    };
-    for (size_t i = 0; i < G_N_ELEMENTS(speeds); i++) {
-        GtkWidget *radio = gtk_radio_menu_item_new_with_label(speed_group, speeds[i].name);
-        speed_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(radio));
-        g_object_set_data(G_OBJECT(radio), "lsm-app", app);
-        g_signal_connect(radio, "toggled", G_CALLBACK(on_speed_selected), GUINT_TO_POINTER(speeds[i].milliseconds));
-        gtk_menu_shell_append(GTK_MENU_SHELL(speed_menu), radio);
-        if (speeds[i].milliseconds == app->runtime.update_interval_ms)
-            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(radio), TRUE);
-    }
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(speed_root), speed_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), speed_root);
-
-    GtkWidget *direction_root = gtk_menu_item_new_with_label("Graph direction");
-    GtkWidget *direction_menu = gtk_menu_new();
-    GtkWidget *right = gtk_radio_menu_item_new_with_label(NULL, "New values on the right");
-    GtkWidget *left = gtk_radio_menu_item_new_with_label_from_widget(GTK_RADIO_MENU_ITEM(right), "New values on the left");
-    g_object_set_data(G_OBJECT(right), "lsm-app", app);
-    g_object_set_data(G_OBJECT(left), "lsm-app", app);
-    g_signal_connect(right, "toggled", G_CALLBACK(on_direction_selected), GINT_TO_POINTER(1));
-    g_signal_connect(left, "toggled", G_CALLBACK(on_direction_selected), GINT_TO_POINTER(0));
-    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(
-        app->runtime.newer_on_right ? right : left), TRUE);
-    gtk_menu_shell_append(GTK_MENU_SHELL(direction_menu), right);
-    gtk_menu_shell_append(GTK_MENU_SHELL(direction_menu), left);
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(direction_root), direction_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), direction_root);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu),
-        menu_item("Process _columns…", G_CALLBACK(on_process_columns), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_root), view_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), view_root);
-
+    /* File/View/Options were remnants of the pre-InfiltratorOS shell.  Keep
+     * non-settings expert actions together instead of duplicating Preferences
+     * and window controls in several places. */
     GtkWidget *tools_root = gtk_menu_item_new_with_mnemonic("_Tools");
     GtkWidget *tools_menu = gtk_menu_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
-                          menu_item("Process _filters…", G_CALLBACK(on_filters), app));
+        menu_item("_Run new task…", G_CALLBACK(on_run_new_task), app));
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
-                          menu_item("_Find process using file…", G_CALLBACK(on_find_file_users), app));
+        menu_item("_Refresh now", G_CALLBACK(lsm_app_menu_refresh), app));
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
-                          menu_item("_Copy selected process rows",
-                                    G_CALLBACK(on_copy_selected), app));
+        menu_item("_Save system snapshot…",
+                  G_CALLBACK(lsm_app_menu_save_snapshot), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        menu_item("Process _filters…", G_CALLBACK(on_filters), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        menu_item("Process _columns…", G_CALLBACK(on_process_columns), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        menu_item("_Find process using file…",
+                  G_CALLBACK(on_find_file_users), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        menu_item("_Copy selected process rows",
+                  G_CALLBACK(on_copy_selected), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+        menu_item("_Export selected process rows…",
+                  G_CALLBACK(on_export_selected), app));
     app->details.process_record_menu_item =
         gtk_check_menu_item_new_with_label("Record selected process");
     gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
@@ -566,18 +401,20 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
                           gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
-                          menu_item("_Plot process log…", G_CALLBACK(on_plot_log), app));
+        menu_item("_Plot process log…", G_CALLBACK(on_plot_log), app));
     gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
-                          menu_item("Open process log _folder", G_CALLBACK(on_open_logs), app));
+        menu_item("Open process log _folder", G_CALLBACK(on_open_logs), app));
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(tools_root), tools_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(bar), tools_root);
 
     GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
     GtkWidget *help_menu = gtk_menu_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
-                          menu_item("_System Monitor Help", G_CALLBACK(on_help), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), menu_item("_About " LSM_PROGRAM_NAME, G_CALLBACK(on_about), app));
+        menu_item("_System Monitor Help", G_CALLBACK(on_help), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
+                          gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
+        menu_item("_About " LSM_PROGRAM_NAME, G_CALLBACK(on_about), app));
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(help_root), help_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(bar), help_root);
 
