@@ -227,13 +227,13 @@ static GtkWidget *navigation_button(LsmApp *app, const char *label,
         button,
         compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                 : LSM_MAIN_NAV_BUTTON_WIDTH,
-        48);
+        LSM_MAIN_NAV_BUTTON_HEIGHT);
     if (style_class)
         gtk_style_context_add_class(
             gtk_widget_get_style_context(button), style_class);
 
     GtkWidget *row = gtk_box_new(
-        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 12);
+        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 10);
     GtkWidget *icon =
         gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
     gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
@@ -559,7 +559,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " color: @lsm_text; border: 1px solid @lsm_connection_border;"
         "}"
         "frame {"
-        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
+        " background-image: none; background-color: @lsm_card;"
         " color: @lsm_text; border: 1px solid @lsm_border;"
         "}"
         "menubar {"
@@ -643,20 +643,19 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->accent_foreground_rgb,
         (unsigned int)palette->accent_hover_rgb);
 
-    /* Keep branded window chrome in a separate literal so the strict
-     * ISO C documentation build remains below the 4095-byte literal floor. */
+    /* Align the application shell with the shared InfiltratorOS grammar:
+     * flat semantic surfaces, restrained selection and no decorative glow. */
     g_string_append(
         css,
         "#lsm-shell-header {"
         " min-height: 58px; padding: 6px 10px;"
-        " background-image: linear-gradient(to right, #06131f, #08263a);"
-        " background-color: #06131f; border-bottom: 1px solid @lsm_border;"
+        " background-image: none; background-color: @lsm_titlebar;"
+        " border-bottom: 1px solid @lsm_border;"
         "}"
         "#lsm-header-brand { padding: 2px 4px; }"
         "#lsm-header-brand-icon {"
         " background-color: @lsm_card; border: 1px solid @lsm_border;"
-        " border-radius: 12px; padding: 7px;"
-        " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
+        " border-radius: 12px; padding: 7px; box-shadow: none;"
         "}"
         "#lsm-header-brand-icon image { color: @lsm_neutral; }"
         "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
@@ -705,9 +704,12 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "entry selection, textview text selection, treeview.view:selected {"
         " background-color: @lsm_selection; color: @lsm_selection_text;"
         "}"
-        "scrollbar trough { background-color: @lsm_surface; }"
-        "scrollbar slider { background-color: @lsm_border; }"
-        "scrollbar slider:hover { background-color: @lsm_summary; }"
+        "scrollbar, scrollbar trough { background-color: transparent; }"
+        "scrollbar slider {"
+        " min-width: 8px; min-height: 8px; background-color: @lsm_border;"
+        " border-radius: 999px;"
+        "}"
+        "scrollbar slider:hover { background-color: @lsm_neutral; }"
         "tooltip {"
         " background-color: @lsm_card; color: @lsm_title;"
         " border: 1px solid @lsm_border;"
@@ -716,33 +718,32 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     g_string_append(
         css,
         "#lsm-main-navigation, #lsm-main-navigation viewport {"
-        " background-image: linear-gradient(to bottom, @lsm_panel, @lsm_background);"
-        " background-color: @lsm_panel;"
+        " background-image: none; background-color: @lsm_panel;"
         " border-color: @lsm_connection_border;"
         "}"
         "#lsm-main-navigation { border-right: 1px solid @lsm_connection_border; }"
         "#lsm-main-nav-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_summary; border: 1px solid transparent;"
-        " box-shadow: none; margin: 2px 0; padding: 8px 10px;"
+        " box-shadow: none; margin: 2px 4px; padding: 6px 8px;"
         "}"
         "#lsm-main-nav-button:hover {"
-        " background-color: @lsm_card_hover;"
-        " border-color: alpha(@lsm_neutral, 0.20);"
+        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
         "}"
         "#lsm-main-nav-button:checked {"
-        " background-image: linear-gradient(to right,"
-        " alpha(@lsm_neutral, 0.68), alpha(@lsm_accent_hover, 0.42));"
-        " color: @lsm_title;"
-        " border-color: alpha(@lsm_neutral, 0.92);"
-        " box-shadow: inset 3px 0 @lsm_neutral;"
+        " background-image: none; background-color: @lsm_selection;"
+        " color: @lsm_selection_text; border-color: @lsm_neutral;"
+        " box-shadow: none;"
         "}"
         "#lsm-main-nav-button .lsm-main-nav-label {"
-        " color: @lsm_summary; font-size: 15px; font-weight: 600;"
+        " color: @lsm_summary; font-size: 14px; font-weight: 700;"
         "}"
-        "#lsm-main-nav-button:hover .lsm-main-nav-label,"
-        "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_title; }"
-        "#lsm-main-nav-button .lsm-main-nav-icon { color: @lsm_neutral; }"
+        "#lsm-main-nav-button:hover .lsm-main-nav-label { color: @lsm_title; }"
+        "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_selection_text; }"
+        "#lsm-main-nav-button .lsm-main-nav-icon {"
+        " color: @lsm_neutral; background-color: @lsm_surface;"
+        " border: 1px solid @lsm_border; border-radius: 10px; padding: 5px;"
+        "}"
         "#lsm-main-nav-button.lsm-nav-memory .lsm-main-nav-icon { color: #9b65ff; }"
         "#lsm-main-nav-button.lsm-nav-disk .lsm-main-nav-icon { color: #8fd94e; }"
         "#lsm-main-nav-button.lsm-nav-network .lsm-main-nav-icon { color: #30d9ef; }"
@@ -779,21 +780,19 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-side-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_text; border: 1px solid transparent; box-shadow: none;"
-        " border-radius: 6px; margin: 3px 7px; padding: 4px 6px;"
+        " margin: 2px 4px; padding: 7px 9px;"
         "}"
         "#lsm-side-button:hover {"
-        " background-color: @lsm_card_hover;"
-        " border-color: alpha(@lsm_text, 0.10);"
+        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
         "}"
         "#lsm-side-button:checked {"
-        " background-color: alpha(@lsm_neutral, 0.075);"
-        " color: @lsm_selection_text;"
-        " border-color: alpha(@lsm_neutral, 0.48);"
+        " background-color: @lsm_selection; color: @lsm_selection_text;"
+        " border-color: @lsm_neutral;"
         "}"
         "#lsm-side-button .lsm-side-title { color: @lsm_text; }"
         "#lsm-side-button .lsm-side-identifier { color: @lsm_kicker; }"
         "#lsm-side-button .lsm-side-value { color: @lsm_summary; }"
-        "#lsm-side-button:checked .lsm-side-title { color: @lsm_neutral; }"
+        "#lsm-side-button:checked .lsm-side-title { color: @lsm_selection_text; }"
         "#lsm-side-button:checked .lsm-side-identifier,"
         "#lsm-side-button:checked .lsm-side-value { color: @lsm_selected_summary; }"
         ".lsm-summary-caption { color: @lsm_summary; font-size: 11px; }"
@@ -801,7 +800,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-performance-title { color: @lsm_heading; }"
         ".lsm-performance-summary { color: @lsm_summary; }"
         ".lsm-performance-card {"
-        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
+        " background-image: none; background-color: @lsm_card;"
         " border: 1px solid @lsm_border;"
         "}"
         ".lsm-performance-card separator { background-color: @lsm_border; }"
@@ -1014,7 +1013,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,
-        (unsigned int)metrics->small_radius,
+        (unsigned int)metrics->control_radius,
         (unsigned int)metrics->control_radius);
 
     GError *css_error = NULL;
@@ -1175,7 +1174,7 @@ static void apply_navigation_density(LsmApp *app)
             button,
             compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                     : LSM_MAIN_NAV_BUTTON_WIDTH,
-            48);
+            LSM_MAIN_NAV_BUTTON_HEIGHT);
         GtkWidget *label = g_object_get_data(
             G_OBJECT(button), "lsm-nav-label-widget");
         if (label) gtk_widget_set_visible(label, !compact);
@@ -1187,7 +1186,7 @@ static void apply_navigation_density(LsmApp *app)
             button,
             compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                     : LSM_MAIN_NAV_BUTTON_WIDTH,
-            48);
+            LSM_MAIN_NAV_BUTTON_HEIGHT);
         GtkWidget *label = g_object_get_data(
             G_OBJECT(button), "lsm-nav-label-widget");
         if (label) gtk_widget_set_visible(label, !compact);
