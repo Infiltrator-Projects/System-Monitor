@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_menu.h
- * @brief Internal overflow-menu and user-action coordination API.
+ * @brief Internal menu and user-action coordination API.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -13,19 +13,12 @@
 #include "app.h"
 
 /**
- * Build the specialist Tools/Help popup used by the header overflow control.
+ * Build the global menu bar and bind application actions.
  *
  * @param [in,out] app Active application context receiving menu handles.
- * @return Newly created GTK popup menu owned by the header overflow control.
+ * @return Newly created GTK menu bar owned by the receiving widget hierarchy.
  */
 GtkWidget *lsm_app_menu_build(LsmApp *app);
-
-/**
- * Attach the specialist overflow control to the InfiltratorOS header.
- *
- * @param [in,out] app Active application with an already-created shell header.
- */
-void lsm_app_menu_attach_to_header(LsmApp *app);
 
 /**
  * Refresh all user-visible inventories once while preserving pause state.

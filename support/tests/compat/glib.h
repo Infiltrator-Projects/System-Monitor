@@ -12,9 +12,6 @@
 #ifndef G_PRIORITY_DEFAULT
 #define G_PRIORITY_DEFAULT 0
 #endif
-#ifndef G_PRIORITY_DEFAULT_IDLE
-#define G_PRIORITY_DEFAULT_IDLE 200
-#endif
 
 typedef struct _GMainContext GMainContext;
 

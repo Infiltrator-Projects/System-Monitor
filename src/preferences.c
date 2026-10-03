@@ -18,7 +18,6 @@
 #include "common.h"
 #include "app_internal.h"
 #include "app_runtime.h"
-#include "app_shell.h"
 
 #include "atomic_file.h"
 #include "details_page.h"
@@ -183,8 +182,7 @@ void lsm_preferences_load(LsmApp *app)
                 value, 0, LSM_TAB_COUNT - 1, app->runtime.last_tab);
         else if (strcmp(key, "performance_page") == 0 &&
                  valid_stack_name(value))
-            lsm_copy_string(app->runtime.selected_performance_page,
-                            sizeof(app->runtime.selected_performance_page),
+            lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
                             value);
         else if (lsm_string_starts_with(key, "page_scroll_") &&
                  key[12] >= '0' && key[12] <= '7' && key[13] == '\0') {
@@ -310,10 +308,10 @@ void lsm_preferences_show(LsmApp *app)
 {
     if (!app) return;
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
-        "Settings", GTK_WINDOW(app->shell.window),
+        "Preferences", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
-    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 700, 710);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 700, 680);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 16);
     GtkWidget *intro = gtk_label_new(
@@ -326,13 +324,6 @@ void lsm_preferences_show(LsmApp *app)
     gtk_grid_set_column_spacing(GTK_GRID(grid), 28);
     gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 14);
 
-    GtkWidget *theme = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(theme), "Follow system");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(theme), "Day");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(theme), "Night");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->runtime.theme_mode);
-    attach_preference(GTK_GRID(grid), 0, "Theme", theme);
-
     GtkWidget *speed = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
                                    "Fast — 0.5 seconds");
@@ -344,7 +335,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "Very low — 5 seconds");
     gtk_combo_box_set_active(GTK_COMBO_BOX(speed),
                              interval_index(app->runtime.update_interval_ms));
-    attach_preference(GTK_GRID(grid), 1, "Performance refresh speed", speed);
+    attach_preference(GTK_GRID(grid), 0, "Performance refresh speed", speed);
 
     GtkWidget *filesystem_speed = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(filesystem_speed),
@@ -358,7 +349,7 @@ void lsm_preferences_show(LsmApp *app)
         app->runtime.filesystem_update_interval_ms <= 5000U ? 1 : 2;
     gtk_combo_box_set_active(GTK_COMBO_BOX(filesystem_speed),
                              filesystem_speed_index);
-    attach_preference(GTK_GRID(grid), 2, "File-system refresh speed",
+    attach_preference(GTK_GRID(grid), 1, "File-system refresh speed",
                       filesystem_speed);
 
     GtkWidget *network = gtk_combo_box_text_new();
@@ -368,7 +359,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "Bits per second — Kb/s, Mb/s");
     gtk_combo_box_set_active(GTK_COMBO_BOX(network),
                              app->runtime.network_use_bits ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 3, "Network units", network);
+    attach_preference(GTK_GRID(grid), 2, "Network units", network);
 
     GtkWidget *network_totals = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network_totals),
@@ -380,7 +371,7 @@ void lsm_preferences_show(LsmApp *app)
     gtk_combo_box_set_active(GTK_COMBO_BOX(network_totals),
         !app->runtime.network_total_separate ? 0 :
         app->runtime.network_total_use_bits ? 2 : 1);
-    attach_preference(GTK_GRID(grid), 4, "Network totals", network_totals);
+    attach_preference(GTK_GRID(grid), 3, "Network totals", network_totals);
 
     GtkWidget *cpu_mode = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(cpu_mode),
@@ -389,7 +380,7 @@ void lsm_preferences_show(LsmApp *app)
         "Per-core capacity — multi-threaded processes may exceed 100%");
     gtk_combo_box_set_active(GTK_COMBO_BOX(cpu_mode),
                              app->runtime.process_cpu_per_core ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 5, "Process CPU scale", cpu_mode);
+    attach_preference(GTK_GRID(grid), 4, "Process CPU scale", cpu_mode);
 
     GtkWidget *direction = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction),
@@ -398,7 +389,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "New values on the left");
     gtk_combo_box_set_active(GTK_COMBO_BOX(direction),
                              app->runtime.newer_on_right ? 0 : 1);
-    attach_preference(GTK_GRID(grid), 6, "Graph direction", direction);
+    attach_preference(GTK_GRID(grid), 5, "Graph direction", direction);
 
     GtkWidget *history_points = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(history_points), "60 samples");
@@ -409,66 +400,61 @@ void lsm_preferences_show(LsmApp *app)
         app->runtime.graph_data_points <= 100U ? 1 :
         app->runtime.graph_data_points <= 300U ? 2 : 3;
     gtk_combo_box_set_active(GTK_COMBO_BOX(history_points), history_index);
-    attach_preference(GTK_GRID(grid), 7, "Graph history", history_points);
+    attach_preference(GTK_GRID(grid), 6, "Graph history", history_points);
 
     GtkWidget *smooth_graphs = gtk_check_button_new_with_label(
         "Draw performance history as smooth graphs");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(smooth_graphs),
                                  app->runtime.graph_smooth);
-    gtk_grid_attach(GTK_GRID(grid), smooth_graphs, 0, 8, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), smooth_graphs, 0, 7, 2, 1);
 
     GtkWidget *stacked_cpu = gtk_check_button_new_with_label(
         "Show CPU history as a stacked user/kernel area");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(stacked_cpu),
                                  app->runtime.cpu_stacked);
-    gtk_grid_attach(GTK_GRID(grid), stacked_cpu, 0, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), stacked_cpu, 0, 8, 2, 1);
 
     GtkWidget *log_memory = gtk_check_button_new_with_label(
         "Show Memory history on a logarithmic scale");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(log_memory),
                                  app->runtime.memory_logarithmic);
-    gtk_grid_attach(GTK_GRID(grid), log_memory, 0, 10, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), log_memory, 0, 9, 2, 1);
 
     GtkWidget *confirm_process = gtk_check_button_new_with_label(
         "Confirm before ending or force-terminating processes");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm_process),
                                  app->runtime.confirm_process_actions);
-    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 11, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 10, 2, 1);
 
     GtkWidget *show_all = gtk_check_button_new_with_label(
         "Show virtual and system filesystems by default");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(show_all),
                                  app->runtime.show_all_filesystems);
-    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 12, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 11, 2, 1);
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Shade busy resource cells in Processes and Details");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap),
                                  app->details.process_heatmap);
-    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 13, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 12, 2, 1);
     GtkWidget *always_on_top = gtk_check_button_new_with_label(
         "Keep the monitor above other windows");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(always_on_top),
                                  app->runtime.always_on_top);
-    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 14, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 13, 2, 1);
     GtkWidget *compact_summary = gtk_check_button_new_with_label(
         "Open in compact summary mode");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_summary),
                                  app->runtime.compact_summary);
-    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 15, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 14, 2, 1);
     GtkWidget *cadence_note = gtk_label_new(
         "Performance graphs can refresh every 0.5 seconds. Process and "
         "management lists refresh no faster than once per second.");
     gtk_label_set_line_wrap(GTK_LABEL(cadence_note), TRUE);
     gtk_widget_set_halign(cadence_note, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 16, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 15, 2, 1);
 
     gtk_widget_show_all(dialog);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
-        const gboolean old_compact_summary = app->runtime.compact_summary;
-        const gint theme_index = gtk_combo_box_get_active(GTK_COMBO_BOX(theme));
-        if (theme_index >= INFILTRATR_THEME_SYSTEM &&
-            theme_index <= INFILTRATR_THEME_NIGHT)
-            app->runtime.theme_mode = (InfiltratrThemeMode)theme_index;
         app->runtime.update_interval_ms = interval_from_index(
             gtk_combo_box_get_active(GTK_COMBO_BOX(speed)));
         app->runtime.filesystem_update_interval_ms =
@@ -508,13 +494,14 @@ void lsm_preferences_show(LsmApp *app)
             GTK_TOGGLE_BUTTON(always_on_top));
         app->runtime.compact_summary = gtk_toggle_button_get_active(
             GTK_TOGGLE_BUTTON(compact_summary));
-
-        if (app->shell.window)
-            gtk_window_set_keep_above(GTK_WINDOW(app->shell.window),
-                                      app->runtime.always_on_top);
-        lsm_app_shell_apply_theme(app);
-        if (old_compact_summary != app->runtime.compact_summary)
-            lsm_app_shell_apply_compact_summary(app);
+        if (app->shell.always_on_top_menu_item)
+            gtk_check_menu_item_set_active(
+                GTK_CHECK_MENU_ITEM(app->shell.always_on_top_menu_item),
+                app->runtime.always_on_top);
+        if (app->shell.compact_summary_menu_item)
+            gtk_check_menu_item_set_active(
+                GTK_CHECK_MENU_ITEM(app->shell.compact_summary_menu_item),
+                app->runtime.compact_summary);
         if (app->filesystem.filesystem_show_all)
             gtk_toggle_button_set_active(
                 GTK_TOGGLE_BUTTON(app->filesystem.filesystem_show_all),

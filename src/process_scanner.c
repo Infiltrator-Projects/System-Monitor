@@ -87,15 +87,8 @@ static void scanner_ready_dispatch_destroy(gpointer user_data)
 
 static void scanner_queue_ready_dispatch(LsmProcessScanner *scanner)
 {
-    /*
-     * Snapshot publication can trigger history accounting and visible GTK
-     * model projection. Run that work at idle priority so input, expose and
-     * window-management events at the normal priority remain responsive even
-     * on machines with large process tables. The worker still coalesces scans,
-     * so delaying presentation never creates an unbounded callback backlog.
-     */
     g_main_context_invoke_full(
-        NULL, G_PRIORITY_DEFAULT_IDLE, scanner_ready_dispatch, scanner,
+        NULL, G_PRIORITY_DEFAULT, scanner_ready_dispatch, scanner,
         scanner_ready_dispatch_destroy);
 }
 

@@ -59,12 +59,6 @@ static void close_window(GtkButton *button, gpointer user_data)
     gtk_window_close(GTK_WINDOW(user_data));
 }
 
-static void open_settings(GtkButton *button, gpointer user_data)
-{
-    (void)button;
-    lsm_preferences_show(user_data);
-}
-
 static GtkWidget *make_window_control(const char *icon_name,
                                       const char *tooltip,
                                       const char *css_class)
@@ -95,8 +89,6 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
     GtkWidget *title = gtk_label_new(LSM_PROGRAM_NAME);
     GtkWidget *subtitle = gtk_label_new("Infiltrator OS");
     GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    GtkWidget *settings = make_window_control(
-        "preferences-system-symbolic", "Settings", NULL);
     GtkWidget *minimize = make_window_control(
         "window-minimize-symbolic", "Minimize", NULL);
     GtkWidget *maximize = make_window_control(
@@ -125,21 +117,18 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
 
     gtk_widget_set_name(header_end, "lsm-header-end");
-    g_signal_connect(settings, "clicked", G_CALLBACK(open_settings), app);
     g_signal_connect(
         minimize, "clicked", G_CALLBACK(minimize_window), window);
     g_signal_connect(
         maximize, "clicked", G_CALLBACK(toggle_maximize_window), window);
     g_signal_connect(
         close, "clicked", G_CALLBACK(close_window), window);
-    gtk_box_pack_start(GTK_BOX(header_end), settings, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), minimize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), maximize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), close, FALSE, FALSE, 0);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
 
     g_object_set_data(G_OBJECT(window), "lsm-shell-header", header);
-    g_object_set_data(G_OBJECT(window), "lsm-settings-button", settings);
     g_object_set_data(G_OBJECT(window), "lsm-minimize-button", minimize);
     g_object_set_data(G_OBJECT(window), "lsm-maximize-button", maximize);
     g_object_set_data(G_OBJECT(window), "lsm-close-button", close);
@@ -148,10 +137,19 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
 
 static void sync_integrated_overview_chrome(LsmApp *app)
 {
-    if (!app) return;
-    /* Overview owns the normal whole-system headline summary. Keep the
-     * five-metric strip only for Compact Summary mode; technical pages do not
-     * carry duplicate shell chrome. */
+    if (!app || !app->shell.window) return;
+    const gboolean integrated =
+        !app->runtime.compact_summary &&
+        app->runtime.active_tab == LSM_TAB_OVERVIEW;
+    GtkWidget *menu_bar = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-main-menu-bar");
+    if (menu_bar)
+        gtk_widget_set_visible(menu_bar, !integrated);
+    /*
+     * Overview now owns the normal whole-system headline summary. Keep the
+     * five-metric strip only for Compact Summary mode; showing it above every
+     * technical page duplicates Overview and wastes vertical space.
+     */
     if (app->shell.summary_bar)
         gtk_widget_set_visible(
             app->shell.summary_bar, app->runtime.compact_summary);
@@ -184,6 +182,7 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
             gtk_window_maximize(GTK_WINDOW(app->shell.window));
     }
 }
+
 
 static const char *navigation_resource_icon(LsmPageType type)
 {
@@ -228,13 +227,13 @@ static GtkWidget *navigation_button(LsmApp *app, const char *label,
         button,
         compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                 : LSM_MAIN_NAV_BUTTON_WIDTH,
-        LSM_MAIN_NAV_BUTTON_HEIGHT);
+        48);
     if (style_class)
         gtk_style_context_add_class(
             gtk_widget_get_style_context(button), style_class);
 
     GtkWidget *row = gtk_box_new(
-        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 10);
+        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 12);
     GtkWidget *icon =
         gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
     gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
@@ -495,11 +494,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     const gboolean night_theme =
         app->runtime.theme_mode == INFILTRATR_THEME_NIGHT ||
         (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
-    if (app->shell.theme_state_valid &&
-        app->shell.theme_state_mode == app->runtime.theme_mode &&
-        app->shell.theme_state_dark == night_theme)
-        return;
-
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
     const InfiltratrTypography *typography = infiltratr_typography();
@@ -565,7 +559,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " color: @lsm_text; border: 1px solid @lsm_connection_border;"
         "}"
         "frame {"
-        " background-image: none; background-color: @lsm_card;"
+        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
         " color: @lsm_text; border: 1px solid @lsm_border;"
         "}"
         "menubar {"
@@ -649,19 +643,20 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->accent_foreground_rgb,
         (unsigned int)palette->accent_hover_rgb);
 
-    /* Align the application shell with the shared InfiltratorOS grammar:
-     * flat semantic surfaces, restrained selection and no decorative glow. */
+    /* Keep branded window chrome in a separate literal so the strict
+     * ISO C documentation build remains below the 4095-byte literal floor. */
     g_string_append(
         css,
         "#lsm-shell-header {"
         " min-height: 58px; padding: 6px 10px;"
-        " background-image: none; background-color: @lsm_titlebar;"
-        " border-bottom: 1px solid @lsm_border;"
+        " background-image: linear-gradient(to right, #06131f, #08263a);"
+        " background-color: #06131f; border-bottom: 1px solid @lsm_border;"
         "}"
         "#lsm-header-brand { padding: 2px 4px; }"
         "#lsm-header-brand-icon {"
         " background-color: @lsm_card; border: 1px solid @lsm_border;"
-        " border-radius: 12px; padding: 7px; box-shadow: none;"
+        " border-radius: 12px; padding: 7px;"
+        " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
         "}"
         "#lsm-header-brand-icon image { color: @lsm_neutral; }"
         "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
@@ -670,7 +665,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-window-control {"
         " min-width: 30px; min-height: 30px; padding: 4px;"
         " background-image: none; background-color: transparent;"
-        " border: 1px solid transparent; border-radius: 6px; box-shadow: none;"
+        " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
         "}"
         ".lsm-window-control:hover {"
         " background-color: @lsm_surface_hover; border-color: @lsm_border;"
@@ -710,14 +705,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "entry selection, textview text selection, treeview.view:selected {"
         " background-color: @lsm_selection; color: @lsm_selection_text;"
         "}"
-        "scrollbar, scrollbar trough {"
-        " min-width: 10px; min-height: 10px; background-color: transparent;"
-        "}"
-        "scrollbar slider {"
-        " min-width: 8px; min-height: 28px; background-color: @lsm_border;"
-        " border-radius: 999px;"
-        "}"
-        "scrollbar slider:hover { background-color: @lsm_neutral; }"
+        "scrollbar trough { background-color: @lsm_surface; }"
+        "scrollbar slider { background-color: @lsm_border; }"
+        "scrollbar slider:hover { background-color: @lsm_summary; }"
         "tooltip {"
         " background-color: @lsm_card; color: @lsm_title;"
         " border: 1px solid @lsm_border;"
@@ -726,33 +716,46 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     g_string_append(
         css,
         "#lsm-main-navigation, #lsm-main-navigation viewport {"
-        " background-image: none; background-color: @lsm_panel;"
-        " border-color: @lsm_border;"
+        " background-image: linear-gradient(to bottom, @lsm_panel, @lsm_background);"
+        " background-color: @lsm_panel;"
+        " border-color: @lsm_connection_border;"
         "}"
-        "#lsm-main-navigation { border-right: 1px solid @lsm_border; }"
+        "#lsm-main-navigation { border-right: 1px solid @lsm_connection_border; }"
         "#lsm-main-nav-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_summary; border: 1px solid transparent;"
-        " border-radius: 12px; box-shadow: none;"
-        " margin: 2px 4px; padding: 7px 9px;"
+        " box-shadow: none; margin: 2px 0; padding: 8px 10px;"
         "}"
         "#lsm-main-nav-button:hover {"
-        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
+        " background-color: @lsm_card_hover;"
+        " border-color: alpha(@lsm_neutral, 0.20);"
         "}"
         "#lsm-main-nav-button:checked {"
-        " background-image: none; background-color: @lsm_selection;"
-        " color: @lsm_selection_text; border-color: @lsm_neutral;"
-        " box-shadow: none;"
+        " background-image: linear-gradient(to right,"
+        " alpha(@lsm_neutral, 0.68), alpha(@lsm_accent_hover, 0.42));"
+        " color: @lsm_title;"
+        " border-color: alpha(@lsm_neutral, 0.92);"
+        " box-shadow: inset 3px 0 @lsm_neutral;"
         "}"
         "#lsm-main-nav-button .lsm-main-nav-label {"
-        " color: @lsm_summary; font-size: 14px; font-weight: 700;"
+        " color: @lsm_summary; font-size: 15px; font-weight: 600;"
         "}"
-        "#lsm-main-nav-button:hover .lsm-main-nav-label { color: @lsm_title; }"
-        "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_selection_text; }"
-        "#lsm-main-nav-button .lsm-main-nav-icon {"
-        " min-width: 38px; min-height: 38px;"
-        " color: @lsm_neutral; background-color: @lsm_surface;"
-        " border: 1px solid @lsm_border; border-radius: 10px; padding: 5px;"
+        "#lsm-main-nav-button:hover .lsm-main-nav-label,"
+        "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_title; }"
+        "#lsm-main-nav-button .lsm-main-nav-icon { color: @lsm_neutral; }"
+        "#lsm-main-nav-button.lsm-nav-memory .lsm-main-nav-icon { color: #9b65ff; }"
+        "#lsm-main-nav-button.lsm-nav-disk .lsm-main-nav-icon { color: #8fd94e; }"
+        "#lsm-main-nav-button.lsm-nav-network .lsm-main-nav-icon { color: #30d9ef; }"
+        "#lsm-main-nav-button.lsm-nav-gpu .lsm-main-nav-icon { color: #de68f2; }"
+        "#lsm-main-nav-button.lsm-nav-battery .lsm-main-nav-icon { color: #6ae66a; }"
+        "#lsm-main-nav-button.lsm-nav-processes .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-history .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-startup .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-users .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-details .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-services .lsm-main-nav-icon,"
+        "#lsm-main-nav-button.lsm-nav-filesystems .lsm-main-nav-icon {"
+        " color: @lsm_selected_summary;"
         "}"
         ".lsm-main-nav-separator {"
         " background-color: alpha(@lsm_connection_border, 0.78);"
@@ -775,21 +778,22 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         "#lsm-side-button {"
         " background-image: none; background-color: transparent;"
-        " color: @lsm_text; border: 1px solid transparent;"
-        " border-radius: 12px; box-shadow: none;"
-        " margin: 2px 4px; padding: 7px 9px;"
+        " color: @lsm_text; border: 1px solid transparent; box-shadow: none;"
+        " border-radius: 6px; margin: 3px 7px; padding: 4px 6px;"
         "}"
         "#lsm-side-button:hover {"
-        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
+        " background-color: @lsm_card_hover;"
+        " border-color: alpha(@lsm_text, 0.10);"
         "}"
         "#lsm-side-button:checked {"
-        " background-color: @lsm_selection; color: @lsm_selection_text;"
-        " border-color: @lsm_neutral;"
+        " background-color: alpha(@lsm_neutral, 0.075);"
+        " color: @lsm_selection_text;"
+        " border-color: alpha(@lsm_neutral, 0.48);"
         "}"
         "#lsm-side-button .lsm-side-title { color: @lsm_text; }"
         "#lsm-side-button .lsm-side-identifier { color: @lsm_kicker; }"
         "#lsm-side-button .lsm-side-value { color: @lsm_summary; }"
-        "#lsm-side-button:checked .lsm-side-title { color: @lsm_selection_text; }"
+        "#lsm-side-button:checked .lsm-side-title { color: @lsm_neutral; }"
         "#lsm-side-button:checked .lsm-side-identifier,"
         "#lsm-side-button:checked .lsm-side-value { color: @lsm_selected_summary; }"
         ".lsm-summary-caption { color: @lsm_summary; font-size: 11px; }"
@@ -797,7 +801,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-performance-title { color: @lsm_heading; }"
         ".lsm-performance-summary { color: @lsm_summary; }"
         ".lsm-performance-card {"
-        " background-image: none; background-color: @lsm_card;"
+        " background-image: linear-gradient(to bottom right, @lsm_card, @lsm_surface);"
         " border: 1px solid @lsm_border;"
         "}"
         ".lsm-performance-card separator { background-color: @lsm_border; }"
@@ -1010,7 +1014,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,
-        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->small_radius,
         (unsigned int)metrics->control_radius);
 
     GError *css_error = NULL;
@@ -1021,10 +1025,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
                 css_error && css_error->message
                     ? css_error->message : "unknown CSS parser error");
         g_clear_error(&css_error);
-    } else {
-        app->shell.theme_state_valid = TRUE;
-        app->shell.theme_state_mode = app->runtime.theme_mode;
-        app->shell.theme_state_dark = night_theme;
     }
     g_string_free(css, TRUE);
     if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
@@ -1088,6 +1088,9 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
     lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
     switch ((LsmTabIndex)page_number) {
         case LSM_TAB_APP_HISTORY:
+            /* lsm_history_build() performs the initial population itself.
+             * Refresh only on later visits so first navigation does not build
+             * all retained rows twice back-to-back on the GTK thread. */
             if (page_was_built) lsm_history_refresh(app);
             break;
         case LSM_TAB_FILESYSTEMS:
@@ -1115,6 +1118,9 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             lsm_overview_refresh(app);
             break;
         case LSM_TAB_PERFORMANCE:
+            /* Hidden Performance pages retain graph history without GTK
+             * presentation. Project the current snapshot immediately when the
+             * user returns instead of waiting for the next timer tick. */
             lsm_performance_refresh(app);
             break;
         case LSM_TAB_COUNT:
@@ -1148,6 +1154,7 @@ static gboolean reflow_after_window_restore(gpointer user_data)
 static void schedule_window_restore_reflow(LsmApp *app)
 {
     if (!app || app->runtime.window_restore_reflow_source) return;
+    /* Defer until the window manager's restore configure events have settled. */
     app->runtime.window_restore_reflow_source =
         g_idle_add(reflow_after_window_restore, app);
 }
@@ -1168,7 +1175,7 @@ static void apply_navigation_density(LsmApp *app)
             button,
             compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                     : LSM_MAIN_NAV_BUTTON_WIDTH,
-            LSM_MAIN_NAV_BUTTON_HEIGHT);
+            48);
         GtkWidget *label = g_object_get_data(
             G_OBJECT(button), "lsm-nav-label-widget");
         if (label) gtk_widget_set_visible(label, !compact);
@@ -1180,7 +1187,7 @@ static void apply_navigation_density(LsmApp *app)
             button,
             compact ? LSM_MAIN_NAV_BUTTON_COMPACT_WIDTH
                     : LSM_MAIN_NAV_BUTTON_WIDTH,
-            LSM_MAIN_NAV_BUTTON_HEIGHT);
+            48);
         GtkWidget *label = g_object_get_data(
             G_OBJECT(button), "lsm-nav-label-widget");
         if (label) gtk_widget_set_visible(label, !compact);
@@ -1246,19 +1253,8 @@ static GtkWidget *search_for_current_tab(const LsmApp *app)
 static gboolean focus_allows_pause(const LsmApp *app, GtkWidget *focus)
 {
     return !focus || focus == app->shell.notebook ||
-           focus == app->processes.processes_tree ||
-           focus == app->details.details_tree ||
+           focus == app->processes.processes_tree || focus == app->details.details_tree ||
            focus == app->performance.performance_stack;
-}
-
-static void toggle_pause(LsmApp *app)
-{
-    if (!app) return;
-    app->runtime.paused = !app->runtime.paused;
-    if (app->shell.pause_indicator)
-        gtk_widget_set_visible(app->shell.pause_indicator,
-                               app->runtime.paused &&
-                               !app->runtime.compact_summary);
 }
 
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
@@ -1307,7 +1303,8 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
 
     GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
     if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
-        toggle_pause(app);
+        gtk_check_menu_item_set_active(
+            GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item), !app->runtime.paused);
         return TRUE;
     }
     const gint current =
@@ -1329,6 +1326,7 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
     }
     return FALSE;
 }
+
 
 void lsm_app_shell_connect_window(LsmApp *app)
 {
@@ -1365,5 +1363,4 @@ void lsm_app_shell_cancel_pending(LsmApp *app)
         g_object_unref(app->shell.theme_provider);
         app->shell.theme_provider = NULL;
     }
-    app->shell.theme_state_valid = FALSE;
 }
