@@ -12,11 +12,4 @@
 #pragma GCC system_header
 #include_next <stdlib.h>
 
-/* The GTK compatibility surface models the small GLib allocation subset used
- * by the source. This macro is compile-only; production builds use GLib's
- * checked g_try_new implementation. */
-#ifndef g_try_new
-#define g_try_new(type, count) ((type *)malloc((count) * sizeof(type)))
-#endif
-
 #endif
