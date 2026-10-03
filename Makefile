@@ -436,7 +436,8 @@ docs-check: style-check clang-doc-check doxygen-check
 
 docs: docs-check
 	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
-		echo "Doxygen is required to generate the HTML reference." >&2; exit 1; \
+		echo "Doxygen is required to generate the HTML reference."; \
+		exit 1; \
 	}
 	@echo "Documentation generated in build/docs/html/index.html"
 
@@ -529,6 +530,7 @@ temporal-presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/temporal_presentation_smoke.c src/temporal_presentation.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
 		-o $(BUILD_DIR)/temporal-presentation-smoke
+	./$(BUILD_DIR)/temporal-presentation-smoke
 
 async-workers-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
@@ -640,6 +642,7 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
 	bash -n $(INSTALL_BOOTSTRAP)
 	./$(INSTALL_BOOTSTRAP) --help >/dev/null
+	./$(NATIVE_INSTALLER) --help >/dev/null
 	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER_TEST)
 	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER) \
 		$(BUILD_DIR)/native-installer-smoke-a.run >/dev/null
