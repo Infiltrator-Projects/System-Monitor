@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.163 - 2026-10-03
+
+- Flush the GTK display connection after hiding the main window and before quitting the event loop, so buffered unmap requests are sent before synchronous final-state persistence and cleanup.
+
 ## 1.0.162 - 2026-10-03
 
 - Stop sampling immediately after runtime timers stop and release the GUI's backend ownership without waiting for device reads; the sampler retains its own lifetime reference.

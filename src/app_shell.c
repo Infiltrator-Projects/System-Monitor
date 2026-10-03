@@ -1060,6 +1060,10 @@ static gboolean on_delete_event(GtkWidget *widget, GdkEvent *event, gpointer use
      * in lsm_app_shutdown(), but remove it from the screen before quitting the
      * application main loop. */
     gtk_widget_set_visible(widget, FALSE);
+    /* Send the unmap before leaving GTK's dispatch loop. Otherwise buffered
+     * display requests can remain unsent throughout synchronous final saves. */
+    GdkDisplay *display = gtk_widget_get_display(widget);
+    if (display) gdk_display_flush(display);
     g_application_quit(G_APPLICATION(app->application));
     return TRUE;
 }

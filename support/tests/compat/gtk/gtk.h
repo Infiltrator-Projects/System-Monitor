@@ -471,6 +471,8 @@ gint gdk_screen_get_primary_monitor(GdkScreen *screen);
 void gdk_screen_get_monitor_workarea(GdkScreen *screen, gint monitor_num,
                                      GdkRectangle *dest);
 GdkDisplay *gdk_display_get_default(void);
+GdkDisplay *gtk_widget_get_display(GtkWidget *widget);
+void gdk_display_flush(GdkDisplay *display);
 GdkMonitor *gdk_display_get_primary_monitor(GdkDisplay *display);
 gint gdk_display_get_n_monitors(GdkDisplay *display);
 GdkMonitor *gdk_display_get_monitor(GdkDisplay *display, gint monitor_num);
