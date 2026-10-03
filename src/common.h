@@ -20,6 +20,8 @@
 #include <infiltratr/posix_path.h>
 #include <infiltratr/token.h>
 
+#include <stdlib.h>
+
 #define LSM_ARRAY_LENGTH(array) INFILTRATR_ARRAY_LENGTH(array)
 
 #define lsm_copy_string infiltratr_copy_string
@@ -83,5 +85,23 @@
     infiltratr_posix_deadline_remaining_milliseconds
 #define lsm_format_bytes infiltratr_format_bytes
 #define lsm_format_rate infiltratr_format_rate
+
+/*
+ * The documentation/strict syntax shim deliberately exposes only the GTK/GLib
+ * surface System Monitor uses. Real GLib defines g_try_new; when that macro is
+ * absent in the shim, preserve its non-throwing allocation semantics here with
+ * checked multiplication rather than weakening the production history path.
+ */
+#ifndef g_try_new
+static inline void *lsm_glib_try_new_fallback(size_t count, size_t element_size)
+{
+    size_t bytes = 0U;
+    if (!lsm_size_multiply_checked(count, element_size, &bytes))
+        return NULL;
+    return malloc(bytes);
+}
+#define g_try_new(type, count) \
+    ((type *)lsm_glib_try_new_fallback((count), sizeof(type)))
+#endif
 
 #endif
