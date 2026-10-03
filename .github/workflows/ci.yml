@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
     timeout-minutes: 30
     env:
       # Self-hosted runner services can inherit a deliberately minimal PATH.
@@ -314,10 +314,16 @@ jobs:
           fi
 
       - name: Run canonical verification suite
-        run: REQUIRE_I386=1 make check
+        run: |
+          # The NVML fixture retains two 4.8 MB monitoring snapshots.
+          # Give test processes enough stack regardless of service defaults.
+          ulimit -s 65536
+          REQUIRE_I386=1 make check
 
       - name: Verify with sanitizers
-        run: make sanitizer-check
+        run: |
+          ulimit -s 65536
+          make sanitizer-check
 
       - name: Verify release packaging without publishing
         shell: bash
@@ -415,6 +421,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ulimit -s 65536
           version=$(tr -d '[:space:]' < support/VERSION)
           installer="infiltrator-system-monitor-${version}-native-installer.run"
           test -x "$installer"
@@ -562,4 +569,3 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Windows backend probe compile failed with exit code $LASTEXITCODE." }
           & (Join-Path $PWD 'windows-backend-probe.exe')
           if ($LASTEXITCODE -ne 0) { throw "Windows backend topology probe failed with exit code $LASTEXITCODE." }
-
