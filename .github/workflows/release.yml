@@ -161,12 +161,11 @@ jobs:
             printf 'Debian maintainer script regained an external setup helper.\n' >&2
             exit 1
           fi
-          if find "$tmp/root/usr/share/fonts" -type f \
-              \( -iname '*mb*corpo*' -o -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) \
-              -print -quit 2>/dev/null | grep -q .; then
-            printf 'System Monitor package must not redistribute proprietary font binaries.\n' >&2
-            exit 1
-          fi
+          font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
+          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
+            test -f "$font_root/$face"
+            cmp "build/fonts/$face" "$font_root/$face"
+          done
           changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')

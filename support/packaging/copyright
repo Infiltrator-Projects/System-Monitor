@@ -17,3 +17,9 @@ License: GPL-3+
  .
  On Debian systems, the complete text of the GNU General Public License version
  3 is available in /usr/share/common-licenses/GPL-3.
+
+Files: support/resources/fonts/mb-corpo-fonts.tar.xz
+Copyright: 2019 Daimler AG
+License: Proprietary-font
+ The supplied MB Corpo font faces retain their embedded copyright and font
+ licence metadata. They are separate from the GPL-licensed program source.

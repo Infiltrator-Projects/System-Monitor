@@ -817,8 +817,8 @@ static void check_licensing_contract(void)
                         "SPDX-FileCopyrightText: 2000-2026 Shannon Smith");
     require_file_marker("support/resources/icons/system-monitor.png.license",
                         "SPDX-License-Identifier: GPL-3.0-or-later");
-    if (regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
-        report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: proprietary font binaries must not be redistributed");
+    if (!regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
+        report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: required bundled typography archive is missing");
     require_file_marker("support/packaging/copyright", "License: GPL-3+");
     require_file_marker("src/project_info.c",
                         ".license_id = \"GPL-3.0-or-later\"");

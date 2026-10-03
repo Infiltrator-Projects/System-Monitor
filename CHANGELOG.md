@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.160 - 2026-10-03
+
+- Install all three supplied MB Corpo faces with both the DEB and hardware-native installer, verifying the local archive and extracted files against Common's canonical SHA-256 values.
+- Apply MB Corpo A Cond to the custom window title and page headings, keeping MB Corpo S for UI text.
+- Give transparent titlebar controls and their symbolic images an explicit theme foreground, with white icons in Night mode and readable hover colours.
+- Replace the obsolete Linux font-exclusion checks with package-payload and rendered GTK typography/colour checks.
+
 ## 1.0.157 - 2026-10-02
 
 - Batch App History retention overflow into one candidate scan and recency sort instead of rescanning the full 4096-entry table once per eviction, removing a remaining GTK-main-context latency spike after large live-process bursts or asynchronous persisted-history merges.

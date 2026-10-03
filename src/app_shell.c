@@ -508,8 +508,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     g_string_append_printf(
         css,
         "* { font-family: \"%s\"; font-weight: %u; }"
-        "headerbar .title, .titlebar .title {"
-        " font-family: \"%s\", \"%s\"; font-weight: %u;"
+        "headerbar .title, .titlebar .title, #lsm-header-brand-title,"
+        " .lsm-performance-title {"
+        " font-family: \"%s\"; font-weight: %u;"
         "}"
         "button, treeview header button, notebook tab { font-weight: %u; }"
         "@define-color lsm_background #%06X;"
@@ -604,7 +605,6 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         typography->ui_family,
         (unsigned int)typography->ui_regular_weight,
         typography->brand_family,
-        typography->ui_family,
         (unsigned int)typography->brand_weight,
         (unsigned int)typography->ui_bold_weight,
         (unsigned int)palette->background_rgb,
@@ -659,7 +659,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
         "}"
         "#lsm-header-brand-icon image { color: @lsm_neutral; }"
-        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; font-weight: 700; }"
+        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; }"
         "#lsm-header-brand-subtitle { color: @lsm_muted; font-size: 11px; }"
         "#lsm-header-end { margin-left: 10px; }"
         ".lsm-window-control {"
@@ -667,11 +667,14 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " background-image: none; background-color: transparent;"
         " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
         "}"
+        "#lsm-shell-header .lsm-window-control,"
+        "#lsm-shell-header .lsm-window-control > image { color: @lsm_title; }"
         ".lsm-window-control:hover {"
         " background-color: @lsm_surface_hover; border-color: @lsm_border;"
         "}"
-        ".lsm-window-control-close:hover {"
-        " background-color: @lsm_fault; color: @lsm_accent_foreground;"
+        "#lsm-shell-header .lsm-window-control-close:hover,"
+        "#lsm-shell-header .lsm-window-control-close:hover > image {"
+        " background-color: @lsm_fault; color: #ffffff;"
         "}");
 
     g_string_append(

@@ -24,6 +24,7 @@ INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
 TARGET := $(BUILD_DIR)/system-monitor
+FONT_STAMP := $(BUILD_DIR)/fonts/.verified
 STYLE_CHECKER := $(BUILD_DIR)/source-style-checker
 PORTABILITY_CHECKER := $(BUILD_DIR)/check-portability
 NATIVE_SAFETY_CHECKER := $(BUILD_DIR)/native-installer-safety
@@ -259,7 +260,14 @@ common-library: common-check
 $(INFILTRATR_COMMON_ARCHIVE): common-library
 	@test -f "$@"
 
-$(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE)
+$(FONT_STAMP): support/resources/fonts/mb-corpo-fonts.tar.xz \
+	support/tools/prepare_typography.cmake \
+	$(INFILTRATR_COMMON_DIR)/cmake/InfiltratrTypographyAssets.cmake | common-check $(BUILD_DIR)
+	cmake -DLSM_FONT_OUTPUT_DIR="$(abspath $(BUILD_DIR)/fonts)" \
+		-P support/tools/prepare_typography.cmake
+	touch $@
+
+$(TARGET): $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(FONT_STAMP)
 	$(APP_LINKER) $(OBJECTS) $(INFILTRATR_COMMON_ARCHIVE) $(LDFLAGS) $(LDLIBS) -o $@
 
 -include $(OBJECTS:.o=.d)
@@ -297,6 +305,13 @@ build-check: check-deps strict-check portability-check \
 .PHONY: core-suite-smoke presentation-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke
+
+$(BUILD_DIR)/gtk-typography-chrome: support/tests/gtk_typography_chrome.c \
+	src/app_shell.c $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		-ffunction-sections -fdata-sections \
+		support/tests/gtk_typography_chrome.c src/app_shell.c \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -Wl,--gc-sections -lm -o $@
 
 core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
@@ -791,11 +806,15 @@ install install-built uninstall:
 	@exit 1
 
 # Debian-family pure-GUI release package.
-deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO)
+deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO) $(FONT_STAMP)
 	./$(DEB_PACKAGE_BUILDER) $(VERSION) $(DEB_ARCH) $(DEB_OUTPUT)
 	dpkg-deb --info $(DEB_OUTPUT) >/dev/null
 	dpkg-deb --contents $(DEB_OUTPUT) > $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
+	@for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do \
+		grep -q "usr/share/fonts/truetype/infiltrator-system-monitor/$$face$$" \
+			$(BUILD_DIR)/deb-contents.txt || exit 1; \
+	done
 	grep -q 'usr/share/doc/infiltrator-system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt

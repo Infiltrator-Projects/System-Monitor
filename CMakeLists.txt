@@ -58,7 +58,13 @@ if(LSM_COMMON_COMMIT_RESULT EQUAL 0 AND
         "Infiltratr Common must be pinned to ${INFILTRATR_COMMON_EXPECTED_COMMIT}; found ${INFILTRATR_COMMON_COMMIT}.")
 endif()
 
+set(LSM_FONT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/fonts")
+include("${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake")
+
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/resources/fonts/mb-corpo-fonts.tar.xz"
+    "${INFILTRATR_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt"
     "${INFILTRATR_COMMON_DIR}/VERSION")

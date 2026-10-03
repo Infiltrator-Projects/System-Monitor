@@ -509,6 +509,14 @@ int main(int argc, char **argv)
              "baseline GLIBC_%u.%u", staged_application, required_glibc_major,
              required_glibc_minor, LSM_GLIBC_BASELINE_MAJOR,
              LSM_GLIBC_BASELINE_MINOR);
+    /* Both the prebuilt DEB and native installer use this same font payload. */
+    copy_staged("build/fonts/mb_corpo_a_cond_regular.ttf",
+                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_a_cond_regular.ttf", 0644);
+    copy_staged("build/fonts/mb_corpo_s_regular.ttf",
+                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_s_regular.ttf", 0644);
+    copy_staged("build/fonts/mb_corpo_s_bold.ttf",
+                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_s_bold.ttf", 0644);
+
     /* Keep the desktop icon canonical name, and also ship package-name aliases
      * inside this package. Linux Mint Software Manager resolves APT packages
      * by package name, so these aliases let the application own its artwork
