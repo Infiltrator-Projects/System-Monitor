@@ -7,10 +7,10 @@
 #ifndef LSM_DOCUMENTATION_COMPAT_STDLIB_H
 #define LSM_DOCUMENTATION_COMPAT_STDLIB_H
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wgnu-include-next"
+/* This shim is intentionally a compiler-system header: include_next is only
+ * used by the documentation/test compatibility surface, never production. */
+#pragma GCC system_header
 #include_next <stdlib.h>
-#pragma clang diagnostic pop
 
 /* The GTK compatibility surface models the small GLib allocation subset used
  * by the source. This macro is compile-only; production builds use GLib's
