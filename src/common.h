@@ -93,26 +93,16 @@
  * checked multiplication rather than weakening the production history path.
  */
 #ifndef g_try_new
-/**
- * Allocate a checked byte count for the strict GLib compatibility surface.
- *
- * Production builds use GLib's g_try_new macro. The syntax-test shim does not
- * provide it, so this local fallback preserves non-throwing allocation and
- * rejects size multiplication overflow before calling malloc().
- *
- * @param count Number of elements requested.
- * @param element_size Size of each element in bytes.
- * @return Newly allocated storage, or NULL on overflow/allocation failure.
- */
-static inline void *lsm_glib_try_new_fallback(size_t count, size_t element_size)
+static inline void *system_monitor_glib_try_new_fallback(
+    size_t count, size_t element_size)
 {
     size_t bytes = 0U;
-    if (!lsm_size_multiply_checked(count, element_size, &bytes))
+    if (!infiltratr_size_multiply_checked(count, element_size, &bytes))
         return NULL;
     return malloc(bytes);
 }
 #define g_try_new(type, count) \
-    ((type *)lsm_glib_try_new_fallback((count), sizeof(type)))
+    ((type *)system_monitor_glib_try_new_fallback((count), sizeof(type)))
 #endif
 
 #endif
