@@ -7,7 +7,10 @@
 #ifndef LSM_DOCUMENTATION_COMPAT_STDLIB_H
 #define LSM_DOCUMENTATION_COMPAT_STDLIB_H
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-include-next"
 #include_next <stdlib.h>
+#pragma clang diagnostic pop
 
 /* The GTK compatibility surface models the small GLib allocation subset used
  * by the source. This macro is compile-only; production builds use GLib's
