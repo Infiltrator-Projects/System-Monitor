@@ -280,10 +280,35 @@ static void attach_preference(GtkGrid *grid, int row, const char *name,
                               GtkWidget *control)
 {
     GtkWidget *label = gtk_label_new(name);
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
-    gtk_widget_set_halign(control, GTK_ALIGN_START);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_widget_set_hexpand(label, TRUE);
+    gtk_widget_set_halign(control, GTK_ALIGN_FILL);
+    gtk_widget_set_size_request(control, 280, 40);
     gtk_grid_attach(grid, label, 0, row, 1, 1);
     gtk_grid_attach(grid, control, 1, row, 1, 1);
+}
+
+static GtkWidget *preference_page(GtkNotebook *notebook, const char *title)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 24);
+    gtk_container_set_border_width(GTK_CONTAINER(grid), 20);
+    gtk_container_add(GTK_CONTAINER(scroll), grid);
+    gtk_notebook_append_page(notebook, scroll, gtk_label_new(title));
+    return grid;
+}
+
+static void attach_toggle(GtkGrid *grid, int row, GtkWidget *toggle)
+{
+    gtk_widget_set_hexpand(toggle, TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(toggle),
+                                "lsm-preference-toggle");
+    gtk_grid_attach(grid, toggle, 0, row, 2, 1);
 }
 
 static int interval_index(guint interval)
@@ -311,18 +336,38 @@ void lsm_preferences_show(LsmApp *app)
         "Preferences", GTK_WINDOW(app->shell.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
-    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 700, 680);
+    gtk_style_context_add_class(gtk_widget_get_style_context(dialog),
+                                "lsm-preferences");
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 700, 570);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    GtkWidget *apply = gtk_dialog_get_widget_for_response(
+        GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    gtk_style_context_add_class(gtk_widget_get_style_context(apply),
+                                "suggested-action");
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 16);
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    gtk_box_set_spacing(GTK_BOX(content), 16);
+    GtkWidget *heading = gtk_label_new("Preferences");
+    gtk_label_set_xalign(GTK_LABEL(heading), 0.0F);
+    gtk_style_context_add_class(gtk_widget_get_style_context(heading),
+                                "lsm-performance-title");
+    gtk_style_context_add_class(gtk_widget_get_style_context(heading),
+                                "lsm-preferences-title");
+    gtk_box_pack_start(GTK_BOX(content), heading, FALSE, FALSE, 0);
     GtkWidget *intro = gtk_label_new(
-        "These settings affect only the graphical presentation. Hardware collection remains native and unchanged.");
+        "Choose how updates, graphs and resource lists are displayed.");
     gtk_label_set_line_wrap(GTK_LABEL(intro), TRUE);
-    gtk_widget_set_halign(intro, GTK_ALIGN_START);
+    gtk_label_set_xalign(GTK_LABEL(intro), 0.0F);
+    gtk_style_context_add_class(gtk_widget_get_style_context(intro),
+                                "lsm-preferences-note");
     gtk_box_pack_start(GTK_BOX(content), intro, FALSE, FALSE, 0);
-    GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 28);
-    gtk_box_pack_start(GTK_BOX(content), grid, TRUE, TRUE, 14);
+    GtkWidget *notebook = gtk_notebook_new();
+    gtk_widget_set_hexpand(notebook, TRUE);
+    gtk_widget_set_vexpand(notebook, TRUE);
+    gtk_box_pack_start(GTK_BOX(content), notebook, TRUE, TRUE, 0);
+    GtkWidget *updates = preference_page(GTK_NOTEBOOK(notebook), "Updates & units");
+    GtkWidget *graphs = preference_page(GTK_NOTEBOOK(notebook), "Graphs");
+    GtkWidget *behaviour = preference_page(GTK_NOTEBOOK(notebook), "Behaviour");
 
     GtkWidget *speed = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(speed),
@@ -335,7 +380,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "Very low — 5 seconds");
     gtk_combo_box_set_active(GTK_COMBO_BOX(speed),
                              interval_index(app->runtime.update_interval_ms));
-    attach_preference(GTK_GRID(grid), 0, "Performance refresh speed", speed);
+    attach_preference(GTK_GRID(updates), 0, "Performance refresh speed", speed);
 
     GtkWidget *filesystem_speed = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(filesystem_speed),
@@ -349,7 +394,7 @@ void lsm_preferences_show(LsmApp *app)
         app->runtime.filesystem_update_interval_ms <= 5000U ? 1 : 2;
     gtk_combo_box_set_active(GTK_COMBO_BOX(filesystem_speed),
                              filesystem_speed_index);
-    attach_preference(GTK_GRID(grid), 1, "File-system refresh speed",
+    attach_preference(GTK_GRID(updates), 1, "File-system refresh speed",
                       filesystem_speed);
 
     GtkWidget *network = gtk_combo_box_text_new();
@@ -359,7 +404,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "Bits per second — Kb/s, Mb/s");
     gtk_combo_box_set_active(GTK_COMBO_BOX(network),
                              app->runtime.network_use_bits ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 2, "Network units", network);
+    attach_preference(GTK_GRID(updates), 2, "Network units", network);
 
     GtkWidget *network_totals = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(network_totals),
@@ -371,16 +416,16 @@ void lsm_preferences_show(LsmApp *app)
     gtk_combo_box_set_active(GTK_COMBO_BOX(network_totals),
         !app->runtime.network_total_separate ? 0 :
         app->runtime.network_total_use_bits ? 2 : 1);
-    attach_preference(GTK_GRID(grid), 3, "Network totals", network_totals);
+    attach_preference(GTK_GRID(updates), 3, "Network totals", network_totals);
 
     GtkWidget *cpu_mode = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(cpu_mode),
-        "Total computer capacity — process maximum 100%");
+        "Whole computer — maximum 100%");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(cpu_mode),
-        "Per-core capacity — multi-threaded processes may exceed 100%");
+        "Per core — may exceed 100%");
     gtk_combo_box_set_active(GTK_COMBO_BOX(cpu_mode),
                              app->runtime.process_cpu_per_core ? 1 : 0);
-    attach_preference(GTK_GRID(grid), 4, "Process CPU scale", cpu_mode);
+    attach_preference(GTK_GRID(updates), 4, "Process CPU scale", cpu_mode);
 
     GtkWidget *direction = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(direction),
@@ -389,7 +434,7 @@ void lsm_preferences_show(LsmApp *app)
                                    "New values on the left");
     gtk_combo_box_set_active(GTK_COMBO_BOX(direction),
                              app->runtime.newer_on_right ? 0 : 1);
-    attach_preference(GTK_GRID(grid), 5, "Graph direction", direction);
+    attach_preference(GTK_GRID(graphs), 0, "Graph direction", direction);
 
     GtkWidget *history_points = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(history_points), "60 samples");
@@ -400,58 +445,61 @@ void lsm_preferences_show(LsmApp *app)
         app->runtime.graph_data_points <= 100U ? 1 :
         app->runtime.graph_data_points <= 300U ? 2 : 3;
     gtk_combo_box_set_active(GTK_COMBO_BOX(history_points), history_index);
-    attach_preference(GTK_GRID(grid), 6, "Graph history", history_points);
+    attach_preference(GTK_GRID(graphs), 1, "Graph history", history_points);
 
     GtkWidget *smooth_graphs = gtk_check_button_new_with_label(
         "Draw performance history as smooth graphs");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(smooth_graphs),
                                  app->runtime.graph_smooth);
-    gtk_grid_attach(GTK_GRID(grid), smooth_graphs, 0, 7, 2, 1);
+    attach_toggle(GTK_GRID(graphs), 2, smooth_graphs);
 
     GtkWidget *stacked_cpu = gtk_check_button_new_with_label(
         "Show CPU history as a stacked user/kernel area");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(stacked_cpu),
                                  app->runtime.cpu_stacked);
-    gtk_grid_attach(GTK_GRID(grid), stacked_cpu, 0, 8, 2, 1);
+    attach_toggle(GTK_GRID(graphs), 3, stacked_cpu);
 
     GtkWidget *log_memory = gtk_check_button_new_with_label(
         "Show Memory history on a logarithmic scale");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(log_memory),
                                  app->runtime.memory_logarithmic);
-    gtk_grid_attach(GTK_GRID(grid), log_memory, 0, 9, 2, 1);
+    attach_toggle(GTK_GRID(graphs), 4, log_memory);
 
     GtkWidget *confirm_process = gtk_check_button_new_with_label(
         "Confirm before ending or force-terminating processes");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm_process),
                                  app->runtime.confirm_process_actions);
-    gtk_grid_attach(GTK_GRID(grid), confirm_process, 0, 10, 2, 1);
+    attach_toggle(GTK_GRID(behaviour), 0, confirm_process);
 
     GtkWidget *show_all = gtk_check_button_new_with_label(
         "Show virtual and system filesystems by default");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(show_all),
                                  app->runtime.show_all_filesystems);
-    gtk_grid_attach(GTK_GRID(grid), show_all, 0, 11, 2, 1);
+    attach_toggle(GTK_GRID(behaviour), 1, show_all);
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Shade busy resource cells in Processes and Details");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap),
                                  app->details.process_heatmap);
-    gtk_grid_attach(GTK_GRID(grid), heatmap, 0, 12, 2, 1);
+    attach_toggle(GTK_GRID(behaviour), 2, heatmap);
     GtkWidget *always_on_top = gtk_check_button_new_with_label(
         "Keep the monitor above other windows");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(always_on_top),
                                  app->runtime.always_on_top);
-    gtk_grid_attach(GTK_GRID(grid), always_on_top, 0, 13, 2, 1);
+    attach_toggle(GTK_GRID(behaviour), 3, always_on_top);
     GtkWidget *compact_summary = gtk_check_button_new_with_label(
         "Open in compact summary mode");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_summary),
                                  app->runtime.compact_summary);
-    gtk_grid_attach(GTK_GRID(grid), compact_summary, 0, 14, 2, 1);
+    attach_toggle(GTK_GRID(behaviour), 4, compact_summary);
     GtkWidget *cadence_note = gtk_label_new(
-        "Performance graphs can refresh every 0.5 seconds. Process and "
-        "management lists refresh no faster than once per second.");
+        "Graphs support 0.5-second updates. Process and management lists "
+        "update at most once per second.");
     gtk_label_set_line_wrap(GTK_LABEL(cadence_note), TRUE);
     gtk_widget_set_halign(cadence_note, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), cadence_note, 0, 15, 2, 1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(cadence_note),
+                                "lsm-preferences-note");
+    gtk_widget_set_margin_top(cadence_note, 8);
+    gtk_grid_attach(GTK_GRID(updates), cadence_note, 0, 5, 2, 1);
 
     gtk_widget_show_all(dialog);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.164 - 2026-10-03
+
+- Reorganise Preferences into Updates & units, Graphs and Behaviour with aligned, consistently sized selectors and separate readable toggle rows.
+- Match the dialog, controls and Apply action to the Day/Night palette and canonical MB fonts; keep Apply/Cancel visible while small-screen content scrolls.
+- Preserve every preference and the existing Apply/Cancel persistence behaviour.
+
 ## 1.0.163 - 2026-10-03
 
 - Flush the GTK display connection after hiding the main window and before quitting the event loop, so buffered unmap requests are sent before synchronous final-state persistence and cleanup.

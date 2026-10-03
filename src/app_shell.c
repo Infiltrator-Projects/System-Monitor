@@ -656,6 +656,45 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->accent_foreground_rgb,
         (unsigned int)palette->accent_hover_rgb);
 
+    g_string_append(css,
+        ".lsm-preferences { font-size: 14px; }"
+        ".lsm-preferences-title { font-size: 26px; color: @lsm_title; }"
+        ".lsm-preferences-note { color: @lsm_muted; }"
+        ".lsm-preferences notebook {"
+        " background-color: @lsm_card; border: 1px solid @lsm_border;"
+        " border-radius: 12px; }"
+        ".lsm-preferences notebook viewport, .lsm-preferences notebook stack {"
+        " background-color: @lsm_card; border-radius: 0 0 12px 12px; }"
+        ".lsm-preferences notebook header {"
+        " background-color: @lsm_panel; border-bottom: 1px solid @lsm_border; }"
+        ".lsm-preferences notebook tab { padding: 10px 18px; }"
+        ".lsm-preferences notebook tab:checked {"
+        " color: @lsm_title; border-bottom: 2px solid @lsm_neutral; }"
+        ".lsm-preferences combobox button {"
+        " background-color: @lsm_input; color: @lsm_text; padding: 6px 12px; }"
+        ".lsm-preferences combobox button label,"
+        " .lsm-preferences combobox button image { color: @lsm_text; }"
+        ".lsm-preferences combobox button:hover {"
+        " background-color: @lsm_surface_hover; border-color: @lsm_neutral; }"
+        ".lsm-preference-toggle {"
+        " padding: 12px 8px; border-bottom: 1px solid @lsm_border; }"
+        ".lsm-preference-toggle check { min-width: 18px; min-height: 18px;"
+        " margin-right: 10px; border-radius: 5px;"
+        " background-color: @lsm_input; border: 1px solid @lsm_border; }"
+        ".lsm-preference-toggle check:checked {"
+        " background-color: @lsm_neutral; border-color: @lsm_neutral;"
+        " color: @lsm_accent_foreground; }"
+        ".lsm-preferences .dialog-action-area { padding: 4px 20px 16px; }"
+        ".lsm-preferences .dialog-action-area button {"
+        " min-width: 84px; min-height: 32px; padding: 4px 12px;"
+        " background-color: @lsm_input; color: @lsm_text; }"
+        ".lsm-preferences .dialog-action-area button label { color: @lsm_text; }"
+        ".lsm-preferences button.suggested-action {"
+        " background-color: @lsm_neutral; border-color: @lsm_neutral;"
+        " color: @lsm_accent_foreground; }"
+        ".lsm-preferences button.suggested-action label {"
+        " color: @lsm_accent_foreground; }");
+
     /* Keep branded window chrome in a separate literal so the strict
      * ISO C documentation build remains below the 4095-byte literal floor. */
     g_string_append(

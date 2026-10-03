@@ -508,7 +508,7 @@ gboolean gtk_check_menu_item_get_active(GtkCheckMenuItem*); GtkWidget *gtk_check
 GtkWidget *gtk_combo_box_text_new(void); void gtk_combo_box_text_append_text(GtkComboBoxText*,const gchar*); void gtk_combo_box_text_remove_all(GtkComboBoxText*); gint gtk_combo_box_get_active(GtkComboBox*); void gtk_combo_box_set_active(GtkComboBox*,gint);
 void gtk_container_add(GtkContainer*,GtkWidget*); void gtk_container_set_border_width(GtkContainer*,guint);
 gboolean gtk_css_provider_load_from_data(GtkCssProvider*,const gchar*,gssize,GError**); GtkCssProvider *gtk_css_provider_new(void);
-void gtk_dialog_add_buttons(GtkDialog*,const gchar*,...); GtkWidget *gtk_dialog_get_content_area(GtkDialog*); GtkWidget *gtk_dialog_new_with_buttons(const gchar*,GtkWindow*,GtkDialogFlags,const gchar*,...); gint gtk_dialog_run(GtkDialog*);
+void gtk_dialog_add_buttons(GtkDialog*,const gchar*,...); GtkWidget *gtk_dialog_get_content_area(GtkDialog*); GtkWidget *gtk_dialog_new_with_buttons(const gchar*,GtkWindow*,GtkDialogFlags,const gchar*,...); gint gtk_dialog_run(GtkDialog*); void gtk_dialog_set_default_response(GtkDialog*,gint); GtkWidget *gtk_dialog_get_widget_for_response(GtkDialog*,gint);
 GtkWidget *gtk_drawing_area_new(void);
 GtkWidget *gtk_entry_new(void); const gchar *gtk_entry_get_text(GtkEntry*); void gtk_entry_set_text(GtkEntry*,const gchar*); void gtk_entry_set_placeholder_text(GtkEntry*,const gchar*);
 void gtk_file_chooser_add_filter(GtkFileChooser*,GtkFileFilter*); GtkWidget *gtk_file_chooser_dialog_new(const gchar*,GtkWindow*,GtkFileChooserAction,const gchar*,...); gchar *gtk_file_chooser_get_filename(GtkFileChooser*); gboolean gtk_file_chooser_set_current_folder(GtkFileChooser*,const gchar*); void gtk_file_chooser_set_current_name(GtkFileChooser*,const gchar*); void gtk_file_chooser_set_do_overwrite_confirmation(GtkFileChooser*,gboolean);
@@ -547,6 +547,8 @@ void gtk_widget_add_events(GtkWidget*,gint); void gtk_widget_destroy(GtkWidget*)
 GtkWidget *gtk_window_get_focus(GtkWindow*); void gtk_window_get_size(GtkWindow*,gint*,gint*); gboolean gtk_window_is_maximized(GtkWindow*); void gtk_window_maximize(GtkWindow*); void gtk_window_unmaximize(GtkWindow*); void gtk_window_resize(GtkWindow*,gint,gint); void gtk_window_set_keep_above(GtkWindow*,gboolean); GtkWidget *gtk_window_new(GtkWindowType); void gtk_window_present(GtkWindow*); void gtk_window_set_default_size(GtkWindow*,gint,gint); void gtk_window_set_icon_name(GtkWindow*,const gchar*); void gtk_window_set_position(GtkWindow*,GtkWindowPosition); void gtk_window_set_title(GtkWindow*,const gchar*); void gtk_window_set_transient_for(GtkWindow*,GtkWindow*); void gtk_window_set_destroy_with_parent(GtkWindow*,gboolean);
 
 void gtk_window_iconify(GtkWindow*); void gtk_window_close(GtkWindow*); void gtk_window_set_titlebar(GtkWindow*,GtkWidget*);
+
+void gtk_box_set_spacing(GtkBox*,gint);
 
 #ifdef __cplusplus
 }
