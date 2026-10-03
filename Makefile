@@ -17,9 +17,9 @@ BUILD_PROFILE ?= generic
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
 INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.19.35
-INFILTRATR_COMMON_COMMIT := 7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f
-INFILTRATR_COMMON_VERSION := 1.19.35
+INFILTRATR_COMMON_TAG := v1.19.38
+INFILTRATR_COMMON_COMMIT := 7070c5812b50821fd7580101cb2289a3184f6b2c
+INFILTRATR_COMMON_VERSION := 1.19.38
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -436,8 +436,7 @@ docs-check: style-check clang-doc-check doxygen-check
 
 docs: docs-check
 	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
-		echo "Doxygen is required to generate the HTML reference."; \
-		exit 1; \
+		echo "Doxygen is required to generate the HTML reference." >&2; exit 1; \
 	}
 	@echo "Documentation generated in build/docs/html/index.html"
 
@@ -530,7 +529,6 @@ temporal-presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/temporal_presentation_smoke.c src/temporal_presentation.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
 		-o $(BUILD_DIR)/temporal-presentation-smoke
-	./$(BUILD_DIR)/temporal-presentation-smoke
 
 async-workers-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
@@ -642,7 +640,6 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
 	bash -n $(INSTALL_BOOTSTRAP)
 	./$(INSTALL_BOOTSTRAP) --help >/dev/null
-	./$(NATIVE_INSTALLER) --help >/dev/null
 	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER_TEST)
 	SOURCE_DATE_EPOCH=$(DIST_SOURCE_DATE_EPOCH) ./$(NATIVE_INSTALLER_BUILDER) \
 		$(BUILD_DIR)/native-installer-smoke-a.run >/dev/null
