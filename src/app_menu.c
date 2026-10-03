@@ -4,7 +4,7 @@
  * @brief Specialist tools/help overflow menu and user-invoked actions.
  *
  * Primary presentation settings live in the graphical Preferences dialog and
- * ordinary window lifecycle lives in the InfiltratorOS-style header.  This
+ * ordinary window lifecycle lives in the InfiltratorOS-style header. This
  * menu therefore contains only specialist tools and help actions exposed from
  * the header overflow control rather than a persistent desktop-style menubar.
  *
@@ -439,34 +439,6 @@ void lsm_app_menu_attach_to_header(LsmApp *app)
     GtkWidget *menu = lsm_app_menu_build(app);
     g_signal_connect(button, "clicked", G_CALLBACK(overflow_menu_clicked), menu);
     g_signal_connect(button, "destroy", G_CALLBACK(overflow_button_destroy), menu);
-
-    GtkWidget *settings = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-settings-button");
-    GtkWidget *minimize = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-minimize-button");
-    GtkWidget *maximize = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-maximize-button");
-    GtkWidget *close = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-close-button");
-    GtkWidget *header_end = settings ? gtk_widget_get_parent(settings) : NULL;
-
-    if (header_end && settings && minimize && maximize && close &&
-        gtk_widget_get_parent(minimize) == header_end &&
-        gtk_widget_get_parent(maximize) == header_end &&
-        gtk_widget_get_parent(close) == header_end) {
-        GtkWidget *controls[] = { settings, minimize, maximize, close };
-        for (guint index = 0U; index < G_N_ELEMENTS(controls); index++) {
-            g_object_ref(controls[index]);
-            gtk_container_remove(GTK_CONTAINER(header_end), controls[index]);
-        }
-        gtk_box_pack_start(GTK_BOX(header_end), button, FALSE, FALSE, 0);
-        for (guint index = 0U; index < G_N_ELEMENTS(controls); index++) {
-            gtk_box_pack_start(
-                GTK_BOX(header_end), controls[index], FALSE, FALSE, 0);
-            g_object_unref(controls[index]);
-        }
-    } else {
-        gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
-    }
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
     g_object_set_data(G_OBJECT(app->shell.window), "lsm-overflow-button", button);
 }
