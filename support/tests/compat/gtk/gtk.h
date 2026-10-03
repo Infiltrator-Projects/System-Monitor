@@ -58,6 +58,7 @@ typedef int GApplicationFlags;
 #define GUINT_TO_POINTER(u) ((gpointer)(uintptr_t)(u))
 #define GPOINTER_TO_UINT(p) ((guint)(uintptr_t)(p))
 #define g_new0(type,n) ((type*)calloc((n), sizeof(type)))
+#define g_try_new(type,n) ((type*)g_try_malloc_n((n), sizeof(type)))
 
 #define G_TYPE_BOOLEAN ((GType)20)
 #define G_TYPE_INT ((GType)24)
@@ -308,6 +309,7 @@ gboolean g_file_get_contents(const gchar *filename, gchar **contents, gsize *len
 gboolean g_file_set_contents(const gchar *filename, const gchar *contents, gssize length, GError **error);
 gchar *g_filename_to_uri(const gchar *filename, const gchar *hostname, GError **error);
 void g_free(gpointer mem);
+gpointer g_try_malloc_n(gsize n_blocks, gsize n_block_bytes);
 void g_list_free(GList *list);
 gchar *g_path_get_dirname(const gchar *file_name);
 const gchar *g_get_home_dir(void);
