@@ -148,19 +148,10 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
 
 static void sync_integrated_overview_chrome(LsmApp *app)
 {
-    if (!app || !app->shell.window) return;
-    const gboolean integrated =
-        !app->runtime.compact_summary &&
-        app->runtime.active_tab == LSM_TAB_OVERVIEW;
-    GtkWidget *menu_bar = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-main-menu-bar");
-    if (menu_bar)
-        gtk_widget_set_visible(menu_bar, !integrated);
-    /*
-     * Overview now owns the normal whole-system headline summary. Keep the
-     * five-metric strip only for Compact Summary mode; showing it above every
-     * technical page duplicates Overview and wastes vertical space.
-     */
+    if (!app) return;
+    /* Overview owns the normal whole-system headline summary. Keep the
+     * five-metric strip only for Compact Summary mode; technical pages do not
+     * carry duplicate shell chrome. */
     if (app->shell.summary_bar)
         gtk_widget_set_visible(
             app->shell.summary_bar, app->runtime.compact_summary);
@@ -679,7 +670,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         ".lsm-window-control {"
         " min-width: 30px; min-height: 30px; padding: 4px;"
         " background-image: none; background-color: transparent;"
-        " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
+        " border: 1px solid transparent; border-radius: 6px; box-shadow: none;"
         "}"
         ".lsm-window-control:hover {"
         " background-color: @lsm_surface_hover; border-color: @lsm_border;"
@@ -719,9 +710,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "entry selection, textview text selection, treeview.view:selected {"
         " background-color: @lsm_selection; color: @lsm_selection_text;"
         "}"
-        "scrollbar, scrollbar trough { background-color: transparent; }"
+        "scrollbar, scrollbar trough {"
+        " min-width: 10px; min-height: 10px; background-color: transparent;"
+        "}"
         "scrollbar slider {"
-        " min-width: 8px; min-height: 8px; background-color: @lsm_border;"
+        " min-width: 8px; min-height: 28px; background-color: @lsm_border;"
         " border-radius: 999px;"
         "}"
         "scrollbar slider:hover { background-color: @lsm_neutral; }"
@@ -734,9 +727,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         css,
         "#lsm-main-navigation, #lsm-main-navigation viewport {"
         " background-image: none; background-color: @lsm_panel;"
-        " border-color: @lsm_connection_border;"
+        " border-color: @lsm_border;"
         "}"
-        "#lsm-main-navigation { border-right: 1px solid @lsm_connection_border; }"
+        "#lsm-main-navigation { border-right: 1px solid @lsm_border; }"
         "#lsm-main-nav-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_summary; border: 1px solid transparent;"
@@ -759,21 +752,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-main-nav-button .lsm-main-nav-icon {"
         " min-width: 38px; min-height: 38px;"
         " color: @lsm_neutral; background-color: @lsm_surface;"
-        " border: 1px solid @lsm_border; border-radius: 11px; padding: 5px;"
-        "}"
-        "#lsm-main-nav-button.lsm-nav-memory .lsm-main-nav-icon { color: #9b65ff; }"
-        "#lsm-main-nav-button.lsm-nav-disk .lsm-main-nav-icon { color: #8fd94e; }"
-        "#lsm-main-nav-button.lsm-nav-network .lsm-main-nav-icon { color: #30d9ef; }"
-        "#lsm-main-nav-button.lsm-nav-gpu .lsm-main-nav-icon { color: #de68f2; }"
-        "#lsm-main-nav-button.lsm-nav-battery .lsm-main-nav-icon { color: #6ae66a; }"
-        "#lsm-main-nav-button.lsm-nav-processes .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-history .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-startup .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-users .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-details .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-services .lsm-main-nav-icon,"
-        "#lsm-main-nav-button.lsm-nav-filesystems .lsm-main-nav-icon {"
-        " color: @lsm_selected_summary;"
+        " border: 1px solid @lsm_border; border-radius: 10px; padding: 5px;"
         "}"
         ".lsm-main-nav-separator {"
         " background-color: alpha(@lsm_connection_border, 0.78);"

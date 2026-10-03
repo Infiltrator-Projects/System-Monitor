@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_menu.c
- * @brief Specialist tools/help menu and user-invoked application actions.
+ * @brief Specialist tools/help overflow menu and user-invoked actions.
  *
  * Primary presentation settings live in the graphical Preferences dialog and
  * ordinary window lifecycle lives in the InfiltratorOS-style header.  This
- * menu therefore contains only specialist tools and help actions that do not
- * belong in the persistent shell chrome.
+ * menu therefore contains only specialist tools and help actions exposed from
+ * the header overflow control rather than a persistent desktop-style menubar.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -362,33 +362,28 @@ static GtkWidget *menu_item(const char *label, GCallback callback, gpointer data
 
 GtkWidget *lsm_app_menu_build(LsmApp *app)
 {
-    GtkWidget *bar = gtk_menu_bar_new();
+    GtkWidget *menu = gtk_menu_new();
 
-    /* File/View/Options were remnants of the pre-InfiltratorOS shell.  Keep
-     * non-settings expert actions together instead of duplicating Preferences
-     * and window controls in several places. */
-    GtkWidget *tools_root = gtk_menu_item_new_with_mnemonic("_Tools");
-    GtkWidget *tools_menu = gtk_menu_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Run new task…", G_CALLBACK(on_run_new_task), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Refresh now", G_CALLBACK(lsm_app_menu_refresh), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Save system snapshot…",
                   G_CALLBACK(lsm_app_menu_save_snapshot), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("Process _filters…", G_CALLBACK(on_filters), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("Process _columns…", G_CALLBACK(on_process_columns), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Find process using file…",
                   G_CALLBACK(on_find_file_users), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Copy selected process rows",
                   G_CALLBACK(on_copy_selected), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Export selected process rows…",
                   G_CALLBACK(on_export_selected), app));
     app->details.process_record_menu_item =
@@ -396,27 +391,82 @@ GtkWidget *lsm_app_menu_build(LsmApp *app)
     gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
     g_signal_connect(app->details.process_record_menu_item, "toggled",
                      G_CALLBACK(on_record_process), app);
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
                           app->details.process_record_menu_item);
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
                           gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_Plot process log…", G_CALLBACK(on_plot_log), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(tools_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("Open process log _folder", G_CALLBACK(on_open_logs), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(tools_root), tools_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), tools_root);
-
-    GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
-    GtkWidget *help_menu = gtk_menu_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
-        menu_item("_System Monitor Help", G_CALLBACK(on_help), app));
-    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
                           gtk_separator_menu_item_new());
-    gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
+        menu_item("_System Monitor Help", G_CALLBACK(on_help), app));
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu),
         menu_item("_About " LSM_PROGRAM_NAME, G_CALLBACK(on_about), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(help_root), help_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), help_root);
 
-    return bar;
+    return menu;
+}
+
+static void overflow_menu_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    GtkWidget *menu = user_data;
+    if (!menu) return;
+    gtk_widget_show_all(menu);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+}
+
+static void overflow_button_destroy(GtkWidget *widget, gpointer user_data)
+{
+    (void)widget;
+    if (user_data) gtk_widget_destroy(GTK_WIDGET(user_data));
+}
+
+void lsm_app_menu_attach_to_header(LsmApp *app)
+{
+    if (!app || !app->shell.window) return;
+    GtkWidget *header = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-shell-header");
+    if (!header) return;
+
+    GtkWidget *button = gtk_button_new_from_icon_name(
+        "open-menu-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), "lsm-window-control");
+    gtk_widget_set_tooltip_text(button, "Tools and Help");
+    GtkWidget *menu = lsm_app_menu_build(app);
+    g_signal_connect(button, "clicked", G_CALLBACK(overflow_menu_clicked), menu);
+    g_signal_connect(button, "destroy", G_CALLBACK(overflow_button_destroy), menu);
+
+    GtkWidget *settings = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-settings-button");
+    GtkWidget *minimize = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-minimize-button");
+    GtkWidget *maximize = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-maximize-button");
+    GtkWidget *close = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-close-button");
+    GtkWidget *header_end = settings ? gtk_widget_get_parent(settings) : NULL;
+
+    if (header_end && settings && minimize && maximize && close &&
+        gtk_widget_get_parent(minimize) == header_end &&
+        gtk_widget_get_parent(maximize) == header_end &&
+        gtk_widget_get_parent(close) == header_end) {
+        GtkWidget *controls[] = { settings, minimize, maximize, close };
+        for (guint index = 0U; index < G_N_ELEMENTS(controls); index++) {
+            g_object_ref(controls[index]);
+            gtk_container_remove(GTK_CONTAINER(header_end), controls[index]);
+        }
+        gtk_box_pack_start(GTK_BOX(header_end), button, FALSE, FALSE, 0);
+        for (guint index = 0U; index < G_N_ELEMENTS(controls); index++) {
+            gtk_box_pack_start(
+                GTK_BOX(header_end), controls[index], FALSE, FALSE, 0);
+            g_object_unref(controls[index]);
+        }
+    } else {
+        gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
+    }
+    g_object_set_data(G_OBJECT(app->shell.window), "lsm-overflow-button", button);
 }
