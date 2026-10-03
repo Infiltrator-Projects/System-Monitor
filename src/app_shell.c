@@ -59,6 +59,12 @@ static void close_window(GtkButton *button, gpointer user_data)
     gtk_window_close(GTK_WINDOW(user_data));
 }
 
+static void open_settings(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    lsm_preferences_show(user_data);
+}
+
 static GtkWidget *make_window_control(const char *icon_name,
                                       const char *tooltip,
                                       const char *css_class)
@@ -89,6 +95,8 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
     GtkWidget *title = gtk_label_new(LSM_PROGRAM_NAME);
     GtkWidget *subtitle = gtk_label_new("Infiltrator OS");
     GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *settings = make_window_control(
+        "preferences-system-symbolic", "Settings", NULL);
     GtkWidget *minimize = make_window_control(
         "window-minimize-symbolic", "Minimize", NULL);
     GtkWidget *maximize = make_window_control(
@@ -117,18 +125,21 @@ GtkWidget *lsm_app_shell_build_header(LsmApp *app)
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
 
     gtk_widget_set_name(header_end, "lsm-header-end");
+    g_signal_connect(settings, "clicked", G_CALLBACK(open_settings), app);
     g_signal_connect(
         minimize, "clicked", G_CALLBACK(minimize_window), window);
     g_signal_connect(
         maximize, "clicked", G_CALLBACK(toggle_maximize_window), window);
     g_signal_connect(
         close, "clicked", G_CALLBACK(close_window), window);
+    gtk_box_pack_start(GTK_BOX(header_end), settings, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), minimize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), maximize, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(header_end), close, FALSE, FALSE, 0);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
 
     g_object_set_data(G_OBJECT(window), "lsm-shell-header", header);
+    g_object_set_data(G_OBJECT(window), "lsm-settings-button", settings);
     g_object_set_data(G_OBJECT(window), "lsm-minimize-button", minimize);
     g_object_set_data(G_OBJECT(window), "lsm-maximize-button", maximize);
     g_object_set_data(G_OBJECT(window), "lsm-close-button", close);
@@ -182,7 +193,6 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app)
             gtk_window_maximize(GTK_WINDOW(app->shell.window));
     }
 }
-
 
 static const char *navigation_resource_icon(LsmPageType type)
 {
@@ -494,6 +504,11 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     const gboolean night_theme =
         app->runtime.theme_mode == INFILTRATR_THEME_NIGHT ||
         (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
+    if (app->shell.theme_state_valid &&
+        app->shell.theme_state_mode == app->runtime.theme_mode &&
+        app->shell.theme_state_dark == night_theme)
+        return;
+
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
     const InfiltratrTypography *typography = infiltratr_typography();
@@ -725,7 +740,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-main-nav-button {"
         " background-image: none; background-color: transparent;"
         " color: @lsm_summary; border: 1px solid transparent;"
-        " box-shadow: none; margin: 2px 4px; padding: 6px 8px;"
+        " border-radius: 12px; box-shadow: none;"
+        " margin: 2px 4px; padding: 7px 9px;"
         "}"
         "#lsm-main-nav-button:hover {"
         " background-color: @lsm_surface_hover; border-color: @lsm_border;"
@@ -741,8 +757,9 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "#lsm-main-nav-button:hover .lsm-main-nav-label { color: @lsm_title; }"
         "#lsm-main-nav-button:checked .lsm-main-nav-label { color: @lsm_selection_text; }"
         "#lsm-main-nav-button .lsm-main-nav-icon {"
+        " min-width: 38px; min-height: 38px;"
         " color: @lsm_neutral; background-color: @lsm_surface;"
-        " border: 1px solid @lsm_border; border-radius: 10px; padding: 5px;"
+        " border: 1px solid @lsm_border; border-radius: 11px; padding: 5px;"
         "}"
         "#lsm-main-nav-button.lsm-nav-memory .lsm-main-nav-icon { color: #9b65ff; }"
         "#lsm-main-nav-button.lsm-nav-disk .lsm-main-nav-icon { color: #8fd94e; }"
@@ -779,7 +796,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "}"
         "#lsm-side-button {"
         " background-image: none; background-color: transparent;"
-        " color: @lsm_text; border: 1px solid transparent; box-shadow: none;"
+        " color: @lsm_text; border: 1px solid transparent;"
+        " border-radius: 12px; box-shadow: none;"
         " margin: 2px 4px; padding: 7px 9px;"
         "}"
         "#lsm-side-button:hover {"
@@ -1024,6 +1042,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
                 css_error && css_error->message
                     ? css_error->message : "unknown CSS parser error");
         g_clear_error(&css_error);
+    } else {
+        app->shell.theme_state_valid = TRUE;
+        app->shell.theme_state_mode = app->runtime.theme_mode;
+        app->shell.theme_state_dark = night_theme;
     }
     g_string_free(css, TRUE);
     if (app->shell.window) gtk_widget_queue_draw(app->shell.window);
@@ -1087,9 +1109,6 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
     lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
     switch ((LsmTabIndex)page_number) {
         case LSM_TAB_APP_HISTORY:
-            /* lsm_history_build() performs the initial population itself.
-             * Refresh only on later visits so first navigation does not build
-             * all retained rows twice back-to-back on the GTK thread. */
             if (page_was_built) lsm_history_refresh(app);
             break;
         case LSM_TAB_FILESYSTEMS:
@@ -1117,9 +1136,6 @@ static void on_tab_switched(GtkNotebook *notebook, GtkWidget *page,
             lsm_overview_refresh(app);
             break;
         case LSM_TAB_PERFORMANCE:
-            /* Hidden Performance pages retain graph history without GTK
-             * presentation. Project the current snapshot immediately when the
-             * user returns instead of waiting for the next timer tick. */
             lsm_performance_refresh(app);
             break;
         case LSM_TAB_COUNT:
@@ -1153,7 +1169,6 @@ static gboolean reflow_after_window_restore(gpointer user_data)
 static void schedule_window_restore_reflow(LsmApp *app)
 {
     if (!app || app->runtime.window_restore_reflow_source) return;
-    /* Defer until the window manager's restore configure events have settled. */
     app->runtime.window_restore_reflow_source =
         g_idle_add(reflow_after_window_restore, app);
 }
@@ -1252,8 +1267,19 @@ static GtkWidget *search_for_current_tab(const LsmApp *app)
 static gboolean focus_allows_pause(const LsmApp *app, GtkWidget *focus)
 {
     return !focus || focus == app->shell.notebook ||
-           focus == app->processes.processes_tree || focus == app->details.details_tree ||
+           focus == app->processes.processes_tree ||
+           focus == app->details.details_tree ||
            focus == app->performance.performance_stack;
+}
+
+static void toggle_pause(LsmApp *app)
+{
+    if (!app) return;
+    app->runtime.paused = !app->runtime.paused;
+    if (app->shell.pause_indicator)
+        gtk_widget_set_visible(app->shell.pause_indicator,
+                               app->runtime.paused &&
+                               !app->runtime.compact_summary);
 }
 
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
@@ -1302,8 +1328,7 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
 
     GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
     if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
-        gtk_check_menu_item_set_active(
-            GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item), !app->runtime.paused);
+        toggle_pause(app);
         return TRUE;
     }
     const gint current =
@@ -1325,7 +1350,6 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event,
     }
     return FALSE;
 }
-
 
 void lsm_app_shell_connect_window(LsmApp *app)
 {
@@ -1362,4 +1386,5 @@ void lsm_app_shell_cancel_pending(LsmApp *app)
         g_object_unref(app->shell.theme_provider);
         app->shell.theme_provider = NULL;
     }
+    app->shell.theme_state_valid = FALSE;
 }
