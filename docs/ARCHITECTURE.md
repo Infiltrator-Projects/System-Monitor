@@ -8,8 +8,6 @@ System Monitor separates presentation, platform-neutral state, native platform b
 
 System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. No external monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority.
 
-Implementation comes from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts.
-
 ## Structure
 
 ```text
@@ -73,16 +71,6 @@ Project-owned declarations may cover narrow stable native ABIs but do not justif
 
 ## Common
 
-`src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Common is first-party shared infrastructure, not ancestry from another monitoring product.
+`src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Generic mechanisms move to Common when its contract is at least as strong as the local implementation; monitoring policy, hardware interpretation and product presentation remain local to System Monitor.
 
-Generic mechanisms move to Common when its contract is at least as strong as the local implementation. System Monitor keeps product-specific monitoring, hardware interpretation, platform policy and presentation behaviour local.
-
-## Security boundary
-
-The installed Linux product is one GUI executable with no project-owned privileged daemon or helper. Kernel, driver, D-Bus and configuration data is untrusted external input.
-
-Bluetooth HCI monitoring uses only the file capability required for its read-only monitor channel. The endpoint is opened during bootstrap and process capability sets are cleared before normal GTK and monitoring work begins; failure to drop them aborts startup. The monitor path issues no HCI commands, resets or controller reconfiguration.
-
-Process control uses the native operating-system permission model. Optional privileged or vendor-specific telemetry degrades to unavailable instead of triggering implicit elevation.
-
-Hardware-specific interface rules live in [Hardware collection](HARDWARE.md).
+Hardware-specific collection rules live in [Hardware collection](HARDWARE.md). Security reporting and privilege boundaries live in [Security](../SECURITY.md).
