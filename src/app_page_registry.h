@@ -21,21 +21,30 @@
 
 bool lsm_app_page_registry_build(LsmApp *app, LsmTabIndex page,
                                  GtkWidget *container);
-
 void lsm_app_page_registry_refresh_all(LsmApp *app);
-
-/** Dispatch the one-time/revisit activation policy for a top-level page. */
 void lsm_app_page_registry_enter(LsmApp *app, LsmTabIndex page,
                                  gboolean page_was_built);
-
-/** Return the active page's search control, or NULL when it has none. */
 GtkWidget *lsm_app_page_registry_search_widget(LsmApp *app, LsmTabIndex page);
-
 bool lsm_app_page_registry_process_foreground(LsmTabIndex page);
-
 bool lsm_app_page_registry_active_periodic_policy(
     const LsmApp *app, guint *interval, gboolean *whole_seconds);
-
 gboolean lsm_app_page_registry_active_periodic_update(gpointer user_data);
+
+/** Connect the registry-owned top-level navigation callback. */
+void lsm_app_page_registry_connect_notebook(LsmApp *app);
+
+/** Connect shell mechanics and replace page-aware keyboard policy. */
+void lsm_app_page_registry_connect_window(LsmApp *app);
+
+/*
+ * app.c includes this header before app_shell.h. Route only the two shell
+ * connection points that carry top-level page policy through the registry;
+ * app_shell.c itself is compiled without these aliases and continues to own
+ * window mechanics, styling and navigation widgets.
+ */
+#ifndef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
+#define lsm_app_shell_connect_notebook lsm_app_page_registry_connect_notebook
+#define lsm_app_shell_connect_window lsm_app_page_registry_connect_window
+#endif
 
 #endif
