@@ -346,7 +346,8 @@ static gboolean registry_key_press(GtkWidget *widget, GdkEventKey *event,
             return TRUE;
         }
     }
-    if (alt && event->keyval >= GDK_KEY_1 && event->keyval <= GDK_KEY_9) {
+    if (alt && event->keyval >= GDK_KEY_1 &&
+        event->keyval <= GDK_KEY_1 + 8U) {
         const gint page_index = (gint)(event->keyval - GDK_KEY_1);
         if (page_index < LSM_TAB_COUNT) {
             gtk_notebook_set_current_page(
@@ -390,16 +391,10 @@ void lsm_app_page_registry_connect_window(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
 
-    /* Preserve shell-owned close/geometry/window-state hooks, then replace
-     * only the key handler whose page knowledge belongs in this registry. */
-    lsm_app_shell_connect_window(app);
-    const guint key_signal = g_signal_lookup(
-        "key-press-event", GTK_TYPE_WIDGET);
-    if (key_signal != 0U)
-        g_signal_handlers_disconnect_matched(
-            app->shell.window,
-            G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_DATA,
-            key_signal, 0U, NULL, NULL, app);
+    /* Register authoritative page-aware key policy before the legacy shell
+     * handler. GTK key-event emission stops at the first TRUE result, while
+     * unhandled keys continue into shell/window mechanics unchanged. */
     g_signal_connect(app->shell.window, "key-press-event",
                      G_CALLBACK(registry_key_press), app);
+    lsm_app_shell_connect_window(app);
 }
