@@ -44,12 +44,28 @@ void lsm_process_workspace_present_ready_snapshot(LsmApp *app);
  */
 void lsm_process_workspace_go_to_details(LsmApp *app);
 
-#ifndef LSM_PROCESS_WORKSPACE_NO_ALIASES
-#define lsm_processes_update lsm_process_workspace_update
-#define lsm_processes_present_ready_snapshot \
-    lsm_process_workspace_present_ready_snapshot
-#define lsm_processes_go_to_details lsm_process_workspace_go_to_details
-#endif
+/**
+ * Established application-facing sampling entry point.
+ *
+ * @param [in,out] user_data Pointer to the owning LsmApp.
+ * @return G_SOURCE_CONTINUE while sampling remains scheduled, otherwise
+ *         G_SOURCE_REMOVE during shutdown.
+ */
+gboolean lsm_processes_update(gpointer user_data);
+
+/**
+ * Established application-facing completed-snapshot handoff.
+ *
+ * @param [in,out] app Application receiving the completed snapshot.
+ */
+void lsm_processes_present_ready_snapshot(LsmApp *app);
+
+/**
+ * Established application-facing transition to the Details page.
+ *
+ * @param [in,out] app Application containing the current process selection.
+ */
+void lsm_processes_go_to_details(LsmApp *app);
 
 /**
  * Build the shared process-action context menu.
