@@ -21,7 +21,6 @@
 #include "app_internal.h"
 #include "application_catalog.h"
 #include "common.h"
-#include "details_page.h"
 #include "process_grouping.h"
 #include "refresh_policy.h"
 #include "ui_helpers.h"
@@ -749,7 +748,7 @@ static void grouped_cell_data(GtkTreeViewColumn *column,
         }
     }
     g_object_set(renderer, "text", text, NULL);
-    if (!app->details.process_heatmap || heat_value <= 0.0) {
+    if (!lsm_process_heatmap_enabled(app) || heat_value <= 0.0) {
         g_object_set(renderer, "cell-background-set", FALSE, NULL);
     } else {
         const double intensity = fmin(heat_value / 100.0, 1.0);
@@ -1262,10 +1261,8 @@ static void grouped_selection_changed(GtkTreeSelection *selection,
     gtk_widget_set_sensitive(app->processes.processes_end_button, valid);
     gtk_widget_set_sensitive(app->processes.processes_inspect_button,
                              app->process.selected_pid > 0);
-    if (app->details.process_record_menu_item)
-        gtk_widget_set_sensitive(app->details.process_record_menu_item,
-            (valid && app->process.selected_group_count == 0U) ||
-            app->process.recorder != NULL);
+    lsm_process_record_action_sync(
+        app, valid, app->process.selected_group_count > 0U);
     g_free(name);
 }
 
@@ -1282,18 +1279,6 @@ static void grouped_end_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;
     lsm_processes_end_selected(user_data);
-}
-
-void lsm_processes_go_to_details(LsmApp *app)
-{
-    if (!app || app->process.selected_pid <= 0) return;
-    lsm_app_ensure_page_built(app, LSM_TAB_DETAILS);
-    if (!app->details.details_search) return;
-    gtk_entry_set_text(GTK_ENTRY(app->details.details_search), "");
-    app->details.details_model_dirty = TRUE;
-    gtk_notebook_set_current_page(
-        GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_DETAILS);
-    lsm_details_present_snapshot(app);
 }
 
 static void grouped_details_clicked(GtkButton *button, gpointer user_data)
