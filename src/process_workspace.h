@@ -21,56 +21,41 @@
 
 typedef struct LsmApp LsmApp;
 
-/** Sample processes and conditionally rebuild visible process models. */
-gboolean lsm_processes_update(gpointer user_data);
+/** Authoritative process sampling callback owned by the workspace. */
+gboolean lsm_process_workspace_update(gpointer user_data);
 
-/** Consume and present a completed background process snapshot immediately. */
-void lsm_processes_present_ready_snapshot(LsmApp *app);
-
-/** Build the shared process-action context menu. */
-GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns);
-
-/** Retain a selected PID together with its current instance token. */
-void lsm_process_selection_set(LsmApp *app, guint64 pid);
-
-/** Clear an application-group selection and retain no stale group PIDs. */
-void lsm_process_group_selection_clear(LsmApp *app);
-
-/** Start or stop recording the selected process. */
-void lsm_process_record_set(LsmApp *app, gboolean active);
-
-/** Append one current sample to the active process recording. */
-gboolean lsm_process_record_append(LsmApp *app,
-                                   const LsmProcessInfo *process);
-
-/** Open the selected process in the technical inspector. */
-void lsm_processes_show_selected_details(LsmApp *app);
+/** Authoritative completed-snapshot handoff owned by the workspace. */
+void lsm_process_workspace_present_ready_snapshot(LsmApp *app);
 
 /** Move the current process selection to the matching Details-page row. */
-void lsm_processes_go_to_details(LsmApp *app);
+void lsm_process_workspace_go_to_details(LsmApp *app);
 
-/** Ask for confirmation and end the currently selected ordinary process. */
+/*
+ * Preserve the established application-facing names while moving ownership to
+ * this neutral translation unit. Details can opt out while its legacy local
+ * definitions are being retired; all composition/runtime callers resolve to
+ * the workspace owner.
+ */
+#ifndef LSM_PROCESS_WORKSPACE_NO_ALIASES
+#define lsm_processes_update lsm_process_workspace_update
+#define lsm_processes_present_ready_snapshot \
+    lsm_process_workspace_present_ready_snapshot
+#define lsm_processes_go_to_details lsm_process_workspace_go_to_details
+#endif
+
+GtkWidget *lsm_process_actions_menu(LsmApp *app, gboolean include_columns);
+void lsm_process_selection_set(LsmApp *app, guint64 pid);
+void lsm_process_group_selection_clear(LsmApp *app);
+void lsm_process_record_set(LsmApp *app, gboolean active);
+gboolean lsm_process_record_append(LsmApp *app,
+                                   const LsmProcessInfo *process);
+void lsm_processes_show_selected_details(LsmApp *app);
 void lsm_processes_end_selected(LsmApp *app);
-
-/** Load persisted process-filter rules into application-owned state. */
 void lsm_process_filters_load(LsmApp *app);
-
-/** Present the graphical process-filter editor. */
 void lsm_process_filters_dialog(LsmApp *app);
-
-/** Stop process CSV recording and let the detached writer drain and close it. */
 void lsm_process_record_stop(LsmApp *app);
 
-/** Return the shared process heatmap preference without exposing Details state. */
 gboolean lsm_process_heatmap_enabled(const LsmApp *app);
-
-/**
- * Synchronise the global recording action with a presentation selection.
- *
- * @param [in,out] app Application containing recording state.
- * @param ordinary_selection TRUE when an ordinary process can be recorded.
- * @param grouped_selection TRUE when the selection represents a process group.
- */
 void lsm_process_record_action_sync(LsmApp *app,
                                     gboolean ordinary_selection,
                                     gboolean grouped_selection);
