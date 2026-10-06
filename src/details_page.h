@@ -4,8 +4,9 @@
  * @brief Technical Details page presentation interface.
  *
  * Sampling lifecycle is owned by process_workspace.h; process mutation,
- * filtering and recording actions are owned by process_actions.h. This header
- * owns only the technical Details presentation.
+ * filtering and recording actions are owned by process_actions.h. Shared
+ * process-presentation state is reached through process_ui_bridge.h. This
+ * header owns only the technical Details presentation.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -15,6 +16,7 @@
 #define INFILTRATOR_SYSTEM_MONITOR_DETAILS_PAGE_H
 
 #include "process_actions.h"
+#include "process_ui_bridge.h"
 #include "process_workspace.h"
 
 #include <gtk/gtk.h>
