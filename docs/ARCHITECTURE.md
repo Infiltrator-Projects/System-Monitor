@@ -4,6 +4,12 @@
 
 System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. The separation is a correctness boundary: GTK should consume completed state, while collectors retain the operating-system knowledge and mutable baselines required to produce it.
 
+## Clean-sheet provenance
+
+System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. No external system monitor's source code, internal architecture or implementation behaviour is an implementation authority for this project.
+
+The implementation derives from System Monitor's own product requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts. A later capability comparison with another product is an audit of user-visible coverage only and does not establish source ancestry, design ancestry or implementation ancestry.
+
 ## First-principles design
 
 System Monitor begins with the authoritative operating-system or hardware contract rather than treating another monitoring application as the source of truth. Where practical, the project implements collection and interpretation directly against native interfaces instead of parsing the output or inheriting the behaviour of external utilities that can change independently.
@@ -95,7 +101,7 @@ Malformed external data is rejected or skipped at the narrowest practical bounda
 
 ## Common
 
-`src/infiltratr-common` is pinned to one exact Common release commit. Common is the authoritative home for reusable project mechanisms; System Monitor owns application, Linux and hardware policy that is genuinely specific to this product.
+`src/infiltratr-common` is pinned to one exact Common release commit. Common is project-owned shared infrastructure, not source ancestry from another system-monitoring product. Common is the authoritative home for reusable project mechanisms; System Monitor owns application, Linux and hardware policy that is genuinely specific to this product.
 
 Common's target is reference-quality, leading-edge and complete reusable code, not merely a lowest-common-denominator helper set. Common 1.19.35 owns the toolkit-neutral POSIX user/XDG path and recursive-directory contracts, deterministic ASCII classification/case-matching/ordering, stable non-cryptographic FNV-1a mixing, monotonic unsigned-counter delta/rate mechanics and normalized absolute POSIX-clock deadline conversion used by System Monitor. Signature composition, Linux counter identity/reset/wrap policy, pthread synchronization policy, GTK/GLib-specific presentation and object-lifecycle policy remain local. If System Monitor contains a stronger implementation of a capability that is fundamentally generic, the correct direction is to improve Common so that its generic contract preserves the local implementation's correctness, performance, resilience and useful capabilities. Once Common is at least as strong, System Monitor should use Common and remove the duplicate implementation.
 
