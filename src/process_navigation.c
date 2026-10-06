@@ -2,6 +2,10 @@
 /**
  * @file process_navigation.c
  * @brief Narrow GTK bridge between Processes and Details.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
  */
 #include "process_navigation.h"
 
