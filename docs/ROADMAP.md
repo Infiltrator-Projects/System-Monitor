@@ -2,6 +2,8 @@
 
 System Monitor is feature-complete for its current Linux desktop product scope. This document defines the maintenance and optional-expansion boundary; it is not a backlog of work required before the application can be considered finished.
 
+System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Another system monitor is not a development baseline, design source or implementation blueprint. Any later capability comparison is audit evidence only and does not define product ancestry.
+
 ## Completion baseline
 
 - preserve process, performance, hardware, service, user and filesystem views;
@@ -20,7 +22,7 @@ Correctness, security, supported-kernel and desktop compatibility, hardware evid
 
 ## Product-coherence gate
 
-Optional work is filtered through the product-admission policy in [Design](DESIGN.md) and ADR-006 in [Decisions](DECISIONS.md). Competitor features are evidence and idea sources rather than a parity backlog. A new capability should solve an existing monitoring or diagnostic problem, strengthen an established product quality and fit the current navigation and presentation model.
+Optional work is filtered through the product-admission policy in [Design](DESIGN.md) and ADR-006 in [Decisions](DECISIONS.md). New capabilities come from System Monitor's own monitoring and diagnostic requirements rather than a parity backlog copied from another product. A post-implementation comparison may expose a gap worth evaluating, but it does not supply the implementation; any accepted capability is independently designed to solve the identified user problem within the existing architecture and visual language.
 
 Presentation work follows the same rule. Summary and monitoring surfaces should favour visual hierarchy, graphs, compact state/value treatment and meaningful grouping when those communicate faster than prose. Dense textual tables remain appropriate where the surface is deliberately technical.
 
