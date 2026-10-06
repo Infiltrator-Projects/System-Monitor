@@ -23,9 +23,30 @@
 
 typedef struct LsmApp LsmApp;
 
+/**
+ * Construct the grouped Processes page.
+ * @param app Application owning the shared process snapshot.
+ * @param container Empty GTK container receiving the page.
+ */
 void lsm_processes_build(LsmApp *app, GtkWidget *container);
+
+/**
+ * Present the newest retained snapshot in the grouped Processes model.
+ * @param app Application whose grouped model is refreshed.
+ */
 void lsm_processes_present_snapshot(LsmApp *app);
+
+/**
+ * Report whether the grouped Processes page is currently visible.
+ * @param app Application containing top-level page state.
+ * @return TRUE when Processes is visible or before the notebook is built.
+ */
 gboolean lsm_processes_page_visible(const LsmApp *app);
+
+/**
+ * Release grouped Processes models and caches.
+ * @param app Application whose Processes page is being destroyed.
+ */
 void lsm_processes_destroy(LsmApp *app);
 
 #endif
