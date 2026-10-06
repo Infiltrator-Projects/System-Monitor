@@ -3,7 +3,7 @@
 ## 1.0.176 - 2026-10-06
 
 - Move shared process snapshot lifecycle and cross-page coordination into a dedicated process workspace owner.
-- Remove direct Processes-to-Details widget/state dependencies and route shared presentation policy through narrow workspace operations.
+- Localise remaining Processes-to-Details navigation and shared presentation state behind narrow process navigation and UI bridge APIs.
 - Make the page registry authoritative for tab-entry refresh, search targeting and page-aware keyboard navigation.
 
 ## 1.0.175 - 2026-10-06
