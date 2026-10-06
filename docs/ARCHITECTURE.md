@@ -6,7 +6,7 @@ System Monitor separates presentation, platform-neutral state, native platform b
 
 ## Provenance
 
-System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. No external monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority.
+System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. No other system-monitoring application's source code, architecture, algorithms or implementation behaviour is an implementation authority.
 
 ## Structure
 
@@ -29,48 +29,48 @@ arithmetic and design primitives
 
 Renderers own native widgets, drawing, events and accessibility. Shared labels, field order, units and availability semantics stay above the renderer. Native paths, handles, ioctls, D-Bus details, driver knowledge and retained platform state stay below platform contracts.
 
-Application-facing monitor and process contracts remain plain C. Platform differences use native implementations or explicit unavailability rather than silently changing the shared product contract.
+Application-facing monitor and process contracts remain plain C. Platform differences use native implementations or explicit unavailability rather than changing the shared product contract.
 
 ## State and ownership
 
-Availability is separate from numeric value; zero is never used to mean unavailable when zero is valid.
+Availability is separate from numeric value; zero does not mean unavailable when zero is valid.
 
-Resource-owning subsystems have explicit initialise/update and shutdown paths. Native handles, worker synchronization, paths and cumulative baselines remain private to the owning backend. Retained device history is keyed by stable identity so replacement or reordering cannot inherit another device's state.
+Resource-owning subsystems have explicit initialise/update and shutdown paths. Native handles, worker synchronization, paths and cumulative baselines remain private to the owning backend. Retained device history is keyed by stable identity.
 
-External binary structures use explicit widths, interface-defined byte order and alignment-safe decoding. Allocation and cumulative arithmetic reject or saturate overflow according to the owning contract.
+External binary structures use explicit widths, defined byte order and alignment-safe decoding. Allocation and cumulative arithmetic must not overflow silently.
 
 ## Collection and concurrency
 
-GTK objects stay on the GTK main thread. Work that may block on procfs, NSS, D-Bus, device I/O or durable persistence runs off the UI thread where practical.
+GTK objects stay on the GTK main thread. Potentially blocking procfs, NSS, D-Bus, device-I/O or persistence work runs off the UI thread where practical.
 
-Workers exchange plain data or immutable request snapshots. A native collection cycle is published only when complete, with generation and monotonic completion time assigned after collection finishes. Re-presenting an unchanged snapshot is not a new measurement.
+Workers exchange plain data or immutable requests. A collection cycle is published only when complete, with generation and monotonic completion time assigned after collection. Re-presenting the same snapshot is not a new measurement.
 
-Periodic work coalesces duplicate requests and must not create catch-up loops. Persistence is generation ordered so stale work cannot overwrite newer state. Shutdown joins owned workers or uses explicit lifetime rules; the GUI must not wait indefinitely on a native call that cannot be cancelled safely.
+Periodic work coalesces duplicate requests. Persistence is generation ordered so stale work cannot overwrite newer state. Shutdown must not leave owned workers running or block indefinitely on an uncancellable native call.
 
 ## Startup and presentation
 
-Startup is first-paint oriented. Build only the shell and initial presentation before showing the window; create other pages on first use where practical.
+Startup is first-paint oriented: build the shell and initial presentation first, and create other pages on first use where practical.
 
-Persistent non-visual models do not depend on whether their page has been opened. Slow page-specific periodic work runs only while its page is active when continuous background sampling is unnecessary. Completed generations feed retained history once; unchanged data does not force unrelated formatting, layout or redraw work.
+Persistent non-visual models do not depend on whether their page has been opened. Slow page-specific work runs only while its page is active when continuous background sampling is unnecessary. Completed generations feed retained history once.
 
 ## Failure model
 
-Optional telemetry fails independently. A failed read invalidates only the affected metric unless the owning contract requires rejection of the whole inventory.
+Optional telemetry fails independently unless a contract requires rejecting the whole inventory. Unsupported or inaccessible information remains unavailable rather than guessed.
 
-Cumulative rates require the same stable identity and a positive monotonic interval. Startup, reset, rollback, replacement, missing samples or invalid elapsed time break the baseline; the next valid observation establishes a new one rather than producing a fabricated spike.
+Cumulative rates require the same stable identity and a positive monotonic interval. Startup, reset, rollback, replacement, missing samples or invalid elapsed time break the baseline; the next valid observation establishes a new one.
 
-Malformed external data is rejected at the narrowest practical boundary. Bounded inventories are complete-or-preserved: overflow or incomplete discovery never publishes a plausible-looking prefix as complete. Unsupported or inaccessible information remains unavailable rather than guessed.
+Malformed external data is rejected at the narrowest practical boundary. Bounded inventories are complete-or-preserved: overflow or incomplete discovery does not publish a partial inventory as complete.
 
 ## Native interfaces and dependencies
 
-Prefer direct procfs, sysfs, ioctl, D-Bus, Win32, kernel, driver or documented in-process interfaces when they provide a stronger contract than external command output.
+Prefer direct procfs, sysfs, ioctl, D-Bus, Win32, kernel, driver or documented in-process interfaces over external command output when they provide the stronger contract.
 
-GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/common-controls and carries no GTK runtime dependency. Optional vendor libraries may be loaded in-process but cannot be required for core startup.
+GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/common-controls and carries no GTK runtime dependency. Optional vendor libraries may be loaded in-process but are not required for core startup.
 
-Project-owned declarations may cover narrow stable native ABIs but do not justify copying library internals. Dependencies that provide substantial semantics remain dependencies unless independently replaced. Platform-neutral code does not hard-code Linux native roots such as `/proc`, `/sys` or `/dev`.
+Project-owned declarations may cover narrow stable native ABIs but do not justify copying library internals. Dependencies that provide substantial semantics remain dependencies unless independently replaced. Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or `/dev`.
 
 ## Common
 
 `src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Generic mechanisms move to Common when its contract is at least as strong as the local implementation; monitoring policy, hardware interpretation and product presentation remain local to System Monitor.
 
-Hardware-specific collection rules live in [Hardware collection](HARDWARE.md). Security reporting and privilege boundaries live in [Security](../SECURITY.md).
+Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security reporting and privilege boundaries live in [Security](../SECURITY.md).
