@@ -4,8 +4,10 @@
  * @brief Technical Details table, filtering, control and CSV recording.
  *
  * The process page supports both a true parent/child tree and a sortable flat
- * list.  The GTK model is rebuilt from one retained process snapshot so search,
+ * list. The GTK model is rebuilt from one retained process snapshot so search,
  * column selection and view changes do not trigger unnecessary procfs scans.
+ * Shared process sampling and cross-page coordination belong to
+ * process_workspace.c.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -13,17 +15,11 @@
  */
 #include "details_page.h"
 #include "atomic_file.h"
-#include "refresh_policy.h"
-#include "monitor.h"
 #include "app_internal.h"
 #include "common.h"
 #include "temporal_presentation.h"
-#include "history.h"
-#include "overview.h"
 #include "process_backend.h"
 #include "process_inspector.h"
-#include "process_scanner.h"
-#include "processes_ui.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/config.h>
@@ -94,7 +90,7 @@ static const ProcessColumnSpec column_specs[PROC_N_COLUMNS] = {
     {PROC_COL_START_TIME,       "started",    "Start time",        CELL_TIME,     FALSE, FALSE, 145},
     {PROC_COL_ELAPSED,          "elapsed",    "Elapsed",           CELL_DURATION, FALSE, FALSE, 100},
     {PROC_COL_EXECUTABLE,       "executable", "Executable",        CELL_TEXT,     FALSE, TRUE,  260},
-    {PROC_COL_COMMAND,          "command",    "Command",           CELL_TEXT,     FALSE, TRUE,  280}
+    {PROC_COL_COMMAND,          "command",    "Command",            CELL_TEXT,     FALSE, TRUE,  280}
 };
 
 typedef struct {
@@ -114,8 +110,8 @@ enum {
     PROCESS_SCOPE_MINE
 };
 
-/* Filtering and rendering operate only on the retained backend snapshot. */
-static gboolean process_directly_visible(const LsmApp *app, const LsmProcessInfo *process)
+static gboolean process_directly_visible(const LsmApp *app,
+                                         const LsmProcessInfo *process)
 {
     gboolean scope_visible = TRUE;
     if (app->details.details_scope == PROCESS_SCOPE_MINE)
@@ -175,12 +171,15 @@ static void apply_resource_heatmap(LsmApp *app, GtkCellRenderer *renderer,
                  NULL);
 }
 
-static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *renderer,
-                              GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
+static void process_cell_data(GtkTreeViewColumn *view_column,
+                              GtkCellRenderer *renderer,
+                              GtkTreeModel *model, GtkTreeIter *iter,
+                              gpointer user_data)
 {
     (void)view_column;
     LsmApp *app = user_data;
-    int column = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(renderer), "lsm-column"));
+    int column = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(renderer), "lsm-column"));
     char text[256] = "";
     double heat_value = 0.0;
 
@@ -198,8 +197,8 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
                 gtk_tree_model_get(model, iter, column, &value, -1);
                 snprintf(text, sizeof(text), "%d", value);
             } else if (column == PROC_COL_PID || column == PROC_COL_PPID ||
-                column == PROC_COL_CONTEXT_SWITCHES ||
-                column == PROC_COL_PAGE_FAULTS) {
+                       column == PROC_COL_CONTEXT_SWITCHES ||
+                       column == PROC_COL_PAGE_FAULTS) {
                 guint64 value = 0;
                 gtk_tree_model_get(model, iter, column, &value, -1);
                 snprintf(text, sizeof(text), "%llu",
@@ -284,17 +283,21 @@ static void process_cell_data(GtkTreeViewColumn *view_column, GtkCellRenderer *r
     apply_resource_heatmap(app, renderer, column, heat_value);
 }
 
-static GtkTreeViewColumn *add_process_column(LsmApp *app, const ProcessColumnSpec *spec)
+static GtkTreeViewColumn *add_process_column(LsmApp *app,
+                                             const ProcessColumnSpec *spec)
 {
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    g_object_set_data(G_OBJECT(renderer), "lsm-column", GINT_TO_POINTER(spec->column));
+    g_object_set_data(G_OBJECT(renderer), "lsm-column",
+                      GINT_TO_POINTER(spec->column));
     g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
-    if (spec->format != CELL_TEXT) g_object_set(renderer, "xalign", 1.0, NULL);
+    if (spec->format != CELL_TEXT)
+        g_object_set(renderer, "xalign", 1.0, NULL);
 
     GtkTreeViewColumn *column = gtk_tree_view_column_new();
     gtk_tree_view_column_set_title(column, spec->title);
     gtk_tree_view_column_pack_start(column, renderer, TRUE);
-    gtk_tree_view_column_set_cell_data_func(column, renderer, process_cell_data, app, NULL);
+    gtk_tree_view_column_set_cell_data_func(
+        column, renderer, process_cell_data, app, NULL);
     gtk_tree_view_column_set_sort_column_id(column, spec->column);
     gtk_tree_view_column_set_resizable(column, TRUE);
     gtk_tree_view_column_set_expand(column, spec->expand);
@@ -311,7 +314,8 @@ void lsm_details_save_layout(const LsmApp *app)
 
     gint order[PROC_N_COLUMNS];
     for (int index = 0; index < PROC_N_COLUMNS; index++) order[index] = index;
-    GList *columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(app->details.details_tree));
+    GList *columns = gtk_tree_view_get_columns(
+        GTK_TREE_VIEW(app->details.details_tree));
     gint position = 0;
     for (GList *item = columns; item; item = item->next, position++) {
         for (int index = 0; index < PROC_N_COLUMNS; index++) {
@@ -325,13 +329,14 @@ void lsm_details_save_layout(const LsmApp *app)
 
     GString *text = g_string_new(NULL);
     g_string_append_printf(text,
-                           "layout_version=5\ntree=%d\nscope=%d\nheatmap=%d\n",
-                           app->details.details_tree_mode ? 1 : 0,
-                           app->details.details_scope,
-                           app->details.process_heatmap ? 1 : 0);
+        "layout_version=5\ntree=%d\nscope=%d\nheatmap=%d\n",
+        app->details.details_tree_mode ? 1 : 0,
+        app->details.details_scope,
+        app->details.process_heatmap ? 1 : 0);
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         g_string_append_printf(text, "%s=%d\n", column_specs[i].key,
-            gtk_tree_view_column_get_visible(app->details.details_columns[i]) ? 1 : 0);
+            gtk_tree_view_column_get_visible(app->details.details_columns[i])
+                ? 1 : 0);
         g_string_append_printf(text, "width.%s=%d\n", column_specs[i].key,
             gtk_tree_view_column_get_width(app->details.details_columns[i]));
         g_string_append_printf(text, "order.%s=%d\n", column_specs[i].key,
@@ -468,25 +473,24 @@ static void process_columns_load(LsmApp *app)
         for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
     }
     if (layout_version < 5) {
-        /* Version 5 inserts the Mint-parity technical fields. Keyed visibility
-         * and widths still migrate correctly, but numeric order/sort indexes
-         * from older layouts cannot be trusted after the insertion. */
         sort_column = -1;
         for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
     }
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
-        gtk_tree_view_column_set_visible(app->details.details_columns[i], visible[i]);
-        gtk_tree_view_column_set_sizing(app->details.details_columns[i],
-                                        GTK_TREE_VIEW_COLUMN_FIXED);
-        gtk_tree_view_column_set_fixed_width(app->details.details_columns[i], widths[i]);
+        gtk_tree_view_column_set_visible(
+            app->details.details_columns[i], visible[i]);
+        gtk_tree_view_column_set_sizing(
+            app->details.details_columns[i], GTK_TREE_VIEW_COLUMN_FIXED);
+        gtk_tree_view_column_set_fixed_width(
+            app->details.details_columns[i], widths[i]);
     }
     GtkTreeViewColumn *previous = NULL;
     for (int position = 0; position < PROC_N_COLUMNS; position++) {
         for (int index = 0; index < PROC_N_COLUMNS; index++) {
             if (order[index] != position) continue;
-            gtk_tree_view_move_column_after(GTK_TREE_VIEW(app->details.details_tree),
-                                            app->details.details_columns[index],
-                                            previous);
+            gtk_tree_view_move_column_after(
+                GTK_TREE_VIEW(app->details.details_tree),
+                app->details.details_columns[index], previous);
             previous = app->details.details_columns[index];
             break;
         }
@@ -496,58 +500,43 @@ static void process_columns_load(LsmApp *app)
             GTK_TREE_SORTABLE(app->details.details_sort_model),
             sort_column, sort_order);
 
-    /* The tree expander is rendered in the first visible column. Keeping Name
-     * visible prevents a saved configuration from producing an unusable tree. */
-    gtk_tree_view_column_set_visible(app->details.details_columns[PROC_COL_NAME], TRUE);
+    gtk_tree_view_column_set_visible(
+        app->details.details_columns[PROC_COL_NAME], TRUE);
 }
 
-static unsigned process_scan_flags(const LsmApp *app)
+unsigned lsm_details_process_scan_flags(const LsmApp *app)
 {
-    /* App History requires a real executable-image identity. The backend
-     * caches /proc/PID/exe so this remains a low-frequency metadata read. */
-    unsigned flags = LSM_PROCESS_SCAN_EXECUTABLE;
-    const gint current = gtk_notebook_get_current_page(
-        GTK_NOTEBOOK(app->shell.notebook));
-    const gboolean details_ready =
-        app->runtime.page_built[LSM_TAB_DETAILS] &&
-        app->details.details_tree != NULL;
+    if (!app || !app->runtime.page_built[LSM_TAB_DETAILS] ||
+        !app->details.details_tree)
+        return 0U;
 
-    if (current == LSM_TAB_DETAILS && details_ready) {
-        if (gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_EXECUTABLE]))
-            flags |= LSM_PROCESS_SCAN_EXECUTABLE;
-        if (gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_HANDLE_COUNT]))
-            flags |= LSM_PROCESS_SCAN_HANDLE_COUNT;
-        if (gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_WRITABLE_MEMORY]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_SECURITY_CONTEXT]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_WCHAN]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_CGROUP]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_UNIT]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_SESSION]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_SEAT]) ||
-            gtk_tree_view_column_get_visible(
-                app->details.details_columns[PROC_COL_OWNER]))
-            flags |= LSM_PROCESS_SCAN_TECHNICAL | LSM_PROCESS_SCAN_CGROUP;
-    }
-
-    if (current == LSM_TAB_PROCESSES) {
-        flags |= LSM_PROCESS_SCAN_GPU;
-        flags |= LSM_PROCESS_SCAN_CGROUP;
-    } else if (current == LSM_TAB_DETAILS && details_ready &&
-               (gtk_tree_view_column_get_visible(
-                    app->details.details_columns[PROC_COL_GPU]) ||
-                gtk_tree_view_column_get_visible(
-                    app->details.details_columns[PROC_COL_GPU_ENGINE]) ||
-                gtk_tree_view_column_get_visible(
-                    app->details.details_columns[PROC_COL_GPU_MEMORY])))
+    unsigned flags = 0U;
+    if (gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_HANDLE_COUNT]))
+        flags |= LSM_PROCESS_SCAN_HANDLE_COUNT;
+    if (gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_WRITABLE_MEMORY]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_SECURITY_CONTEXT]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_WCHAN]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_CGROUP]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_UNIT]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_SESSION]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_SEAT]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_OWNER]))
+        flags |= LSM_PROCESS_SCAN_TECHNICAL | LSM_PROCESS_SCAN_CGROUP;
+    if (gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_GPU]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_GPU_ENGINE]) ||
+        gtk_tree_view_column_get_visible(
+            app->details.details_columns[PROC_COL_GPU_MEMORY]))
         flags |= LSM_PROCESS_SCAN_GPU;
     return flags;
 }
@@ -555,8 +544,9 @@ static unsigned process_scan_flags(const LsmApp *app)
 void lsm_details_show_columns(LsmApp *app)
 {
     if (!app || !app->details.details_tree) return;
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Select process columns",
-        GTK_WINDOW(app->shell.window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "Select process columns", GTK_WINDOW(app->shell.window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
     lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 650, 430);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -576,7 +566,8 @@ void lsm_details_show_columns(LsmApp *app)
     GtkWidget *checks[PROC_N_COLUMNS];
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         checks[i] = gtk_check_button_new_with_label(column_specs[i].title);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[i]),
+        gtk_toggle_button_set_active(
+            GTK_TOGGLE_BUTTON(checks[i]),
             gtk_tree_view_column_get_visible(app->details.details_columns[i]));
         if (i == PROC_COL_NAME) gtk_widget_set_sensitive(checks[i], FALSE);
         gtk_grid_attach(GTK_GRID(grid), checks[i], i % 3, i / 3, 1, 1);
@@ -585,18 +576,22 @@ void lsm_details_show_columns(LsmApp *app)
 
     GtkWidget *heatmap = gtk_check_button_new_with_label(
         "Highlight CPU, memory and disk-I/O usage");
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(heatmap), app->details.process_heatmap);
+    gtk_toggle_button_set_active(
+        GTK_TOGGLE_BUTTON(heatmap), app->details.process_heatmap);
     gtk_box_pack_start(GTK_BOX(content), heatmap, FALSE, FALSE, 0);
 
     gtk_widget_show_all(dialog);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         for (int i = 0; i < PROC_N_COLUMNS; i++)
-            gtk_tree_view_column_set_visible(app->details.details_columns[i],
-                i == PROC_COL_NAME || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[i])));
-        app->details.process_heatmap = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(heatmap));
+            gtk_tree_view_column_set_visible(
+                app->details.details_columns[i],
+                i == PROC_COL_NAME ||
+                    gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[i])));
+        app->details.process_heatmap =
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(heatmap));
         lsm_details_save_layout(app);
         gtk_widget_queue_draw(app->details.details_tree);
-        (void)lsm_processes_update(app);
+        (void)lsm_process_workspace_update(app);
     }
     gtk_widget_destroy(dialog);
 }
@@ -699,12 +694,10 @@ static gboolean update_details_branch(LsmApp *app, GHashTable *pid_index,
         gpointer value = g_hash_table_lookup(
             pid_index, GUINT_TO_POINTER((guint)pid));
         if (!value) return FALSE;
-        const size_t index =
-            (size_t)(GPOINTER_TO_UINT(value) - 1U);
+        const size_t index = (size_t)(GPOINTER_TO_UINT(value) - 1U);
         set_process_row(app->details.details_store, &iter,
                         &app->process.process_snapshot[index]);
-        if (!update_details_branch(app, pid_index, &iter))
-            return FALSE;
+        if (!update_details_branch(app, pid_index, &iter)) return FALSE;
         valid = gtk_tree_model_iter_next(model, &iter);
     }
     return TRUE;
@@ -713,13 +706,11 @@ static gboolean update_details_branch(LsmApp *app, GHashTable *pid_index,
 static gboolean update_details_model_values(LsmApp *app)
 {
     if (!app || !app->details.details_store) return FALSE;
-    GHashTable *pid_index =
-        g_hash_table_new(g_direct_hash, g_direct_equal);
+    GHashTable *pid_index = g_hash_table_new(g_direct_hash, g_direct_equal);
     if (!pid_index) return FALSE;
     for (size_t index = 0U;
          index < app->process.process_snapshot_count; index++) {
-        const LsmProcessId pid =
-            app->process.process_snapshot[index].pid;
+        const LsmProcessId pid = app->process.process_snapshot[index].pid;
         if (pid == 0U || pid > UINT_MAX || index >= UINT_MAX) continue;
         g_hash_table_insert(pid_index,
                             GUINT_TO_POINTER((guint)pid),
@@ -730,10 +721,10 @@ static gboolean update_details_model_values(LsmApp *app)
     return okay;
 }
 
-static ssize_t process_index_for_pid(ProcessBuildContext *context, LsmProcessId pid)
+static ssize_t process_index_for_pid(ProcessBuildContext *context,
+                                     LsmProcessId pid)
 {
-    if (!context || pid == 0U || pid > (LsmProcessId)UINT_MAX)
-        return -1;
+    if (!context || pid == 0U || pid > (LsmProcessId)UINT_MAX) return -1;
     gpointer value = g_hash_table_lookup(
         context->pid_to_index, GUINT_TO_POINTER((guint)pid));
     return value ? (ssize_t)(GPOINTER_TO_UINT(value) - 1U) : -1;
@@ -742,30 +733,32 @@ static ssize_t process_index_for_pid(ProcessBuildContext *context, LsmProcessId 
 static void append_process_recursive(ProcessBuildContext *context, size_t index)
 {
     if (context->inserted[index] || !context->visible[index]) return;
-    if (context->state[index] == 1) {
-        /* Corrupt or transient parent cycles are displayed as roots rather than
-         * preventing the process list from being rendered. */
-        context->state[index] = 0;
-    }
+    if (context->state[index] == 1) context->state[index] = 0;
     context->state[index] = 1;
 
     GtkTreeIter *parent = NULL;
     if (context->app->details.details_tree_mode) {
-        ssize_t parent_index = process_index_for_pid(context, context->processes[index].ppid);
+        ssize_t parent_index = process_index_for_pid(
+            context, context->processes[index].ppid);
         if (parent_index >= 0 && (size_t)parent_index != index &&
-            context->visible[parent_index] && context->state[parent_index] != 1) {
+            context->visible[parent_index] &&
+            context->state[parent_index] != 1) {
             append_process_recursive(context, (size_t)parent_index);
-            if (context->inserted[parent_index]) parent = &context->iters[parent_index];
+            if (context->inserted[parent_index])
+                parent = &context->iters[parent_index];
         }
     }
 
-    gtk_tree_store_append(context->app->details.details_store, &context->iters[index], parent);
-    set_process_row(context->app->details.details_store, &context->iters[index], &context->processes[index]);
+    gtk_tree_store_append(context->app->details.details_store,
+                          &context->iters[index], parent);
+    set_process_row(context->app->details.details_store,
+                    &context->iters[index], &context->processes[index]);
     context->inserted[index] = TRUE;
     context->state[index] = 2;
 }
 
-static void collect_expanded_pid(GtkTreeView *tree, GtkTreePath *path, gpointer user_data)
+static void collect_expanded_pid(GtkTreeView *tree, GtkTreePath *path,
+                                 gpointer user_data)
 {
     GHashTable *expanded = user_data;
     GtkTreeIter iter;
@@ -774,30 +767,34 @@ static void collect_expanded_pid(GtkTreeView *tree, GtkTreePath *path, gpointer 
         guint64 pid = 0U;
         gtk_tree_model_get(model, &iter, PROC_COL_PID, &pid, -1);
         if (pid > 0U && pid <= UINT_MAX)
-            g_hash_table_add(
-                expanded, GUINT_TO_POINTER((guint)pid));
+            g_hash_table_add(expanded, GUINT_TO_POINTER((guint)pid));
     }
 }
 
-static void select_sorted_path(LsmApp *app, GtkTreeIter *child_iter, gboolean expand)
+static void select_sorted_path(LsmApp *app, GtkTreeIter *child_iter,
+                               gboolean expand)
 {
-    GtkTreePath *child_path = gtk_tree_model_get_path(GTK_TREE_MODEL(app->details.details_store), child_iter);
+    GtkTreePath *child_path = gtk_tree_model_get_path(
+        GTK_TREE_MODEL(app->details.details_store), child_iter);
     GtkTreePath *sorted_path = gtk_tree_model_sort_convert_child_path_to_path(
         GTK_TREE_MODEL_SORT(app->details.details_sort_model), child_path);
     if (sorted_path) {
-        if (expand) gtk_tree_view_expand_row(GTK_TREE_VIEW(app->details.details_tree), sorted_path, FALSE);
+        if (expand)
+            gtk_tree_view_expand_row(
+                GTK_TREE_VIEW(app->details.details_tree), sorted_path, FALSE);
         else {
-            GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->details.details_tree));
+            GtkTreeSelection *selection = gtk_tree_view_get_selection(
+                GTK_TREE_VIEW(app->details.details_tree));
             gtk_tree_selection_select_path(selection, sorted_path);
-            gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(app->details.details_tree), sorted_path,
-                                         NULL, FALSE, 0.0, 0.0);
+            gtk_tree_view_scroll_to_cell(
+                GTK_TREE_VIEW(app->details.details_tree), sorted_path,
+                NULL, FALSE, 0.0, 0.0);
         }
         gtk_tree_path_free(sorted_path);
     }
     gtk_tree_path_free(child_path);
 }
 
-/* Rebuild while preserving selection by process identity and expansion by PID. */
 static void rebuild_details_model(LsmApp *app)
 {
     size_t count = app->process.process_snapshot_count;
@@ -806,8 +803,9 @@ static void rebuild_details_model(LsmApp *app)
         app->process.selected_instance_id;
     GHashTable *expanded = g_hash_table_new(g_direct_hash, g_direct_equal);
     if (app->details.details_tree_mode && app->details.details_tree_initialized)
-        gtk_tree_view_map_expanded_rows(GTK_TREE_VIEW(app->details.details_tree),
-                                        collect_expanded_pid, expanded);
+        gtk_tree_view_map_expanded_rows(
+            GTK_TREE_VIEW(app->details.details_tree),
+            collect_expanded_pid, expanded);
 
     gboolean *direct = g_new0(gboolean, count);
     gboolean *visible = g_new0(gboolean, count);
@@ -819,17 +817,14 @@ static void rebuild_details_model(LsmApp *app)
     for (size_t i = 0; i < count; i++) {
         const LsmProcessId pid = app->process.process_snapshot[i].pid;
         if (pid > 0U && pid <= (LsmProcessId)UINT_MAX && i < UINT_MAX)
-            g_hash_table_insert(
-                pid_to_index, GUINT_TO_POINTER((guint)pid),
-                GUINT_TO_POINTER((guint)i + 1U));
+            g_hash_table_insert(pid_to_index,
+                                GUINT_TO_POINTER((guint)pid),
+                                GUINT_TO_POINTER((guint)i + 1U));
         direct[i] = process_directly_visible(
             app, &app->process.process_snapshot[i]);
         visible[i] = direct[i];
     }
 
-    /* A matching descendant keeps each ancestor visible so the result remains
-     * reachable in tree mode.  Ancestors are context rows; excluded children
-     * remain excluded unless another visible descendant needs them. */
     if (app->details.details_tree_mode) {
         for (size_t i = 0; i < count; i++) {
             if (!direct[i]) continue;
@@ -839,9 +834,10 @@ static void rebuild_details_model(LsmApp *app)
                 gpointer value = g_hash_table_lookup(
                     pid_to_index, GUINT_TO_POINTER((guint)parent));
                 if (!value) break;
-                size_t parent_index = GPOINTER_TO_UINT(value) - 1u;
+                size_t parent_index = GPOINTER_TO_UINT(value) - 1U;
                 visible[parent_index] = TRUE;
-                LsmProcessId next_parent = app->process.process_snapshot[parent_index].ppid;
+                LsmProcessId next_parent =
+                    app->process.process_snapshot[parent_index].ppid;
                 if (next_parent == parent) break;
                 parent = next_parent;
             }
@@ -850,9 +846,14 @@ static void rebuild_details_model(LsmApp *app)
 
     gtk_tree_store_clear(app->details.details_store);
     ProcessBuildContext context = {
-        .app = app, .processes = app->process.process_snapshot, .count = count,
-        .visible = visible, .inserted = inserted, .state = state,
-        .iters = iters, .pid_to_index = pid_to_index
+        .app = app,
+        .processes = app->process.process_snapshot,
+        .count = count,
+        .visible = visible,
+        .inserted = inserted,
+        .state = state,
+        .iters = iters,
+        .pid_to_index = pid_to_index
     };
     size_t shown = 0;
     for (size_t i = 0; i < count; i++) {
@@ -862,14 +863,14 @@ static void rebuild_details_model(LsmApp *app)
         }
     }
 
-    const char *active_search = gtk_entry_get_text(GTK_ENTRY(app->details.details_search));
+    const char *active_search = gtk_entry_get_text(
+        GTK_ENTRY(app->details.details_search));
     gboolean searching = active_search && *active_search;
     for (size_t i = 0; i < count; i++) {
         if (!inserted[i]) continue;
         if (desired_pid > 0 &&
             app->process.process_snapshot[i].pid == desired_pid &&
-            app->process.process_snapshot[i].instance_id ==
-                desired_instance_id)
+            app->process.process_snapshot[i].instance_id == desired_instance_id)
             select_sorted_path(app, &iters[i], FALSE);
         if (app->details.details_tree_mode &&
             (searching ||
@@ -883,19 +884,21 @@ static void rebuild_details_model(LsmApp *app)
             select_sorted_path(app, &iters[i], TRUE);
     }
 
-    if (app->details.details_tree_mode && !app->details.details_tree_initialized) {
-        /* Expanding only root rows exposes the useful first level without
-         * opening thousands of descendants or making startup expensive. */
+    if (app->details.details_tree_mode &&
+        !app->details.details_tree_initialized) {
         for (size_t i = 0; i < count; i++) {
             if (!inserted[i]) continue;
-            ssize_t parent = process_index_for_pid(&context, app->process.process_snapshot[i].ppid);
-            if (parent < 0 || !visible[parent]) select_sorted_path(app, &iters[i], TRUE);
+            ssize_t parent = process_index_for_pid(
+                &context, app->process.process_snapshot[i].ppid);
+            if (parent < 0 || !visible[parent])
+                select_sorted_path(app, &iters[i], TRUE);
         }
         app->details.details_tree_initialized = TRUE;
     }
 
     lsm_ui_set_label_text(app->details.details_count_label,
-        shown == count ? "Processes: %zu" : "Processes: %zu  Showing: %zu", count, shown);
+        shown == count ? "Processes: %zu" : "Processes: %zu  Showing: %zu",
+        count, shown);
 
     g_hash_table_destroy(expanded);
     g_hash_table_destroy(pid_to_index);
@@ -904,14 +907,6 @@ static void rebuild_details_model(LsmApp *app)
     g_free(inserted);
     g_free(state);
     g_free(iters);
-}
-
-static gboolean details_page_visible(const LsmApp *app)
-{
-    if (!app || !app->shell.notebook) return TRUE;
-    const gint current = gtk_notebook_get_current_page(GTK_NOTEBOOK(app->shell.notebook));
-    return current >= 0 && lsm_refresh_page_should_present(
-        (unsigned)current, (unsigned)LSM_TAB_DETAILS, TRUE);
 }
 
 void lsm_details_present_snapshot(LsmApp *app)
@@ -939,7 +934,8 @@ static void refilter_processes(GtkEditable *editable, gpointer user_data)
     lsm_details_present_snapshot(app);
 }
 
-static void selected_process_changed(GtkTreeSelection *selection, gpointer user_data)
+static void selected_process_changed(GtkTreeSelection *selection,
+                                     gpointer user_data)
 {
     LsmApp *app = user_data;
     lsm_process_group_selection_clear(app);
@@ -952,26 +948,28 @@ static void selected_process_changed(GtkTreeSelection *selection, gpointer user_
         gboolean valid = pid > 1;
         gtk_widget_set_sensitive(app->details.details_end_button, valid);
         gtk_widget_set_sensitive(app->details.details_inspect_button, pid > 0);
-        if (app->details.process_record_menu_item)
-            gtk_widget_set_sensitive(app->details.process_record_menu_item,
-                                     valid || app->process.recorder != NULL);
+        lsm_process_record_action_sync(app, valid, FALSE);
     } else {
         lsm_process_selection_set(app, 0U);
         gtk_widget_set_sensitive(app->details.details_end_button, FALSE);
         gtk_widget_set_sensitive(app->details.details_inspect_button, FALSE);
-        if (!app->process.recorder && app->details.process_record_menu_item)
-            gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
+        lsm_process_record_action_sync(app, FALSE, FALSE);
     }
 }
 
-static gboolean process_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean process_button_press(GtkWidget *widget,
+                                     GdkEventButton *event,
+                                     gpointer user_data)
 {
     LsmApp *app = user_data;
     if (event->type != GDK_BUTTON_PRESS || event->button != 3) return FALSE;
     GtkTreePath *path = NULL;
-    if (!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), (gint)event->x, (gint)event->y,
-                                       &path, NULL, NULL, NULL)) return FALSE;
-    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
+    if (!gtk_tree_view_get_path_at_pos(
+            GTK_TREE_VIEW(widget), (gint)event->x, (gint)event->y,
+            &path, NULL, NULL, NULL))
+        return FALSE;
+    GtkTreeSelection *selection =
+        gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
     gtk_tree_selection_select_path(selection, path);
     gtk_tree_path_free(path);
     GtkWidget *menu = lsm_process_actions_menu(app, TRUE);
@@ -981,9 +979,12 @@ static gboolean process_button_press(GtkWidget *widget, GdkEventButton *event, g
 }
 
 static void process_row_activated(GtkTreeView *tree, GtkTreePath *path,
-                                  GtkTreeViewColumn *column, gpointer user_data)
+                                  GtkTreeViewColumn *column,
+                                  gpointer user_data)
 {
-    (void)tree; (void)path; (void)column;
+    (void)tree;
+    (void)path;
+    (void)column;
     LsmApp *app = user_data;
     lsm_process_inspector_show(app, app->process.selected_pid,
                                app->process.selected_instance_id);
@@ -1029,8 +1030,6 @@ static void process_view_changed(GtkComboBox *combo, gpointer user_data)
     }
 }
 
-/* Public lifecycle. The update callback produces the shared process snapshot
- * consumed by Processes, Performance, Users and App History. */
 void lsm_details_build(LsmApp *app, GtkWidget *container)
 {
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -1050,8 +1049,10 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     gtk_combo_box_text_append_text(
         GTK_COMBO_BOX_TEXT(app->details.details_scope_combo), "My processes");
     app->details.details_view_combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Process tree");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Flat list");
+    gtk_combo_box_text_append_text(
+        GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Process tree");
+    gtk_combo_box_text_append_text(
+        GTK_COMBO_BOX_TEXT(app->details.details_view_combo), "Flat list");
     app->details.details_count_label = gtk_label_new("Processes: 0");
     app->details.details_inspect_button = gtk_button_new_with_label("Details");
     gtk_widget_set_sensitive(app->details.details_inspect_button, FALSE);
@@ -1068,81 +1069,77 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
         "Ask the selected process to exit (Delete)");
     gtk_widget_set_sensitive(app->details.details_end_button, FALSE);
 
-    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_search, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_scope_combo, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_view_combo, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_inspect_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_end_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_search,
+                       TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_scope_combo,
+                       FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_view_combo,
+                       FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_inspect_button,
+                       FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), app->details.details_end_button,
+                       FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(outer), toolbar, FALSE, FALSE, 0);
 
     app->details.details_store = gtk_tree_store_new(PROC_N_COLUMNS,
-        G_TYPE_STRING,  /* Name */
-        G_TYPE_UINT64,  /* PID */
-        G_TYPE_UINT64,  /* Parent PID */
-        G_TYPE_STRING,  /* User */
-        G_TYPE_STRING,  /* Status */
-        G_TYPE_DOUBLE,  /* CPU */
-        G_TYPE_UINT64,  /* CPU time */
-        G_TYPE_DOUBLE,  /* Memory % */
-        G_TYPE_UINT64,  /* Resident memory */
-        G_TYPE_UINT64,  /* Virtual memory */
-        G_TYPE_UINT64,  /* Writable memory */
-        G_TYPE_UINT64,  /* Shared memory */
-        G_TYPE_UINT,    /* Threads */
-        G_TYPE_DOUBLE,  /* Read/s */
-        G_TYPE_DOUBLE,  /* Write/s */
-        G_TYPE_DOUBLE,  /* GPU */
-        G_TYPE_STRING,  /* GPU engine */
-        G_TYPE_UINT64,  /* GPU memory */
-        G_TYPE_UINT64,  /* Read total */
-        G_TYPE_UINT64,  /* Write total */
-        G_TYPE_UINT,    /* Handles */
-        G_TYPE_UINT64,  /* Context switches */
-        G_TYPE_UINT64,  /* Page faults */
-        G_TYPE_INT,     /* Priority */
-        G_TYPE_INT,     /* Nice */
-        G_TYPE_STRING,  /* Security context */
-        G_TYPE_STRING,  /* Waiting channel */
-        G_TYPE_STRING,  /* Control group */
-        G_TYPE_STRING,  /* Unit */
-        G_TYPE_STRING,  /* Session */
-        G_TYPE_STRING,  /* Seat */
-        G_TYPE_STRING,  /* Owner */
-        G_TYPE_INT64,   /* Start time */
-        G_TYPE_UINT64,  /* Elapsed */
-        G_TYPE_STRING,  /* Executable */
-        G_TYPE_STRING); /* Command */
-    app->details.details_sort_model = gtk_tree_model_sort_new_with_model(GTK_TREE_MODEL(app->details.details_store));
-    app->details.details_tree = gtk_tree_view_new_with_model(app->details.details_sort_model);
+        G_TYPE_STRING, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_DOUBLE, G_TYPE_UINT64, G_TYPE_DOUBLE,
+        G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT64,
+        G_TYPE_UINT, G_TYPE_DOUBLE, G_TYPE_DOUBLE, G_TYPE_DOUBLE,
+        G_TYPE_STRING, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_UINT64,
+        G_TYPE_UINT, G_TYPE_UINT64, G_TYPE_UINT64, G_TYPE_INT,
+        G_TYPE_INT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_INT64, G_TYPE_UINT64, G_TYPE_STRING, G_TYPE_STRING);
+    app->details.details_sort_model = gtk_tree_model_sort_new_with_model(
+        GTK_TREE_MODEL(app->details.details_store));
+    app->details.details_tree = gtk_tree_view_new_with_model(
+        app->details.details_sort_model);
     gtk_widget_set_tooltip_text(app->details.details_tree,
         "Click headings to sort; right-click for actions; Ctrl+C copies the selected row");
-    gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(app->details.details_tree), TRUE);
-    gtk_tree_view_set_enable_search(GTK_TREE_VIEW(app->details.details_tree), FALSE);
-    gtk_tree_view_set_enable_tree_lines(GTK_TREE_VIEW(app->details.details_tree), TRUE);
-    gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(app->details.details_tree), TRUE);
+    gtk_tree_view_set_headers_clickable(
+        GTK_TREE_VIEW(app->details.details_tree), TRUE);
+    gtk_tree_view_set_enable_search(
+        GTK_TREE_VIEW(app->details.details_tree), FALSE);
+    gtk_tree_view_set_enable_tree_lines(
+        GTK_TREE_VIEW(app->details.details_tree), TRUE);
+    gtk_tree_view_set_show_expanders(
+        GTK_TREE_VIEW(app->details.details_tree), TRUE);
 
     for (int i = 0; i < PROC_N_COLUMNS; i++)
-        app->details.details_columns[i] = add_process_column(app, &column_specs[i]);
+        app->details.details_columns[i] = add_process_column(
+            app, &column_specs[i]);
     process_columns_load(app);
-    gtk_combo_box_set_active(GTK_COMBO_BOX(app->details.details_scope_combo),
-                             app->details.details_scope);
-    gtk_combo_box_set_active(GTK_COMBO_BOX(app->details.details_view_combo),
-                             app->details.details_tree_mode ? 0 : 1);
+    gtk_combo_box_set_active(
+        GTK_COMBO_BOX(app->details.details_scope_combo),
+        app->details.details_scope);
+    gtk_combo_box_set_active(
+        GTK_COMBO_BOX(app->details.details_view_combo),
+        app->details.details_tree_mode ? 0 : 1);
 
-    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->details.details_tree));
-    g_signal_connect(selection, "changed", G_CALLBACK(selected_process_changed), app);
-    g_signal_connect(app->details.details_search, "changed", G_CALLBACK(refilter_processes), app);
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(
+        GTK_TREE_VIEW(app->details.details_tree));
+    g_signal_connect(selection, "changed",
+                     G_CALLBACK(selected_process_changed), app);
+    g_signal_connect(app->details.details_search, "changed",
+                     G_CALLBACK(refilter_processes), app);
     g_signal_connect(app->details.details_scope_combo, "changed",
                      G_CALLBACK(process_scope_changed), app);
-    g_signal_connect(app->details.details_view_combo, "changed", G_CALLBACK(process_view_changed), app);
-    g_signal_connect(app->details.details_inspect_button, "clicked", G_CALLBACK(details_clicked), app);
-    g_signal_connect(app->details.details_end_button, "clicked", G_CALLBACK(kill_selected_process), app);
-    g_signal_connect(app->details.details_tree, "button-press-event", G_CALLBACK(process_button_press), app);
-    g_signal_connect(app->details.details_tree, "row-activated", G_CALLBACK(process_row_activated), app);
+    g_signal_connect(app->details.details_view_combo, "changed",
+                     G_CALLBACK(process_view_changed), app);
+    g_signal_connect(app->details.details_inspect_button, "clicked",
+                     G_CALLBACK(details_clicked), app);
+    g_signal_connect(app->details.details_end_button, "clicked",
+                     G_CALLBACK(kill_selected_process), app);
+    g_signal_connect(app->details.details_tree, "button-press-event",
+                     G_CALLBACK(process_button_press), app);
+    g_signal_connect(app->details.details_tree, "row-activated",
+                     G_CALLBACK(process_row_activated), app);
 
     GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
-                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+                                   GTK_POLICY_AUTOMATIC,
+                                   GTK_POLICY_AUTOMATIC);
     gtk_widget_set_vexpand(scroller, TRUE);
     gtk_container_add(GTK_CONTAINER(scroller), app->details.details_tree);
     app->runtime.page_scrollers[LSM_TAB_DETAILS] = scroller;
@@ -1151,86 +1148,16 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
     gtk_widget_set_margin_start(app->details.details_count_label, 4);
     gtk_box_pack_start(GTK_BOX(outer), app->details.details_count_label,
                        FALSE, FALSE, 0);
-    if (app->details.process_record_menu_item)
-        gtk_widget_set_sensitive(app->details.process_record_menu_item, FALSE);
-}
-
-static void append_record_if_needed(LsmApp *app,
-                                    const LsmProcessInfo *processes,
-                                    size_t count)
-{
-    if (!app->process.recorder || app->process.recording_pid <= 1 ||
-        app->process.recording_instance_id == 0U)
-        return;
-    const LsmProcessInfo *found = NULL;
-    for (size_t index = 0U; index < count; index++) {
-        if (processes[index].pid == app->process.recording_pid &&
-            processes[index].instance_id ==
-                app->process.recording_instance_id) {
-            found = &processes[index];
-            break;
-        }
-    }
-    if (!found) {
-        lsm_process_record_stop(app);
-        return;
-    }
-    (void)lsm_process_record_append(app, found);
-}
-
-static gboolean consume_completed_process_snapshot(LsmApp *app)
-{
-    if (!app || app->runtime.paused || !app->process_scanner)
-        return FALSE;
-
-    LsmProcessInfo *processes = NULL;
-    size_t count = 0U;
-    if (!lsm_process_scanner_take(
-            app->process_scanner, &processes, &count))
-        return FALSE;
-
-    lsm_monitor_set_process_totals(&app->monitor, processes, count);
-    append_record_if_needed(app, processes, count);
-    lsm_app_history_ingest(app, processes, count);
-
-    lsm_process_list_free(app->process.process_snapshot);
-    app->process.process_snapshot = processes;
-    app->process.process_snapshot_count = count;
-    app->process.process_snapshot_generation++;
-    if (app->process.process_snapshot_generation == 0U)
-        app->process.process_snapshot_generation = 1U;
-    app->processes.processes_model_dirty = TRUE;
-    app->details.details_model_dirty = TRUE;
-    lsm_overview_refresh(app);
-    if (lsm_processes_page_visible(app))
-        lsm_processes_present_snapshot(app);
-    if (details_page_visible(app))
-        lsm_details_present_snapshot(app);
-    return TRUE;
-}
-
-void lsm_processes_present_ready_snapshot(LsmApp *app)
-{
-    (void)consume_completed_process_snapshot(app);
-}
-
-gboolean lsm_processes_update(gpointer user_data)
-{
-    LsmApp *app = user_data;
-    if (!app || app->runtime.paused || !app->process_scanner)
-        return G_SOURCE_CONTINUE;
-
-    (void)consume_completed_process_snapshot(app);
-    (void)lsm_process_scanner_request(
-        app->process_scanner, process_scan_flags(app));
-    return G_SOURCE_CONTINUE;
+    lsm_process_record_action_sync(app, FALSE, FALSE);
 }
 
 void lsm_details_destroy(LsmApp *app)
 {
     if (!app) return;
-    if (app->details.details_sort_model) g_object_unref(app->details.details_sort_model);
-    if (app->details.details_store) g_object_unref(app->details.details_store);
+    if (app->details.details_sort_model)
+        g_object_unref(app->details.details_sort_model);
+    if (app->details.details_store)
+        g_object_unref(app->details.details_store);
     app->details.details_sort_model = NULL;
     app->details.details_store = NULL;
     app->details.details_structure_valid = FALSE;
