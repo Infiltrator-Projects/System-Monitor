@@ -3,6 +3,10 @@
  * @file performance_internal.h
  * @brief Internal Performance-page construction helpers shared across GUI modules.
  *
+ * This construction contract deliberately keeps LsmApp opaque. Translation
+ * units that genuinely project private application state must include
+ * app_internal.h themselves rather than receiving it transitively here.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
@@ -10,8 +14,14 @@
 #ifndef INFILTRATOR_SYSTEM_MONITOR_PERFORMANCE_INTERNAL_H
 #define INFILTRATOR_SYSTEM_MONITOR_PERFORMANCE_INTERNAL_H
 
-#include "app_internal.h"
+#include "app.h"
+#include "graph.h"
 #include "presentation_contract.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef struct LsmDevicePage LsmDevicePage;
 
 GtkWidget *performance_new_vertical_box(int spacing);
 void performance_style_card(GtkWidget *widget);
@@ -51,15 +61,5 @@ LsmDevicePage *performance_build_bluetooth_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_gpu_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_battery_page(LsmApp *app, size_t index);
 LsmDevicePage *performance_build_npu_page(LsmApp *app, size_t index);
-
-/**
- * Rebuild one GPU graph selector from metrics supplied by the current backend.
- *
- * @param [in,out] slot GPU graph slot whose selector mapping is refreshed.
- * @param [in] gpu Current GPU snapshot used to derive selectable metrics.
- * @param [in] preferred Preferred metric when it is supported.
- */
-void lsm_performance_populate_gpu_metric_selector(
-    LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
 
 #endif

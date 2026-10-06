@@ -3,6 +3,10 @@
  * @file performance_present_internal.h
  * @brief Private boundaries between Performance snapshot-presentation modules.
  *
+ * Presentation implementations genuinely require private monitor/widget state,
+ * so that dependency is explicit here rather than leaking from the generic
+ * Performance construction contract.
+ *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
@@ -49,6 +53,15 @@ void performance_present_device_page(LsmApp *app, LsmDevicePage *page);
  */
 void performance_record_device_page_sample(
     LsmApp *app, LsmDevicePage *page);
+
+/**
+ * Rebuild one GPU graph selector from metrics supplied by the current backend.
+ *
+ * The selector uses presentation-owned widget state, so its declaration lives
+ * with the presentation-private contract instead of performance_internal.h.
+ */
+void lsm_performance_populate_gpu_metric_selector(
+    LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
 
 /**
  * Choose the best user-facing hardware name without promoting bus identifiers.

@@ -7,6 +7,7 @@
  * parallel switches, timer policy or feature include sets. The descriptor
  * table is indexed by stable LsmTabIndex identity and uses designated
  * initialisers so adding fields cannot silently retarget existing policy.
+ * Keyboard command routing is owned separately by app_keyboard.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -17,7 +18,7 @@
 #undef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 
 #include "app_internal.h"
-#include "app_menu.h"
+#include "app_keyboard.h"
 #include "app_runtime.h"
 #include "app_shell.h"
 #include "app_shell_window.h"
@@ -26,9 +27,6 @@
 #include "history.h"
 #include "overview.h"
 #include "performance.h"
-#include "process_export.h"
-#include "process_navigation.h"
-#include "process_workspace.h"
 #include "processes_ui.h"
 #include "services.h"
 #include "startup.h"
@@ -294,108 +292,12 @@ void lsm_app_page_registry_connect_notebook(LsmApp *app)
                      G_CALLBACK(on_registry_tab_switched), app);
 }
 
-static gboolean focus_allows_pause(const LsmApp *app, GtkWidget *focus)
-{
-    return !focus || focus == app->shell.notebook ||
-           focus == app->processes.processes_tree ||
-           focus == app->details.details_tree ||
-           focus == app->performance.performance_stack;
-}
-
-static gboolean registry_key_press(GtkWidget *widget, GdkEventKey *event,
-                                   gpointer user_data)
-{
-    (void)widget;
-    LsmApp *app = user_data;
-    if (!app) return FALSE;
-
-    const gboolean control = (event->state & GDK_CONTROL_MASK) != 0;
-    const gboolean shift = (event->state & GDK_SHIFT_MASK) != 0;
-    const gboolean alt = (event->state & GDK_MOD1_MASK) != 0;
-
-    if (event->keyval == GDK_KEY_F5) {
-        lsm_app_menu_refresh(NULL, app);
-        return TRUE;
-    }
-    if (control && (event->keyval == GDK_KEY_f ||
-                    event->keyval == GDK_KEY_F)) {
-        const gint current = gtk_notebook_get_current_page(
-            GTK_NOTEBOOK(app->shell.notebook));
-        GtkWidget *search = current >= 0 && current < LSM_TAB_COUNT
-            ? lsm_app_page_registry_search_widget(
-                  app, (LsmTabIndex)current)
-            : NULL;
-        if (search) {
-            gtk_widget_grab_focus(search);
-            return TRUE;
-        }
-    }
-    if (control && shift && (event->keyval == GDK_KEY_s ||
-                             event->keyval == GDK_KEY_S)) {
-        lsm_app_menu_save_snapshot(NULL, app);
-        return TRUE;
-    }
-    if (control && (event->keyval == GDK_KEY_c ||
-                    event->keyval == GDK_KEY_C)) {
-        const gint current = gtk_notebook_get_current_page(
-            GTK_NOTEBOOK(app->shell.notebook));
-        GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
-        if ((current == LSM_TAB_PROCESSES &&
-             focus == app->processes.processes_tree) ||
-            (current == LSM_TAB_DETAILS &&
-             focus == app->details.details_tree)) {
-            lsm_process_export_copy_selected(app);
-            return TRUE;
-        }
-    }
-    if (alt && event->keyval >= GDK_KEY_1 &&
-        event->keyval <= GDK_KEY_1 + 8U) {
-        const gint page_index = (gint)(event->keyval - GDK_KEY_1);
-        if (page_index < LSM_TAB_COUNT) {
-            gtk_notebook_set_current_page(
-                GTK_NOTEBOOK(app->shell.notebook), page_index);
-            return TRUE;
-        }
-    }
-
-    GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
-    if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
-        if (app->shell.pause_menu_item)
-            gtk_check_menu_item_set_active(
-                GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item),
-                !app->runtime.paused);
-        return TRUE;
-    }
-
-    const gint current = gtk_notebook_get_current_page(
-        GTK_NOTEBOOK(app->shell.notebook));
-    if ((current == LSM_TAB_PROCESSES &&
-         focus == app->processes.processes_tree) ||
-        (current == LSM_TAB_DETAILS &&
-         focus == app->details.details_tree)) {
-        if (event->keyval == GDK_KEY_Return ||
-            event->keyval == GDK_KEY_KP_Enter) {
-            if (current == LSM_TAB_PROCESSES)
-                lsm_processes_go_to_details(app);
-            else
-                lsm_processes_show_selected_details(app);
-            return TRUE;
-        }
-        if (event->keyval == GDK_KEY_Delete) {
-            lsm_processes_end_selected(app);
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
 void lsm_app_page_registry_connect_window(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
 
-    /* Page-aware key policy has exactly one live owner. Window-manager
-     * mechanics are connected separately and contain no page knowledge. */
-    g_signal_connect(app->shell.window, "key-press-event",
-                     G_CALLBACK(registry_key_press), app);
+    /* Page-aware keyboard commands and window-manager mechanics have separate
+     * owners; page registration contains neither command nor WM policy. */
+    lsm_app_keyboard_connect(app);
     lsm_app_shell_window_connect(app);
 }
