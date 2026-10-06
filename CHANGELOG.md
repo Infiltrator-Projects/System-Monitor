@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.174 - 2026-10-06
+
+- Consolidate maintained documentation around one architecture contract, hardware-specific collection rules and validation evidence.
+- Remove the redundant documentation index and duplicate decision/portability documents, while preserving their unique technical contracts in Architecture.
+- Align documentation, Doxygen and source-style checks with the reduced maintained documentation set.
+
 ## 1.0.173 - 2026-10-06
 
 - Centralise GTK top-level page construction, manual refresh ownership and active-page periodic refresh policy in one registry.
