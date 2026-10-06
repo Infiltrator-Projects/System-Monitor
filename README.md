@@ -19,6 +19,7 @@ System Monitor is an original clean-sheet implementation designed and written fr
 - Processes, application history, startup, users, details, services and filesystems.
 - Process inspection and control, including termination, suspend/resume, priority, efficiency mode and CPU affinity.
 - cgroup-v2-aware application grouping, process history, snapshots and process-table export.
+- Exact first-party shared infrastructure is retained at `src/infiltratr-common`.
 
 ## Build and test
 
@@ -36,13 +37,18 @@ Run `make check` for the authoritative verification suite. Installation is owned
 
 Development stays on `main`. Releases are produced from the exact tested commit; published tags and assets are immutable.
 
-## Documentation
+## Release assets
+
+A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision.
+
+## Technical documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
 - [Hardware collection](docs/HARDWARE.md) — hardware rules, units and provenance.
+- [Validation](docs/VALIDATION.md) — compact verification entry point.
 - [Contributing](CONTRIBUTING.md) — verification and repository discipline.
 - [Security](SECURITY.md) — security boundaries and reporting.
 
-## Licence
+## Licence and provenance
 
 Shannon Smith-owned System Monitor source, documentation and application artwork are licensed under GPL-3.0-or-later. Documented dependencies, first-party Common infrastructure and separately licensed assets retain their own identities and licences.
