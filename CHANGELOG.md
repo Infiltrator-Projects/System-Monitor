@@ -2,9 +2,9 @@
 
 ## 1.0.174 - 2026-10-06
 
-- Consolidate maintained documentation around one architecture contract, hardware-specific collection rules and validation evidence.
-- Remove the redundant documentation index and duplicate decision/portability documents, while preserving their unique technical contracts in Architecture.
-- Align documentation, Doxygen and source-style checks with the reduced maintained documentation set.
+- Consolidate maintained documentation around one architecture contract and one hardware-specific collection guide.
+- Remove redundant documentation and repeated architecture, validation and repository-policy prose while preserving durable technical contracts.
+- Keep build, test, security and contribution instructions in their owning repository documents rather than duplicating them across `docs/`.
 
 ## 1.0.173 - 2026-10-06
 
