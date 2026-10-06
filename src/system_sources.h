@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file system_sources.h
+ * @brief Native Linux hardware-discovery boundary.
+ *
+ * The collector exposes compact records built from direct device ioctls,
+ * rtnetlink and bounded kernel-interface fallbacks. No external enumeration or
+ * sensor-library type escapes into the application data model.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_SYSTEM_SOURCES_H
+#define INFILTRATOR_SYSTEM_MONITOR_SYSTEM_SOURCES_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "monitor_types.h"
+
+/** Opaque native-source context. */
+typedef struct LsmSystemSources LsmSystemSources;
+
+/** One physical block device discovered through block-class sysfs. */
+typedef struct {
+    char name[64];             /**< Current kernel name, such as nvme0n1. */
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Kernel device-instance identity. */
+    char model[LSM_NAME_LEN];  /**< Human-readable vendor/model text. */
+    char media_type[16];       /**< SSD or HDD when the queue reports it. */
+    char connection_type[32];  /**< Native storage transport when identifiable. */
+    uint64_t size_bytes;       /**< Raw device capacity. */
+} LsmBlockDeviceRecord;
+
+/** One mounted filesystem reported by the native mountinfo parser. */
+typedef struct {
+    char source[LSM_PATH_LEN];      /**< Mount source as reported by the kernel. */
+    char target[LSM_PATH_LEN];      /**< Mount point. */
+    char filesystem[64];            /**< Filesystem type. */
+    char block_name[64];            /**< Kernel partition name when resolvable. */
+    char parent_disk[64];           /**< Owning block disk name. */
+} LsmMountRecord;
+
+/** One partition, mounted or unmounted, belonging to a physical disk. */
+typedef struct {
+    char device[LSM_PATH_LEN];      /**< User-visible /dev node. */
+    char mount_point[LSM_PATH_LEN]; /**< Empty when unmounted. */
+    char filesystem[64];            /**< Filesystem/type identifier when known. */
+    char parent_disk[64];           /**< Owning physical disk name. */
+    uint64_t size_bytes;            /**< Partition capacity. */
+    bool mounted;                   /**< True when a mount record matched. */
+} LsmPartitionRecord;
+
+/** One active non-loopback network interface. */
+typedef struct {
+    char name[64];                  /**< Kernel interface name. */
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Kernel interface instance identity. */
+    char mac[32];                   /**< Link-layer address. */
+    char product[LSM_NAME_LEN];     /**< Friendly adapter model. */
+    char vendor[LSM_NAME_LEN];      /**< Friendly adapter vendor. */
+    bool wireless;                  /**< Wireless driver accepted SIOCGIWNAME. */
+} LsmNetworkRecord;
+
+/** One rtnetlink interface-counter sample. */
+typedef struct {
+    char name[64];
+    char instance_identity[LSM_IDENTITY_LEN]; /**< Interface instance that supplied these counters. */
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
+} LsmNetworkCounterRecord;
+
+/** One DRM graphics adapter and its backing hardware identity. */
+typedef struct {
+    char card[64];                  /**< DRM card name, such as card0. */
+    char product[LSM_NAME_LEN];     /**< Friendly adapter model. */
+    char vendor[LSM_NAME_LEN];      /**< Friendly adapter vendor. */
+    char driver[64];                /**< Bound kernel driver. */
+    char device_syspath[LSM_PATH_LEN]; /**< Canonical backing-device path. */
+} LsmGpuRecord;
+
+/** One CPU thermal sample and its native limit metadata. */
+typedef struct {
+    double temperature_c; /**< Current CPU/package temperature, or NAN. */
+    double warning_c;     /**< Native warning/Tcontrol/hot threshold, or NAN. */
+    double critical_c;    /**< Native critical/Tjmax threshold, or NAN. */
+} LsmCpuThermalSample;
+
+/**
+ * Create the native Linux source context and its rtnetlink sockets.
+ *
+ * @param [out] sources Receives the newly allocated context.
+ * @return true on success; false leaves @p sources set to NULL.
+ */
+bool lsm_sources_init(LsmSystemSources **sources);
+/**
+ * Close source sockets and release the native-source context.
+ *
+ * @param [in,out] sources Context to release, or NULL.
+ */
+void lsm_sources_destroy(LsmSystemSources *sources);
+
+/**
+ * Enumerate physical non-loop block devices into a bounded array.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
+ */
+bool lsm_sources_list_block_devices_checked(
+    LsmSystemSources *sources, LsmBlockDeviceRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Enumerate current mount records through the internal mountinfo parser.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
+ */
+bool lsm_sources_list_mounts_checked(
+    LsmSystemSources *sources, LsmMountRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Enumerate mounted and unmounted child partitions for physical disks.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
+ */
+bool lsm_sources_list_partitions_checked(
+    LsmSystemSources *sources, LsmPartitionRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Enumerate active network interfaces and resolve hardware identity.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when enumeration completed, including a valid empty result.
+ */
+bool lsm_sources_list_networks_checked(
+    LsmSystemSources *sources, LsmNetworkRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Read one rtnetlink counter snapshot for active interfaces.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of records written.
+ * @return true when the counter snapshot completed, including zero records.
+ */
+bool lsm_sources_read_network_counters_checked(
+    LsmSystemSources *sources, LsmNetworkCounterRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Drain queued link/address events and report whether topology changed.
+ *
+ * @param [in,out] sources Native-source context containing the event socket.
+ * @return true when at least one relevant link or address event was observed.
+ */
+bool lsm_sources_network_topology_changed(LsmSystemSources *sources);
+
+/**
+ * Enumerate DRM graphics adapters and canonical backing-device identities.
+ *
+ * @param [in] sources Native-source context.
+ * @param [out] records Destination array.
+ * @param [in] capacity Number of records available.
+ * @param [out] out_count Receives the number of adapters written.
+ * @return true when enumeration completed, including a valid empty result.
+ */
+bool lsm_sources_list_gpus_checked(
+    LsmSystemSources *sources, LsmGpuRecord *records,
+    size_t capacity, size_t *out_count);
+/**
+ * Read the best available CPU/package temperature and native limits.
+ *
+ * @param [in,out] sources Native-source context supplying the sysfs root.
+ * @param [out] sample Current temperature and optional native thresholds.
+ * @return true when a valid current CPU temperature was found.
+ */
+bool lsm_sources_read_cpu_thermal(LsmSystemSources *sources,
+                                  LsmCpuThermalSample *sample);
+
+#endif

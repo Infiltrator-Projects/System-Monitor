@@ -1,0 +1,481 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file graph.c
+ * @brief Cairo rendering for performance and sidebar history graphs.
+ *
+ * The renderer owns System Monitor's native Cairo graph presentation,
+ * including retained history, scaling, labels and threshold styling.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "graph.h"
+#include "ui_helpers.h"
+
+#include <infiltratr/design.h>
+
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+static void rounded_rectangle(cairo_t *cr, double x, double y,
+                              double width, double height, double radius)
+{
+    static const double half_pi = 1.57079632679489661923;
+    const double right = x + width;
+    const double bottom = y + height;
+    double r = radius;
+
+    if (r < 0.0) r = 0.0;
+    if (r > width / 2.0) r = width / 2.0;
+    if (r > height / 2.0) r = height / 2.0;
+    if (r <= 0.0) {
+        cairo_rectangle(cr, x, y, width, height);
+        return;
+    }
+
+    cairo_new_path(cr);
+    cairo_move_to(cr, x + r, y);
+    cairo_line_to(cr, right - r, y);
+    cairo_arc(cr, right - r, y + r, r, -half_pi, 0.0);
+    cairo_line_to(cr, right, bottom - r);
+    cairo_arc(cr, right - r, bottom - r, r, 0.0, half_pi);
+    cairo_line_to(cr, x + r, bottom);
+    cairo_arc(cr, x + r, bottom - r, r, half_pi, 2.0 * half_pi);
+    cairo_line_to(cr, x, y + r);
+    cairo_arc(cr, x + r, y + r, r, 2.0 * half_pi, 3.0 * half_pi);
+    cairo_close_path(cr);
+}
+
+static void visible_history_range(const LsmGraph *graph,
+                                  const LsmSampleHistory *history,
+                                  size_t *start, size_t *end)
+{
+    const size_t points =
+        graph->visible_points > 0U && graph->visible_points < history->count
+            ? graph->visible_points : history->count;
+    *start = graph->newer_on_right && history->count > points
+        ? history->count - points : 0U;
+    *end = !graph->newer_on_right && history->count > points
+        ? points : history->count;
+}
+
+static double graph_maximum(const LsmGraph *graph)
+{
+    if (graph->percentage_scale) return 100.0;
+    if (graph->fixed_max > 0.0) return graph->fixed_max;
+    double maximum = 1.0;
+    size_t start = 0U, end = 0U;
+    visible_history_range(graph, &graph->primary, &start, &end);
+    for (size_t i = start; i < end; i++) {
+        if (lsm_sample_history_is_valid(&graph->primary, i))
+            maximum = fmax(maximum,
+                           lsm_sample_history_get(&graph->primary, i));
+    }
+    if (graph->has_secondary) {
+        visible_history_range(graph, &graph->secondary, &start, &end);
+        for (size_t i = start; i < end; i++) {
+            if (lsm_sample_history_is_valid(&graph->secondary, i))
+                maximum = fmax(maximum,
+                               lsm_sample_history_get(&graph->secondary, i));
+        }
+    }
+    if (graph->dynamic_step > 0.0) {
+        const double rounded = ceil(maximum / graph->dynamic_step) * graph->dynamic_step;
+        return fmax(graph->minimum_max, rounded);
+    }
+    maximum *= 1.15;
+    double scale = 1.0;
+    while (scale < maximum) scale *= 2.0;
+    return fmax(graph->minimum_max, scale);
+}
+
+static void append_series_segment(cairo_t *cr,
+                                  const double *x, const double *y,
+                                  size_t count, bool smooth)
+{
+    if (!cr || !x || !y || count == 0U) return;
+    cairo_move_to(cr, x[0], y[0]);
+    if (!smooth || count < 3U) {
+        for (size_t i = 1U; i < count; i++)
+            cairo_line_to(cr, x[i], y[i]);
+        return;
+    }
+
+    /* A Catmull-Rom segment is exactly representable as one cubic Bezier.
+     * Cairo can therefore render the same smooth curve with one curve command
+     * per sample interval instead of five interpolated line segments. */
+    for (size_t i = 0U; i + 1U < count; i++) {
+        const size_t p0 = i > 0U ? i - 1U : i;
+        const size_t p1 = i;
+        const size_t p2 = i + 1U;
+        const size_t p3 = i + 2U < count ? i + 2U : i + 1U;
+        const double c1x = x[p1] + (x[p2] - x[p0]) / 6.0;
+        const double c2x = x[p2] - (x[p3] - x[p1]) / 6.0;
+        const double lower = fmin(y[p1], y[p2]);
+        const double upper = fmax(y[p1], y[p2]);
+        const double c1y = fmin(
+            upper, fmax(lower, y[p1] + (y[p2] - y[p0]) / 6.0));
+        const double c2y = fmin(
+            upper, fmax(lower, y[p2] - (y[p3] - y[p1]) / 6.0));
+        cairo_curve_to(cr, c1x, c1y, c2x, c2y, x[p2], y[p2]);
+    }
+}
+
+typedef struct {
+    double x[LSM_HISTORY_LENGTH];
+    double y[LSM_HISTORY_LENGTH];
+    size_t segment_offset[LSM_HISTORY_LENGTH];
+    size_t segment_length[LSM_HISTORY_LENGTH];
+    size_t point_count;
+    size_t segment_count;
+} LsmSeriesGeometry;
+
+static bool build_series_geometry(const LsmSampleHistory *history,
+                                  double maximum, double width, double height,
+                                  size_t visible_points,
+                                  bool newer_on_right, bool logarithmic,
+                                  LsmSeriesGeometry *geometry)
+{
+    if (!history || !geometry || maximum <= 0.0) return false;
+    memset(geometry, 0, sizeof(*geometry));
+
+    const size_t points =
+        visible_points > 0U && visible_points < history->count
+            ? visible_points : history->count;
+    const size_t start =
+        newer_on_right && history->count > points
+            ? history->count - points : 0U;
+    const size_t end =
+        !newer_on_right && history->count > points
+            ? points : history->count;
+    const size_t display_count = end - start;
+    size_t active_offset = 0U;
+    size_t active_length = 0U;
+
+    for (size_t logical = start; logical < end; logical++) {
+        if (!lsm_sample_history_is_valid(history, logical)) {
+            if (active_length > 0U) {
+                geometry->segment_offset[geometry->segment_count] =
+                    active_offset;
+                geometry->segment_length[geometry->segment_count++] =
+                    active_length;
+                active_length = 0U;
+            }
+            continue;
+        }
+
+        if (active_length == 0U)
+            active_offset = geometry->point_count;
+        const size_t display_index = logical - start;
+        const size_t point = geometry->point_count++;
+        geometry->x[point] = display_count > 1U
+            ? width * (double)display_index /
+                (double)(display_count - 1U) : 0.0;
+        const double value =
+            fmax(0.0, lsm_sample_history_get(history, logical));
+        const double fraction = logarithmic
+            ? log1p(value) / log1p(maximum)
+            : value / maximum;
+        geometry->y[point] =
+            height - fmin(height, height * fraction);
+        active_length++;
+    }
+
+    if (active_length > 0U) {
+        geometry->segment_offset[geometry->segment_count] = active_offset;
+        geometry->segment_length[geometry->segment_count++] = active_length;
+    }
+    return geometry->point_count > 0U;
+}
+
+static void append_geometry_path(cairo_t *cr,
+                                 const LsmSeriesGeometry *geometry,
+                                 double height, bool close_to_baseline,
+                                 bool smooth)
+{
+    if (!cr || !geometry) return;
+    for (size_t segment = 0U;
+         segment < geometry->segment_count; segment++) {
+        const size_t offset = geometry->segment_offset[segment];
+        const size_t length = geometry->segment_length[segment];
+        if (length == 0U) continue;
+        append_series_segment(
+            cr, geometry->x + offset, geometry->y + offset,
+            length, smooth);
+        if (close_to_baseline) {
+            cairo_line_to(
+                cr, geometry->x[offset + length - 1U], height);
+            cairo_line_to(cr, geometry->x[offset], height);
+            cairo_close_path(cr);
+        }
+    }
+}
+
+static void draw_series(cairo_t *cr, const LsmSampleHistory *history,
+                        const GdkRGBA *colour, double maximum,
+                        double width, double height, gboolean fill,
+                        gboolean dashed, gboolean compact, gboolean smooth,
+                        size_t visible_points, gboolean newer_on_right,
+                        gboolean logarithmic)
+{
+    if (history->count < 2 || maximum <= 0.0) return;
+
+    LsmSeriesGeometry geometry;
+    if (!build_series_geometry(
+            history, maximum, width, height, visible_points,
+            newer_on_right, logarithmic, &geometry))
+        return;
+
+    if (fill) {
+        cairo_new_path(cr);
+        append_geometry_path(cr, &geometry, height, true, smooth);
+        cairo_pattern_t *gradient =
+            cairo_pattern_create_linear(0.0, 0.0, 0.0, height);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 0.0, colour->red, colour->green, colour->blue,
+            compact ? 0.22 : 0.38);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 0.58, colour->red, colour->green, colour->blue,
+            compact ? 0.14 : 0.20);
+        cairo_pattern_add_color_stop_rgba(
+            gradient, 1.0, colour->red, colour->green, colour->blue, 0.025);
+        cairo_set_source(cr, gradient);
+        cairo_fill(cr);
+        cairo_pattern_destroy(gradient);
+    }
+
+    if (dashed) {
+        const double dashes[] = {3.0, 3.0};
+        cairo_set_dash(cr, dashes, 2, 0.0);
+    } else {
+        cairo_set_dash(cr, NULL, 0, 0.0);
+    }
+
+    cairo_new_path(cr);
+    append_geometry_path(cr, &geometry, height, false, smooth);
+    cairo_set_source_rgba(
+        cr, colour->red, colour->green, colour->blue,
+        compact ? 0.16 : 0.20);
+    cairo_set_line_width(cr, compact ? 5.0 : 7.0);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, colour->red, colour->green, colour->blue, 1.0);
+    cairo_set_line_width(cr, compact ? 1.55 : 1.85);
+    cairo_stroke(cr);
+    cairo_set_dash(cr, NULL, 0, 0.0);
+}
+
+static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+    LsmGraph *graph = user_data;
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(widget, &allocation);
+    const double width = allocation.width;
+    const double height = allocation.height;
+    const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
+    const double radius = metrics
+        ? (graph->compact ? (double)metrics->small_radius
+                          : (double)metrics->card_radius)
+        : (graph->compact ? 6.0 : 12.0);
+    const GdkRGBA fallback_background = lsm_ui_background_colour(widget);
+    GdkRGBA background = fallback_background;
+    GdkRGBA border = {0.21, 0.23, 0.25, 1.0};
+    GtkStyleContext *style = gtk_widget_get_style_context(widget);
+    if (style) {
+        const char *surface_name = graph->compact ? "lsm_surface" : "lsm_card";
+        (void)gtk_style_context_lookup_color(style, surface_name, &background);
+        (void)gtk_style_context_lookup_color(style, "lsm_border", &border);
+    }
+
+    cairo_save(cr);
+    rounded_rectangle(cr, 0.0, 0.0, width, height, radius);
+    cairo_clip(cr);
+
+    cairo_set_source_rgba(cr, background.red, background.green, background.blue, 1.0);
+    cairo_rectangle(cr, 0.0, 0.0, width, height);
+    cairo_fill(cr);
+
+    {
+        const int divisions = graph->compact ? 4 : 10;
+        cairo_set_source_rgba(cr, graph->primary_colour.red,
+                              graph->primary_colour.green,
+                              graph->primary_colour.blue,
+                              graph->compact ? 0.055 : 0.13);
+        cairo_set_line_width(cr, graph->compact ? 0.35 : 0.50);
+        for (int i = 1; i < divisions; i++) {
+            const double x = width * i / (double)divisions;
+            cairo_move_to(cr, x, 0.0);
+            cairo_line_to(cr, x, height);
+        }
+        for (int i = 1; i < divisions; i++) {
+            const double y = height * i / (double)divisions;
+            cairo_move_to(cr, 0.0, y);
+            cairo_line_to(cr, width, y);
+        }
+        cairo_stroke(cr);
+        if (!graph->compact && graph->emphasise_midline) {
+            cairo_set_source_rgba(cr, graph->primary_colour.red,
+                                  graph->primary_colour.green,
+                                  graph->primary_colour.blue, 0.24);
+            cairo_set_line_width(cr, 0.70);
+            cairo_move_to(cr, 0.0, height / 2.0);
+            cairo_line_to(cr, width, height / 2.0);
+            cairo_stroke(cr);
+        }
+    }
+
+    const double maximum = graph_maximum(graph);
+    draw_series(cr, &graph->primary, &graph->primary_colour, maximum,
+                width, height, TRUE, FALSE, graph->compact, graph->smooth,
+                graph->visible_points, graph->newer_on_right,
+                graph->logarithmic);
+    if (graph->has_secondary &&
+        (graph->secondary_visible || graph->stacked)) {
+        draw_series(cr, &graph->secondary, &graph->secondary_colour, maximum,
+                    width, height, TRUE,
+                    graph->stacked ? FALSE : graph->secondary_dashed,
+                    graph->compact, graph->smooth,
+                    graph->visible_points, graph->newer_on_right,
+                    graph->logarithmic);
+    }
+
+    cairo_restore(cr);
+    cairo_set_source_rgba(cr, border.red, border.green, border.blue, border.alpha);
+    cairo_set_line_width(cr, 1.0);
+    rounded_rectangle(cr, 0.5, 0.5, fmax(0.0, width - 1.0),
+                      fmax(0.0, height - 1.0), radius);
+    cairo_stroke(cr);
+    return FALSE;
+}
+
+LsmGraph *lsm_graph_new(gboolean has_secondary,
+                        gboolean percentage_scale,
+                        double fixed_max,
+                        int minimum_width,
+                        int minimum_height)
+{
+    LsmGraph *graph = calloc(1, sizeof(*graph));
+    if (!graph) return NULL;
+    lsm_sample_history_init(&graph->primary);
+    lsm_sample_history_init(&graph->secondary);
+    graph->has_secondary = has_secondary;
+    graph->percentage_scale = percentage_scale;
+    graph->secondary_dashed = TRUE;
+    graph->secondary_visible = has_secondary;
+    graph->newer_on_right = TRUE;
+    graph->visible_points = 100U;
+    graph->fixed_max = fixed_max;
+    gdk_rgba_parse(&graph->primary_colour, "#39b8e3");
+    graph->secondary_colour = graph->primary_colour;
+    graph->area = gtk_drawing_area_new();
+    gtk_widget_set_size_request(graph->area, minimum_width, minimum_height);
+    gtk_widget_set_hexpand(graph->area, TRUE);
+    gtk_widget_set_vexpand(graph->area, TRUE);
+    g_signal_connect(graph->area, "draw", G_CALLBACK(on_draw), graph);
+    return graph;
+}
+
+void lsm_graph_free(LsmGraph *graph)
+{
+    free(graph);
+}
+
+void lsm_graph_push(LsmGraph *graph, double primary, double secondary,
+                    gboolean newer_on_right)
+{
+    if (!graph) return;
+    graph->newer_on_right = newer_on_right;
+    lsm_sample_history_push(&graph->primary, primary, newer_on_right);
+    if (graph->has_secondary)
+        lsm_sample_history_push(&graph->secondary, secondary, newer_on_right);
+    /* Hidden GtkStack pages still retain every sample, but GTK does not need
+     * a redraw request until the drawing area is mapped. Sidebar graphs remain
+     * mapped and continue to update normally. */
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_queue_draw(LsmGraph *graph)
+{
+    if (graph && graph->area) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_colours(LsmGraph *graph, const char *primary, const char *secondary)
+{
+    if (!graph) return;
+    if (primary && *primary) gdk_rgba_parse(&graph->primary_colour, primary);
+    if (secondary && *secondary) gdk_rgba_parse(&graph->secondary_colour, secondary);
+    else graph->secondary_colour = graph->primary_colour;
+}
+
+void lsm_graph_set_compact(LsmGraph *graph, gboolean compact)
+{
+    if (!graph) return;
+    graph->compact = compact;
+    gtk_widget_set_hexpand(graph->area, !compact);
+    gtk_widget_set_vexpand(graph->area, !compact);
+}
+
+void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise)
+{
+    if (!graph) return;
+    graph->emphasise_midline = emphasise;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth)
+{
+    if (!graph) return;
+    graph->smooth = smooth;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_visible_points(LsmGraph *graph, size_t points)
+{
+    if (!graph) return;
+    if (points < 2U) points = 2U;
+    if (points > LSM_HISTORY_LENGTH) points = LSM_HISTORY_LENGTH;
+    graph->visible_points = points;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_logarithmic(LsmGraph *graph, gboolean logarithmic)
+{
+    if (!graph) return;
+    graph->logarithmic = logarithmic;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_secondary_visible(LsmGraph *graph, gboolean visible)
+{
+    if (!graph) return;
+    graph->secondary_visible = visible;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_stacked(LsmGraph *graph, gboolean stacked)
+{
+    if (!graph) return;
+    graph->stacked = stacked;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_secondary_dashed(LsmGraph *graph, gboolean dashed)
+{
+    if (!graph) return;
+    graph->secondary_dashed = dashed;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+void lsm_graph_set_dynamic_scale(LsmGraph *graph, double step, double minimum_max)
+{
+    if (!graph) return;
+    graph->dynamic_step = step > 0.0 ? step : 0.0;
+    graph->minimum_max = minimum_max > 0.0 ? minimum_max : 0.0;
+    if (gtk_widget_get_mapped(graph->area)) gtk_widget_queue_draw(graph->area);
+}
+
+double lsm_graph_get_maximum(const LsmGraph *graph)
+{
+    return graph ? graph_maximum(graph) : 0.0;
+}

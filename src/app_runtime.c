@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file app_runtime.c
+ * @brief GTK-main-loop refresh cadence and timer ownership.
+ *
+ * This module owns when application refresh callbacks run. Feature modules
+ * continue to own what they collect and present.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "app_runtime.h"
+#include "app_internal.h"
+
+#include "common.h"
+#include "details_page.h"
+#include "filesystems.h"
+#include "history.h"
+#include "overview.h"
+#include "performance.h"
+#include "processes_ui.h"
+#include "refresh_policy.h"
+#include "services.h"
+#include "startup.h"
+#include "users.h"
+
+static guint process_refresh_interval(const LsmApp *app)
+{
+    return app->runtime.update_interval_ms < 1000U
+        ? 1000U : app->runtime.update_interval_ms;
+}
+
+static gboolean process_pages_active(const LsmApp *app)
+{
+    return app->runtime.active_tab == LSM_TAB_PROCESSES ||
+           app->runtime.active_tab == LSM_TAB_DETAILS;
+}
+
+static guint effective_process_refresh_interval(const LsmApp *app)
+{
+    const guint foreground = process_refresh_interval(app);
+    if (process_pages_active(app) || app->process.recorder)
+        return foreground;
+    return foreground < LSM_PROCESS_UPDATE_INTERVAL_MS
+        ? LSM_PROCESS_UPDATE_INTERVAL_MS : foreground;
+}
+
+gboolean lsm_app_refresh_processes_if_due(LsmApp *app, gboolean force)
+{
+    if (!app || (app->runtime.paused && !force))
+        return G_SOURCE_CONTINUE;
+
+    const double now = lsm_monotonic_seconds();
+    const double interval =
+        (double)effective_process_refresh_interval(app) / 1000.0;
+    if (!force && !lsm_refresh_interval_due(
+                      now,
+                      app->runtime.last_process_refresh_monotonic,
+                      interval))
+        return G_SOURCE_CONTINUE;
+
+    const gboolean result = lsm_processes_update(app);
+    if (now > 0.0)
+        app->runtime.last_process_refresh_monotonic = now;
+    return result;
+}
+
+static gboolean process_timer_update(gpointer user_data)
+{
+    return lsm_app_refresh_processes_if_due(user_data, FALSE);
+}
+
+static void remove_source(guint *source);
+
+static void reschedule_process_timer(LsmApp *app)
+{
+    if (!app || !app->shell.window || app->runtime.shutting_down)
+        return;
+    if (app->runtime.process_timer)
+        g_source_remove(app->runtime.process_timer);
+    app->runtime.process_timer = g_timeout_add(
+        effective_process_refresh_interval(app), process_timer_update, app);
+}
+
+static gboolean services_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_SERVICES)
+        return G_SOURCE_CONTINUE;
+    return lsm_services_update(app);
+}
+
+static gboolean users_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_USERS)
+        return G_SOURCE_CONTINUE;
+    return lsm_users_update(app);
+}
+
+static gboolean filesystem_timer_update(gpointer user_data)
+{
+    LsmApp *app = user_data;
+    if (!app) return G_SOURCE_REMOVE;
+    if (app->runtime.active_tab != LSM_TAB_FILESYSTEMS)
+        return G_SOURCE_CONTINUE;
+    return lsm_filesystems_update(app);
+}
+
+static void reschedule_slow_page_timer(LsmApp *app)
+{
+    if (!app) return;
+    remove_source(&app->runtime.services_timer);
+    remove_source(&app->runtime.users_timer);
+    remove_source(&app->runtime.filesystem_timer);
+
+    if (!app->shell.window || app->runtime.shutting_down)
+        return;
+
+    switch ((LsmTabIndex)app->runtime.active_tab) {
+        case LSM_TAB_SERVICES:
+            if (app->runtime.page_built[LSM_TAB_SERVICES])
+                app->runtime.services_timer = g_timeout_add_seconds(
+                    LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
+                    services_timer_update, app);
+            break;
+        case LSM_TAB_USERS:
+            if (app->runtime.page_built[LSM_TAB_USERS])
+                app->runtime.users_timer = g_timeout_add_seconds(
+                    LSM_USER_UPDATE_INTERVAL_SECONDS,
+                    users_timer_update, app);
+            break;
+        case LSM_TAB_FILESYSTEMS:
+            if (app->runtime.page_built[LSM_TAB_FILESYSTEMS])
+                app->runtime.filesystem_timer = g_timeout_add(
+                    app->runtime.filesystem_update_interval_ms,
+                    filesystem_timer_update, app);
+            break;
+        case LSM_TAB_PERFORMANCE:
+        case LSM_TAB_PROCESSES:
+        case LSM_TAB_APP_HISTORY:
+        case LSM_TAB_STARTUP:
+        case LSM_TAB_DETAILS:
+        case LSM_TAB_OVERVIEW:
+        case LSM_TAB_COUNT:
+            break;
+    }
+}
+
+void lsm_app_refresh_all(LsmApp *app)
+{
+    if (!app) return;
+    const gboolean was_paused = app->runtime.paused;
+    app->runtime.paused = FALSE;
+    (void)lsm_app_refresh_processes_if_due(app, TRUE);
+    lsm_performance_refresh(app);
+    lsm_history_refresh(app);
+    lsm_filesystems_refresh(app);
+    lsm_startup_refresh(app);
+    lsm_services_refresh(app);
+    lsm_users_refresh(app);
+    app->runtime.paused = was_paused;
+}
+
+void lsm_app_preferences_changed(LsmApp *app)
+{
+    if (!app || !app->shell.window ||
+        (!app->runtime.performance_timer && !app->runtime.process_timer))
+        return;
+    if (app->runtime.performance_timer)
+        g_source_remove(app->runtime.performance_timer);
+    if (app->runtime.process_timer) {
+        g_source_remove(app->runtime.process_timer);
+        app->runtime.process_timer = 0U;
+    }
+    app->runtime.performance_timer = g_timeout_add(
+        app->runtime.update_interval_ms, lsm_performance_update, app);
+    reschedule_process_timer(app);
+    reschedule_slow_page_timer(app);
+}
+
+void lsm_app_runtime_navigation_changed(LsmApp *app)
+{
+    if (!app) return;
+    if (app->runtime.process_timer)
+        reschedule_process_timer(app);
+    reschedule_slow_page_timer(app);
+}
+
+void lsm_app_runtime_page_built(LsmApp *app, unsigned page)
+{
+    if (!app || app->runtime.shutting_down || page >= LSM_TAB_COUNT)
+        return;
+    if ((unsigned)app->runtime.active_tab == page)
+        reschedule_slow_page_timer(app);
+}
+
+void lsm_app_runtime_start(LsmApp *app)
+{
+    if (!app) return;
+    app->runtime.performance_timer = g_timeout_add(
+        app->runtime.update_interval_ms, lsm_performance_update, app);
+    reschedule_process_timer(app);
+    reschedule_slow_page_timer(app);
+}
+
+static void remove_source(guint *source)
+{
+    if (!source || !*source) return;
+    g_source_remove(*source);
+    *source = 0U;
+}
+
+void lsm_app_runtime_stop(LsmApp *app)
+{
+    if (!app) return;
+    remove_source(&app->runtime.performance_timer);
+    remove_source(&app->runtime.process_timer);
+    remove_source(&app->runtime.services_timer);
+    remove_source(&app->runtime.users_timer);
+    remove_source(&app->runtime.filesystem_timer);
+}

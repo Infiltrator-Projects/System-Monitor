@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file process_inspection.h
+ * @brief Read-only process-inspection API and current Linux resource records.
+ *
+ * The API supplies the detailed information required by the graphical Process
+ * Inspector without invoking lsof, pmap, ps, readelf or any other executable.
+ * Process identity uses the neutral process model, while open-descriptor and
+ * memory-map records still describe Linux concepts and therefore remain a
+ * separate portability boundary from process_backend.h. Every returned array is
+ * a coherent caller-owned snapshot. Permission denial, process exit and PID
+ * reuse are ordinary failures; callers must never treat an empty array as proof
+ * that a process owns no resources.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_PROCESS_INSPECTION_H
+#define INFILTRATOR_SYSTEM_MONITOR_PROCESS_INSPECTION_H
+
+#include "monitor_types.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+/** Maximum text retained for one kernel-exposed resource target. */
+#define LSM_INSPECTION_TARGET_LEN 1024U
+/** Maximum text retained for one memory-map pathname or annotation. */
+#define LSM_INSPECTION_MAP_PATH_LEN 1024U
+
+/** One descriptor from /proc/PID/fd. */
+typedef struct {
+    int descriptor;                              /**< Numeric file descriptor. */
+    char kind[32];                               /**< File, socket, pipe, anon-inode or unknown. */
+    char target[LSM_INSPECTION_TARGET_LEN];      /**< Kernel symlink target. */
+} LsmOpenFileInfo;
+
+/** One virtual-memory area from /proc/PID/smaps, falling back to maps. */
+typedef struct {
+    uint64_t start_address;                      /**< Inclusive virtual start address. */
+    uint64_t end_address;                        /**< Exclusive virtual end address. */
+    uint64_t file_offset;                        /**< Backing-file offset in bytes. */
+    uint64_t inode;                              /**< Backing inode, or zero for anonymous memory. */
+    uint64_t private_clean_bytes;                /**< Private clean resident bytes when smaps exposes them. */
+    uint64_t private_dirty_bytes;                /**< Private dirty resident bytes when smaps exposes them. */
+    uint64_t shared_clean_bytes;                 /**< Shared clean resident bytes when smaps exposes them. */
+    uint64_t shared_dirty_bytes;                 /**< Shared dirty resident bytes when smaps exposes them. */
+    bool accounting_available;                   /**< True when detailed smaps accounting was observed. */
+    char permissions[8];                         /**< Kernel permission text such as r-xp. */
+    char device[32];                             /**< Kernel major:minor device text. */
+    char path[LSM_INSPECTION_MAP_PATH_LEN];      /**< Pathname or bracketed kernel annotation. */
+} LsmMemoryMapInfo;
+
+/** One task belonging to a process thread group. */
+typedef struct {
+    LsmProcessId tid;                            /**< Platform thread identifier. */
+    char name[LSM_NAME_LEN];                     /**< Thread command name. */
+    char state[64];                              /**< Human-readable kernel task state. */
+} LsmThreadInfo;
+
+/** One process found to hold a descriptor referring to a requested file. */
+typedef struct {
+    LsmProcessId pid;                            /**< Process identifier. */
+    int descriptor;                              /**< Matching file descriptor. */
+    char process_name[LSM_NAME_LEN];             /**< Process command name. */
+    char target[LSM_INSPECTION_TARGET_LEN];      /**< Resolved descriptor target. */
+} LsmFileUserInfo;
+
+
+/**
+ * Verify that a process identifier still denotes the expected process instance.
+ *
+ * Platforms may recycle numeric process identifiers after process exit. The
+ * backend-provided instance token therefore forms part of every inspector
+ * identity. Callers should check it immediately before inspection or control
+ * operations and treat false as exit, replacement or read failure.
+ *
+ * @param [in] pid Process identifier.
+ * @param [in] expected_instance_id Opaque instance token captured with the snapshot.
+ * @return true only when the current procfs record has the same non-zero start time.
+ */
+bool lsm_process_inspection_identity_matches(
+    LsmProcessId pid, LsmProcessInstanceId expected_instance_id);
+
+/**
+ * Read the open descriptors of one process.
+ *
+ * Descriptor targets are collected with readlink(2). Socket inodes are
+ * resolved against the process network namespace so IPv4, IPv6 and local Unix
+ * sockets remain distinguishable when procfs exposes the corresponding table.
+ * The result is sorted numerically by descriptor. A process may close
+ * descriptors during the walk; vanished individual entries are ignored.
+ *
+ * @param [in] pid Process to inspect; values less than one are rejected.
+ * @param [out] out_items Receives a heap array owned by the caller.
+ * @param [out] out_count Receives the complete descriptor count.
+ * @return true only when enumeration reached a clean end-of-directory.
+ */
+bool lsm_process_inspection_open_files_checked(
+    LsmProcessId pid, LsmOpenFileInfo **out_items, size_t *out_count);
+
+/**
+ * Read the virtual-memory map of one process.
+ *
+ * Linux smaps is preferred so clean/dirty private/shared accounting accompanies
+ * each mapping. Restricted kernels may expose only maps; in that case mapping
+ * identity remains available and @c accounting_available is false.
+ *
+ * @param [in] pid Process to inspect; values less than one are rejected.
+ * @param [out] out_items Receives a heap array owned by the caller.
+ * @param [out] out_count Receives the complete mapping count.
+ * @return true only when the selected procfs mapping file was read completely.
+ */
+bool lsm_process_inspection_memory_maps_checked(
+    LsmProcessId pid, LsmMemoryMapInfo **out_items, size_t *out_count);
+
+/**
+ * Read the current thread-group membership of one process.
+ *
+ * @param [in] pid Process whose /proc/PID/task directory is inspected.
+ * @param [out] out_items Receives a heap array owned by the caller.
+ * @param [out] out_count Receives the complete task count.
+ * @return true only when the task directory was enumerated completely.
+ */
+bool lsm_process_inspection_threads_checked(
+    LsmProcessId pid, LsmThreadInfo **out_items, size_t *out_count);
+
+/**
+ * Find processes whose descriptors resolve to an exact filesystem object.
+ *
+ * Compare device/inode identity from stat(path) and stat(/proc/PID/fd/N),
+ * so hard links match and a replaced pathname does not identify the old file.
+ * This is a best-effort snapshot: descriptors may close or be reused during
+ * the scan. Work is O(P + sum(F)), where P is visible processes and F is each
+ * process's descriptor count; denied descriptors are skipped.
+ *
+ * @param [in] path Existing filesystem path to search for.
+ * @param [out] out_items Receives a heap array owned by the caller.
+ * @param [out] out_count Receives the complete matching-descriptor count.
+ * @return true when the process walk completed without an authoritative failure.
+ */
+bool lsm_process_inspection_find_file_users_checked(
+    const char *path, LsmFileUserInfo **out_items, size_t *out_count);
+
+/**
+ * Release any array returned by this module.
+ *
+ * @param [in,out] items Array to release, or NULL.
+ */
+void lsm_process_inspection_free(void *items);
+
+#endif

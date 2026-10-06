@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file monitor_linux_internal.h
+ * @brief Private collector boundaries used by monitor_backend_linux.c.
+ *
+ * These functions are intentionally not installed as a public API. Each
+ * module owns one coherent Linux subsystem and mutates only its portion of the
+ * current LsmMonitor snapshot.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_MONITOR_INTERNAL_H
+#define INFILTRATOR_SYSTEM_MONITOR_MONITOR_INTERNAL_H
+
+#include "cpu_accounting.h"
+#include "disk_accounting.h"
+#include "logitech_hidpp.h"
+#include "monitor_types.h"
+#include "system_sources.h"
+#include "wifi_metadata.h"
+#include "bluetooth_traffic.h"
+
+#include <stdint.h>
+
+typedef struct LsmLinuxHardwareState LsmLinuxHardwareState;
+typedef struct LsmLinuxSamplerState LsmLinuxSamplerState;
+
+/** Retained Linux disk baselines keyed independently of the public snapshot. */
+typedef struct {
+    char name[64];
+    char instance_identity[LSM_IDENTITY_LEN];
+    LsmDiskAccountingState accounting;
+} LsmLinuxDiskState;
+
+/** Retained Linux network baselines keyed independently of the public snapshot. */
+typedef struct {
+    char name[64];
+    char instance_identity[LSM_IDENTITY_LEN];
+    uint64_t previous_rx;
+    uint64_t previous_tx;
+    bool initialized;
+} LsmLinuxNetworkState;
+
+/** Linux-only per-device Bluetooth identity and traffic baseline. */
+typedef struct {
+    char controller[64];
+    char address[32];
+    LsmBluetoothTrafficState accounting;
+} LsmLinuxBluetoothDeviceState;
+
+/**
+ * Reconcile retained Bluetooth traffic baselines against the current device set.
+ *
+ * @param [in,out] monitor Monitor containing current Bluetooth device records.
+ */
+void lsm_monitor_bluetooth_reconcile_states(LsmMonitor *monitor);
+
+/**
+ * Refresh per-device Bluetooth traffic from the native HCI accounting layer.
+ *
+ * @param [in,out] monitor Monitor containing current device records.
+ * @param [in] elapsed Seconds since the prior traffic sample.
+ */
+void lsm_monitor_bluetooth_update_traffic(LsmMonitor *monitor, double elapsed);
+
+/**
+ * Compare prior Bluetooth membership with the current monitor snapshot.
+ *
+ * @param [in] old_records Prior device records.
+ * @param [in] old_count Number of prior records.
+ * @param [in] monitor Current monitor snapshot.
+ * @return true when device membership changed.
+ */
+bool lsm_monitor_bluetooth_membership_changed(
+    const LsmBluetoothDeviceInfo *old_records,
+    size_t old_count,
+    const LsmMonitor *monitor);
+
+/** Linux-only GPU identity and cumulative-counter state. */
+typedef struct {
+    char platform_identity[LSM_IDENTITY_LEN];
+    uint64_t previous_engine_busy_ns;
+    bool engine_busy_initialized;
+    bool intel_native_backend;
+} LsmLinuxGpuState;
+
+/** Linux-only battery transport identity. */
+typedef struct {
+    char name[64];
+    char hidraw_path[LSM_PATH_LEN];
+    bool bluez_record;
+} LsmLinuxBatteryState;
+
+/** Private state owned by the active platform monitoring backend. */
+typedef struct {
+    LsmSystemSources *system_sources;
+    LsmWifiMetadata *wifi_metadata;
+    LsmLinuxHardwareState *hardware_state;
+    LsmLinuxSamplerState *sampler_state;
+    void *cpu_frequency_source;
+    LsmCpuAccountingState cpu_accounting;
+    LsmLinuxDiskState disks[LSM_MAX_DISKS];
+    size_t disk_count;
+    LsmLinuxNetworkState networks[LSM_MAX_NETS];
+    size_t network_count;
+    LsmLinuxBluetoothDeviceState bluetooth_devices[LSM_MAX_BLUETOOTH_DEVICES];
+    size_t bluetooth_device_count;
+    LsmLinuxGpuState gpus[LSM_MAX_GPUS];
+    size_t gpu_count;
+    LsmLinuxBatteryState batteries[LSM_MAX_BATTERIES];
+    size_t battery_count;
+    double last_update_monotonic;
+    double last_topology_scan_monotonic;
+    double topology_retry_not_before_monotonic;
+    unsigned topology_retry_failures;
+    bool topology_retry_pending;
+    double last_battery_update_monotonic;
+    double last_memory_detail_monotonic;
+    double last_cpu_frequency_source_refresh_monotonic;
+    bool topology_refresh_requested;
+} LsmLinuxMonitorBackendState;
+
+/** Return the mutable private backend state for an initialised monitor. */
+static inline LsmLinuxMonitorBackendState *monitor_backend_state(LsmMonitor *monitor)
+{
+    return monitor ? (LsmLinuxMonitorBackendState *)monitor->backend_state : NULL;
+}
+
+/** Return the read-only private backend state for an initialised monitor. */
+static inline const LsmLinuxMonitorBackendState *monitor_backend_state_const(
+    const LsmMonitor *monitor)
+{
+    return monitor ? (const LsmLinuxMonitorBackendState *)monitor->backend_state : NULL;
+}
+
+/** Return the active native source context, or NULL before backend setup. */
+static inline LsmSystemSources *monitor_system_sources(LsmMonitor *monitor)
+{
+    LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
+    return state ? state->system_sources : NULL;
+}
+
+/**
+ * Initialise CPU/memory counter baselines and static CPU identity.
+ *
+ * @param [in,out] monitor Retained monitor snapshot.
+ * @return true when mandatory CPU and memory sources were initialised.
+ */
+bool lsm_cpu_memory_initialise(LsmMonitor *monitor);
+/**
+ * Refresh CPU scheduler rates, frequencies, temperatures and memory values.
+ *
+ * @param [in,out] monitor Retained monitor snapshot.
+ * @param [in] elapsed_seconds Monotonic seconds since the previous refresh.
+ */
+void lsm_cpu_memory_update(LsmMonitor *monitor, double elapsed_seconds);
+/**
+ * Release CPU/memory-specific retained resources.
+ *
+ * @param [in,out] monitor Monitor being destroyed.
+ */
+void lsm_cpu_memory_shutdown(LsmMonitor *monitor);
+
+/**
+ * Discover storage/network topology and establish cumulative-counter baselines.
+ *
+ * @param [in,out] monitor Retained monitor snapshot.
+ * @return true when initial disk and network inventories could be allocated.
+ *         An unavailable native source can still yield an empty inventory.
+ */
+bool lsm_storage_initialise(LsmMonitor *monitor);
+/**
+ * Refresh storage and network rates, optionally reconciling device topology.
+ *
+ * @param [in,out] monitor Snapshot to update.
+ * @param [in] elapsed Monotonic seconds since the previous refresh.
+ * @param [in] refresh_topology Re-enumerate devices before sampling counters.
+ * @return true when every requested topology refresh completed; false when a
+ *         topology source was incomplete and should be retried.
+ */
+bool lsm_storage_update(LsmMonitor *monitor, double elapsed,
+                        bool refresh_topology);
+
+/**
+ * Start in-process battery and peripheral snapshot workers.
+ */
+void lsm_battery_start(void);
+/**
+ * Rebuild bounded Bluetooth controller and connected-device inventories from
+ * cached BlueZ data.
+ *
+ * @param [in,out] monitor Snapshot whose Bluetooth topology is replaced.
+ * @return true when the complete bounded controller/device inventory was
+ *         published; false preserves the prior snapshot.
+ */
+bool lsm_bluetooth_enumerate(LsmMonitor *monitor);
+/**
+ * Rebuild the bounded battery inventory from native driver interfaces.
+ *
+ * @param [in,out] monitor Snapshot whose battery topology is replaced.
+ * @return true when native enumeration completed; false preserves the prior snapshot.
+ */
+bool lsm_battery_enumerate(LsmMonitor *monitor);
+/**
+ * Apply current system and peripheral battery telemetry to the snapshot.
+ *
+ * @param [in,out] monitor Snapshot to update.
+ */
+void lsm_battery_update(LsmMonitor *monitor);
+/**
+ * Stop and join in-process battery and peripheral workers.
+ */
+void lsm_battery_shutdown(void);
+
+/**
+ * Discover GPU, NPU and temperature sources and initialise retained adapters.
+ *
+ * @param [in,out] monitor Snapshot receiving hardware topology.
+ * @return true when GPU, Bluetooth, battery and NPU topology discovery
+ *         completed; false when any authoritative inventory was incomplete.
+ */
+bool lsm_hardware_initialise(LsmMonitor *monitor);
+/**
+ * Refresh hardware telemetry with independently controlled slow-path work.
+ *
+ * @param [in,out] monitor Snapshot to update.
+ * @param [in] elapsed Monotonic seconds since the previous update.
+ * @param [in] refresh_topology Reconcile hardware before sampling.
+ * @param [in] refresh_batteries Perform full battery presentation this cycle.
+ * @return true when every requested topology refresh completed; false when a
+ *         hardware inventory was incomplete and should be retried.
+ */
+bool lsm_hardware_update(LsmMonitor *monitor, double elapsed,
+                         bool refresh_topology, bool refresh_batteries);
+/**
+ * Release dynamic hardware adapters and stop associated in-process workers.
+ *
+ * @param [in,out] monitor Monitor whose retained hardware state is released.
+ */
+void lsm_hardware_shutdown(LsmMonitor *monitor);
+
+/**
+ * Merge an authoritative direct HID++ reading into a battery snapshot.
+ *
+ * @param [in,out] battery Destination peripheral record.
+ * @param [in] reading Direct HID++ reading to apply.
+ * @return true when @p reading was valid and applied.
+ */
+bool lsm_battery_apply_hidpp_reading(
+    LsmBatteryInfo *battery, const LsmHidppBatteryReading *reading);
+
+#endif

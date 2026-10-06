@@ -1,0 +1,838 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file process_backend_windows.c
+ * @brief Initial read-only Windows implementation of the process backend.
+ *
+ * The first Windows process slice deliberately favours trustworthy native data
+ * over breadth. Tool Help supplies process identity and parent/thread counts;
+ * process handles supply creation identity, CPU time, working set, I/O totals,
+ * priority, executable path and handle count when permissions allow. Retained
+ * samples calculate CPU and I/O rates without confusing PID reuse.
+ *
+ * Process ownership and account identity come from native access-token SIDs.
+ * Command-line recovery, GPU/cgroup enrichment and all process-control
+ * operations are intentionally unsupported in this first backend. Callers
+ * receive partial rows rather than guessed values.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "process_backend.h"
+
+#include <infiltratr/arithmetic.h>
+#include <infiltratr/core.h>
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#ifndef PSAPI_VERSION
+#define PSAPI_VERSION 1
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#include <sddl.h>
+#include <tlhelp32.h>
+
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char account_identity[128];
+    char user[64];
+} LsmWindowsAccountCacheEntry;
+
+typedef struct {
+    DWORD pid;
+    LsmProcessInstanceId instance_id;
+    uint64_t cpu_time_100ns;
+    uint64_t read_bytes;
+    uint64_t write_bytes;
+    bool io_available;
+    uint64_t sampled_at_ms;
+    unsigned generation;
+    char account_identity[128];
+    char user[64];
+    bool owned_by_current_user;
+    bool account_available;
+} LsmWindowsProcessSample;
+
+struct LsmProcessBackend {
+    LsmWindowsProcessSample *samples;
+    size_t sample_count;
+    size_t sample_capacity;
+    LsmWindowsProcessSample *sample_backup;
+    size_t sample_backup_capacity;
+    LsmWindowsAccountCacheEntry *accounts;
+    size_t account_count;
+    size_t account_capacity;
+    unsigned generation;
+    uint64_t previous_system_cpu_100ns;
+    uint64_t total_memory_bytes;
+    PSID current_user_sid;
+};
+
+static uint64_t filetime_value(FILETIME value)
+{
+    return ((uint64_t)value.dwHighDateTime << 32U) |
+           (uint64_t)value.dwLowDateTime;
+}
+
+static uint64_t process_cpu_time_100ns(HANDLE process,
+                                       LsmProcessInstanceId *instance_id,
+                                       int64_t *start_time_epoch)
+{
+    FILETIME creation;
+    FILETIME exit_time;
+    FILETIME kernel;
+    FILETIME user;
+    if (!GetProcessTimes(process, &creation, &exit_time, &kernel, &user))
+        return 0U;
+
+    const uint64_t creation_value = filetime_value(creation);
+    if (instance_id) *instance_id = creation_value;
+
+    if (start_time_epoch) {
+        const uint64_t seconds = creation_value / 10000000ULL;
+        const uint64_t windows_to_unix = 11644473600ULL;
+        *start_time_epoch = seconds >= windows_to_unix
+            ? (int64_t)(seconds - windows_to_unix) : 0;
+    }
+
+    const uint64_t kernel_value = filetime_value(kernel);
+    const uint64_t user_value = filetime_value(user);
+    return infiltratr_u64_add_saturating(kernel_value, user_value);
+}
+
+static uint64_t system_cpu_time_100ns(void)
+{
+    FILETIME idle;
+    FILETIME kernel;
+    FILETIME user;
+    if (!GetSystemTimes(&idle, &kernel, &user))
+        return 0U;
+    const uint64_t kernel_value = filetime_value(kernel);
+    const uint64_t user_value = filetime_value(user);
+    return infiltratr_u64_add_saturating(kernel_value, user_value);
+}
+
+double lsm_process_cpu_total_percent(uint64_t process_delta,
+                                     uint64_t system_delta)
+{
+    return infiltratr_percent_u64(process_delta, system_delta);
+}
+
+static LsmProcessPriority priority_from_class(DWORD priority_class)
+{
+    switch (priority_class) {
+        case REALTIME_PRIORITY_CLASS:
+        case HIGH_PRIORITY_CLASS:
+            return LSM_PROCESS_PRIORITY_HIGH;
+        case ABOVE_NORMAL_PRIORITY_CLASS:
+            return LSM_PROCESS_PRIORITY_ABOVE_NORMAL;
+        case BELOW_NORMAL_PRIORITY_CLASS:
+            return LSM_PROCESS_PRIORITY_BELOW_NORMAL;
+        case IDLE_PRIORITY_CLASS:
+            return LSM_PROCESS_PRIORITY_LOW;
+        case NORMAL_PRIORITY_CLASS:
+        default:
+            return LSM_PROCESS_PRIORITY_NORMAL;
+    }
+}
+
+static bool native_pid(LsmProcessId id, DWORD *pid)
+{
+    if (!pid || id == 0U || id > UINT32_MAX) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return false;
+    }
+    *pid = (DWORD)id;
+    return true;
+}
+
+static PSID copy_process_user_sid(HANDLE process)
+{
+    if (!process) return NULL;
+
+    HANDLE token = NULL;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token))
+        return NULL;
+
+    DWORD required = 0U;
+    (void)GetTokenInformation(token, TokenUser, NULL, 0U, &required);
+    if (required == 0U || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        CloseHandle(token);
+        return NULL;
+    }
+
+    TOKEN_USER *token_user = malloc((size_t)required);
+    if (!token_user) {
+        CloseHandle(token);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+
+    if (!GetTokenInformation(token, TokenUser, token_user, required, &required) ||
+        !IsValidSid(token_user->User.Sid)) {
+        free(token_user);
+        CloseHandle(token);
+        return NULL;
+    }
+
+    const DWORD sid_size = GetLengthSid(token_user->User.Sid);
+    PSID sid = malloc((size_t)sid_size);
+    if (!sid) {
+        free(token_user);
+        CloseHandle(token);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+    if (!CopySid(sid_size, sid, token_user->User.Sid)) {
+        free(sid);
+        sid = NULL;
+    }
+
+    free(token_user);
+    CloseHandle(token);
+    return sid;
+}
+
+static const char *cached_account_name(
+    const LsmProcessBackend *backend, const char *account_identity)
+{
+    if (!backend || !account_identity || !*account_identity) return NULL;
+    for (size_t index = 0U; index < backend->account_count; index++) {
+        if (strcmp(
+                backend->accounts[index].account_identity,
+                account_identity) == 0)
+            return backend->accounts[index].user;
+    }
+    return NULL;
+}
+
+static void cache_account_name(LsmProcessBackend *backend,
+                               const char *account_identity,
+                               const char *user)
+{
+    if (!backend || !account_identity || !*account_identity ||
+        !user || !*user)
+        return;
+    if (!infiltratr_array_reserve(
+            (void **)&backend->accounts, &backend->account_capacity,
+            sizeof(*backend->accounts), backend->account_count + 1U, 16U))
+        return;
+    LsmWindowsAccountCacheEntry *entry =
+        &backend->accounts[backend->account_count++];
+    memset(entry, 0, sizeof(*entry));
+    infiltratr_copy_string(
+        entry->account_identity, sizeof(entry->account_identity),
+        account_identity);
+    infiltratr_copy_string(entry->user, sizeof(entry->user), user);
+}
+
+static bool populate_process_account(LsmProcessBackend *backend,
+                                     HANDLE process,
+                                     LsmProcessInfo *info)
+{
+    if (!backend || !process || !info || !backend->current_user_sid)
+        return false;
+
+    PSID sid = copy_process_user_sid(process);
+    if (!sid) return false;
+
+    info->owned_by_current_user =
+        EqualSid(sid, backend->current_user_sid) != FALSE;
+
+    bool identity_available = false;
+    LPSTR sid_text = NULL;
+    if (ConvertSidToStringSidA(sid, &sid_text) && sid_text) {
+        static const char prefix[] = "sid:";
+        const size_t prefix_length = sizeof(prefix) - 1U;
+        const size_t sid_length = strlen(sid_text);
+        if (prefix_length + sid_length < sizeof(info->account_identity)) {
+            memcpy(info->account_identity, prefix, prefix_length);
+            memcpy(info->account_identity + prefix_length, sid_text,
+                   sid_length + 1U);
+            identity_available = true;
+        }
+        LocalFree(sid_text);
+    }
+
+    if (identity_available) {
+        const char *cached =
+            cached_account_name(backend, info->account_identity);
+        if (cached) {
+            infiltratr_copy_string(info->user, sizeof(info->user), cached);
+        } else {
+            char account[256];
+            char domain[256];
+            DWORD account_length = (DWORD)sizeof(account);
+            DWORD domain_length = (DWORD)sizeof(domain);
+            SID_NAME_USE use = SidTypeUnknown;
+            if (LookupAccountSidA(NULL, sid, account, &account_length,
+                                  domain, &domain_length, &use)) {
+                infiltratr_copy_string(
+                    info->user, sizeof(info->user), account);
+                cache_account_name(
+                    backend, info->account_identity, info->user);
+            }
+        }
+    }
+
+    free(sid);
+    return identity_available;
+}
+
+static void wide_to_utf8(const WCHAR *source, char *destination,
+                         size_t capacity)
+{
+    if (!destination || capacity == 0U) return;
+    destination[0] = '\0';
+    if (!source || !source[0] || capacity > (size_t)INT_MAX) return;
+
+    const int result = WideCharToMultiByte(
+        CP_UTF8, 0, source, -1, destination, (int)capacity, NULL, NULL);
+    if (result <= 0)
+        destination[0] = '\0';
+}
+
+static size_t process_sample_lower_bound(
+    const LsmProcessBackend *backend, DWORD pid)
+{
+    size_t left = 0U;
+    size_t right = backend ? backend->sample_count : 0U;
+    while (left < right) {
+        const size_t middle = left + (right - left) / 2U;
+        if (backend->samples[middle].pid < pid)
+            left = middle + 1U;
+        else
+            right = middle;
+    }
+    return left;
+}
+
+static LsmWindowsProcessSample *find_or_create_sample(
+    LsmProcessBackend *backend, DWORD pid)
+{
+    if (!backend) return NULL;
+    const size_t position = process_sample_lower_bound(backend, pid);
+    if (position < backend->sample_count &&
+        backend->samples[position].pid == pid)
+        return &backend->samples[position];
+
+    if (!infiltratr_array_reserve((void **)&backend->samples,
+                           &backend->sample_capacity,
+                           sizeof(*backend->samples),
+                           backend->sample_count + 1U,
+                           256U))
+        return NULL;
+
+    if (position < backend->sample_count) {
+        memmove(
+            &backend->samples[position + 1U],
+            &backend->samples[position],
+            (backend->sample_count - position) *
+                sizeof(*backend->samples));
+    }
+    backend->sample_count++;
+    LsmWindowsProcessSample *sample = &backend->samples[position];
+    memset(sample, 0, sizeof(*sample));
+    sample->pid = pid;
+    return sample;
+}
+
+static int compare_process_identity(const void *left, const void *right)
+{
+    const LsmProcessInfo *a = left;
+    const LsmProcessInfo *b = right;
+    if (a->pid != b->pid) return a->pid < b->pid ? -1 : 1;
+    if (a->instance_id != b->instance_id)
+        return a->instance_id < b->instance_id ? -1 : 1;
+    return 0;
+}
+
+static void prune_process_samples(LsmProcessBackend *backend)
+{
+    if (!backend) return;
+    size_t write_index = 0U;
+    for (size_t read_index = 0U;
+         read_index < backend->sample_count; read_index++) {
+        if (backend->samples[read_index].generation != backend->generation)
+            continue;
+        if (write_index != read_index)
+            backend->samples[write_index] = backend->samples[read_index];
+        write_index++;
+    }
+    backend->sample_count = write_index;
+}
+
+static HANDLE open_process_for_query(DWORD pid)
+{
+    HANDLE process = OpenProcess(
+        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (!process)
+        process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    return process;
+}
+
+static void populate_optional_process_fields(HANDLE process,
+                                             LsmProcessInfo *info,
+                                             unsigned scan_flags)
+{
+    if (!process || !info) return;
+
+    if ((scan_flags & LSM_PROCESS_SCAN_EXECUTABLE) != 0U) {
+        DWORD length = (DWORD)sizeof(info->executable);
+        if (!QueryFullProcessImageNameA(
+                process, 0U, info->executable, &length))
+            info->executable[0] = '\0';
+    }
+
+    if ((scan_flags & LSM_PROCESS_SCAN_HANDLE_COUNT) != 0U) {
+        DWORD handle_count = 0U;
+        info->handle_count_available =
+            GetProcessHandleCount(process, &handle_count) != FALSE;
+        if (info->handle_count_available)
+            info->handle_count = (unsigned)handle_count;
+    }
+}
+
+static bool populate_process_metrics(LsmProcessBackend *backend,
+                                     HANDLE process,
+                                     LsmProcessInfo *info,
+                                     uint64_t system_delta,
+                                     uint64_t now_ms,
+                                     uint64_t now_epoch,
+                                     unsigned scan_flags)
+{
+    if (!backend || !process || !info) return false;
+
+    int64_t start_epoch = 0;
+    const uint64_t cpu_time = process_cpu_time_100ns(
+        process, &info->instance_id, &start_epoch);
+    info->start_time_epoch = start_epoch;
+    info->cpu_time_seconds = cpu_time / 10000000ULL;
+    info->cpu_time_nanoseconds =
+        infiltratr_u64_multiply_saturating(cpu_time, 100ULL);
+
+    if (start_epoch > 0)
+        info->elapsed_seconds = now_epoch >= (uint64_t)start_epoch
+            ? now_epoch - (uint64_t)start_epoch : 0U;
+
+    LsmWindowsProcessSample *sample =
+        find_or_create_sample(backend, (DWORD)info->pid);
+    if (!sample) return false;
+    const bool same_instance =
+        sample->instance_id != 0U &&
+        sample->instance_id == info->instance_id;
+
+    PROCESS_MEMORY_COUNTERS_EX memory;
+    memset(&memory, 0, sizeof(memory));
+    if (GetProcessMemoryInfo(
+            process, (PROCESS_MEMORY_COUNTERS *)&memory,
+            (DWORD)sizeof(memory))) {
+        info->rss_bytes = (uint64_t)memory.WorkingSetSize;
+        info->memory_percent = infiltratr_percent_u64(
+            info->rss_bytes, backend->total_memory_bytes);
+        info->page_faults = (uint64_t)memory.PageFaultCount;
+    }
+
+    IO_COUNTERS io;
+    memset(&io, 0, sizeof(io));
+    if (GetProcessIoCounters(process, &io)) {
+        info->read_bytes = (uint64_t)io.ReadTransferCount;
+        info->write_bytes = (uint64_t)io.WriteTransferCount;
+        info->io_totals_available = true;
+    }
+    info->io_rate_available = false;
+
+    const DWORD priority_class = GetPriorityClass(process);
+    if (priority_class != 0U)
+        info->priority = priority_from_class(priority_class);
+
+    if (same_instance && sample->account_available) {
+        infiltratr_copy_string(
+            info->account_identity, sizeof(info->account_identity),
+            sample->account_identity);
+        infiltratr_copy_string(
+            info->user, sizeof(info->user), sample->user);
+        info->owned_by_current_user = sample->owned_by_current_user;
+        if (!info->user[0] &&
+            populate_process_account(backend, process, info) &&
+            info->user[0])
+            infiltratr_copy_string(
+                sample->user, sizeof(sample->user), info->user);
+    } else {
+        sample->account_available = false;
+        sample->account_identity[0] = '\0';
+        sample->user[0] = '\0';
+        sample->owned_by_current_user = false;
+        if (populate_process_account(backend, process, info)) {
+            infiltratr_copy_string(
+                sample->account_identity, sizeof(sample->account_identity),
+                info->account_identity);
+            infiltratr_copy_string(
+                sample->user, sizeof(sample->user), info->user);
+            sample->owned_by_current_user = info->owned_by_current_user;
+            sample->account_available = info->account_identity[0] != '\0';
+        }
+    }
+    populate_optional_process_fields(process, info, scan_flags);
+
+    if (same_instance) {
+        if (cpu_time >= sample->cpu_time_100ns)
+            info->cpu_percent = lsm_process_cpu_total_percent(
+                cpu_time - sample->cpu_time_100ns, system_delta);
+
+        if (info->io_totals_available && sample->io_available &&
+            now_ms > sample->sampled_at_ms) {
+            const double elapsed =
+                (double)(now_ms - sample->sampled_at_ms) / 1000.0;
+            if (elapsed > 0.0) {
+                const bool read_ok = infiltratr_u64_counter_rate(
+                    info->read_bytes, sample->read_bytes, 1.0L, elapsed,
+                    &info->read_bytes_per_sec);
+                const bool write_ok = infiltratr_u64_counter_rate(
+                    info->write_bytes, sample->write_bytes, 1.0L, elapsed,
+                    &info->write_bytes_per_sec);
+                info->io_rate_available = read_ok && write_ok;
+            }
+        }
+    }
+
+    sample->instance_id = info->instance_id;
+    sample->cpu_time_100ns = cpu_time;
+    if (info->io_totals_available) {
+        sample->read_bytes = info->read_bytes;
+        sample->write_bytes = info->write_bytes;
+    }
+    sample->io_available = info->io_totals_available;
+    sample->sampled_at_ms = now_ms;
+    sample->generation = backend->generation;
+    return true;
+}
+
+LsmProcessBackend *lsm_process_backend_create(void)
+{
+    LsmProcessBackend *backend = calloc(1U, sizeof(*backend));
+    if (!backend) return NULL;
+
+    backend->current_user_sid = copy_process_user_sid(GetCurrentProcess());
+    if (!backend->current_user_sid) {
+        free(backend);
+        return NULL;
+    }
+
+    MEMORYSTATUSEX memory;
+    memset(&memory, 0, sizeof(memory));
+    memory.dwLength = (DWORD)sizeof(memory);
+    if (GlobalMemoryStatusEx(&memory))
+        backend->total_memory_bytes = (uint64_t)memory.ullTotalPhys;
+
+    backend->previous_system_cpu_100ns = system_cpu_time_100ns();
+    return backend;
+}
+
+void lsm_process_backend_destroy(LsmProcessBackend *backend)
+{
+    if (!backend) return;
+    free(backend->accounts);
+    free(backend->sample_backup);
+    free(backend->samples);
+    free(backend->current_user_sid);
+    free(backend);
+}
+
+size_t lsm_process_scan(LsmProcessBackend *backend,
+                        LsmProcessInfo **out_processes,
+                        unsigned scan_flags)
+{
+    if (!backend || !out_processes) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0U;
+    }
+    *out_processes = NULL;
+
+    const uint64_t system_cpu = system_cpu_time_100ns();
+    uint64_t system_delta = 0U;
+    (void)infiltratr_u64_counter_delta(
+        system_cpu, backend->previous_system_cpu_100ns, &system_delta);
+    const uint64_t now_ms = (uint64_t)GetTickCount64();
+    FILETIME now_filetime;
+    GetSystemTimeAsFileTime(&now_filetime);
+    const uint64_t now_seconds =
+        filetime_value(now_filetime) / 10000000ULL;
+    const uint64_t windows_to_unix = 11644473600ULL;
+    const uint64_t now_epoch =
+        now_seconds >= windows_to_unix
+            ? now_seconds - windows_to_unix : 0U;
+
+    const size_t original_sample_count = backend->sample_count;
+    const unsigned original_generation = backend->generation;
+    if (original_sample_count > backend->sample_backup_capacity &&
+        !infiltratr_array_reserve(
+            (void **)&backend->sample_backup,
+            &backend->sample_backup_capacity,
+            sizeof(*backend->sample_backup), original_sample_count, 256U)) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return 0U;
+    }
+    LsmWindowsProcessSample *sample_backup = backend->sample_backup;
+    if (original_sample_count > 0U)
+        memcpy(sample_backup, backend->samples,
+               original_sample_count * sizeof(*sample_backup));
+
+    backend->generation++;
+    if (backend->generation == 0U) {
+        for (size_t index = 0U; index < backend->sample_count; index++)
+            backend->samples[index].generation = 0U;
+        backend->generation = 1U;
+    }
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0U);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        if (sample_backup)
+            memcpy(backend->samples, sample_backup,
+                   original_sample_count * sizeof(*sample_backup));
+        backend->sample_count = original_sample_count;
+        backend->generation = original_generation;
+        return 0U;
+    }
+
+    LsmProcessInfo *processes = NULL;
+    size_t count = 0U;
+    size_t capacity = 0U;
+    bool scan_failed = false;
+    DWORD scan_error = ERROR_SUCCESS;
+
+    PROCESSENTRY32W entry;
+    memset(&entry, 0, sizeof(entry));
+    entry.dwSize = (DWORD)sizeof(entry);
+    SetLastError(ERROR_SUCCESS);
+    BOOL have_entry = Process32FirstW(snapshot, &entry);
+    while (have_entry) {
+        if (!infiltratr_array_reserve((void **)&processes, &capacity,
+                                      sizeof(*processes), count + 1U, 256U)) {
+            scan_failed = true;
+            scan_error = ERROR_NOT_ENOUGH_MEMORY;
+            break;
+        }
+
+        LsmProcessInfo *info = &processes[count];
+        memset(info, 0, sizeof(*info));
+        info->pid = (LsmProcessId)entry.th32ProcessID;
+        info->ppid = (LsmProcessId)entry.th32ParentProcessID;
+        info->threads = (unsigned)entry.cntThreads;
+        info->priority = LSM_PROCESS_PRIORITY_NORMAL;
+        wide_to_utf8(entry.szExeFile, info->name, sizeof(info->name));
+        infiltratr_copy_string(info->state, sizeof(info->state), "Unknown");
+
+        HANDLE process = open_process_for_query(entry.th32ProcessID);
+        if (process) {
+            if (!populate_process_metrics(
+                    backend, process, info, system_delta, now_ms,
+                    now_epoch, scan_flags)) {
+                CloseHandle(process);
+                scan_failed = true;
+                scan_error = ERROR_NOT_ENOUGH_MEMORY;
+                break;
+            }
+            CloseHandle(process);
+        }
+
+        count++;
+        SetLastError(ERROR_SUCCESS);
+        have_entry = Process32NextW(snapshot, &entry);
+    }
+
+    if (!scan_failed) {
+        const DWORD enumeration_error = GetLastError();
+        if (!have_entry && enumeration_error != ERROR_SUCCESS &&
+            enumeration_error != ERROR_NO_MORE_FILES) {
+            scan_failed = true;
+            scan_error = enumeration_error;
+        }
+    }
+    CloseHandle(snapshot);
+
+    if (scan_failed) {
+        free(processes);
+        if (sample_backup)
+            memcpy(backend->samples, sample_backup,
+                   original_sample_count * sizeof(*sample_backup));
+        backend->sample_count = original_sample_count;
+        backend->generation = original_generation;
+        SetLastError(scan_error);
+        return 0U;
+    }
+
+    backend->previous_system_cpu_100ns = system_cpu;
+    prune_process_samples(backend);
+    if (count > 1U)
+        qsort(processes, count, sizeof(*processes),
+              compare_process_identity);
+
+    if (count == 0U) {
+        free(processes);
+        processes = calloc(1U, sizeof(*processes));
+        if (!processes) {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return 0U;
+        }
+    }
+    *out_processes = processes;
+    return count;
+}
+
+bool lsm_process_identity_matches(LsmProcessId pid,
+                                  LsmProcessInstanceId instance_id)
+{
+    DWORD native = 0U;
+    if (!native_pid(pid, &native) || instance_id == 0U)
+        return false;
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, native);
+    if (!process) return false;
+
+    LsmProcessInstanceId current_instance = 0U;
+    const uint64_t cpu_time = process_cpu_time_100ns(
+        process, &current_instance, NULL);
+    (void)cpu_time;
+    CloseHandle(process);
+    return current_instance != 0U && current_instance == instance_id;
+}
+
+bool lsm_process_enrich(LsmProcessId pid, LsmProcessInfo *process,
+                        unsigned scan_flags)
+{
+    DWORD native = 0U;
+    if (!process || !native_pid(pid, &native) ||
+        process->instance_id == 0U ||
+        process->pid != pid ||
+        !lsm_process_identity_matches(pid, process->instance_id))
+        return false;
+
+    HANDLE handle = open_process_for_query(native);
+    if (!handle) return false;
+    populate_optional_process_fields(handle, process, scan_flags);
+    CloseHandle(handle);
+    return lsm_process_identity_matches(pid, process->instance_id);
+}
+
+static bool unsupported_process_operation(void)
+{
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return false;
+}
+
+bool lsm_process_set_priority(LsmProcessId pid,
+                              LsmProcessInstanceId instance_id,
+                              LsmProcessPriority priority)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)priority;
+    return unsupported_process_operation();
+}
+
+bool lsm_process_set_nice(LsmProcessId pid,
+                          LsmProcessInstanceId instance_id,
+                          int nice_value)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)nice_value;
+    return unsupported_process_operation();
+}
+
+bool lsm_process_set_efficiency(LsmProcessId pid,
+                                LsmProcessInstanceId instance_id,
+                                bool enabled)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)enabled;
+    return unsupported_process_operation();
+}
+
+size_t lsm_process_affinity_get(LsmProcessId pid,
+                                LsmProcessInstanceId instance_id,
+                                bool *enabled, size_t capacity)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)enabled;
+    (void)capacity;
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return 0U;
+}
+
+bool lsm_process_affinity_set(LsmProcessId pid,
+                              LsmProcessInstanceId instance_id,
+                              const bool *enabled, size_t count)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)enabled;
+    (void)count;
+    return unsupported_process_operation();
+}
+
+bool lsm_process_control_tree(LsmProcessId root_pid,
+                              LsmProcessInstanceId root_instance_id,
+                              LsmProcessControl action)
+{
+    (void)root_pid;
+    (void)root_instance_id;
+    (void)action;
+    return unsupported_process_operation();
+}
+
+bool lsm_process_control(LsmProcessId pid,
+                         LsmProcessInstanceId instance_id,
+                         LsmProcessControl action)
+{
+    (void)pid;
+    (void)instance_id;
+    (void)action;
+    return unsupported_process_operation();
+}
+
+void lsm_process_error_message(char *buffer, size_t size)
+{
+    if (!buffer || size == 0U) return;
+    buffer[0] = '\0';
+
+    const DWORD error = GetLastError();
+    if (error == ERROR_SUCCESS) {
+        (void)snprintf(buffer, size, "%s", "No Windows process error");
+        return;
+    }
+
+    const DWORD length = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, error, 0U, buffer,
+        size > (size_t)UINT32_MAX ? UINT32_MAX : (DWORD)size,
+        NULL);
+    if (length == 0U) {
+        (void)snprintf(
+            buffer, size, "Windows error %lu", (unsigned long)error);
+        return;
+    }
+
+    size_t used = strlen(buffer);
+    while (used > 0U &&
+           (buffer[used - 1U] == '\r' || buffer[used - 1U] == '\n' ||
+            buffer[used - 1U] == ' ')) {
+        buffer[--used] = '\0';
+    }
+}
+
+void lsm_process_list_free(LsmProcessInfo *processes)
+{
+    free(processes);
+}

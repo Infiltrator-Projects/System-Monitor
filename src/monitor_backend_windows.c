@@ -1,0 +1,2776 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file monitor_backend_windows.c
+ * @brief Native Windows implementation of the shared monitor backend contract.
+ *
+ * Windows and Linux publish into the same LsmMonitor data model.  This adapter
+ * owns only Win32-specific discovery and sampling: system CPU/memory through
+ * Win32/PSAPI, physical storage through the storage IOCTL surface, network
+ * interfaces through IP Helper, and graphics-adapter identity through the
+ * native display-device API.  Presentation policy remains above this seam.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "monitor_platform.h"
+
+#include <infiltratr/core.h>
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#ifndef PSAPI_VERSION
+#define PSAPI_VERSION 1
+#endif
+#define WIN32_LEAN_AND_MEAN
+#define COBJMACROS
+#include <winsock2.h>
+#include <windows.h>
+#include <powrprof.h>
+#include <dxgi1_4.h>
+#include <devguid.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <psapi.h>
+#include <setupapi.h>
+#include <winioctl.h>
+
+#include <limits.h>
+#include <math.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wchar.h>
+
+#define LSM_WINDOWS_TOPOLOGY_REFRESH_MS 30000ULL
+#define LSM_WINDOWS_VOLUME_BUFFER 4096U
+#define LSM_WINDOWS_STORAGE_DESCRIPTOR_BUFFER 2048U
+#define LSM_WINDOWS_EXTENTS_BUFFER 4096U
+#define LSM_WINDOWS_EXTENTS_BUFFER_MAX (1024U * 1024U)
+#define LSM_WINDOWS_GPU_ENGINE_LIMIT 256U
+#define LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE 512U
+
+/*
+ * GUID_DEVINTERFACE_DISK ({53F56307-B6BF-11D0-94F2-00A0C91EFB8B})
+ * is a stable Windows device-interface contract. Keep the value local so the
+ * backend does not depend on SDK header ordering quirks in ntddstor.h.
+ */
+static const GUID LSM_GUID_DEVINTERFACE_DISK = {
+    0x53f56307U, 0xb6bfU, 0x11d0U,
+    {0x94U, 0xf2U, 0x00U, 0xa0U, 0xc9U, 0x1eU, 0xfbU, 0x8bU}
+};
+
+/*
+ * CallNtPowerInformation(ProcessorInformation) returns one six-ULONG record
+ * per logical processor. Some MinGW header sets expose the function and
+ * information level but omit Microsoft's PROCESSOR_POWER_INFORMATION typedef,
+ * so keep the documented wire layout local to the Windows adapter.
+ */
+typedef struct {
+    ULONG number;
+    ULONG max_mhz;
+    ULONG current_mhz;
+    ULONG mhz_limit;
+    ULONG max_idle_state;
+    ULONG current_idle_state;
+} LsmWindowsProcessorPowerInformation;
+
+typedef struct {
+    bool valid;
+    DWORD number;
+    uint64_t read_bytes;
+    uint64_t write_bytes;
+    uint64_t read_count;
+    uint64_t write_count;
+    uint64_t read_time_100ns;
+    uint64_t write_time_100ns;
+} LsmWindowsDiskBaseline;
+
+typedef struct {
+    bool valid;
+    uint64_t key;
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
+} LsmWindowsNetBaseline;
+
+typedef struct {
+    uint64_t idle_time;
+    uint64_t kernel_time;
+    uint64_t user_time;
+    bool cpu_baseline_valid;
+    ULONGLONG previous_sample_tick;
+    ULONGLONG last_topology_tick;
+    bool topology_refresh_requested;
+    bool winsock_started;
+    PDH_HQUERY gpu_query;
+    PDH_HCOUNTER gpu_engine_counter;
+    PPDH_FMT_COUNTERVALUE_ITEM_W gpu_engine_items;
+    DWORD gpu_engine_items_capacity;
+    bool gpu_query_ready;
+    LUID gpu_luids[LSM_MAX_GPUS];
+    bool gpu_luid_valid[LSM_MAX_GPUS];
+    LsmWindowsDiskBaseline disks[LSM_MAX_DISKS];
+    LsmWindowsNetBaseline nets[LSM_MAX_NETS];
+} LsmWindowsMonitorBackendState;
+
+typedef struct {
+    HANDLE thread;
+    HANDLE request_event;
+    CRITICAL_SECTION lock;
+    bool lock_initialised;
+    bool stop_requested;
+    bool request_pending;
+    bool sample_in_progress;
+    bool sample_ready;
+    volatile LONG references;
+    LsmWindowsMonitorBackendState *native;
+    LsmMonitor sample;
+} LsmWindowsSamplerState;
+
+#define LSM_WINDOWS_SAMPLER_SHUTDOWN_MS 500U
+
+static uint64_t filetime_value(FILETIME value)
+{
+    return ((uint64_t)value.dwHighDateTime << 32U) |
+           (uint64_t)value.dwLowDateTime;
+}
+
+static uint64_t large_integer_u64(LARGE_INTEGER value)
+{
+    return value.QuadPart > 0 ? (uint64_t)value.QuadPart : 0U;
+}
+
+static uint64_t pages_to_bytes(SIZE_T pages, SIZE_T page_size)
+{
+    return infiltratr_u64_multiply_saturating(
+        (uint64_t)pages, (uint64_t)page_size);
+}
+
+static unsigned size_to_unsigned(SIZE_T value)
+{
+    return (uint64_t)value > (uint64_t)UINT_MAX
+        ? UINT_MAX : (unsigned)value;
+}
+
+static void wide_to_utf8(const wchar_t *source, char *destination,
+                         size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (!source || !source[0] || destination_size > (size_t)INT_MAX) return;
+
+    const int result = WideCharToMultiByte(
+        CP_UTF8, 0U, source, -1, destination,
+        (int)destination_size, NULL, NULL);
+    if (result <= 0)
+        destination[0] = '\0';
+}
+
+static bool read_cpu_times(uint64_t *idle, uint64_t *kernel, uint64_t *user)
+{
+    if (!idle || !kernel || !user) return false;
+
+    FILETIME idle_time;
+    FILETIME kernel_time;
+    FILETIME user_time;
+    if (!GetSystemTimes(&idle_time, &kernel_time, &user_time))
+        return false;
+
+    *idle = filetime_value(idle_time);
+    *kernel = filetime_value(kernel_time);
+    *user = filetime_value(user_time);
+    return true;
+}
+
+static void format_cpu_cache(uint64_t bytes, unsigned instances,
+                             char *destination, size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (bytes == 0U || instances == 0U) return;
+
+    if (bytes % (1024ULL * 1024ULL) == 0U) {
+        (void)snprintf(
+            destination, destination_size, "%llu MB (%u %s)",
+            (unsigned long long)(bytes / (1024ULL * 1024ULL)),
+            instances, instances == 1U ? "instance" : "instances");
+    } else if (bytes % 1024ULL == 0U) {
+        (void)snprintf(
+            destination, destination_size, "%llu KB (%u %s)",
+            (unsigned long long)(bytes / 1024ULL),
+            instances, instances == 1U ? "instance" : "instances");
+    } else {
+        (void)snprintf(
+            destination, destination_size, "%llu B (%u %s)",
+            (unsigned long long)bytes,
+            instances, instances == 1U ? "instance" : "instances");
+    }
+}
+
+static void populate_cpu_topology(LsmCpuInfo *cpu)
+{
+    if (!cpu) return;
+
+    DWORD active = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    if (active != 0U && active != 0xffffffffU) {
+        cpu->logical_cores_total = (unsigned)active;
+        cpu->logical_cores =
+            active > (DWORD)LSM_MAX_CPUS ? LSM_MAX_CPUS : (unsigned)active;
+    } else {
+        SYSTEM_INFO system_info;
+        GetNativeSystemInfo(&system_info);
+        cpu->logical_cores_total =
+            (unsigned)system_info.dwNumberOfProcessors;
+        cpu->logical_cores =
+            cpu->logical_cores_total > LSM_MAX_CPUS
+                ? LSM_MAX_CPUS : cpu->logical_cores_total;
+    }
+
+    DWORD length = 0U;
+    (void)GetLogicalProcessorInformationEx(RelationAll, NULL, &length);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || length == 0U)
+        return;
+
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *buffer =
+        (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)malloc(length);
+    if (!buffer) return;
+    if (!GetLogicalProcessorInformationEx(RelationAll, buffer, &length)) {
+        free(buffer);
+        return;
+    }
+
+    unsigned physical_cores = 0U;
+    unsigned sockets = 0U;
+    unsigned numa_nodes = 0U;
+    uint64_t cache_bytes[4] = {0U, 0U, 0U, 0U};
+    unsigned cache_instances[4] = {0U, 0U, 0U, 0U};
+
+    BYTE *cursor = (BYTE *)(void *)buffer;
+    BYTE *const end = cursor + length;
+    bool topology_complete = true;
+    while (cursor < end) {
+        if ((size_t)(end - cursor) < sizeof(DWORD) * 2U) {
+            topology_complete = false;
+            break;
+        }
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *entry =
+            (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)(void *)cursor;
+        if (entry->Size < sizeof(DWORD) * 2U ||
+            (size_t)(end - cursor) < (size_t)entry->Size) {
+            topology_complete = false;
+            break;
+        }
+
+        switch (entry->Relationship) {
+            case RelationProcessorCore:
+                physical_cores++;
+                break;
+            case RelationProcessorPackage:
+                sockets++;
+                break;
+            case RelationNumaNode:
+                numa_nodes++;
+                break;
+            case RelationCache: {
+                const CACHE_RELATIONSHIP *cache = &entry->Cache;
+                const unsigned level = (unsigned)cache->Level;
+                if (level >= 1U && level <= 3U &&
+                    cache->Type != CacheInstruction &&
+                    cache->CacheSize > 0U) {
+                    cache_bytes[level] = infiltratr_u64_add_saturating(
+                        cache_bytes[level], (uint64_t)cache->CacheSize);
+                    cache_instances[level]++;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        cursor += entry->Size;
+    }
+    if (cursor != end)
+        topology_complete = false;
+    free(buffer);
+    if (!topology_complete)
+        return;
+
+    if (physical_cores > 0U)
+        cpu->physical_cores = physical_cores;
+    if (sockets > 0U)
+        cpu->socket_count = sockets;
+    if (numa_nodes > 0U)
+        cpu->numa_node_count = numa_nodes;
+
+    format_cpu_cache(
+        cache_bytes[1], cache_instances[1],
+        cpu->cache_l1, sizeof(cpu->cache_l1));
+    format_cpu_cache(
+        cache_bytes[2], cache_instances[2],
+        cpu->cache_l2, sizeof(cpu->cache_l2));
+    format_cpu_cache(
+        cache_bytes[3], cache_instances[3],
+        cpu->cache_l3, sizeof(cpu->cache_l3));
+}
+
+static void populate_cpu_registry_identity(LsmCpuInfo *cpu)
+{
+    if (!cpu) return;
+
+    HKEY key = NULL;
+    if (RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+            0U, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return;
+
+    wchar_t name[256];
+    memset(name, 0, sizeof(name));
+    DWORD name_size = (DWORD)sizeof(name);
+    if (RegGetValueW(
+            key, NULL, L"ProcessorNameString", RRF_RT_REG_SZ,
+            NULL, name, &name_size) == ERROR_SUCCESS &&
+        name[0]) {
+        wide_to_utf8(name, cpu->model, sizeof(cpu->model));
+    }
+
+    DWORD mhz = 0U;
+    DWORD mhz_size = (DWORD)sizeof(mhz);
+    if (RegGetValueW(
+            key, NULL, L"~MHz", RRF_RT_REG_DWORD,
+            NULL, &mhz, &mhz_size) == ERROR_SUCCESS &&
+        mhz > 0U) {
+        cpu->base_frequency_ghz = (double)mhz / 1000.0;
+    }
+    RegCloseKey(key);
+}
+
+static bool update_cpu_power(LsmCpuInfo *cpu)
+{
+    if (!cpu) return false;
+    cpu->frequency_available = false;
+    cpu->frequency_ghz = 0.0;
+    if (cpu->logical_cores == 0U) return false;
+
+    const unsigned processor_count =
+        cpu->logical_cores > LSM_MAX_CPUS ? LSM_MAX_CPUS : cpu->logical_cores;
+    LsmWindowsProcessorPowerInformation power[LSM_MAX_CPUS];
+    memset(power, 0, sizeof(power));
+
+    const ULONG bytes =
+        (ULONG)(processor_count * sizeof(power[0]));
+    if (CallNtPowerInformation(
+            ProcessorInformation, NULL, 0U,
+            power, bytes) != 0)
+        return false;
+
+    uint64_t current_total_mhz = 0U;
+    unsigned current_count = 0U;
+    ULONG maximum_mhz = 0U;
+    for (unsigned index = 0U; index < processor_count; index++) {
+        if (power[index].current_mhz > 0U) {
+            current_total_mhz = infiltratr_u64_add_saturating(
+                current_total_mhz, (uint64_t)power[index].current_mhz);
+            current_count++;
+        }
+        if (power[index].max_mhz > maximum_mhz)
+            maximum_mhz = power[index].max_mhz;
+    }
+
+    if (current_count > 0U) {
+        cpu->frequency_ghz =
+            ((double)current_total_mhz / (double)current_count) / 1000.0;
+        cpu->frequency_available = true;
+    }
+    if (maximum_mhz > 0U)
+        cpu->max_frequency_ghz = (double)maximum_mhz / 1000.0;
+    return cpu->frequency_available;
+}
+
+static void populate_cpu_identity(LsmMonitor *monitor)
+{
+    if (!monitor) return;
+
+    populate_cpu_topology(&monitor->cpu);
+    populate_cpu_registry_identity(&monitor->cpu);
+
+    if (!monitor->cpu.model[0]) {
+        const DWORD length = GetEnvironmentVariableA(
+            "PROCESSOR_IDENTIFIER", monitor->cpu.model,
+            (DWORD)sizeof(monitor->cpu.model));
+        if (length == 0U ||
+            length >= (DWORD)sizeof(monitor->cpu.model))
+            monitor->cpu.model[0] = '\0';
+    }
+
+#ifdef PF_VIRT_FIRMWARE_ENABLED
+    monitor->cpu.virtualization_available = true;
+    monitor->cpu.virtualization =
+        IsProcessorFeaturePresent(PF_VIRT_FIRMWARE_ENABLED) != FALSE;
+#endif
+
+    update_cpu_power(&monitor->cpu);
+}
+
+static bool update_cpu_snapshot(LsmMonitor *monitor,
+                                LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state) return false;
+
+    uint64_t idle = 0U;
+    uint64_t kernel = 0U;
+    uint64_t user = 0U;
+    if (!read_cpu_times(&idle, &kernel, &user))
+        return false;
+
+    if (state->cpu_baseline_valid &&
+        idle >= state->idle_time &&
+        kernel >= state->kernel_time &&
+        user >= state->user_time) {
+        const uint64_t idle_delta = idle - state->idle_time;
+        const uint64_t kernel_delta = kernel - state->kernel_time;
+        const uint64_t user_delta = user - state->user_time;
+        const uint64_t total_delta =
+            infiltratr_u64_add_saturating(kernel_delta, user_delta);
+        const uint64_t busy_kernel_delta =
+            kernel_delta >= idle_delta ? kernel_delta - idle_delta : 0U;
+        const uint64_t busy_delta =
+            infiltratr_u64_add_saturating(user_delta, busy_kernel_delta);
+
+        if (total_delta > 0U && idle_delta <= total_delta) {
+            monitor->cpu.usage_percent =
+                infiltratr_percent_u64(busy_delta, total_delta);
+            monitor->cpu.user_percent =
+                infiltratr_percent_u64(user_delta, total_delta);
+            monitor->cpu.kernel_percent =
+                infiltratr_percent_u64(busy_kernel_delta, total_delta);
+            monitor->cpu.usage_available = true;
+        } else {
+            monitor->cpu.usage_percent = NAN;
+            monitor->cpu.user_percent = NAN;
+            monitor->cpu.kernel_percent = NAN;
+            monitor->cpu.usage_available = false;
+        }
+    } else {
+        monitor->cpu.usage_percent = NAN;
+        monitor->cpu.user_percent = NAN;
+        monitor->cpu.kernel_percent = NAN;
+        monitor->cpu.usage_available = false;
+    }
+
+    state->idle_time = idle;
+    state->kernel_time = kernel;
+    state->user_time = user;
+    state->cpu_baseline_valid = true;
+    monitor->cpu.uptime_seconds = (uint64_t)(GetTickCount64() / 1000ULL);
+    update_cpu_power(&monitor->cpu);
+    return true;
+}
+
+static bool update_memory_snapshot(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+
+    PERFORMANCE_INFORMATION performance;
+    memset(&performance, 0, sizeof(performance));
+    performance.cb = (DWORD)sizeof(performance);
+    if (GetPerformanceInfo(&performance, (DWORD)sizeof(performance))) {
+        monitor->memory.total_bytes = pages_to_bytes(
+            performance.PhysicalTotal, performance.PageSize);
+        monitor->memory.available_bytes = pages_to_bytes(
+            performance.PhysicalAvailable, performance.PageSize);
+        monitor->memory.cached_bytes = pages_to_bytes(
+            performance.SystemCache, performance.PageSize);
+        monitor->memory.committed_bytes = pages_to_bytes(
+            performance.CommitTotal, performance.PageSize);
+        monitor->memory.commit_limit_bytes = pages_to_bytes(
+            performance.CommitLimit, performance.PageSize);
+        monitor->cpu.process_count =
+            size_to_unsigned((SIZE_T)performance.ProcessCount);
+        monitor->cpu.thread_count =
+            size_to_unsigned((SIZE_T)performance.ThreadCount);
+        monitor->cpu.file_handle_count = (uint64_t)performance.HandleCount;
+        monitor->cpu.file_handle_count_available = true;
+    } else {
+        monitor->cpu.file_handle_count_available = false;
+        MEMORYSTATUSEX status;
+        memset(&status, 0, sizeof(status));
+        status.dwLength = (DWORD)sizeof(status);
+        if (!GlobalMemoryStatusEx(&status))
+            return false;
+        monitor->memory.total_bytes = (uint64_t)status.ullTotalPhys;
+        monitor->memory.available_bytes = (uint64_t)status.ullAvailPhys;
+        monitor->memory.cached_bytes = 0U;
+        monitor->memory.committed_bytes = 0U;
+        monitor->memory.commit_limit_bytes = 0U;
+    }
+
+    monitor->memory.used_bytes =
+        monitor->memory.total_bytes >= monitor->memory.available_bytes
+            ? monitor->memory.total_bytes - monitor->memory.available_bytes
+            : 0U;
+    monitor->memory.usage_percent = infiltratr_percent_u64(
+        monitor->memory.used_bytes, monitor->memory.total_bytes);
+    return true;
+}
+
+static const char *storage_bus_name(STORAGE_BUS_TYPE bus)
+{
+    switch ((unsigned)bus) {
+        case 1U: return "SCSI";
+        case 2U: return "ATAPI";
+        case 3U: return "ATA";
+        case 7U: return "USB";
+        case 8U: return "RAID";
+        case 11U: return "SATA";
+        case 17U: return "NVMe";
+        case 18U: return "SCM";
+        case 19U: return "UFS";
+        default: return "Unknown";
+    }
+}
+
+static void descriptor_text(
+    const unsigned char *buffer, size_t buffer_size, DWORD offset,
+    char *destination, size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (!buffer || offset == 0U || (size_t)offset >= buffer_size) return;
+
+    const char *source = (const char *)(buffer + offset);
+    size_t available = buffer_size - (size_t)offset;
+    size_t length = 0U;
+    while (length < available && source[length] != '\0')
+        length++;
+    while (length > 0U && source[length - 1U] == ' ')
+        length--;
+    while (*source == ' ' && length > 0U) {
+        source++;
+        length--;
+    }
+
+    const size_t copy = length < destination_size - 1U
+        ? length : destination_size - 1U;
+    if (copy > 0U)
+        memcpy(destination, source, copy);
+    destination[copy] = '\0';
+}
+
+static bool query_disk_identity(HANDLE disk, LsmDiskInfo *info)
+{
+    if (disk == INVALID_HANDLE_VALUE || !info) return false;
+
+    STORAGE_PROPERTY_QUERY query;
+    memset(&query, 0, sizeof(query));
+    query.PropertyId = StorageDeviceProperty;
+    query.QueryType = PropertyStandardQuery;
+
+    unsigned char buffer[LSM_WINDOWS_STORAGE_DESCRIPTOR_BUFFER];
+    memset(buffer, 0, sizeof(buffer));
+    DWORD bytes = 0U;
+    if (!DeviceIoControl(
+            disk, IOCTL_STORAGE_QUERY_PROPERTY,
+            &query, (DWORD)sizeof(query),
+            buffer, (DWORD)sizeof(buffer),
+            &bytes, NULL) ||
+        bytes < sizeof(STORAGE_DEVICE_DESCRIPTOR))
+        return false;
+
+    const STORAGE_DEVICE_DESCRIPTOR *descriptor =
+        (const STORAGE_DEVICE_DESCRIPTOR *)buffer;
+    char vendor[64];
+    char product[96];
+    descriptor_text(
+        buffer, (size_t)bytes, descriptor->VendorIdOffset,
+        vendor, sizeof(vendor));
+    descriptor_text(
+        buffer, (size_t)bytes, descriptor->ProductIdOffset,
+        product, sizeof(product));
+
+    if (vendor[0] && product[0])
+        (void)snprintf(info->model, sizeof(info->model), "%.48s %.72s", vendor, product);
+    else if (product[0])
+        infiltratr_copy_string(info->model, sizeof(info->model), product);
+    else if (vendor[0])
+        infiltratr_copy_string(info->model, sizeof(info->model), vendor);
+
+    infiltratr_copy_string(
+        info->connection_type, sizeof(info->connection_type),
+        storage_bus_name(descriptor->BusType));
+    infiltratr_copy_string(
+        info->media_type, sizeof(info->media_type),
+        descriptor->RemovableMedia ? "Removable" : "Fixed");
+    return true;
+}
+
+static void query_disk_size(HANDLE disk, LsmDiskInfo *info)
+{
+    if (disk == INVALID_HANDLE_VALUE || !info) return;
+
+    unsigned char buffer[
+        sizeof(DISK_GEOMETRY_EX) + sizeof(DISK_PARTITION_INFO) +
+        sizeof(DISK_DETECTION_INFO)];
+    memset(buffer, 0, sizeof(buffer));
+    DWORD bytes = 0U;
+    if (DeviceIoControl(
+            disk, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+            NULL, 0U, buffer, (DWORD)sizeof(buffer), &bytes, NULL) &&
+        bytes >= sizeof(DISK_GEOMETRY_EX)) {
+        const DISK_GEOMETRY_EX *geometry =
+            (const DISK_GEOMETRY_EX *)buffer;
+        info->size_bytes = large_integer_u64(geometry->DiskSize);
+    }
+}
+
+static bool query_disk_performance(HANDLE disk, DISK_PERFORMANCE *performance)
+{
+    if (disk == INVALID_HANDLE_VALUE || !performance) return false;
+    memset(performance, 0, sizeof(*performance));
+    DWORD bytes = 0U;
+    return DeviceIoControl(
+        disk, IOCTL_DISK_PERFORMANCE, NULL, 0U,
+        performance, (DWORD)sizeof(*performance),
+        &bytes, NULL) != FALSE &&
+        bytes >= sizeof(*performance);
+}
+
+static void update_disk_performance(
+    LsmDiskInfo *disk, LsmWindowsDiskBaseline *baseline,
+    const DISK_PERFORMANCE *performance, double elapsed)
+{
+    if (!disk || !baseline || !performance) return;
+
+    const uint64_t read_bytes = large_integer_u64(performance->BytesRead);
+    const uint64_t write_bytes = large_integer_u64(performance->BytesWritten);
+    const uint64_t read_count = (uint64_t)performance->ReadCount;
+    const uint64_t write_count = (uint64_t)performance->WriteCount;
+    const uint64_t read_time =
+        large_integer_u64(performance->ReadTime);
+    const uint64_t write_time =
+        large_integer_u64(performance->WriteTime);
+
+    disk->read_bytes_total = read_bytes;
+    disk->write_bytes_total = write_bytes;
+    disk->queue_length = (double)performance->QueueDepth;
+    disk->in_progress_operations = performance->QueueDepth;
+    disk->read_bytes_per_sec = NAN;
+    disk->write_bytes_per_sec = NAN;
+    disk->active_percent = NAN;
+    disk->read_response_ms = NAN;
+    disk->write_response_ms = NAN;
+    disk->average_response_ms = NAN;
+
+    if (baseline->valid && elapsed > 0.0) {
+        double read_rate = 0.0;
+        double write_rate = 0.0;
+        if (infiltratr_u64_counter_rate(
+                read_bytes, baseline->read_bytes, 1.0L, elapsed,
+                &read_rate))
+            disk->read_bytes_per_sec = read_rate;
+        if (infiltratr_u64_counter_rate(
+                write_bytes, baseline->write_bytes, 1.0L, elapsed,
+                &write_rate))
+            disk->write_bytes_per_sec = write_rate;
+
+        const bool read_valid =
+            read_time >= baseline->read_time_100ns &&
+            read_count >= baseline->read_count;
+        const bool write_valid =
+            write_time >= baseline->write_time_100ns &&
+            write_count >= baseline->write_count;
+        if (read_valid && write_valid) {
+            const uint64_t read_time_delta =
+                read_time - baseline->read_time_100ns;
+            const uint64_t write_time_delta =
+                write_time - baseline->write_time_100ns;
+            const long double elapsed_100ns =
+                (long double)elapsed * 10000000.0L;
+            const long double busy =
+                (long double)read_time_delta +
+                (long double)write_time_delta;
+            double active = elapsed_100ns > 0.0L
+                ? (double)((busy * 100.0L) / elapsed_100ns)
+                : NAN;
+            if (isfinite(active)) {
+                if (active > 100.0) active = 100.0;
+                if (active < 0.0) active = 0.0;
+                disk->active_percent = active;
+            }
+
+            const uint64_t read_ops =
+                read_count - baseline->read_count;
+            const uint64_t write_ops =
+                write_count - baseline->write_count;
+            const uint64_t operations =
+                infiltratr_u64_add_saturating(read_ops, write_ops);
+            disk->read_response_ms = read_ops > 0U
+                ? (double)read_time_delta / 10000.0 / (double)read_ops
+                : 0.0;
+            disk->write_response_ms = write_ops > 0U
+                ? (double)write_time_delta / 10000.0 / (double)write_ops
+                : 0.0;
+            disk->average_response_ms = operations > 0U
+                ? (double)(read_time_delta + write_time_delta) /
+                    10000.0 / (double)operations
+                : 0.0;
+        }
+    }
+
+    baseline->read_bytes = read_bytes;
+    baseline->write_bytes = write_bytes;
+    baseline->read_count = read_count;
+    baseline->write_count = write_count;
+    baseline->read_time_100ns = read_time;
+    baseline->write_time_100ns = write_time;
+    baseline->valid = true;
+}
+
+static bool disk_identity_changed(
+    const LsmDiskInfo *old_disks, size_t old_count,
+    const LsmDiskInfo *new_disks, size_t new_count)
+{
+    if (old_count != new_count) return true;
+    for (size_t index = 0U; index < new_count; index++) {
+        if (strcmp(old_disks[index].instance_identity,
+                   new_disks[index].instance_identity) != 0)
+            return true;
+    }
+    return false;
+}
+
+static const LsmWindowsDiskBaseline *find_disk_baseline(
+    const LsmWindowsMonitorBackendState *state, DWORD number)
+{
+    if (!state) return NULL;
+    for (size_t index = 0U; index < LSM_MAX_DISKS; index++)
+        if (state->disks[index].valid &&
+            state->disks[index].number == number)
+            return &state->disks[index];
+    return NULL;
+}
+
+static bool enumerate_physical_disk_numbers(
+    DWORD numbers[LSM_MAX_DISKS], size_t *out_count)
+{
+    if (out_count) *out_count = 0U;
+    if (!numbers || !out_count) return false;
+
+    HDEVINFO devices = SetupDiGetClassDevsA(
+        &LSM_GUID_DEVINTERFACE_DISK, NULL, NULL,
+        DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (devices == INVALID_HANDLE_VALUE) return false;
+
+    size_t count = 0U;
+    bool complete = true;
+    DWORD enumeration_error = ERROR_SUCCESS;
+    for (DWORD index = 0U;; index++) {
+        SP_DEVICE_INTERFACE_DATA interface_data;
+        memset(&interface_data, 0, sizeof(interface_data));
+        interface_data.cbSize = sizeof(interface_data);
+
+        SetLastError(ERROR_SUCCESS);
+        if (!SetupDiEnumDeviceInterfaces(
+                devices, NULL, &LSM_GUID_DEVINTERFACE_DISK, index,
+                &interface_data)) {
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_NO_MORE_ITEMS) {
+                complete = false;
+                enumeration_error = failure != ERROR_SUCCESS
+                    ? failure : ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+
+        DWORD required = 0U;
+        SetLastError(ERROR_SUCCESS);
+        (void)SetupDiGetDeviceInterfaceDetailA(
+            devices, &interface_data, NULL, 0U, &required, NULL);
+        const DWORD sizing_error = GetLastError();
+        if (required < sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_A) ||
+            sizing_error != ERROR_INSUFFICIENT_BUFFER) {
+            complete = false;
+            enumeration_error = sizing_error != ERROR_SUCCESS
+                ? sizing_error : ERROR_INVALID_DATA;
+            break;
+        }
+
+        SP_DEVICE_INTERFACE_DETAIL_DATA_A *detail =
+            (SP_DEVICE_INTERFACE_DETAIL_DATA_A *)calloc(1U, required);
+        if (!detail) {
+            complete = false;
+            enumeration_error = ERROR_NOT_ENOUGH_MEMORY;
+            break;
+        }
+        detail->cbSize = sizeof(*detail);
+        if (!SetupDiGetDeviceInterfaceDetailA(
+                devices, &interface_data, detail, required, NULL, NULL)) {
+            enumeration_error = GetLastError();
+            free(detail);
+            complete = false;
+            break;
+        }
+
+        HANDLE disk = CreateFileA(
+            detail->DevicePath, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        free(detail);
+        if (disk == INVALID_HANDLE_VALUE) {
+            enumeration_error = GetLastError();
+            complete = false;
+            break;
+        }
+
+        STORAGE_DEVICE_NUMBER device_number;
+        memset(&device_number, 0, sizeof(device_number));
+        DWORD bytes = 0U;
+        const BOOL have_number = DeviceIoControl(
+            disk, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+            NULL, 0U, &device_number, (DWORD)sizeof(device_number),
+            &bytes, NULL);
+        const DWORD number_error = have_number ? ERROR_SUCCESS : GetLastError();
+        (void)CloseHandle(disk);
+        if (!have_number || bytes < sizeof(device_number)) {
+            complete = false;
+            enumeration_error = number_error != ERROR_SUCCESS
+                ? number_error : ERROR_INVALID_DATA;
+            break;
+        }
+        if (device_number.DeviceType != FILE_DEVICE_DISK)
+            continue;
+
+        bool duplicate = false;
+        for (size_t known = 0U; known < count; known++)
+            if (numbers[known] == device_number.DeviceNumber) {
+                duplicate = true;
+                break;
+            }
+        if (duplicate) continue;
+        if (count >= LSM_MAX_DISKS) {
+            complete = false;
+            enumeration_error = ERROR_BUFFER_OVERFLOW;
+            break;
+        }
+        numbers[count++] = device_number.DeviceNumber;
+    }
+
+    if (!SetupDiDestroyDeviceInfoList(devices) && complete) {
+        complete = false;
+        enumeration_error = GetLastError();
+    }
+    if (!complete) {
+        SetLastError(
+            enumeration_error != ERROR_SUCCESS
+                ? enumeration_error : ERROR_GEN_FAILURE);
+        return false;
+    }
+
+    *out_count = count;
+    return true;
+}
+
+static bool enumerate_physical_disks(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return false;
+
+    DWORD numbers[LSM_MAX_DISKS] = {0};
+    size_t number_count = 0U;
+    if (!enumerate_physical_disk_numbers(numbers, &number_count))
+        return false;
+
+    LsmDiskInfo *discovered =
+        (LsmDiskInfo *)calloc(LSM_MAX_DISKS, sizeof(*discovered));
+    if (!discovered) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return false;
+    }
+    LsmWindowsDiskBaseline next_baselines[LSM_MAX_DISKS];
+    memset(next_baselines, 0, sizeof(next_baselines));
+
+    size_t count = 0U;
+    for (size_t position = 0U; position < number_count; position++) {
+        const DWORD number = numbers[position];
+        char path[64];
+        (void)snprintf(
+            path, sizeof(path), "\\\\.\\PhysicalDrive%lu",
+            (unsigned long)number);
+        HANDLE disk = CreateFileA(
+            path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        if (disk == INVALID_HANDLE_VALUE) {
+            free(discovered);
+            return false;
+        }
+
+        LsmDiskInfo *info = &discovered[count];
+        (void)snprintf(
+            info->name, sizeof(info->name), "Disk %lu",
+            (unsigned long)number);
+        infiltratr_copy_string(
+            info->instance_identity, sizeof(info->instance_identity), path);
+        query_disk_size(disk, info);
+        (void)query_disk_identity(disk, info);
+
+        LsmWindowsDiskBaseline *baseline = &next_baselines[count];
+        const LsmWindowsDiskBaseline *old =
+            find_disk_baseline(state, number);
+        if (old) *baseline = *old;
+        baseline->number = number;
+
+        DISK_PERFORMANCE performance;
+        if (query_disk_performance(disk, &performance))
+            update_disk_performance(info, baseline, &performance, elapsed);
+        else
+            baseline->valid = false;
+
+        if (!CloseHandle(disk)) {
+            free(discovered);
+            return false;
+        }
+        count++;
+    }
+
+    if (disk_identity_changed(
+            monitor->disks, monitor->disk_count, discovered, count)) {
+        monitor->disk_generation++;
+        monitor->topology_generation++;
+    }
+
+    memset(monitor->disks, 0, sizeof(monitor->disks));
+    if (count > 0U)
+        memcpy(monitor->disks, discovered, count * sizeof(discovered[0]));
+    monitor->disk_count = count;
+    memcpy(state->disks, next_baselines, sizeof(state->disks));
+    free(discovered);
+    return true;
+}
+
+static void mark_disk_performance_unavailable(
+    LsmDiskInfo *disk, LsmWindowsDiskBaseline *baseline)
+{
+    if (!disk || !baseline) return;
+    disk->read_bytes_per_sec = NAN;
+    disk->write_bytes_per_sec = NAN;
+    disk->active_percent = NAN;
+    disk->read_response_ms = NAN;
+    disk->write_response_ms = NAN;
+    disk->average_response_ms = NAN;
+    disk->queue_length = NAN;
+    disk->in_progress_operations = 0U;
+    baseline->valid = false;
+}
+
+/*
+ * Fast disk sampling deliberately avoids SetupAPI, identity queries and volume
+ * enumeration. The retained topology already gives us the physical drive
+ * number; only IOCTL_DISK_PERFORMANCE is required between topology scans.
+ */
+static void update_physical_disk_performance(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return;
+
+    const size_t count = monitor->disk_count < LSM_MAX_DISKS
+        ? monitor->disk_count : LSM_MAX_DISKS;
+    for (size_t index = 0U; index < count; index++) {
+        LsmWindowsDiskBaseline *baseline = &state->disks[index];
+        char path[64];
+        (void)snprintf(
+            path, sizeof(path), "\\\\.\\PhysicalDrive%lu",
+            (unsigned long)baseline->number);
+        HANDLE disk = CreateFileA(
+            path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        if (disk == INVALID_HANDLE_VALUE) {
+            mark_disk_performance_unavailable(
+                &monitor->disks[index], baseline);
+            continue;
+        }
+
+        DISK_PERFORMANCE performance;
+        if (query_disk_performance(disk, &performance))
+            update_disk_performance(
+                &monitor->disks[index], baseline, &performance, elapsed);
+        else
+            mark_disk_performance_unavailable(
+                &monitor->disks[index], baseline);
+        (void)CloseHandle(disk);
+    }
+}
+
+static int physical_disk_index(
+    const LsmMonitor *monitor, DWORD disk_number)
+{
+    if (!monitor) return -1;
+    char identity[64];
+    (void)snprintf(
+        identity, sizeof(identity),
+        "\\\\.\\PhysicalDrive%lu", (unsigned long)disk_number);
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        if (strcmp(monitor->disks[index].instance_identity, identity) == 0)
+            return (int)index;
+    }
+    return -1;
+}
+
+static bool volume_is_system_volume(const char *mount_point)
+{
+    if (!mount_point || !mount_point[0]) return false;
+    char windows_directory[MAX_PATH];
+    const UINT length =
+        GetWindowsDirectoryA(windows_directory, (UINT)sizeof(windows_directory));
+    if (length == 0U || length >= (UINT)sizeof(windows_directory))
+        return false;
+    return strlen(mount_point) >= 2U &&
+        windows_directory[0] == mount_point[0] &&
+        windows_directory[1] == ':';
+}
+
+static bool append_volume_to_disk(
+    LsmMonitor *monitor, int disk_index, const char *volume_name,
+    const char *mount_point, const char *filesystem,
+    uint64_t total_bytes, uint64_t used_bytes, bool usage_known)
+{
+    if (!monitor || disk_index < 0 ||
+        (size_t)disk_index >= monitor->disk_count)
+        return false;
+
+    LsmDiskInfo *disk = &monitor->disks[(size_t)disk_index];
+    if (disk->partition_count >= LSM_MAX_PARTITIONS) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        return false;
+    }
+
+    LsmPartitionInfo *partition =
+        &disk->partitions[disk->partition_count++];
+    memset(partition, 0, sizeof(*partition));
+    infiltratr_copy_string(
+        partition->device, sizeof(partition->device),
+        volume_name && volume_name[0] ? volume_name : "Volume");
+    infiltratr_copy_string(
+        partition->mount_point, sizeof(partition->mount_point),
+        mount_point && mount_point[0] ? mount_point : "N/A");
+    infiltratr_copy_string(
+        partition->filesystem, sizeof(partition->filesystem),
+        filesystem && filesystem[0] ? filesystem : "N/A");
+    partition->total_bytes = total_bytes;
+    partition->used_bytes = used_bytes;
+    partition->usage_known = usage_known;
+    partition->used_percent = usage_known && total_bytes > 0U
+        ? (unsigned)infiltratr_percent_u64(used_bytes, total_bytes) : 0U;
+    if (mount_point && volume_is_system_volume(mount_point))
+        disk->system_disk = true;
+    return true;
+}
+
+static VOLUME_DISK_EXTENTS *query_volume_disk_extents(
+    HANDLE volume, DWORD *bytes_returned)
+{
+    if (volume == INVALID_HANDLE_VALUE || !bytes_returned) return NULL;
+    *bytes_returned = 0U;
+
+    DWORD capacity = LSM_WINDOWS_EXTENTS_BUFFER;
+    while (capacity <= LSM_WINDOWS_EXTENTS_BUFFER_MAX) {
+        VOLUME_DISK_EXTENTS *extents =
+            (VOLUME_DISK_EXTENTS *)calloc(1U, (size_t)capacity);
+        if (!extents) return NULL;
+
+        DWORD bytes = 0U;
+        if (DeviceIoControl(
+                volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                NULL, 0U, extents, capacity, &bytes, NULL)) {
+            const DWORD extent_offset =
+                (DWORD)FIELD_OFFSET(VOLUME_DISK_EXTENTS, Extents);
+            if (bytes < extent_offset) {
+                free(extents);
+                return NULL;
+            }
+            *bytes_returned = bytes;
+            return extents;
+        }
+
+        const DWORD error = GetLastError();
+        free(extents);
+        if (error != ERROR_MORE_DATA &&
+            error != ERROR_INSUFFICIENT_BUFFER)
+            return NULL;
+        if (capacity > LSM_WINDOWS_EXTENTS_BUFFER_MAX / 2U)
+            break;
+        capacity *= 2U;
+    }
+    return NULL;
+}
+
+static bool enumerate_disk_volumes(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+    if (monitor->disk_count == 0U) return true;
+
+    LsmDiskInfo *backup =
+        (LsmDiskInfo *)malloc(sizeof(monitor->disks));
+    if (!backup) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return false;
+    }
+    memcpy(backup, monitor->disks, sizeof(monitor->disks));
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        monitor->disks[index].partition_count = 0U;
+        monitor->disks[index].system_disk = false;
+        memset(monitor->disks[index].partitions, 0,
+               sizeof(monitor->disks[index].partitions));
+    }
+
+    char volume_name[MAX_PATH];
+    SetLastError(ERROR_SUCCESS);
+    HANDLE search = FindFirstVolumeA(volume_name, (DWORD)sizeof(volume_name));
+    if (search == INVALID_HANDLE_VALUE) {
+        const DWORD failure = GetLastError();
+        if (failure == ERROR_NO_MORE_FILES) {
+            free(backup);
+            return true;
+        }
+        memcpy(monitor->disks, backup, sizeof(monitor->disks));
+        free(backup);
+        return false;
+    }
+
+    bool complete = true;
+    DWORD enumeration_error = ERROR_SUCCESS;
+    for (;;) {
+        char volume_path[MAX_PATH];
+        infiltratr_copy_string(volume_path, sizeof(volume_path), volume_name);
+        const size_t volume_length = strlen(volume_path);
+        if (volume_length > 0U &&
+            volume_path[volume_length - 1U] == '\\')
+            volume_path[volume_length - 1U] = '\0';
+
+        HANDLE volume = CreateFileA(
+            volume_path, 0U, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL, OPEN_EXISTING, 0U, NULL);
+        if (volume != INVALID_HANDLE_VALUE) {
+            DWORD bytes = 0U;
+            VOLUME_DISK_EXTENTS *extents =
+                query_volume_disk_extents(volume, &bytes);
+            if (extents) {
+                const DWORD extent_offset =
+                    (DWORD)FIELD_OFFSET(VOLUME_DISK_EXTENTS, Extents);
+                const DWORD extent_capacity =
+                    bytes >= extent_offset
+                        ? (bytes - extent_offset) /
+                            (DWORD)sizeof(extents->Extents[0])
+                        : 0U;
+                if (extents->NumberOfDiskExtents > extent_capacity) {
+                    complete = false;
+                    enumeration_error = ERROR_INVALID_DATA;
+                } else {
+                    char mount_points[LSM_WINDOWS_VOLUME_BUFFER];
+                    DWORD required = 0U;
+                    mount_points[0] = '\0';
+                    if (!GetVolumePathNamesForVolumeNameA(
+                            volume_name, mount_points,
+                            (DWORD)sizeof(mount_points), &required))
+                        mount_points[0] = '\0';
+
+                    char filesystem[64];
+                    filesystem[0] = '\0';
+                    (void)GetVolumeInformationA(
+                        volume_name, NULL, 0U, NULL, NULL, NULL,
+                        filesystem, (DWORD)sizeof(filesystem));
+
+                    ULARGE_INTEGER available;
+                    ULARGE_INTEGER total;
+                    ULARGE_INTEGER free_total;
+                    const bool usage_known =
+                        GetDiskFreeSpaceExA(
+                            volume_name, &available, &total, &free_total) != FALSE;
+                    const uint64_t total_bytes =
+                        usage_known ? (uint64_t)total.QuadPart : 0U;
+                    const uint64_t free_bytes =
+                        usage_known ? (uint64_t)free_total.QuadPart : 0U;
+                    const uint64_t used_bytes =
+                        usage_known && total_bytes >= free_bytes
+                            ? total_bytes - free_bytes : 0U;
+                    const char *display_mount =
+                        mount_points[0] ? mount_points : volume_name;
+
+                    for (DWORD extent = 0U;
+                         extent < extents->NumberOfDiskExtents; extent++) {
+                        const int index = physical_disk_index(
+                            monitor, extents->Extents[extent].DiskNumber);
+                        if (!append_volume_to_disk(
+                                monitor, index, volume_name, display_mount,
+                                filesystem, total_bytes, used_bytes,
+                                usage_known)) {
+                            complete = false;
+                            enumeration_error = GetLastError();
+                            if (enumeration_error == ERROR_SUCCESS)
+                                enumeration_error = ERROR_INVALID_DATA;
+                            break;
+                        }
+                    }
+                }
+                free(extents);
+            }
+            if (!CloseHandle(volume) && complete) {
+                complete = false;
+                enumeration_error = GetLastError();
+            }
+        }
+
+        if (!complete) break;
+
+        SetLastError(ERROR_SUCCESS);
+        if (!FindNextVolumeA(
+                search, volume_name, (DWORD)sizeof(volume_name))) {
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_NO_MORE_FILES) {
+                complete = false;
+                enumeration_error = failure != ERROR_SUCCESS
+                    ? failure : ERROR_GEN_FAILURE;
+            }
+            break;
+        }
+    }
+
+    if (!FindVolumeClose(search) && complete) {
+        complete = false;
+        enumeration_error = GetLastError();
+    }
+    if (!complete) {
+        memcpy(monitor->disks, backup, sizeof(monitor->disks));
+        free(backup);
+        SetLastError(
+            enumeration_error != ERROR_SUCCESS
+                ? enumeration_error : ERROR_GEN_FAILURE);
+        return false;
+    }
+    free(backup);
+    return true;
+}
+
+static LsmWindowsNetBaseline *net_baseline(
+    LsmWindowsMonitorBackendState *state, uint64_t key)
+{
+    if (!state) return NULL;
+    for (size_t index = 0U; index < LSM_MAX_NETS; index++) {
+        if (state->nets[index].valid && state->nets[index].key == key)
+            return &state->nets[index];
+    }
+    for (size_t index = 0U; index < LSM_MAX_NETS; index++) {
+        if (!state->nets[index].valid) {
+            state->nets[index].key = key;
+            return &state->nets[index];
+        }
+    }
+    return NULL;
+}
+
+static void format_mac(
+    const BYTE *address, ULONG length, char *destination,
+    size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (!address || length == 0U) return;
+
+    size_t used = 0U;
+    for (ULONG index = 0U; index < length; index++) {
+        const int written = snprintf(
+            destination + used,
+            destination_size > used ? destination_size - used : 0U,
+            index == 0U ? "%02X" : ":%02X",
+            (unsigned)address[index]);
+        if (written < 0) {
+            destination[0] = '\0';
+            return;
+        }
+        const size_t count = (size_t)written;
+        if (used + count >= destination_size) {
+            destination[destination_size - 1U] = '\0';
+            return;
+        }
+        used += count;
+    }
+}
+
+static void populate_unicast_addresses(
+    const IP_ADAPTER_ADDRESSES *adapter, LsmNetInfo *net)
+{
+    if (!adapter || !net) return;
+
+    for (const IP_ADAPTER_UNICAST_ADDRESS *address =
+             adapter->FirstUnicastAddress;
+         address; address = address->Next) {
+        if (!address->Address.lpSockaddr) continue;
+
+        if (address->Address.lpSockaddr->sa_family == AF_INET &&
+            !net->ipv4[0]) {
+            const struct sockaddr_in *ipv4 =
+                (const struct sockaddr_in *)address->Address.lpSockaddr;
+            (void)InetNtopA(
+                AF_INET, &ipv4->sin_addr,
+                net->ipv4, (DWORD)sizeof(net->ipv4));
+        } else if (address->Address.lpSockaddr->sa_family == AF_INET6 &&
+                   !net->ipv6[0]) {
+            const struct sockaddr_in6 *ipv6 =
+                (const struct sockaddr_in6 *)address->Address.lpSockaddr;
+            (void)InetNtopA(
+                AF_INET6, &ipv6->sin6_addr,
+                net->ipv6, (DWORD)sizeof(net->ipv6));
+        }
+    }
+}
+
+static bool network_identity_changed(
+    const LsmNetInfo *old_nets, size_t old_count,
+    const LsmNetInfo *new_nets, size_t new_count)
+{
+    if (old_count != new_count) return true;
+    for (size_t index = 0U; index < new_count; index++) {
+        if (old_nets[index].instance_identity[0] &&
+            new_nets[index].instance_identity[0]) {
+            if (strcmp(old_nets[index].instance_identity,
+                       new_nets[index].instance_identity) != 0)
+                return true;
+        } else if (strcmp(old_nets[index].name,
+                          new_nets[index].name) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool enumerate_networks(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return false;
+
+    ULONG buffer_size = 16384U;
+    IP_ADAPTER_ADDRESSES *addresses =
+        (IP_ADAPTER_ADDRESSES *)malloc(buffer_size);
+    if (!addresses) return false;
+
+    const ULONG flags =
+        GAA_FLAG_INCLUDE_PREFIX |
+        GAA_FLAG_SKIP_ANYCAST |
+        GAA_FLAG_SKIP_MULTICAST |
+        GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG result = GetAdaptersAddresses(
+        AF_UNSPEC, flags, NULL, addresses, &buffer_size);
+    if (result == ERROR_BUFFER_OVERFLOW) {
+        IP_ADAPTER_ADDRESSES *larger =
+            (IP_ADAPTER_ADDRESSES *)realloc(addresses, buffer_size);
+        if (!larger) {
+            free(addresses);
+            return false;
+        }
+        addresses = larger;
+        result = GetAdaptersAddresses(
+            AF_UNSPEC, flags, NULL, addresses, &buffer_size);
+    }
+    if (result != NO_ERROR) {
+        free(addresses);
+        return false;
+    }
+
+    LsmNetInfo discovered[LSM_MAX_NETS];
+    memset(discovered, 0, sizeof(discovered));
+    LsmWindowsNetBaseline baseline_backup[LSM_MAX_NETS];
+    memcpy(baseline_backup, state->nets, sizeof(baseline_backup));
+    uint64_t discovered_keys[LSM_MAX_NETS] = {0};
+    size_t count = 0U;
+
+    for (const IP_ADAPTER_ADDRESSES *adapter = addresses;
+         adapter; adapter = adapter->Next) {
+        if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+            continue;
+        if (count >= LSM_MAX_NETS) {
+            memcpy(state->nets, baseline_backup, sizeof(state->nets));
+            free(addresses);
+            SetLastError(ERROR_BUFFER_OVERFLOW);
+            return false;
+        }
+        if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+            continue;
+
+        MIB_IF_ROW2 row;
+        memset(&row, 0, sizeof(row));
+        row.InterfaceLuid = adapter->Luid;
+        if (GetIfEntry2(&row) != NO_ERROR) {
+            memcpy(state->nets, baseline_backup, sizeof(state->nets));
+            free(addresses);
+            return false;
+        }
+
+        LsmNetInfo *net = &discovered[count];
+        wide_to_utf8(
+            adapter->FriendlyName, net->name, sizeof(net->name));
+        if (!net->name[0] && adapter->AdapterName)
+            infiltratr_copy_string(
+                net->name, sizeof(net->name), adapter->AdapterName);
+        wide_to_utf8(
+            adapter->Description, net->product, sizeof(net->product));
+
+        format_mac(
+            adapter->PhysicalAddress, adapter->PhysicalAddressLength,
+            net->mac, sizeof(net->mac));
+        populate_unicast_addresses(adapter, net);
+
+        net->wireless = adapter->IfType == IF_TYPE_IEEE80211;
+        infiltratr_copy_string(
+            net->connection_state, sizeof(net->connection_state),
+            row.OperStatus == IfOperStatusUp ? "Connected" : "Disconnected");
+        const uint64_t link_bits =
+            row.TransmitLinkSpeed > row.ReceiveLinkSpeed
+                ? row.TransmitLinkSpeed : row.ReceiveLinkSpeed;
+        net->link_speed_mbps = (double)link_bits / 1000000.0;
+        net->rx_bytes_total = row.InOctets;
+        net->tx_bytes_total = row.OutOctets;
+        net->rx_bytes_per_sec = NAN;
+        net->tx_bytes_per_sec = NAN;
+        net->utilisation_percent = NAN;
+        net->utilisation_available = false;
+
+        const uint64_t key = adapter->Luid.Value;
+        discovered_keys[count] = key;
+        (void)snprintf(
+            net->instance_identity, sizeof(net->instance_identity),
+            "luid:%016llx", (unsigned long long)key);
+        LsmWindowsNetBaseline *baseline = net_baseline(state, key);
+        if (baseline) {
+            if (baseline->valid && elapsed > 0.0) {
+                double receive_rate = 0.0;
+                double transmit_rate = 0.0;
+                const bool receive_ok = infiltratr_u64_counter_rate(
+                    row.InOctets, baseline->rx_bytes, 1.0L, elapsed,
+                    &receive_rate);
+                const bool transmit_ok = infiltratr_u64_counter_rate(
+                    row.OutOctets, baseline->tx_bytes, 1.0L, elapsed,
+                    &transmit_rate);
+                if (receive_ok) net->rx_bytes_per_sec = receive_rate;
+                if (transmit_ok) net->tx_bytes_per_sec = transmit_rate;
+            }
+            baseline->key = key;
+            baseline->rx_bytes = row.InOctets;
+            baseline->tx_bytes = row.OutOctets;
+            baseline->valid = true;
+        }
+
+        if (link_bits > 0U &&
+            isfinite(net->rx_bytes_per_sec) &&
+            isfinite(net->tx_bytes_per_sec)) {
+            const long double current_bits =
+                fmaxl((long double)net->rx_bytes_per_sec,
+                      (long double)net->tx_bytes_per_sec) * 8.0L;
+            long double utilisation =
+                (current_bits * 100.0L) / (long double)link_bits;
+            if (utilisation > 100.0L) utilisation = 100.0L;
+            if (utilisation < 0.0L) utilisation = 0.0L;
+            net->utilisation_percent = (double)utilisation;
+            net->utilisation_available = true;
+        }
+        count++;
+    }
+
+    for (size_t slot = 0U; slot < LSM_MAX_NETS; slot++) {
+        if (!state->nets[slot].valid) continue;
+        bool present = false;
+        for (size_t index = 0U; index < count; index++)
+            if (state->nets[slot].key == discovered_keys[index]) {
+                present = true;
+                break;
+            }
+        if (!present) memset(&state->nets[slot], 0, sizeof(state->nets[slot]));
+    }
+
+    if (network_identity_changed(
+            monitor->nets, monitor->net_count, discovered, count))
+        monitor->topology_generation++;
+
+    memset(monitor->nets, 0, sizeof(monitor->nets));
+    if (count > 0U)
+        memcpy(monitor->nets, discovered, count * sizeof(discovered[0]));
+    monitor->net_count = count;
+    free(addresses);
+    return true;
+}
+
+static bool network_luid_from_identity(
+    const char *identity, uint64_t *key)
+{
+    if (!identity || !key) return false;
+    unsigned long long parsed = 0ULL;
+    char trailing = '\0';
+    if (sscanf(identity, "luid:%llx%c", &parsed, &trailing) != 1)
+        return false;
+    *key = (uint64_t)parsed;
+    return true;
+}
+
+/*
+ * GetIfEntry2 supplies live counters, oper-state and negotiated link rate for
+ * an already-discovered LUID. Address/name discovery stays on the slow cadence.
+ */
+static void update_network_counters(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed)
+{
+    if (!monitor || !state) return;
+
+    for (size_t index = 0U; index < monitor->net_count; index++) {
+        LsmNetInfo *net = &monitor->nets[index];
+        uint64_t key = 0U;
+        if (!network_luid_from_identity(net->instance_identity, &key)) {
+            net->rx_bytes_per_sec = NAN;
+            net->tx_bytes_per_sec = NAN;
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+            continue;
+        }
+
+        MIB_IF_ROW2 row;
+        memset(&row, 0, sizeof(row));
+        row.InterfaceLuid.Value = key;
+        if (GetIfEntry2(&row) != NO_ERROR) {
+            LsmWindowsNetBaseline *baseline = net_baseline(state, key);
+            if (baseline) baseline->valid = false;
+            net->rx_bytes_per_sec = NAN;
+            net->tx_bytes_per_sec = NAN;
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+            continue;
+        }
+
+        LsmWindowsNetBaseline *baseline = net_baseline(state, key);
+        net->rx_bytes_per_sec = NAN;
+        net->tx_bytes_per_sec = NAN;
+        if (baseline && baseline->valid && elapsed > 0.0) {
+            double receive_rate = 0.0;
+            double transmit_rate = 0.0;
+            if (infiltratr_u64_counter_rate(
+                    row.InOctets, baseline->rx_bytes, 1.0L, elapsed,
+                    &receive_rate))
+                net->rx_bytes_per_sec = receive_rate;
+            if (infiltratr_u64_counter_rate(
+                    row.OutOctets, baseline->tx_bytes, 1.0L, elapsed,
+                    &transmit_rate))
+                net->tx_bytes_per_sec = transmit_rate;
+        }
+        if (baseline) {
+            baseline->key = key;
+            baseline->rx_bytes = row.InOctets;
+            baseline->tx_bytes = row.OutOctets;
+            baseline->valid = true;
+        }
+
+        net->rx_bytes_total = row.InOctets;
+        net->tx_bytes_total = row.OutOctets;
+        infiltratr_copy_string(
+            net->connection_state, sizeof(net->connection_state),
+            row.OperStatus == IfOperStatusUp ? "Connected" : "Disconnected");
+        const uint64_t link_bits =
+            row.TransmitLinkSpeed > row.ReceiveLinkSpeed
+                ? row.TransmitLinkSpeed : row.ReceiveLinkSpeed;
+        net->link_speed_mbps = (double)link_bits / 1000000.0;
+        if (link_bits > 0U &&
+            isfinite(net->rx_bytes_per_sec) &&
+            isfinite(net->tx_bytes_per_sec)) {
+            const long double current_bits =
+                fmaxl((long double)net->rx_bytes_per_sec,
+                      (long double)net->tx_bytes_per_sec) * 8.0L;
+            long double utilisation =
+                (current_bits * 100.0L) / (long double)link_bits;
+            if (utilisation > 100.0L) utilisation = 100.0L;
+            if (utilisation < 0.0L) utilisation = 0.0L;
+            net->utilisation_percent = (double)utilisation;
+            net->utilisation_available = true;
+        } else {
+            net->utilisation_percent = NAN;
+            net->utilisation_available = false;
+        }
+    }
+}
+
+static bool display_luid_for_name(
+    const char *display_name, LUID *adapter_luid)
+{
+    if (!display_name || !display_name[0] || !adapter_luid)
+        return false;
+
+    wchar_t target[64];
+    const int converted = MultiByteToWideChar(
+        CP_ACP, 0U, display_name, -1,
+        target, (int)(sizeof(target) / sizeof(target[0])));
+    if (converted <= 0)
+        return false;
+
+    UINT32 path_count = 0U;
+    UINT32 mode_count = 0U;
+    if (GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS ||
+        path_count == 0U)
+        return false;
+
+    DISPLAYCONFIG_PATH_INFO *paths =
+        (DISPLAYCONFIG_PATH_INFO *)calloc(
+            path_count, sizeof(*paths));
+    DISPLAYCONFIG_MODE_INFO *modes =
+        mode_count > 0U
+            ? (DISPLAYCONFIG_MODE_INFO *)calloc(
+                mode_count, sizeof(*modes))
+            : NULL;
+    if (!paths || (mode_count > 0U && !modes)) {
+        free(paths);
+        free(modes);
+        return false;
+    }
+
+    bool found = false;
+    LONG status = QueryDisplayConfig(
+        QDC_ONLY_ACTIVE_PATHS,
+        &path_count, paths, &mode_count, modes, NULL);
+    if (status == ERROR_SUCCESS) {
+        for (UINT32 index = 0U; index < path_count; index++) {
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source;
+            memset(&source, 0, sizeof(source));
+            source.header.type =
+                DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId =
+                paths[index].sourceInfo.adapterId;
+            source.header.id = paths[index].sourceInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&source.header) !=
+                    ERROR_SUCCESS ||
+                _wcsicmp(source.viewGdiDeviceName, target) != 0)
+                continue;
+
+            *adapter_luid = paths[index].sourceInfo.adapterId;
+            found = true;
+            break;
+        }
+    }
+
+    free(paths);
+    free(modes);
+    return found;
+}
+
+static bool parse_hex_component(
+    const wchar_t *text, unsigned long *value,
+    const wchar_t **end_text)
+{
+    if (!text || !value) return false;
+    wchar_t *end = NULL;
+    const unsigned long parsed = wcstoul(text, &end, 0);
+    if (!end || end == text) return false;
+    *value = parsed;
+    if (end_text) *end_text = end;
+    return true;
+}
+
+static bool parse_gpu_engine_luid(
+    const wchar_t *instance, LUID *luid)
+{
+    if (!instance || !luid) return false;
+    const wchar_t *cursor = wcsstr(instance, L"luid_");
+    if (!cursor) return false;
+    cursor += 5;
+
+    unsigned long high = 0UL;
+    unsigned long low = 0UL;
+    const wchar_t *end = NULL;
+    if (!parse_hex_component(cursor, &high, &end) ||
+        !end || *end != L'_')
+        return false;
+    cursor = end + 1;
+    if (!parse_hex_component(cursor, &low, NULL))
+        return false;
+
+    luid->HighPart = (LONG)(DWORD)high;
+    luid->LowPart = (DWORD)low;
+    return true;
+}
+
+static bool parse_gpu_engine_index(
+    const wchar_t *instance, const wchar_t *token,
+    DWORD *value)
+{
+    if (!instance || !token || !value) return false;
+    const wchar_t *cursor = wcsstr(instance, token);
+    if (!cursor) return false;
+    cursor += wcslen(token);
+
+    unsigned long parsed = 0UL;
+    if (!parse_hex_component(cursor, &parsed, NULL))
+        return false;
+    *value = (DWORD)parsed;
+    return true;
+}
+
+static const wchar_t *gpu_engine_type(const wchar_t *instance)
+{
+    if (!instance) return NULL;
+    const wchar_t *type = wcsstr(instance, L"engtype_");
+    return type ? type + 8 : NULL;
+}
+
+static bool gpu_luid_equal(LUID left, LUID right)
+{
+    return left.LowPart == right.LowPart &&
+        left.HighPart == right.HighPart;
+}
+
+static int gpu_index_for_luid(
+    const LsmWindowsMonitorBackendState *state,
+    size_t gpu_count, LUID luid)
+{
+    if (!state) return -1;
+    const size_t limit =
+        gpu_count < LSM_MAX_GPUS ? gpu_count : LSM_MAX_GPUS;
+    for (size_t index = 0U; index < limit; index++) {
+        if (state->gpu_luid_valid[index] &&
+            gpu_luid_equal(state->gpu_luids[index], luid))
+            return (int)index;
+    }
+    return -1;
+}
+
+typedef enum {
+    LSM_WINDOWS_GPU_ENGINE_OTHER = 0,
+    LSM_WINDOWS_GPU_ENGINE_RENDER,
+    LSM_WINDOWS_GPU_ENGINE_COMPUTE,
+    LSM_WINDOWS_GPU_ENGINE_VIDEO,
+    LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE,
+    LSM_WINDOWS_GPU_ENGINE_COPY
+} LsmWindowsGpuEngineType;
+
+static LsmWindowsGpuEngineType classify_gpu_engine(
+    const wchar_t *type)
+{
+    if (!type) return LSM_WINDOWS_GPU_ENGINE_OTHER;
+    if (_wcsnicmp(type, L"3D", 2U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_RENDER;
+    if (_wcsnicmp(type, L"Compute", 7U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_COMPUTE;
+    if (_wcsnicmp(type, L"VideoDecode", 11U) == 0 ||
+        _wcsnicmp(type, L"VideoEncode", 11U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_VIDEO;
+    if (_wcsnicmp(type, L"VideoProcessing", 15U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE;
+    if (_wcsnicmp(type, L"Copy", 4U) == 0)
+        return LSM_WINDOWS_GPU_ENGINE_COPY;
+    return LSM_WINDOWS_GPU_ENGINE_OTHER;
+}
+
+typedef struct {
+    bool used;
+    size_t gpu_index;
+    DWORD physical_index;
+    DWORD engine_index;
+    LsmWindowsGpuEngineType type;
+    double utilisation;
+} LsmWindowsGpuEngineSample;
+
+static size_t gpu_engine_lookup_start(
+    size_t gpu_index, DWORD physical_index, DWORD engine_index,
+    LsmWindowsGpuEngineType type)
+{
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = (hash ^ (uint64_t)gpu_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)physical_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)engine_index) * UINT64_C(1099511628211);
+    hash = (hash ^ (uint64_t)type) * UINT64_C(1099511628211);
+    return (size_t)(hash % LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE);
+}
+
+static void reset_gpu_engine_metrics(LsmGpuInfo *gpu)
+{
+    if (!gpu) return;
+    gpu->utilization_percent = 0.0;
+    gpu->active_engine_percent = 0.0;
+    gpu->render_percent = 0.0;
+    gpu->compute_percent = 0.0;
+    gpu->video_percent = 0.0;
+    gpu->video_enhance_percent = 0.0;
+    gpu->copy_percent = 0.0;
+    gpu->utilization_available = false;
+    gpu->render_available = false;
+    gpu->compute_available = false;
+    gpu->video_available = false;
+    gpu->video_enhance_available = false;
+    gpu->copy_available = false;
+    gpu->engine_metrics_capable = false;
+    gpu->active_engine[0] = '\0';
+}
+
+static double clamp_percent(double value)
+{
+    if (value < 0.0) return 0.0;
+    return value > 100.0 ? 100.0 : value;
+}
+
+static void apply_gpu_engine_sample(
+    LsmGpuInfo *gpu, LsmWindowsGpuEngineType type,
+    double value)
+{
+    if (!gpu) return;
+    const double bounded = clamp_percent(value);
+    switch (type) {
+        case LSM_WINDOWS_GPU_ENGINE_RENDER:
+            if (!gpu->render_available ||
+                bounded > gpu->render_percent)
+                gpu->render_percent = bounded;
+            gpu->render_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_COMPUTE:
+            if (!gpu->compute_available ||
+                bounded > gpu->compute_percent)
+                gpu->compute_percent = bounded;
+            gpu->compute_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_VIDEO:
+            if (!gpu->video_available ||
+                bounded > gpu->video_percent)
+                gpu->video_percent = bounded;
+            gpu->video_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_VIDEO_ENHANCE:
+            if (!gpu->video_enhance_available ||
+                bounded > gpu->video_enhance_percent)
+                gpu->video_enhance_percent = bounded;
+            gpu->video_enhance_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_COPY:
+            if (!gpu->copy_available ||
+                bounded > gpu->copy_percent)
+                gpu->copy_percent = bounded;
+            gpu->copy_available = true;
+            break;
+        case LSM_WINDOWS_GPU_ENGINE_OTHER:
+        default:
+            break;
+    }
+
+    if (bounded > gpu->utilization_percent)
+        gpu->utilization_percent = bounded;
+}
+
+static void finalise_gpu_engine_metrics(LsmGpuInfo *gpu)
+{
+    if (!gpu) return;
+    gpu->engine_metrics_capable =
+        gpu->render_available || gpu->compute_available ||
+        gpu->video_available || gpu->video_enhance_available ||
+        gpu->copy_available;
+    gpu->utilization_available = gpu->engine_metrics_capable;
+    if (!gpu->engine_metrics_capable)
+        return;
+
+    double peak = 0.0;
+    const char *name = "Idle";
+#define CONSIDER_GPU_ENGINE(available, value, label) \
+    do { \
+        if ((available) && (value) > peak) { \
+            peak = (value); \
+            name = (label); \
+        } \
+    } while (0)
+    CONSIDER_GPU_ENGINE(gpu->render_available, gpu->render_percent, "3D");
+    CONSIDER_GPU_ENGINE(
+        gpu->compute_available, gpu->compute_percent, "Compute");
+    CONSIDER_GPU_ENGINE(gpu->video_available, gpu->video_percent, "Video");
+    CONSIDER_GPU_ENGINE(
+        gpu->video_enhance_available,
+        gpu->video_enhance_percent, "Video processing");
+    CONSIDER_GPU_ENGINE(gpu->copy_available, gpu->copy_percent, "Copy");
+#undef CONSIDER_GPU_ENGINE
+
+    gpu->active_engine_percent = peak;
+    infiltratr_copy_string(
+        gpu->active_engine, sizeof(gpu->active_engine), name);
+    gpu->supported_metrics = true;
+    infiltratr_copy_string(
+        gpu->metrics_source, sizeof(gpu->metrics_source),
+        "Windows GPU Engine performance counters");
+}
+
+static void initialise_gpu_query(
+    LsmWindowsMonitorBackendState *state)
+{
+    if (!state || state->gpu_query_ready) return;
+
+    PDH_HQUERY query = NULL;
+    if (PdhOpenQueryW(NULL, 0U, &query) != ERROR_SUCCESS)
+        return;
+
+    PDH_HCOUNTER counter = NULL;
+    const PDH_STATUS added = PdhAddEnglishCounterW(
+        query,
+        L"\\GPU Engine(*)\\Utilization Percentage",
+        0U, &counter);
+    if (added != ERROR_SUCCESS) {
+        PdhCloseQuery(query);
+        return;
+    }
+
+    if (PdhCollectQueryData(query) != ERROR_SUCCESS) {
+        PdhCloseQuery(query);
+        return;
+    }
+
+    state->gpu_query = query;
+    state->gpu_engine_counter = counter;
+    state->gpu_query_ready = true;
+}
+
+static bool ensure_gpu_engine_item_capacity(
+    LsmWindowsMonitorBackendState *state, DWORD required)
+{
+    if (!state || required == 0U) return false;
+    if (required <= state->gpu_engine_items_capacity &&
+        state->gpu_engine_items)
+        return true;
+
+    void *grown = realloc(state->gpu_engine_items, (size_t)required);
+    if (!grown) return false;
+    state->gpu_engine_items =
+        (PPDH_FMT_COUNTERVALUE_ITEM_W)grown;
+    state->gpu_engine_items_capacity = required;
+    return true;
+}
+
+static void update_gpu_engine_metrics(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state || monitor->gpu_count == 0U)
+        return;
+
+    for (size_t index = 0U; index < monitor->gpu_count; index++)
+        reset_gpu_engine_metrics(&monitor->gpus[index]);
+
+    initialise_gpu_query(state);
+    if (!state->gpu_query_ready ||
+        PdhCollectQueryData(state->gpu_query) != ERROR_SUCCESS)
+        return;
+
+    DWORD buffer_size = state->gpu_engine_items_capacity;
+    DWORD item_count = 0U;
+    PDH_STATUS status = (PDH_STATUS)PDH_MORE_DATA;
+
+    if (state->gpu_engine_items && buffer_size > 0U) {
+        status = PdhGetFormattedCounterArrayW(
+            state->gpu_engine_counter, PDH_FMT_DOUBLE,
+            &buffer_size, &item_count, state->gpu_engine_items);
+        if (status != ERROR_SUCCESS &&
+            status != (PDH_STATUS)PDH_MORE_DATA)
+            return;
+    }
+
+    if (status == (PDH_STATUS)PDH_MORE_DATA) {
+        if (buffer_size == 0U) {
+            status = PdhGetFormattedCounterArrayW(
+                state->gpu_engine_counter, PDH_FMT_DOUBLE,
+                &buffer_size, &item_count, NULL);
+            if (status != (PDH_STATUS)PDH_MORE_DATA ||
+                buffer_size == 0U)
+                return;
+        }
+        if (!ensure_gpu_engine_item_capacity(state, buffer_size))
+            return;
+
+        for (unsigned attempt = 0U; attempt < 3U; attempt++) {
+            buffer_size = state->gpu_engine_items_capacity;
+            item_count = 0U;
+            status = PdhGetFormattedCounterArrayW(
+                state->gpu_engine_counter, PDH_FMT_DOUBLE,
+                &buffer_size, &item_count, state->gpu_engine_items);
+            if (status != (PDH_STATUS)PDH_MORE_DATA)
+                break;
+            if (buffer_size <= state->gpu_engine_items_capacity ||
+                !ensure_gpu_engine_item_capacity(state, buffer_size))
+                return;
+        }
+    }
+    if (status != ERROR_SUCCESS)
+        return;
+
+    PPDH_FMT_COUNTERVALUE_ITEM_W items = state->gpu_engine_items;
+
+    LsmWindowsGpuEngineSample engines[
+        LSM_WINDOWS_GPU_ENGINE_LIMIT];
+    memset(engines, 0, sizeof(engines));
+    size_t engine_lookup[LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE];
+    for (size_t slot = 0U;
+         slot < LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE; slot++)
+        engine_lookup[slot] = SIZE_MAX;
+    size_t engine_count = 0U;
+    bool engine_inventory_complete = true;
+
+    for (DWORD item = 0U; item < item_count; item++) {
+        const PDH_FMT_COUNTERVALUE *formatted =
+            &items[item].FmtValue;
+        if (formatted->CStatus != PDH_CSTATUS_VALID_DATA &&
+            formatted->CStatus != PDH_CSTATUS_NEW_DATA)
+            continue;
+
+        const double value = formatted->doubleValue;
+        if (!(value >= 0.0) || value > 1000000.0)
+            continue;
+
+        LUID luid;
+        DWORD physical_index = 0U;
+        DWORD engine_index = 0U;
+        if (!parse_gpu_engine_luid(items[item].szName, &luid) ||
+            !parse_gpu_engine_index(
+                items[item].szName, L"phys_", &physical_index) ||
+            !parse_gpu_engine_index(
+                items[item].szName, L"eng_", &engine_index))
+            continue;
+
+        const int matched_gpu =
+            gpu_index_for_luid(state, monitor->gpu_count, luid);
+        if (matched_gpu < 0)
+            continue;
+
+        const LsmWindowsGpuEngineType type =
+            classify_gpu_engine(gpu_engine_type(items[item].szName));
+        if (type == LSM_WINDOWS_GPU_ENGINE_OTHER)
+            continue;
+
+        size_t lookup_slot = gpu_engine_lookup_start(
+            (size_t)matched_gpu, physical_index, engine_index, type);
+        size_t engine = SIZE_MAX;
+        for (size_t probe = 0U;
+             probe < LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE; probe++) {
+            const size_t candidate = engine_lookup[lookup_slot];
+            if (candidate == SIZE_MAX) {
+                if (engine_count >= LSM_WINDOWS_GPU_ENGINE_LIMIT) {
+                    engine_inventory_complete = false;
+                    break;
+                }
+                engine = engine_count++;
+                engines[engine].used = true;
+                engines[engine].gpu_index = (size_t)matched_gpu;
+                engines[engine].physical_index = physical_index;
+                engines[engine].engine_index = engine_index;
+                engines[engine].type = type;
+                engines[engine].utilisation = 0.0;
+                engine_lookup[lookup_slot] = engine;
+                break;
+            }
+            if (candidate < engine_count &&
+                engines[candidate].gpu_index == (size_t)matched_gpu &&
+                engines[candidate].physical_index == physical_index &&
+                engines[candidate].engine_index == engine_index &&
+                engines[candidate].type == type) {
+                engine = candidate;
+                break;
+            }
+            lookup_slot =
+                (lookup_slot + 1U) % LSM_WINDOWS_GPU_ENGINE_LOOKUP_SIZE;
+        }
+        if (!engine_inventory_complete || engine == SIZE_MAX) {
+            engine_inventory_complete = false;
+            break;
+        }
+        engines[engine].utilisation += value;
+    }
+
+    if (!engine_inventory_complete) {
+        for (size_t index = 0U; index < monitor->gpu_count; index++)
+            reset_gpu_engine_metrics(&monitor->gpus[index]);
+        return;
+    }
+
+    for (size_t engine = 0U; engine < engine_count; engine++) {
+        if (!engines[engine].used ||
+            engines[engine].gpu_index >= monitor->gpu_count)
+            continue;
+        apply_gpu_engine_sample(
+            &monitor->gpus[engines[engine].gpu_index],
+            engines[engine].type,
+            engines[engine].utilisation);
+    }
+    for (size_t index = 0U; index < monitor->gpu_count; index++)
+        finalise_gpu_engine_metrics(&monitor->gpus[index]);
+}
+
+static void update_gpu_dxgi_memory(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state || monitor->gpu_count == 0U)
+        return;
+
+    IDXGIFactory1 *factory = NULL;
+    const HRESULT factory_result = CreateDXGIFactory1(
+        &IID_IDXGIFactory1, (void **)&factory);
+    if (FAILED(factory_result) || !factory)
+        return;
+
+    for (UINT adapter_index = 0U; ; adapter_index++) {
+        IDXGIAdapter1 *adapter = NULL;
+        const HRESULT enumerated = IDXGIFactory1_EnumAdapters1(
+            factory, adapter_index, &adapter);
+        if (enumerated == DXGI_ERROR_NOT_FOUND)
+            break;
+        if (FAILED(enumerated) || !adapter)
+            continue;
+
+        DXGI_ADAPTER_DESC1 description;
+        memset(&description, 0, sizeof(description));
+        if (SUCCEEDED(IDXGIAdapter1_GetDesc1(adapter, &description)) &&
+            (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0U) {
+            const int matched = gpu_index_for_luid(
+                state, monitor->gpu_count, description.AdapterLuid);
+            if (matched >= 0) {
+                LsmGpuInfo *gpu = &monitor->gpus[(size_t)matched];
+                gpu->shared_system_memory =
+                    description.DedicatedVideoMemory == 0U &&
+                    description.SharedSystemMemory > 0U;
+
+                if (!gpu->shared_system_memory)
+                    gpu->memory_total_bytes =
+                        (uint64_t)description.DedicatedVideoMemory;
+                else
+                    gpu->memory_total_bytes = 0U;
+
+                /* QueryVideoMemoryInfo.CurrentUsage belongs to the calling
+                 * process, not this adapter as a whole. DXGI establishes
+                 * capacity here; adapter-wide consumption remains unavailable. */
+                gpu->memory_usage_available = false;
+                gpu->memory_used_bytes = 0U;
+                gpu->memory_percent = 0.0;
+            }
+        }
+
+        IDXGIAdapter1_Release(adapter);
+    }
+
+    IDXGIFactory1_Release(factory);
+}
+
+static bool multi_string_contains_identity(
+    const char *multi, size_t multi_size, const char *identity)
+{
+    if (!multi || multi_size == 0U || !identity || !identity[0])
+        return false;
+
+    size_t offset = 0U;
+    while (offset < multi_size && multi[offset] != '\0') {
+        const char *entry = multi + offset;
+        const size_t remaining = multi_size - offset;
+        size_t length = 0U;
+        while (length < remaining && entry[length] != '\0')
+            length++;
+        if (length == remaining)
+            break;
+        if (_stricmp(entry, identity) == 0)
+            return true;
+        offset += length + 1U;
+    }
+    return false;
+}
+
+static bool query_registry_string(
+    HKEY key, const char *name, char *destination,
+    size_t destination_size)
+{
+    if (!key || !name || !destination || destination_size == 0U ||
+        destination_size > (size_t)MAXDWORD)
+        return false;
+
+    destination[0] = '\0';
+    DWORD type = 0U;
+    DWORD bytes = (DWORD)destination_size;
+    const LSTATUS status = RegQueryValueExA(
+        key, name, NULL, &type, (BYTE *)destination, &bytes);
+    if (status != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        destination[0] = '\0';
+        return false;
+    }
+
+    destination[destination_size - 1U] = '\0';
+    return destination[0] != '\0';
+}
+
+static void populate_gpu_setupapi_metadata(LsmMonitor *monitor)
+{
+    if (!monitor || monitor->gpu_count == 0U)
+        return;
+
+    HDEVINFO devices = SetupDiGetClassDevsA(
+        &GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
+    if (devices == INVALID_HANDLE_VALUE)
+        return;
+
+    for (DWORD device_index = 0U; ; device_index++) {
+        SP_DEVINFO_DATA device;
+        memset(&device, 0, sizeof(device));
+        device.cbSize = sizeof(device);
+        if (!SetupDiEnumDeviceInfo(devices, device_index, &device)) {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        char instance[LSM_IDENTITY_LEN];
+        instance[0] = '\0';
+        DWORD required = 0U;
+        (void)SetupDiGetDeviceInstanceIdA(
+            devices, &device, instance,
+            (DWORD)sizeof(instance), &required);
+
+        char hardware_ids[2048];
+        memset(hardware_ids, 0, sizeof(hardware_ids));
+        DWORD property_type = 0U;
+        DWORD hardware_bytes = 0U;
+        if (!SetupDiGetDeviceRegistryPropertyA(
+                devices, &device, SPDRP_HARDWAREID,
+                &property_type, (BYTE *)hardware_ids,
+                (DWORD)sizeof(hardware_ids), &hardware_bytes) ||
+            property_type != REG_MULTI_SZ) {
+            hardware_ids[0] = '\0';
+            hardware_bytes = 0U;
+        }
+
+        HKEY driver_key = SetupDiOpenDevRegKey(
+            devices, &device, DICS_FLAG_GLOBAL, 0U,
+            DIREG_DRV, KEY_READ);
+
+        for (size_t gpu_index = 0U;
+             gpu_index < monitor->gpu_count; gpu_index++) {
+            LsmGpuInfo *gpu = &monitor->gpus[gpu_index];
+            const bool exact_instance =
+                instance[0] &&
+                _stricmp(instance, gpu->platform_identity) == 0;
+            const bool hardware_match =
+                multi_string_contains_identity(
+                    hardware_ids, (size_t)hardware_bytes,
+                    gpu->platform_identity);
+            if (!exact_instance && !hardware_match)
+                continue;
+
+            if (driver_key != INVALID_HANDLE_VALUE) {
+                char provider[64];
+                char version[96];
+                provider[0] = '\0';
+                version[0] = '\0';
+                if (!query_registry_string(
+                        driver_key, "ProviderName",
+                        provider, sizeof(provider))) {
+                    (void)query_registry_string(
+                        driver_key, "DriverDesc",
+                        provider, sizeof(provider));
+                }
+                (void)query_registry_string(
+                    driver_key, "DriverVersion",
+                    version, sizeof(version));
+                if (provider[0])
+                    infiltratr_copy_string(
+                        gpu->driver, sizeof(gpu->driver), provider);
+                if (version[0])
+                    infiltratr_copy_string(
+                        gpu->driver_version,
+                        sizeof(gpu->driver_version), version);
+            }
+
+            if (exact_instance) {
+                char location[128];
+                DWORD location_type = 0U;
+                DWORD location_bytes = 0U;
+                memset(location, 0, sizeof(location));
+                if (SetupDiGetDeviceRegistryPropertyA(
+                        devices, &device,
+                        SPDRP_LOCATION_INFORMATION,
+                        &location_type, (BYTE *)location,
+                        (DWORD)sizeof(location),
+                        &location_bytes) &&
+                    location_type == REG_SZ && location[0]) {
+                    infiltratr_copy_string(
+                        gpu->pci_location,
+                        sizeof(gpu->pci_location), location);
+                }
+            }
+        }
+
+        if (driver_key != INVALID_HANDLE_VALUE)
+            RegCloseKey(driver_key);
+    }
+
+    SetupDiDestroyDeviceInfoList(devices);
+}
+
+static bool gpu_identity_changed(
+    const LsmGpuInfo *old_gpus, size_t old_count,
+    const LsmGpuInfo *new_gpus, size_t new_count)
+{
+    if (old_count != new_count) return true;
+    for (size_t index = 0U; index < new_count; index++) {
+        if (strcmp(old_gpus[index].platform_identity,
+                   new_gpus[index].platform_identity) != 0)
+            return true;
+    }
+    return false;
+}
+
+static bool gpu_already_present(
+    const LsmGpuInfo *gpus, size_t count, const char *identity)
+{
+    if (!gpus || !identity || !identity[0]) return false;
+    for (size_t index = 0U; index < count; index++) {
+        if (strcmp(gpus[index].platform_identity, identity) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool enumerate_gpus(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state)
+{
+    if (!monitor || !state) return false;
+
+    LUID discovered_luids[LSM_MAX_GPUS];
+    bool discovered_luid_valid[LSM_MAX_GPUS];
+    memset(discovered_luids, 0, sizeof(discovered_luids));
+    memset(discovered_luid_valid, 0, sizeof(discovered_luid_valid));
+
+    LsmGpuInfo discovered[LSM_MAX_GPUS];
+    memset(discovered, 0, sizeof(discovered));
+    size_t count = 0U;
+
+    for (DWORD device_index = 0U;; device_index++) {
+        DISPLAY_DEVICEA device;
+        memset(&device, 0, sizeof(device));
+        device.cb = sizeof(device);
+        SetLastError(ERROR_SUCCESS);
+        if (!EnumDisplayDevicesA(NULL, device_index, &device, 0U)) {
+            const DWORD failure = GetLastError();
+            if (failure != ERROR_SUCCESS)
+                return false;
+            break;
+        }
+        if ((device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) != 0U)
+            continue;
+        if (!device.DeviceString[0])
+            continue;
+
+        const char *identity =
+            device.DeviceID[0] ? device.DeviceID :
+            (device.DeviceKey[0] ? device.DeviceKey : device.DeviceName);
+        if (gpu_already_present(discovered, count, identity))
+            continue;
+        if (count >= LSM_MAX_GPUS) {
+            SetLastError(ERROR_BUFFER_OVERFLOW);
+            return false;
+        }
+
+        const size_t gpu_index = count++;
+        LsmGpuInfo *gpu = &discovered[gpu_index];
+        infiltratr_copy_string(gpu->name, sizeof(gpu->name), device.DeviceString);
+        infiltratr_copy_string(
+            gpu->display_identifier, sizeof(gpu->display_identifier),
+            device.DeviceName);
+        infiltratr_copy_string(
+            gpu->platform_identity, sizeof(gpu->platform_identity), identity);
+        infiltratr_copy_string(
+            gpu->metrics_source, sizeof(gpu->metrics_source),
+            "Windows display adapter identification");
+        gpu->supported_metrics = false;
+        gpu->utilization_available = false;
+        gpu->engine_metrics_capable = false;
+
+        LUID luid;
+        if (display_luid_for_name(device.DeviceName, &luid)) {
+            discovered_luids[gpu_index] = luid;
+            discovered_luid_valid[gpu_index] = true;
+        }
+    }
+
+    if (gpu_identity_changed(
+            monitor->gpus, monitor->gpu_count, discovered, count))
+        monitor->topology_generation++;
+
+    memcpy(state->gpu_luids, discovered_luids, sizeof(state->gpu_luids));
+    memcpy(state->gpu_luid_valid, discovered_luid_valid,
+           sizeof(state->gpu_luid_valid));
+    memset(monitor->gpus, 0, sizeof(monitor->gpus));
+    if (count > 0U)
+        memcpy(monitor->gpus, discovered, count * sizeof(discovered[0]));
+    monitor->gpu_count = count;
+    populate_gpu_setupapi_metadata(monitor);
+    return true;
+}
+
+static void refresh_topology_and_devices(
+    LsmMonitor *monitor, LsmWindowsMonitorBackendState *state,
+    double elapsed, bool force)
+{
+    if (!monitor || !state) return;
+
+    const ULONGLONG now = GetTickCount64();
+    const bool due =
+        force || state->topology_refresh_requested ||
+        state->last_topology_tick == 0ULL ||
+        now - state->last_topology_tick >= LSM_WINDOWS_TOPOLOGY_REFRESH_MS;
+
+    if (!due) {
+        update_physical_disk_performance(monitor, state, elapsed);
+        update_network_counters(monitor, state, elapsed);
+        return;
+    }
+
+    /*
+     * Record the attempt independently of provider success. A persistent
+     * discovery failure must not collapse the topology cadence into a
+     * one-second retry storm.
+     */
+    state->last_topology_tick = now;
+    state->topology_refresh_requested = false;
+
+    bool disks_refreshed = false;
+    LsmDiskInfo *disk_backup =
+        (LsmDiskInfo *)malloc(sizeof(monitor->disks));
+    LsmWindowsDiskBaseline *disk_baseline_backup =
+        (LsmWindowsDiskBaseline *)malloc(sizeof(state->disks));
+    if (disk_backup && disk_baseline_backup) {
+        const size_t disk_count_backup = monitor->disk_count;
+        const uint64_t disk_generation_backup = monitor->disk_generation;
+        const uint64_t topology_generation_backup =
+            monitor->topology_generation;
+        memcpy(disk_backup, monitor->disks, sizeof(monitor->disks));
+        memcpy(disk_baseline_backup, state->disks, sizeof(state->disks));
+        disks_refreshed =
+            enumerate_physical_disks(monitor, state, elapsed) &&
+            enumerate_disk_volumes(monitor);
+        if (!disks_refreshed) {
+            memcpy(monitor->disks, disk_backup, sizeof(monitor->disks));
+            monitor->disk_count = disk_count_backup;
+            monitor->disk_generation = disk_generation_backup;
+            monitor->topology_generation = topology_generation_backup;
+            memcpy(state->disks, disk_baseline_backup, sizeof(state->disks));
+        }
+    }
+    free(disk_baseline_backup);
+    free(disk_backup);
+    if (!disks_refreshed)
+        update_physical_disk_performance(monitor, state, elapsed);
+
+    if (!enumerate_networks(monitor, state, elapsed))
+        update_network_counters(monitor, state, elapsed);
+
+    populate_cpu_topology(&monitor->cpu);
+    (void)enumerate_gpus(monitor, state);
+}
+
+static void windows_sampler_release(LsmWindowsSamplerState *sampler)
+{
+    if (!sampler || InterlockedDecrement(&sampler->references) != 0)
+        return;
+
+    LsmWindowsMonitorBackendState *state = sampler->native;
+    if (state && state->gpu_query)
+        PdhCloseQuery(state->gpu_query);
+    if (state) {
+        free(state->gpu_engine_items);
+        state->gpu_engine_items = NULL;
+        state->gpu_engine_items_capacity = 0U;
+    }
+    if (state && state->winsock_started)
+        WSACleanup();
+    free(state);
+    if (sampler->request_event) CloseHandle(sampler->request_event);
+    if (sampler->lock_initialised) DeleteCriticalSection(&sampler->lock);
+    free(sampler);
+}
+
+static bool windows_sample_once(LsmWindowsSamplerState *sampler,
+                                bool force_topology)
+{
+    if (!sampler || !sampler->native) return false;
+    LsmWindowsMonitorBackendState *state = sampler->native;
+    LsmMonitor *sample = &sampler->sample;
+    if (sample->sample_generation == 0U && !sample->cpu.model[0])
+        populate_cpu_identity(sample);
+
+    const ULONGLONG now = GetTickCount64();
+    const double elapsed =
+        state->previous_sample_tick > 0ULL && now >= state->previous_sample_tick
+            ? (double)(now - state->previous_sample_tick) / 1000.0
+            : 0.0;
+    state->previous_sample_tick = now;
+
+    const bool cpu_ok = update_cpu_snapshot(sample, state);
+    const bool memory_ok = update_memory_snapshot(sample);
+    refresh_topology_and_devices(sample, state, elapsed, force_topology);
+    update_gpu_engine_metrics(sample, state);
+    update_gpu_dxgi_memory(sample, state);
+    if (!cpu_ok || !memory_ok) return false;
+
+    sample->sample_generation++;
+    if (sample->sample_generation == 0U)
+        sample->sample_generation = 1U;
+    sample->sample_monotonic_seconds = (double)now / 1000.0;
+    return true;
+}
+
+static DWORD WINAPI windows_sampler_thread(LPVOID user_data)
+{
+    LsmWindowsSamplerState *sampler = user_data;
+    if (!sampler) return 0U;
+    for (;;) {
+        (void)WaitForSingleObject(sampler->request_event, INFINITE);
+        EnterCriticalSection(&sampler->lock);
+        if (sampler->stop_requested) {
+            LeaveCriticalSection(&sampler->lock);
+            break;
+        }
+        if (!sampler->request_pending) {
+            LeaveCriticalSection(&sampler->lock);
+            continue;
+        }
+        sampler->request_pending = false;
+        sampler->sample_in_progress = true;
+        const bool force_topology =
+            sampler->native->topology_refresh_requested;
+        sampler->native->topology_refresh_requested = false;
+        LeaveCriticalSection(&sampler->lock);
+
+        const bool sampled = windows_sample_once(sampler, force_topology);
+
+        EnterCriticalSection(&sampler->lock);
+        sampler->sample_in_progress = false;
+        if (sampled && !sampler->stop_requested)
+            sampler->sample_ready = true;
+        LeaveCriticalSection(&sampler->lock);
+    }
+    windows_sampler_release(sampler);
+    return 0U;
+}
+
+bool lsm_monitor_platform_init(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+    memset(monitor, 0, sizeof(*monitor));
+
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)calloc(1U, sizeof(*sampler));
+    LsmWindowsMonitorBackendState *state =
+        (LsmWindowsMonitorBackendState *)calloc(1U, sizeof(*state));
+    if (!sampler || !state) {
+        free(state);
+        free(sampler);
+        return false;
+    }
+    sampler->native = state;
+    sampler->sample.backend_state = state;
+    InitializeCriticalSection(&sampler->lock);
+    sampler->lock_initialised = true;
+    sampler->request_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!sampler->request_event) {
+        sampler->references = 1;
+        windows_sampler_release(sampler);
+        return false;
+    }
+
+    WSADATA winsock;
+    memset(&winsock, 0, sizeof(winsock));
+    if (WSAStartup(MAKEWORD(2, 2), &winsock) == 0)
+        state->winsock_started = true;
+
+    sampler->request_pending = true;
+    sampler->references = 2;
+    sampler->thread = CreateThread(
+        NULL, 0U, windows_sampler_thread, sampler, 0U, NULL);
+    if (!sampler->thread) {
+        sampler->references = 1;
+        windows_sampler_release(sampler);
+        return false;
+    }
+
+    monitor->backend_state = sampler;
+    SetEvent(sampler->request_event);
+    return true;
+}
+
+static void copy_disk_snapshot(LsmDiskInfo *destination,
+                               const LsmDiskInfo *source)
+{
+    if (!destination || !source) return;
+    memcpy(destination, source, offsetof(LsmDiskInfo, partitions));
+    const size_t partition_count =
+        source->partition_count < LSM_MAX_PARTITIONS
+            ? source->partition_count : LSM_MAX_PARTITIONS;
+    if (partition_count > 0U)
+        memcpy(destination->partitions, source->partitions,
+               partition_count * sizeof(destination->partitions[0]));
+    destination->partition_count = partition_count;
+}
+
+static void publish_monitor_snapshot(
+    LsmMonitor *destination, const LsmMonitor *source)
+{
+    if (!destination || !source) return;
+
+    const size_t old_disk_count = destination->disk_count;
+    const size_t old_net_count = destination->net_count;
+    const size_t old_bluetooth_count = destination->bluetooth_count;
+    const size_t old_bluetooth_device_count =
+        destination->bluetooth_device_count;
+    const size_t old_gpu_count = destination->gpu_count;
+    const size_t old_battery_count = destination->battery_count;
+    const size_t old_npu_count = destination->npu_count;
+
+    destination->cpu = source->cpu;
+    destination->memory = source->memory;
+    destination->cpu_pressure = source->cpu_pressure;
+    destination->memory_pressure = source->memory_pressure;
+    destination->io_pressure = source->io_pressure;
+
+    const size_t disk_count =
+        source->disk_count < LSM_MAX_DISKS
+            ? source->disk_count : LSM_MAX_DISKS;
+    for (size_t index = 0U; index < disk_count; index++)
+        copy_disk_snapshot(&destination->disks[index],
+                           &source->disks[index]);
+    if (disk_count < old_disk_count)
+        memset(&destination->disks[disk_count], 0,
+               (old_disk_count - disk_count) *
+                   sizeof(destination->disks[0]));
+    destination->disk_count = disk_count;
+    destination->disk_generation = source->disk_generation;
+    destination->topology_generation = source->topology_generation;
+
+    if (source->net_count > 0U)
+        memcpy(destination->nets, source->nets,
+               source->net_count * sizeof(destination->nets[0]));
+    if (source->net_count < old_net_count)
+        memset(&destination->nets[source->net_count], 0,
+               (old_net_count - source->net_count) *
+                   sizeof(destination->nets[0]));
+    destination->net_count = source->net_count;
+
+    if (source->bluetooth_count > 0U)
+        memcpy(destination->bluetooth, source->bluetooth,
+               source->bluetooth_count *
+                   sizeof(destination->bluetooth[0]));
+    if (source->bluetooth_count < old_bluetooth_count)
+        memset(&destination->bluetooth[source->bluetooth_count], 0,
+               (old_bluetooth_count - source->bluetooth_count) *
+                   sizeof(destination->bluetooth[0]));
+    destination->bluetooth_count = source->bluetooth_count;
+
+    if (source->bluetooth_device_count > 0U)
+        memcpy(destination->bluetooth_devices, source->bluetooth_devices,
+               source->bluetooth_device_count *
+                   sizeof(destination->bluetooth_devices[0]));
+    if (source->bluetooth_device_count < old_bluetooth_device_count)
+        memset(
+            &destination->bluetooth_devices[source->bluetooth_device_count],
+            0,
+            (old_bluetooth_device_count -
+             source->bluetooth_device_count) *
+                sizeof(destination->bluetooth_devices[0]));
+    destination->bluetooth_device_count =
+        source->bluetooth_device_count;
+
+    if (source->gpu_count > 0U)
+        memcpy(destination->gpus, source->gpus,
+               source->gpu_count * sizeof(destination->gpus[0]));
+    if (source->gpu_count < old_gpu_count)
+        memset(&destination->gpus[source->gpu_count], 0,
+               (old_gpu_count - source->gpu_count) *
+                   sizeof(destination->gpus[0]));
+    destination->gpu_count = source->gpu_count;
+
+    if (source->battery_count > 0U)
+        memcpy(destination->batteries, source->batteries,
+               source->battery_count *
+                   sizeof(destination->batteries[0]));
+    if (source->battery_count < old_battery_count)
+        memset(&destination->batteries[source->battery_count], 0,
+               (old_battery_count - source->battery_count) *
+                   sizeof(destination->batteries[0]));
+    destination->battery_count = source->battery_count;
+
+    if (source->npu_count > 0U)
+        memcpy(destination->npus, source->npus,
+               source->npu_count * sizeof(destination->npus[0]));
+    if (source->npu_count < old_npu_count)
+        memset(&destination->npus[source->npu_count], 0,
+               (old_npu_count - source->npu_count) *
+                   sizeof(destination->npus[0]));
+    destination->npu_count = source->npu_count;
+
+    destination->sample_generation = source->sample_generation;
+    destination->sample_monotonic_seconds =
+        source->sample_monotonic_seconds;
+}
+
+bool lsm_monitor_platform_update(LsmMonitor *monitor)
+{
+    if (!monitor || !monitor->backend_state) return false;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
+    bool signal = false;
+    EnterCriticalSection(&sampler->lock);
+    if (sampler->sample_ready) {
+        publish_monitor_snapshot(monitor, &sampler->sample);
+        sampler->sample_ready = false;
+    }
+    if (!sampler->stop_requested &&
+        !sampler->request_pending &&
+        !sampler->sample_in_progress) {
+        sampler->request_pending = true;
+        signal = true;
+    }
+    LeaveCriticalSection(&sampler->lock);
+    if (signal) SetEvent(sampler->request_event);
+    return true;
+}
+
+void lsm_monitor_platform_request_topology_refresh(LsmMonitor *monitor)
+{
+    if (!monitor || !monitor->backend_state) return;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
+    EnterCriticalSection(&sampler->lock);
+    sampler->native->topology_refresh_requested = true;
+    if (!sampler->stop_requested) {
+        sampler->request_pending = true;
+        SetEvent(sampler->request_event);
+    }
+    LeaveCriticalSection(&sampler->lock);
+}
+
+void lsm_monitor_platform_destroy(LsmMonitor *monitor)
+{
+    if (!monitor || !monitor->backend_state) return;
+    LsmWindowsSamplerState *sampler =
+        (LsmWindowsSamplerState *)monitor->backend_state;
+    monitor->backend_state = NULL;
+
+    EnterCriticalSection(&sampler->lock);
+    sampler->stop_requested = true;
+    sampler->request_pending = false;
+    LeaveCriticalSection(&sampler->lock);
+    SetEvent(sampler->request_event);
+
+    if (sampler->thread) {
+        (void)CancelSynchronousIo(sampler->thread);
+        (void)WaitForSingleObject(
+            sampler->thread, LSM_WINDOWS_SAMPLER_SHUTDOWN_MS);
+        CloseHandle(sampler->thread);
+        sampler->thread = NULL;
+    }
+    windows_sampler_release(sampler);
+}

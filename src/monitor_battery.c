@@ -1,0 +1,708 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file monitor_battery.c
+ * @brief System and peripheral battery collection and source integration.
+ *
+ * The module combines power-supply sysfs, cached BlueZ Battery1 records and
+ * direct Logitech HID++ readings. Slow D-Bus and wireless transactions remain
+ * in their own background backends; this file only merges bounded snapshots.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "monitor_linux_internal.h"
+
+#include "bluetooth_battery.h"
+#include "common.h"
+#include "logitech_hidpp.h"
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+
+/* The power-supply class is the kernel driver ABI for system batteries and
+ * many peripherals; fixture roots keep parsing independently testable. */
+static const char *power_supply_root(void)
+{
+    const char *root = getenv("LSM_POWER_SUPPLY_ROOT");
+    return root && root[0] ? root : "/sys/class/power_supply";
+}
+
+static bool power_supply_online(bool *online)
+{
+    if (!online) return false;
+    *online = false;
+    const char *root = power_supply_root();
+    DIR *directory = opendir(root);
+    if (!directory) return false;
+
+    bool complete = true;
+    int enumeration_error = 0;
+    struct dirent *entry = NULL;
+    for (;;) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) {
+            if (errno != 0) {
+                complete = false;
+                enumeration_error = errno;
+            }
+            break;
+        }
+        if (entry->d_name[0] == '.') continue;
+        char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
+        if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
+            !lsm_join_path(path, sizeof(path), base, "type") ||
+            !lsm_read_text_file(path, type, sizeof(type)) ||
+            strcmp(type, "Battery") == 0)
+            continue;
+        if (!lsm_join_path(path, sizeof(path), base, "online"))
+            continue;
+        uint64_t value = 0U;
+        if (lsm_read_u64_file(path, &value) && value != 0U) {
+            *online = true;
+            break;
+        }
+    }
+    if (closedir(directory) != 0 && complete) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EIO;
+    }
+    if (!complete) {
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
+    return true;
+}
+
+static double battery_energy_wh(const char *base, const char *energy_name,
+                                const char *charge_name, double voltage_volts)
+{
+    char path[LSM_PATH_LEN];
+    uint64_t micro = 0;
+    if (lsm_join_path(path, sizeof(path), base, energy_name) &&
+        lsm_read_u64_file(path, &micro)) return (double)micro / 1000000.0;
+
+    if (lsm_join_path(path, sizeof(path), base, charge_name) &&
+        lsm_read_u64_file(path, &micro) && voltage_volts > 0.0)
+        return ((double)micro / 1000000.0) * voltage_volts;
+    return NAN;
+}
+
+static uint64_t battery_seconds_from_hours(double hours)
+{
+    if (!isfinite(hours) || hours <= 0.0) return 0U;
+    const long double seconds = (long double)hours * 3600.0L;
+    if (!isfinite(seconds) || seconds >= (long double)UINT64_MAX)
+        return UINT64_MAX;
+    return (uint64_t)seconds;
+}
+
+static void initialise_battery_measurements(LsmBatteryInfo *battery)
+{
+    battery->capacity_percent = NAN;
+    battery->supplemental_capacity_percent = NAN;
+    battery->energy_now_wh = NAN;
+    battery->energy_full_wh = NAN;
+    battery->energy_design_wh = NAN;
+    battery->power_watts = NAN;
+    battery->voltage_volts = NAN;
+    battery->current_amps = NAN;
+    battery->temperature_c = NAN;
+}
+
+static bool peripheral_supply_has_charge_telemetry(const char *base)
+{
+    if (!base || !base[0]) return false;
+
+    char path[LSM_PATH_LEN];
+    if (lsm_join_path(path, sizeof(path), base, "/capacity") &&
+        isfinite(lsm_read_double_or_nan(path)))
+        return true;
+
+    char level[32] = "";
+    if (lsm_join_path(path, sizeof(path), base, "/capacity_level") &&
+        lsm_read_text_file(path, level, sizeof(level)) && level[0] &&
+        !lsm_ascii_equal_ci(level, "Unknown"))
+        return true;
+
+    static const char *const charge_paths[] = {
+        "/energy_now",
+        "/charge_now"
+    };
+    uint64_t raw = 0U;
+    return lsm_read_first_u64(
+        base, charge_paths, LSM_ARRAY_LENGTH(charge_paths), &raw);
+}
+
+static bool same_bluetooth_address(const char *left, const char *right)
+{
+    return left && right && left[0] && right[0] && lsm_ascii_equal_ci(left, right);
+}
+
+static LsmBatteryInfo *find_battery_by_serial(LsmMonitor *monitor,
+                                               const char *serial)
+{
+    if (!serial || !serial[0]) return NULL;
+    for (size_t index = 0; index < monitor->battery_count; index++)
+        if (same_bluetooth_address(monitor->batteries[index].serial, serial))
+            return &monitor->batteries[index];
+    return NULL;
+}
+
+static LsmLinuxBatteryState *find_battery_state(LsmMonitor *monitor,
+                                                const char *name)
+{
+    LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
+    if (!state || !name) return NULL;
+    for (size_t index = 0U; index < state->battery_count; index++)
+        if (strcmp(state->batteries[index].name, name) == 0)
+            return &state->batteries[index];
+    return NULL;
+}
+
+static LsmLinuxBatteryState *register_battery_state(
+    LsmMonitor *monitor, const char *name)
+{
+    LsmLinuxMonitorBackendState *state = monitor_backend_state(monitor);
+    if (!state || !name || !name[0]) return NULL;
+    LsmLinuxBatteryState *existing = find_battery_state(monitor, name);
+    if (existing) return existing;
+    if (state->battery_count >= LSM_MAX_BATTERIES) return NULL;
+    LsmLinuxBatteryState *entry = &state->batteries[state->battery_count++];
+    memset(entry, 0, sizeof(*entry));
+    lsm_copy_string(entry->name, sizeof(entry->name), name);
+    return entry;
+}
+
+static void bluetooth_battery_name(const LsmBluetoothBatteryRecord *record,
+                                   char *name, size_t size)
+{
+    snprintf(name, size, "bluez_%s", record->address[0]
+             ? record->address : record->object_path);
+    for (char *cursor = name; *cursor; cursor++)
+        if (*cursor == ':' || *cursor == '/' || *cursor == ' ')
+            *cursor = '_';
+}
+
+
+static void bluetooth_device_type(const char *icon, char *destination,
+                                  size_t destination_size)
+{
+    if (!destination || destination_size == 0U) return;
+    destination[0] = '\0';
+    if (!icon || !icon[0]) return;
+
+    const char *source = icon;
+    if (lsm_string_starts_with(source, "audio-")) source += 6U;
+    else if (lsm_string_starts_with(source, "input-")) source += 6U;
+
+    size_t used = 0U;
+    bool first = true;
+    for (; *source && used + 1U < destination_size; source++) {
+        char value = *source == '-' || *source == '_' ? ' ' : *source;
+        if (first && lsm_ascii_is_alpha((unsigned char)value)) {
+            value = (char)lsm_ascii_to_upper((unsigned char)value);
+            first = false;
+        }
+        destination[used++] = value;
+    }
+    destination[used] = '\0';
+}
+
+static void apply_bluetooth_details(
+    LsmBatteryInfo *battery, const LsmBluetoothBatteryRecord *record)
+{
+    if (!battery || !record) return;
+    lsm_copy_string(battery->connection, sizeof(battery->connection),
+                    record->address_type[0] &&
+                    lsm_ascii_equal_ci(record->address_type, "random")
+                        ? "Bluetooth LE" : "Bluetooth");
+    lsm_copy_string(battery->battery_source,
+                    sizeof(battery->battery_source),
+                    record->source[0] ? record->source : "BlueZ Battery1");
+    bluetooth_device_type(record->icon, battery->device_type,
+                          sizeof(battery->device_type));
+    lsm_copy_string(battery->modalias, sizeof(battery->modalias),
+                    record->modalias);
+    battery->paired = record->paired;
+    battery->trusted = record->trusted;
+    battery->services_resolved = record->services_resolved;
+    battery->bluetooth_details_available = true;
+}
+
+/* BlueZ records enrich or append Bluetooth devices without blocking GTK. */
+static bool merge_bluez_batteries(LsmMonitor *monitor)
+{
+    LsmBluetoothBatteryRecord records[LSM_BLUETOOTH_BATTERY_MAX] = {0};
+    const size_t count = lsm_bluetooth_battery_snapshot(
+        records, LSM_BLUETOOTH_BATTERY_MAX);
+    for (size_t index = 0; index < count; index++) {
+        const LsmBluetoothBatteryRecord *record = &records[index];
+        LsmBatteryInfo *battery = find_battery_by_serial(monitor,
+                                                         record->address);
+        if (battery) {
+            battery->supplemental_capacity_percent = record->percentage;
+            battery->has_supplemental_capacity = true;
+            if (!battery->technology[0])
+                lsm_copy_string(battery->technology,
+                                sizeof(battery->technology), "Bluetooth");
+            apply_bluetooth_details(battery, record);
+            continue;
+        }
+        if (monitor->battery_count >= LSM_MAX_BATTERIES) {
+            errno = EOVERFLOW;
+            return false;
+        }
+
+        battery = &monitor->batteries[monitor->battery_count++];
+        memset(battery, 0, sizeof(*battery));
+        initialise_battery_measurements(battery);
+        bluetooth_battery_name(record, battery->name, sizeof(battery->name));
+        lsm_copy_string(battery->model, sizeof(battery->model), record->name);
+        lsm_copy_string(battery->serial, sizeof(battery->serial),
+                        record->address);
+        lsm_copy_string(battery->technology, sizeof(battery->technology),
+                        "Bluetooth");
+        apply_bluetooth_details(battery, record);
+        lsm_copy_string(battery->scope, sizeof(battery->scope), "Device");
+        lsm_copy_string(battery->status, sizeof(battery->status), "Connected");
+        battery->capacity_percent = record->percentage;
+        battery->supplemental_capacity_percent = record->percentage;
+        battery->has_supplemental_capacity = true;
+        battery->is_peripheral = true;
+        LsmLinuxBatteryState *state = register_battery_state(
+            monitor, battery->name);
+        if (state) state->bluez_record = true;
+        battery->present = record->connected;
+    }
+    return true;
+}
+
+bool lsm_bluetooth_enumerate(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+
+    LsmBluetoothAdapterRecord records[LSM_BLUETOOTH_ADAPTER_MAX] = {0};
+    const size_t count = lsm_bluetooth_adapter_snapshot(
+        records, LSM_BLUETOOTH_ADAPTER_MAX);
+    if (count > LSM_MAX_BLUETOOTH) {
+        errno = EOVERFLOW;
+        return false;
+    }
+
+    LsmBluetoothInfo discovered_adapters[LSM_MAX_BLUETOOTH] = {0};
+    for (size_t index = 0U; index < count; index++) {
+        const LsmBluetoothAdapterRecord *source = &records[index];
+        LsmBluetoothInfo *destination = &discovered_adapters[index];
+        const char *name = lsm_path_basename(source->object_path);
+        lsm_copy_string(destination->name, sizeof(destination->name),
+                        name[0] ? name : "Bluetooth");
+        lsm_copy_string(destination->address, sizeof(destination->address),
+                        source->address);
+        lsm_copy_string(destination->adapter_name,
+                        sizeof(destination->adapter_name), source->name);
+        lsm_copy_string(destination->alias, sizeof(destination->alias),
+                        source->alias);
+        lsm_copy_string(destination->connected_devices,
+                        sizeof(destination->connected_devices),
+                        source->connected_names);
+        destination->device_count = source->device_count;
+        destination->connected_count = source->connected_count;
+        destination->paired_count = source->paired_count;
+        destination->trusted_count = source->trusted_count;
+        destination->powered = source->powered;
+        destination->discoverable = source->discoverable;
+        destination->pairable = source->pairable;
+        destination->discovering = source->discovering;
+    }
+
+    LsmBluetoothDeviceRecord devices[LSM_BLUETOOTH_DEVICE_MAX] = {0};
+    const size_t device_count = lsm_bluetooth_device_snapshot(
+        devices, LSM_BLUETOOTH_DEVICE_MAX);
+    LsmBluetoothDeviceInfo
+        discovered_devices[LSM_MAX_BLUETOOTH_DEVICES] = {0};
+    size_t connected_count = 0U;
+    for (size_t index = 0U; index < device_count; index++) {
+        const LsmBluetoothDeviceRecord *source = &devices[index];
+        if (!source->connected || !source->address[0]) continue;
+        if (connected_count >= LSM_MAX_BLUETOOTH_DEVICES) {
+            errno = EOVERFLOW;
+            return false;
+        }
+        LsmBluetoothDeviceInfo *destination =
+            &discovered_devices[connected_count++];
+        lsm_copy_string(destination->controller,
+                        sizeof(destination->controller), source->controller);
+        lsm_copy_string(destination->address,
+                        sizeof(destination->address), source->address);
+        lsm_copy_string(destination->name,
+                        sizeof(destination->name), source->name);
+        lsm_copy_string(destination->alias,
+                        sizeof(destination->alias), source->alias);
+        lsm_copy_string(destination->address_type,
+                        sizeof(destination->address_type),
+                        source->address_type);
+        lsm_copy_string(destination->icon,
+                        sizeof(destination->icon), source->icon);
+        lsm_copy_string(destination->modalias,
+                        sizeof(destination->modalias), source->modalias);
+        destination->connected = true;
+        destination->paired = source->paired;
+        destination->trusted = source->trusted;
+        destination->services_resolved = source->services_resolved;
+    }
+
+    memset(monitor->bluetooth, 0, sizeof(monitor->bluetooth));
+    if (count > 0U)
+        memcpy(monitor->bluetooth, discovered_adapters,
+               count * sizeof(discovered_adapters[0]));
+    monitor->bluetooth_count = count;
+
+    memset(monitor->bluetooth_devices, 0, sizeof(monitor->bluetooth_devices));
+    if (connected_count > 0U)
+        memcpy(monitor->bluetooth_devices, discovered_devices,
+               connected_count * sizeof(discovered_devices[0]));
+    monitor->bluetooth_device_count = connected_count;
+    return true;
+}
+
+static bool track_hidpp_batteries(const LsmMonitor *monitor)
+{
+    const char *devices[LSM_LOGITECH_HIDPP_MAX_DEVICES] = {0};
+    size_t count = 0U;
+    const LsmLinuxMonitorBackendState *state =
+        monitor_backend_state_const(monitor);
+    if (state) {
+        for (size_t index = 0U; index < state->battery_count; index++) {
+            const char *path = state->batteries[index].hidraw_path;
+            if (!path[0]) continue;
+            if (count >= LSM_LOGITECH_HIDPP_MAX_DEVICES) {
+                errno = EOVERFLOW;
+                return false;
+            }
+            devices[count++] = path;
+        }
+    }
+    return lsm_logitech_hidpp_set_devices(devices, count);
+}
+
+static bool hidpp_status_matches(const char *sysfs_status,
+                                 const char *hidpp_status)
+{
+    if (!hidpp_status || !hidpp_status[0]) return false;
+    if (!sysfs_status || !sysfs_status[0] ||
+        lsm_ascii_equal_ci(sysfs_status, "Unknown"))
+        return true;
+    return lsm_ascii_equal_ci(sysfs_status, hidpp_status);
+}
+
+/* HID++ values override coarse kernel capacity only when identity and status
+ * checks show that both records describe the same physical device. */
+bool lsm_battery_apply_hidpp_reading(
+    LsmBatteryInfo *battery, const LsmHidppBatteryReading *reading)
+{
+    if (!battery || !reading ||
+        !hidpp_status_matches(battery->status, reading->status))
+        return false;
+
+    if ((!battery->status[0] ||
+         lsm_ascii_equal_ci(battery->status, "Unknown")) &&
+        reading->status[0])
+        lsm_copy_string(battery->status, sizeof(battery->status),
+                        reading->status);
+    if (reading->level[0])
+        lsm_copy_string(battery->capacity_level,
+                        sizeof(battery->capacity_level), reading->level);
+
+    /* A status-matched HID++ result comes directly from the Logitech
+     * battery feature and therefore supersedes generic BlueZ/sysfs values. */
+    if (reading->exact_percent && isfinite(reading->percent) &&
+        reading->percent >= 0.0 && reading->percent <= 100.0)
+        battery->capacity_percent = reading->percent;
+    if (reading->source[0])
+        lsm_copy_string(battery->battery_source,
+                        sizeof(battery->battery_source), reading->source);
+    if (!battery->connection[0])
+        lsm_copy_string(battery->connection, sizeof(battery->connection),
+                        "Logitech HID++");
+    if (!battery->device_type[0])
+        lsm_copy_string(battery->device_type,
+                        sizeof(battery->device_type), "Mouse");
+    return true;
+}
+
+static void apply_hidpp_snapshot(LsmMonitor *monitor,
+                                 LsmBatteryInfo *battery)
+{
+    LsmLinuxBatteryState *state = find_battery_state(monitor, battery->name);
+    if (!state || !state->hidraw_path[0]) return;
+
+    LsmHidppBatteryReading reading;
+    if (!lsm_logitech_hidpp_snapshot(state->hidraw_path, &reading)) return;
+    (void)lsm_battery_apply_hidpp_reading(battery, &reading);
+}
+
+/* Inventory and sampling are separate so hotplug work stays off fast graphs. */
+bool lsm_battery_enumerate(LsmMonitor *monitor)
+{
+    if (!monitor) return false;
+    const char *root = power_supply_root();
+    errno = 0;
+    DIR *directory = opendir(root);
+    if (!directory && errno != ENOENT)
+        return false;
+
+    LsmBatteryInfo previous_batteries[LSM_MAX_BATTERIES];
+    memcpy(previous_batteries, monitor->batteries, sizeof(previous_batteries));
+    const size_t previous_battery_count = monitor->battery_count;
+
+    LsmLinuxMonitorBackendState *backend = monitor_backend_state(monitor);
+    LsmLinuxBatteryState previous_states[LSM_MAX_BATTERIES];
+    size_t previous_state_count = 0U;
+    if (backend) {
+        memcpy(previous_states, backend->batteries, sizeof(previous_states));
+        previous_state_count = backend->battery_count;
+    }
+
+    monitor->battery_count = 0U;
+    if (backend) {
+        memset(backend->batteries, 0, sizeof(backend->batteries));
+        backend->battery_count = 0U;
+    }
+
+    bool complete = true;
+    int enumeration_error = 0;
+    if (directory) {
+        struct dirent *entry = NULL;
+        for (;;) {
+            errno = 0;
+            entry = readdir(directory);
+            if (!entry) {
+                if (errno != 0) {
+                    complete = false;
+                    enumeration_error = errno;
+                }
+                break;
+            }
+            if (entry->d_name[0] == '.') continue;
+            char base[LSM_PATH_LEN], path[LSM_PATH_LEN], type[64] = "";
+            if (!lsm_join_path(base, sizeof(base), root, entry->d_name) ||
+                !lsm_join_path(path, sizeof(path), base, "type") ||
+                !lsm_read_text_file(path, type, sizeof(type)) ||
+                strcmp(type, "Battery") != 0)
+                continue;
+
+            if (monitor->battery_count >= LSM_MAX_BATTERIES) {
+                complete = false;
+                enumeration_error = EOVERFLOW;
+                continue;
+            }
+
+            LsmBatteryInfo *battery =
+                &monitor->batteries[monitor->battery_count++];
+            memset(battery, 0, sizeof(*battery));
+            initialise_battery_measurements(battery);
+            lsm_copy_string(battery->name, sizeof(battery->name), entry->d_name);
+            (void)lsm_join_path(path, sizeof(path), base, "/model_name");
+            (void)lsm_read_text_file(path, battery->model, sizeof(battery->model));
+            (void)lsm_join_path(path, sizeof(path), base, "/manufacturer");
+            (void)lsm_read_text_file(path, battery->manufacturer,
+                                     sizeof(battery->manufacturer));
+            (void)lsm_join_path(path, sizeof(path), base, "/technology");
+            (void)lsm_read_text_file(path, battery->technology,
+                                     sizeof(battery->technology));
+            (void)lsm_join_path(path, sizeof(path), base, "/scope");
+            (void)lsm_read_text_file(path, battery->scope, sizeof(battery->scope));
+            (void)lsm_join_path(path, sizeof(path), base, "/serial_number");
+            (void)lsm_read_text_file(path, battery->serial, sizeof(battery->serial));
+            battery->is_peripheral =
+                lsm_ascii_equal_ci(battery->scope, "Device");
+            if (battery->is_peripheral &&
+                !peripheral_supply_has_charge_telemetry(base)) {
+                monitor->battery_count--;
+                memset(battery, 0, sizeof(*battery));
+                continue;
+            }
+            LsmLinuxBatteryState *battery_state =
+                register_battery_state(monitor, battery->name);
+            if (battery->is_peripheral &&
+                (lsm_ascii_equal_ci(battery->manufacturer, "Logitech") ||
+                 lsm_string_starts_with(battery->name, "hidpp_battery_"))) {
+                if (battery_state)
+                    (void)lsm_logitech_hidpp_find_device(
+                        base, battery_state->hidraw_path,
+                        sizeof(battery_state->hidraw_path));
+                if (!battery->technology[0])
+                    lsm_copy_string(battery->technology,
+                                    sizeof(battery->technology),
+                                    "Logitech HID++");
+            }
+        }
+        if (closedir(directory) != 0 && complete) {
+            complete = false;
+            enumeration_error = errno != 0 ? errno : EIO;
+        }
+    }
+
+    if (complete && !merge_bluez_batteries(monitor)) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EOVERFLOW;
+    }
+    if (complete && !track_hidpp_batteries(monitor)) {
+        complete = false;
+        enumeration_error = errno != 0 ? errno : EOVERFLOW;
+    }
+
+    if (!complete) {
+        memcpy(monitor->batteries, previous_batteries,
+               sizeof(previous_batteries));
+        monitor->battery_count = previous_battery_count;
+        if (backend) {
+            memcpy(backend->batteries, previous_states,
+                   sizeof(previous_states));
+            backend->battery_count = previous_state_count;
+        }
+        errno = enumeration_error != 0 ? enumeration_error : EIO;
+        return false;
+    }
+
+    return true;
+}
+
+void lsm_battery_update(LsmMonitor *monitor)
+{
+    bool ac = false;
+    const bool ac_available = power_supply_online(&ac);
+    const char *root = power_supply_root();
+    for (size_t i = 0; i < monitor->battery_count; i++) {
+        LsmBatteryInfo *battery = &monitor->batteries[i];
+        LsmLinuxBatteryState *battery_state =
+            find_battery_state(monitor, battery->name);
+        if (battery_state && battery_state->bluez_record) continue;
+
+        char base[LSM_PATH_LEN], path[LSM_PATH_LEN];
+        if (!lsm_join_path(base, sizeof(base), root, battery->name))
+            continue;
+        (void)lsm_join_path(path, sizeof(path), base, "/present");
+        battery->present = access(path, R_OK) != 0 ||
+                           lsm_read_u64_or_zero(path) != 0;
+        (void)lsm_join_path(path, sizeof(path), base, "/status");
+        battery->status[0] = '\0';
+        lsm_read_text_file(path, battery->status, sizeof(battery->status));
+        (void)lsm_join_path(path, sizeof(path), base, "/health");
+        battery->health[0] = '\0';
+        lsm_read_text_file(path, battery->health, sizeof(battery->health));
+        (void)lsm_join_path(path, sizeof(path), base, "/scope");
+        lsm_read_text_file(path, battery->scope, sizeof(battery->scope));
+        battery->is_peripheral =
+            lsm_ascii_equal_ci(battery->scope, "Device");
+        (void)lsm_join_path(path, sizeof(path), base, "/capacity_level");
+        battery->capacity_level[0] = '\0';
+        lsm_read_text_file(path, battery->capacity_level,
+                           sizeof(battery->capacity_level));
+        (void)lsm_join_path(path, sizeof(path), base, "/capacity");
+        battery->capacity_percent = lsm_read_double_or_nan(path);
+        if (isfinite(battery->capacity_percent))
+            battery->capacity_percent = fmin(
+                100.0, fmax(0.0, battery->capacity_percent));
+        else if (battery->has_supplemental_capacity)
+            battery->capacity_percent = battery->supplemental_capacity_percent;
+
+        (void)lsm_join_path(path, sizeof(path), base, "/voltage_now");
+        const double micro_voltage = lsm_read_double_or_nan(path);
+        battery->voltage_volts = isfinite(micro_voltage)
+            ? micro_voltage / 1000000.0 : NAN;
+        (void)lsm_join_path(path, sizeof(path), base, "/current_now");
+        const double micro_current = lsm_read_double_or_nan(path);
+        battery->current_amps = isfinite(micro_current)
+            ? fabs(micro_current) / 1000000.0 : NAN;
+
+        battery->energy_now_wh = battery_energy_wh(
+            base, "energy_now", "charge_now", battery->voltage_volts);
+        battery->energy_full_wh = battery_energy_wh(
+            base, "energy_full", "charge_full", battery->voltage_volts);
+        battery->energy_design_wh = battery_energy_wh(
+            base, "energy_full_design", "charge_full_design",
+            battery->voltage_volts);
+        if ((!battery->health[0] ||
+             strcmp(battery->health, "Unknown") == 0) &&
+            isfinite(battery->energy_full_wh) &&
+            isfinite(battery->energy_design_wh) &&
+            battery->energy_design_wh > 0.0) {
+            const double health_percent = fmin(100.0, fmax(
+                0.0, 100.0 * battery->energy_full_wh /
+                     battery->energy_design_wh));
+            snprintf(battery->health, sizeof(battery->health),
+                     "%.0f%%", health_percent);
+        }
+        (void)lsm_join_path(path, sizeof(path), base, "/power_now");
+        const double micro_power = lsm_read_double_or_nan(path);
+        battery->power_watts = isfinite(micro_power)
+            ? fabs(micro_power) / 1000000.0 : NAN;
+        if (!isfinite(battery->power_watts) &&
+            isfinite(battery->voltage_volts) &&
+            isfinite(battery->current_amps))
+            battery->power_watts =
+                battery->voltage_volts * battery->current_amps;
+
+        (void)lsm_join_path(path, sizeof(path), base, "/temp");
+        const double temperature = lsm_read_double_or_nan(path);
+        battery->temperature_c = isfinite(temperature)
+            ? temperature / 10.0 : NAN;
+        (void)lsm_join_path(path, sizeof(path), base, "/cycle_count");
+        const uint64_t cycle_count = lsm_read_u64_or_zero(path);
+        battery->cycle_count = cycle_count > UINT_MAX
+            ? UINT_MAX : (unsigned)cycle_count;
+        battery->on_ac_power_available =
+            !battery->is_peripheral && ac_available;
+        if (battery->on_ac_power_available)
+            battery->on_ac_power = ac;
+
+        uint64_t seconds = 0;
+        const bool charging =
+            lsm_ascii_equal_ci(battery->status, "Charging");
+        const bool discharging =
+            lsm_ascii_equal_ci(battery->status, "Discharging");
+        if (charging || discharging) {
+            const char *time_name = charging
+                ? "time_to_full_now" : "time_to_empty_now";
+            (void)lsm_join_path(path, sizeof(path), base, time_name);
+            if (!lsm_read_u64_file(path, &seconds) &&
+                isfinite(battery->power_watts) &&
+                battery->power_watts > 0.01) {
+                if (charging && isfinite(battery->energy_full_wh) &&
+                    isfinite(battery->energy_now_wh))
+                    seconds = battery_seconds_from_hours(
+                        (battery->energy_full_wh - battery->energy_now_wh) /
+                        battery->power_watts);
+                else if (discharging && isfinite(battery->energy_now_wh))
+                    seconds = battery_seconds_from_hours(
+                        battery->energy_now_wh / battery->power_watts);
+            }
+        }
+        battery->seconds_remaining = seconds;
+        apply_hidpp_snapshot(monitor, battery);
+    }
+}
+
+/* Public battery-worker lifecycle. */
+void lsm_battery_start(void)
+{
+    (void)lsm_bluetooth_battery_start();
+    (void)lsm_logitech_hidpp_start();
+}
+
+void lsm_battery_shutdown(void)
+{
+    lsm_logitech_hidpp_stop();
+    lsm_bluetooth_battery_stop();
+}

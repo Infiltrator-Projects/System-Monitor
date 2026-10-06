@@ -1,0 +1,401 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Publish release
+
+on:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out exact tested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set reproducible release timestamp
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch=$(git show -s --format=%ct "$EXPECTED_SHA")
+          [[ "$epoch" =~ ^[0-9]+$ ]]
+          printf 'SOURCE_DATE_EPOCH=%s\n' "$epoch" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-mingw-w64-x86-64 git libgtk-3-dev pkg-config
+
+      - name: Verify exact current main and Release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          test "$head_commit" = "$EXPECTED_SHA"
+          current_main=$(git rev-parse origin/main)
+          if [[ "$current_main" != "$EXPECTED_SHA" ]]; then
+            printf 'Refusing to publish stale tested commit %s; current main is %s.\n' \
+              "$EXPECTED_SHA" "$current_main" >&2
+            exit 1
+          fi
+          version=$(tr -d '[:space:]' < support/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          subject=$(git log -1 --format=%s "$head_commit")
+          if [[ "$subject" != "Release ${version}" && "$subject" != "Release ${version}:"* ]]; then
+            printf 'Release commit subject must begin with Release %s.\n' "$version" >&2
+            exit 1
+          fi
+
+      - name: Build release packages
+        run: |
+          set -euo pipefail
+          make -j2 release
+          version=$(tr -d '[:space:]' < support/VERSION)
+          windows_app="system-monitor-${version}-windows.exe"
+          version_header=build/windows-version.h
+          mkdir -p build
+          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            support/tools/prepare_windows_typography.cpp \
+            -o build/prepare-windows-typography
+          build/prepare-windows-typography \
+            src/infiltratr-common/cmake/InfiltratrTypographyAssets.cmake \
+            build/windows-fonts
+          x86_64-w64-mingw32-windres -Isrc \
+            support/windows/system-monitor-fonts.rc -O coff \
+            -o build/windows-fonts.o
+          common_portable=( \
+            src/infiltratr-common/src/core.c \
+            src/infiltratr-common/src/arithmetic.c \
+            src/infiltratr-common/src/config.c \
+            src/infiltratr-common/src/i18n.c \
+            src/infiltratr-common/src/token.c \
+            src/infiltratr-common/src/timing.c \
+            src/infiltratr-common/src/temporal.c \
+            src/infiltratr-common/src/format.c \
+            src/infiltratr-common/src/quantity.c \
+            src/infiltratr-common/src/graphics.c \
+            src/infiltratr-common/src/escape.c \
+            src/infiltratr-common/src/design.c \
+          )
+          x86_64-w64-mingw32-gcc \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            -Wstrict-prototypes -Wmissing-prototypes \
+            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
+            src/main_windows.c src/presentation_contract.c src/performance_view.c \
+            src/overview_history.c src/monitor_backend_windows.c src/process_backend_windows.c \
+            build/windows-fonts.o "${common_portable[@]}" \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
+            -static-libgcc -mwindows \
+            -o "$windows_app"
+          strings "$windows_app" > build/windows-strings.txt
+          grep -Fq "$version" build/windows-strings.txt
+          pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
+          grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
+          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|PDH\.DLL|POWRPROF\.dll|DXGI\.dll|SETUPAPI\.dll|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
+            echo "Windows GUI has an unexpected non-system runtime dependency." >&2
+            exit 1
+          fi
+
+      - name: Verify Debian compatibility contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          test -f "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
+          dependencies=$(dpkg-deb -f "$deb" Depends)
+          grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
+          if grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"; then
+            printf 'Avoidable runtime dependency reappeared: %s\n' "$dependencies" >&2
+            exit 1
+          fi
+
+          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
+          actual_members=$(ar t "$deb")
+          if [[ "$actual_members" != "$expected_members" ]]; then
+            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
+            printf 'Found:\n%s\n' "$actual_members" >&2
+            exit 1
+          fi
+
+          contents=$(dpkg-deb --contents "$deb")
+          if grep -q '1970-01-01' <<<"$contents"; then
+            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
+            exit 1
+          fi
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          dpkg-deb -x "$deb" "$tmp/root"
+          dpkg-deb -e "$deb" "$tmp/control"
+          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
+          if grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"; then
+            printf 'Debian maintainer script regained an external setup helper.\n' >&2
+            exit 1
+          fi
+          font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
+          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
+            test -f "$font_root/$face"
+            cmp "build/fonts/$face" "$font_root/$face"
+          done
+          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
+          gzip -t "$changelog"
+          first_line=$(gzip -cd "$changelog" | sed -n '1p')
+          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
+          if [[ "$first_line" != "$expected_line" ]]; then
+            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
+            exit 1
+          fi
+          gzip -cd "$changelog" > "$tmp/debian-changelog"
+          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
+
+      - name: Publish or resume exact immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          head_commit=$(git rev-parse HEAD)
+          test "$head_commit" = "$EXPECTED_SHA"
+
+          version=$(tr -d '[:space:]' < support/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v${version}"
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          windows_app="system-monitor-${version}-windows.exe"
+          test -f "$deb"
+          test -x "$installer"
+          test -f "$windows_app"
+          test "$(dpkg-deb -f "$deb" Version)" = "$version"
+          ./"$installer" --help >/dev/null
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "$tag")
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Release tag %s points to %s instead of verified commit %s.\n' \
+                "$tag" "$tag_commit" "$head_commit" >&2
+              exit 1
+            fi
+            printf 'Resuming exact existing tag %s at %s.\n' "$tag" "$head_commit"
+          else
+            git tag "$tag" "$head_commit"
+            git push origin "$tag"
+          fi
+
+          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_app" | sort)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+            if [[ "$published_assets" != "$expected_assets" ]]; then
+              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
+                "$tag" >&2
+              exit 1
+            fi
+            tmp=$(mktemp -d)
+            trap 'rm -rf "$tmp"' EXIT
+            gh release download "$tag" --dir "$tmp"
+            cmp -s "$deb" "$tmp/$deb" || {
+              printf 'Published Debian asset differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            cmp -s "$installer" "$tmp/$installer" || {
+              printf 'Published native installer differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            cmp -s "$windows_app" "$tmp/$windows_app" || {
+              printf 'Published Windows GUI differs from the verified rebuild.\n' >&2
+              exit 1
+            }
+            printf 'Resuming exact existing immutable release %s.\n' "$tag"
+          else
+            notes=$(git log -1 --format=%b "$head_commit")
+            if [[ -z "$notes" ]]; then
+              notes="Verified System Monitor ${version} release."
+            fi
+            gh release create "$tag" "$deb" "$installer" "$windows_app" \
+              --verify-tag \
+              --target "$head_commit" \
+              --title "System Monitor $version" \
+              --notes "$notes" \
+              --latest
+          fi
+
+          published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+          if [[ "$published_assets" != "$expected_assets" ]]; then
+            printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
+            exit 1
+          fi
+
+
+
+  apt-publication:
+    name: Publish to central APT repository
+    needs: publish
+    if: needs.publish.result == 'success'
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact published commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Trigger and verify central APT publication
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_ID: system-monitor
+          DISPATCH_TOKEN: ${{ secrets.APT_REPOSITORY_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < support/VERSION)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+          payload="$(jq -nc \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$RELEASE_SHA" \
+            '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
+
+          dispatched=false
+          if [[ -n "${DISPATCH_TOKEN:-}" ]]; then
+            if curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $DISPATCH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$payload" \
+              https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
+              echo "Immediate APT dispatch accepted; verifying publication."
+              dispatched=true
+            else
+              echo "::warning::Immediate APT dispatch failed; waiting for the central scheduled publisher."
+            fi
+          else
+            echo "::warning::APT dispatch token unavailable; waiting for the central scheduled publisher."
+          fi
+
+          catalogue='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
+
+          if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA&attempt=0" \
+            | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
+              '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+            echo "APT repository already advertises $APP_ID $VERSION."
+            exit 0
+          fi
+
+          if [[ "$dispatched" != true ]]; then
+            echo "Immediate APT dispatch unavailable; waiting for central repository publication."
+          fi
+
+          for attempt in $(seq 1 120); do
+            if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA&attempt=$attempt" \
+              | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
+                '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+              echo "APT repository advertises $APP_ID $VERSION."
+              exit 0
+            fi
+            echo "Waiting for APT publication of $APP_ID $VERSION ($attempt/120)..."
+            sleep 10
+          done
+
+          echo "::error::Central APT repository did not advertise $APP_ID $VERSION within 20 minutes."
+          exit 1
+
+  retention:
+    name: Keep only the five newest GitHub releases and release tags
+    needs: publish
+    if: needs.publish.result == 'success'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository for release retention
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Remove superseded published releases and their tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t release_tags < <(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .tag_name' |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              sort -Vr
+          )
+
+          printf 'Numbered published releases found: %d\n' "${#release_tags[@]}"
+
+          if (( ${#release_tags[@]} > 5 )); then
+            for tag in "${release_tags[@]:5}"; do
+              echo "Pruning superseded published release and tag: $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+              if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+                git push origin ":refs/tags/$tag"
+              fi
+            done
+          fi
+
+          mapfile -t remaining < <(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false) | .tag_name' |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              sort -Vr
+          )
+
+          if (( ${#remaining[@]} > 5 )); then
+            echo "Release retention failed: more than five numbered published releases remain." >&2
+            exit 1
+          fi
+
+          for tag in "${remaining[@]}"; do
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "Published release $tag is missing its immutable source tag." >&2
+              exit 1
+            fi
+          done
+
+          printf 'Release retention verified: %s\n' "${remaining[*]}"

@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file graph.h
+ * @brief Reusable GTK/Cairo history graph widget.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_GRAPH_H
+#define INFILTRATOR_SYSTEM_MONITOR_GRAPH_H
+
+#include <gtk/gtk.h>
+#include "sample_history.h"
+
+/** Runtime state for one single- or dual-series graph. */
+typedef struct {
+    GtkWidget *area;
+    LsmSampleHistory primary;
+    LsmSampleHistory secondary;
+    gboolean has_secondary;
+    gboolean percentage_scale;
+    gboolean compact;
+    gboolean emphasise_midline;
+    gboolean smooth;
+    gboolean secondary_dashed;
+    gboolean secondary_visible;
+    gboolean stacked;
+    gboolean logarithmic;
+    gboolean newer_on_right;
+    size_t visible_points;
+    double fixed_max;
+    double dynamic_step;
+    double minimum_max;
+    GdkRGBA primary_colour;
+    GdkRGBA secondary_colour;
+} LsmGraph;
+
+/**
+ * Allocate a graph widget and its fixed-capacity sample histories.
+ *
+ * @param [in] has_secondary Whether a second series is displayed.
+ * @param [in] percentage_scale Clamp the vertical scale to 0-100 percent.
+ * @param [in] fixed_max Positive fixed maximum, or zero for dynamic scaling.
+ * @param [in] minimum_width Minimum drawing-area width, or -1 for GTK's natural minimum.
+ * @param [in] minimum_height Minimum drawing-area height, or -1 for GTK's natural minimum.
+ * @return New graph owned by the caller, or NULL on allocation failure.
+ */
+LsmGraph *lsm_graph_new(gboolean has_secondary,
+                        gboolean percentage_scale,
+                        double fixed_max,
+                        int minimum_width,
+                        int minimum_height);
+/**
+ * Release graph-owned history and drawing state.
+ *
+ * @param [in,out] graph Graph returned by lsm_graph_new(), or NULL.
+ */
+void lsm_graph_free(LsmGraph *graph);
+/**
+ * Append primary and optional secondary samples in O(1) time.
+ *
+ * @param [in,out] graph Graph receiving the samples.
+ * @param [in] primary Primary series value.
+ * @param [in] secondary Secondary value when enabled.
+ * @param [in] newer_on_right Whether newest samples appear on the right.
+ */
+void lsm_graph_push(LsmGraph *graph, double primary, double secondary,
+                    gboolean newer_on_right);
+/**
+ * Queue a GTK redraw for the graph's drawing area.
+ *
+ * @param [in,out] graph Graph whose widget should be invalidated.
+ */
+void lsm_graph_queue_draw(LsmGraph *graph);
+/**
+ * Replace primary and secondary series colours from CSS colour strings.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] primary Primary CSS colour specification.
+ * @param [in] secondary Secondary CSS colour specification, or NULL.
+ */
+void lsm_graph_set_colours(LsmGraph *graph, const char *primary, const char *secondary);
+/**
+ * Select compact side-pane rendering or full detail rendering.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] compact TRUE for compact rendering.
+ */
+void lsm_graph_set_compact(LsmGraph *graph, gboolean compact);
+/**
+ * Emphasise the horizontal 50-percent line in a full-size graph.
+ *
+ * This is useful for Task-Manager-style axis presentation where a midpoint
+ * scale label is shown beside the graph. Compact sidebar graphs ignore it.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] emphasise TRUE to draw a stronger midpoint guide.
+ */
+void lsm_graph_set_midline_emphasis(LsmGraph *graph, gboolean emphasise);
+/**
+ * Select rounded spline presentation for retained history.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] smooth TRUE to join contiguous samples with a Catmull-Rom spline.
+ */
+void lsm_graph_set_smooth(LsmGraph *graph, gboolean smooth);
+/**
+ * Limit how many retained samples are visible without discarding history.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] points Number of newest/oldest samples to render, clamped to the retained-history capacity.
+ */
+void lsm_graph_set_visible_points(LsmGraph *graph, size_t points);
+/**
+ * Select logarithmic vertical presentation for non-negative samples.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] logarithmic TRUE to transform the visible vertical scale with log1p.
+ */
+void lsm_graph_set_logarithmic(LsmGraph *graph, gboolean logarithmic);
+/**
+ * Select whether the optional secondary trace is drawn.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] visible TRUE to draw the secondary trace.
+ */
+void lsm_graph_set_secondary_visible(LsmGraph *graph, gboolean visible);
+/**
+ * Select stacked-area presentation for graphs that support two related series.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] stacked TRUE to present the secondary series as part of the stacked view.
+ */
+void lsm_graph_set_stacked(LsmGraph *graph, gboolean stacked);
+/**
+ * Select whether the optional secondary trace uses a dashed stroke.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] dashed TRUE for dashed secondary presentation.
+ */
+void lsm_graph_set_secondary_dashed(LsmGraph *graph, gboolean dashed);
+/**
+ * Configure quantised dynamic vertical scaling.
+ *
+ * @param [in,out] graph Graph to configure.
+ * @param [in] step Scale grows in positive multiples of this value.
+ * @param [in] minimum_max Lower bound for the displayed maximum.
+ */
+void lsm_graph_set_dynamic_scale(LsmGraph *graph, double step, double minimum_max);
+/**
+ * Return the vertical maximum currently used for presentation.
+ *
+ * @param [in] graph Graph to inspect.
+ * @return Current positive maximum, or 0.0 for an invalid graph.
+ */
+double lsm_graph_get_maximum(const LsmGraph *graph);
+
+#endif

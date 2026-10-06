@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file ui_helpers.h
+ * @brief Shared GTK presentation helpers used by multiple tabs.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_UI_HELPERS_H
+#define INFILTRATOR_SYSTEM_MONITOR_UI_HELPERS_H
+
+#include <gtk/gtk.h>
+#include <stddef.h>
+
+/**
+ * Compare current and proposed widget text under NULL-as-empty semantics.
+ *
+ * @param [in] current Existing label text, or NULL.
+ * @param [in] next Proposed label text, or NULL.
+ * @return TRUE only when a GTK property update is required.
+ */
+gboolean lsm_ui_text_needs_update(const char *current, const char *next);
+/**
+ * Format and conditionally apply label text.
+ *
+ * Formatting uses stack storage on the normal path. GTK is notified only when
+ * the final text differs, avoiding redundant allocation, layout and redraw.
+ *
+ * @param [in,out] label GtkLabel-compatible widget.
+ * @param [in] format printf-style format string followed by its arguments.
+ * @return TRUE when the widget text changed; FALSE for invalid input or an
+ *         unchanged formatted value.
+ */
+gboolean lsm_ui_set_label_text(GtkWidget *label, const char *format, ...)
+    G_GNUC_PRINTF(2, 3);
+/**
+ * Present a modal, formatted error message through the GUI.
+ *
+ * @param [in] parent Optional transient parent window.
+ * @param [in] title Dialog title.
+ * @param [in] format printf-style message format followed by its arguments.
+ */
+void lsm_ui_show_error(GtkWindow *parent, const char *title,
+                       const char *format, ...) G_GNUC_PRINTF(3, 4);
+/**
+ * Resolve the effective themed background colour for a widget.
+ *
+ * @param [in] widget Widget whose style context is queried.
+ * @return Resolved RGBA colour, with an opaque neutral fallback on failure.
+ */
+GdkRGBA lsm_ui_background_colour(GtkWidget *widget);
+/**
+ * Match UTF-8 text against a query that has already been case-folded.
+ *
+ * This avoids repeatedly folding the same search term while filtering a
+ * collection with several searchable fields per row.
+ *
+ * @param [in] text Candidate UTF-8 text, or NULL.
+ * @param [in] folded_needle Pre-case-folded query, or NULL/empty to match all.
+ * @return TRUE when @p folded_needle is empty or occurs in @p text.
+ */
+gboolean lsm_ui_text_matches_folded(const char *text,
+                                    const char *folded_needle);
+
+/**
+ * Perform the application's case-insensitive substring filter comparison.
+ *
+ * @param [in] text Candidate text, or NULL.
+ * @param [in] needle Search text, or NULL/empty to match all candidates.
+ * @return TRUE when @p needle is empty or occurs in @p text.
+ */
+gboolean lsm_ui_text_matches(const char *text, const char *needle);
+/**
+ * Set a preferred window size clamped to the usable primary-monitor work area.
+ *
+ * Normal displays retain the requested size. Smaller work areas reduce only
+ * the oversized dimension so dialogs and tool windows remain reachable.
+ *
+ * @param [in,out] window Window receiving the preferred size.
+ * @param [in] requested_width Preferred client width.
+ * @param [in] requested_height Preferred client height.
+ */
+void lsm_ui_set_workarea_default_size(GtkWindow *window,
+                                      gint requested_width,
+                                      gint requested_height);
+
+#endif

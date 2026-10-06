@@ -1,0 +1,965 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file process_inspector.c
+ * @brief Multi-page graphical Process Inspector implementation.
+ *
+ * The inspector is deliberately non-modal: the main monitor continues sampling
+ * while the window displays live CPU, memory and I/O values. Expensive procfs
+ * inventories are refreshed only on explicit user request and collected on a
+ * worker thread, while the compact overview and performance graph update once
+ * per second from the application's retained process snapshot. This separation
+ * avoids blocking GTK or turning an inspector into a second process scanner.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "process_inspector.h"
+#include "app_internal.h"
+
+#include "common.h"
+#include "temporal_presentation.h"
+#include "graph.h"
+#include "process_backend.h"
+#include "process_inspection.h"
+#include "process_table_ui.h"
+#include "ui_helpers.h"
+
+#include <infiltratr/format.h>
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define INSPECTOR_OVERVIEW_LABELS 28U
+
+/** Runtime state owned by one non-modal Process Inspector window. */
+typedef struct {
+    LsmApp *app;
+    LsmProcessId pid;
+    LsmProcessInstanceId instance_id;
+    GtkWidget *window;
+    GtkWidget *identity_label;
+    GtkWidget *overview_values[INSPECTOR_OVERVIEW_LABELS];
+    GtkWidget *cpu_value;
+    GtkWidget *memory_value;
+    GtkWidget *read_value;
+    GtkWidget *write_value;
+    GtkWidget *priority_combo;
+    GtkWidget *nice_entry;
+    LsmProcessInfo technical_details;
+    gboolean technical_details_valid;
+    GtkListStore *open_files_store;
+    GtkListStore *maps_store;
+    GtkListStore *threads_store;
+    GtkListStore *family_store;
+    GtkWidget *open_files_status;
+    GtkWidget *maps_status;
+    GtkWidget *threads_status;
+    GtkWidget *family_status;
+    char executable[LSM_PATH_LEN];
+    unsigned descriptor_count;
+    gboolean descriptor_count_available;
+    LsmGraph *performance_graph;
+    guint refresh_timer;
+    gboolean inventory_pending;
+} ProcessInspector;
+
+/** Immutable identity token passed to the expensive inventory worker. */
+typedef struct {
+    LsmProcessId pid; /**< Process identifier captured at dispatch. */
+    LsmProcessInstanceId instance_id; /**< Start-time identity guarding PID reuse. */
+} ProcessInventoryRequest;
+
+/** Plain-data inventory snapshot returned from the worker to GTK. */
+typedef struct {
+    LsmProcessId pid; /**< Process identifier represented by this result. */
+    LsmProcessInstanceId instance_id; /**< Identity token represented by this result. */
+    gboolean identity_valid; /**< Whether the original process instance still exists. */
+    char executable[LSM_PATH_LEN];
+    unsigned descriptor_count;
+    gboolean descriptor_count_available;
+    LsmProcessInfo details;
+    gboolean details_valid;
+    LsmOpenFileInfo *open_files;
+    size_t open_file_count;
+    gboolean open_files_valid;
+    LsmMemoryMapInfo *maps;
+    size_t map_count;
+    gboolean maps_valid;
+    LsmThreadInfo *threads;
+    size_t thread_count;
+    gboolean threads_valid;
+} ProcessInventoryResult;
+
+#define LSM_INSPECTOR_OBJECT_KEY "lsm-process-inspector"
+
+/* Every inspector operation revalidates the process instance token. A
+ * recycled process identifier must never redirect an existing inspector to a
+ * different process. */
+static const LsmProcessInfo *snapshot_process(
+    const LsmApp *app, LsmProcessId pid, LsmProcessInstanceId instance_id)
+{
+    if (!app) return NULL;
+    for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+        if (process->pid == pid && process->instance_id == instance_id)
+            return process;
+    }
+    return NULL;
+}
+
+static bool inspector_identity_current(const ProcessInspector *inspector)
+{
+    return inspector && lsm_process_inspection_identity_matches(
+        inspector->pid, inspector->instance_id);
+}
+
+static bool require_current_identity(ProcessInspector *inspector,
+                                     const char *operation)
+{
+    if (inspector_identity_current(inspector)) return true;
+    lsm_ui_show_error(GTK_WINDOW(inspector->window), operation,
+        "The original process has exited or its PID has been reused.");
+    return false;
+}
+
+static int priority_index(LsmProcessPriority priority)
+{
+    return (int)priority;
+}
+
+static double displayed_cpu(const LsmApp *app, double total_percent)
+{
+    if (!app || !app->runtime.process_cpu_per_core) return total_percent;
+    const unsigned cores = app->monitor.cpu.logical_cores ?
+        app->monitor.cpu.logical_cores : 1U;
+    return total_percent * (double)cores;
+}
+
+static GtkWidget *detail_value(void)
+{
+    GtkWidget *label = gtk_label_new("N/A");
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+    return label;
+}
+
+static void attach_detail(GtkGrid *grid, int row, const char *caption,
+                          GtkWidget **value_out)
+{
+    GtkWidget *name = gtk_label_new(NULL);
+    char *markup = g_markup_printf_escaped("<b>%s</b>", caption);
+    gtk_label_set_markup(GTK_LABEL(name), markup);
+    g_free(markup);
+    gtk_widget_set_halign(name, GTK_ALIGN_START);
+    GtkWidget *value = detail_value();
+    gtk_grid_attach(grid, name, 0, row, 1, 1);
+    gtk_grid_attach(grid, value, 1, row, 1, 1);
+    *value_out = value;
+}
+
+/* Construction is separated from population so expensive inventories can be
+ * refreshed explicitly without rebuilding the inspector window. */
+static GtkWidget *build_overview_page(ProcessInspector *inspector)
+{
+    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    GtkWidget *grid = gtk_grid_new();
+    gtk_container_set_border_width(GTK_CONTAINER(grid), 12);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 24);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
+    static const char *captions[INSPECTOR_OVERVIEW_LABELS] = {
+        "Name", "PID", "Parent PID", "User", "State", "Executable",
+        "Command", "Started", "Elapsed", "Threads", "Handles",
+        "Priority", "Nice", "CPU time", "Virtual memory",
+        "Resident memory", "Writable memory", "Shared memory",
+        "Security context", "Waiting channel", "Control group", "Unit",
+        "Session", "Seat", "Owner", "GPU", "GPU engine", "GPU memory"
+    };
+    for (size_t index = 0U; index < G_N_ELEMENTS(captions); index++)
+        attach_detail(GTK_GRID(grid), (int)index, captions[index],
+                      &inspector->overview_values[index]);
+    gtk_container_add(GTK_CONTAINER(scroller), grid);
+    return scroller;
+}
+
+static GtkWidget *metric_block(const char *caption, GtkWidget **value_out)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *value = gtk_label_new("0%");
+    GtkWidget *name = gtk_label_new(caption);
+    gtk_widget_set_halign(value, GTK_ALIGN_START);
+    gtk_widget_set_halign(name, GTK_ALIGN_START);
+    gtk_label_set_width_chars(GTK_LABEL(value), 12);
+    PangoAttrList *attributes = pango_attr_list_new();
+    PangoAttribute *features = pango_attr_font_features_new("tnum=1");
+    if (features) pango_attr_list_insert(attributes, features);
+    gtk_label_set_attributes(GTK_LABEL(value), attributes);
+    pango_attr_list_unref(attributes);
+    char *markup = g_markup_printf_escaped("<span size=\"xx-large\"><b>%s</b></span>",
+                                           "0%");
+    gtk_label_set_markup(GTK_LABEL(value), markup);
+    g_free(markup);
+    gtk_box_pack_start(GTK_BOX(box), value, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), name, FALSE, FALSE, 0);
+    *value_out = value;
+    return box;
+}
+
+static GtkWidget *build_performance_page(ProcessInspector *inspector)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+    GtkWidget *metrics = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(metrics), 36);
+    gtk_grid_set_row_spacing(GTK_GRID(metrics), 8);
+    gtk_grid_attach(GTK_GRID(metrics), metric_block("CPU", &inspector->cpu_value), 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), metric_block("Memory", &inspector->memory_value), 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), metric_block("Read", &inspector->read_value), 2, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(metrics), metric_block("Write", &inspector->write_value), 3, 0, 1, 1);
+    gtk_box_pack_start(GTK_BOX(box), metrics, FALSE, FALSE, 0);
+    inspector->performance_graph = lsm_graph_new(TRUE, TRUE, 100.0,
+                                                 -1, 360);
+    gtk_box_pack_start(GTK_BOX(box), inspector->performance_graph->area,
+                       TRUE, TRUE, 0);
+    GtkWidget *legend = gtk_label_new(
+        "CPU (total computer capacity) and memory percentage — recent history");
+    gtk_widget_set_halign(legend, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(box), legend, FALSE, FALSE, 0);
+    return box;
+}
+
+/* Inventory reads are deliberately on-demand. They can be large and may race
+ * with process churn, so each category reports partial/unavailable results
+ * without invalidating the one-second summary. */
+static void process_inventory_result_free(gpointer data)
+{
+    ProcessInventoryResult *result = data;
+    if (!result) return;
+    lsm_process_inspection_free(result->open_files);
+    lsm_process_inspection_free(result->maps);
+    lsm_process_inspection_free(result->threads);
+    g_free(result);
+}
+
+static void present_open_files(ProcessInspector *inspector,
+                               const LsmOpenFileInfo *items, size_t count,
+                               gboolean complete)
+{
+    gtk_list_store_clear(inspector->open_files_store);
+    for (size_t index = 0U; index < count; index++) {
+        GtkTreeIter iterator;
+        char descriptor[32];
+        snprintf(descriptor, sizeof(descriptor), "%d", items[index].descriptor);
+        gtk_list_store_append(inspector->open_files_store, &iterator);
+        gtk_list_store_set(inspector->open_files_store, &iterator,
+                           0, descriptor, 1, items[index].kind,
+                           2, items[index].target, -1);
+    }
+    if (!complete)
+        lsm_ui_set_label_text(inspector->open_files_status,
+            "Open-descriptor inventory unavailable or incomplete");
+    else
+        lsm_ui_set_label_text(inspector->open_files_status,
+                              "%zu open descriptor%s", count,
+                              count == 1U ? "" : "s");
+}
+
+static void present_maps(ProcessInspector *inspector,
+                         const LsmMemoryMapInfo *items, size_t count,
+                         gboolean complete)
+{
+    gtk_list_store_clear(inspector->maps_store);
+    for (size_t index = 0U; index < count; index++) {
+        GtkTreeIter iterator;
+        char start[32], end[32], offset[32], inode[32], size[64];
+        char private_clean[64], private_dirty[64];
+        char shared_clean[64], shared_dirty[64];
+        snprintf(start, sizeof(start), "0x%llx",
+                 (unsigned long long)items[index].start_address);
+        snprintf(end, sizeof(end), "0x%llx",
+                 (unsigned long long)items[index].end_address);
+        snprintf(offset, sizeof(offset), "0x%llx",
+                 (unsigned long long)items[index].file_offset);
+        snprintf(inode, sizeof(inode), "%llu",
+                 (unsigned long long)items[index].inode);
+        lsm_format_bytes(items[index].end_address - items[index].start_address,
+                         size, sizeof(size));
+        if (items[index].accounting_available) {
+            lsm_format_bytes(items[index].private_clean_bytes,
+                             private_clean, sizeof(private_clean));
+            lsm_format_bytes(items[index].private_dirty_bytes,
+                             private_dirty, sizeof(private_dirty));
+            lsm_format_bytes(items[index].shared_clean_bytes,
+                             shared_clean, sizeof(shared_clean));
+            lsm_format_bytes(items[index].shared_dirty_bytes,
+                             shared_dirty, sizeof(shared_dirty));
+        } else {
+            snprintf(private_clean, sizeof(private_clean), "N/A");
+            snprintf(private_dirty, sizeof(private_dirty), "N/A");
+            snprintf(shared_clean, sizeof(shared_clean), "N/A");
+            snprintf(shared_dirty, sizeof(shared_dirty), "N/A");
+        }
+        gtk_list_store_append(inspector->maps_store, &iterator);
+        gtk_list_store_set(inspector->maps_store, &iterator,
+                           0, items[index].path,
+                           1, start, 2, end, 3, size,
+                           4, items[index].permissions, 5, offset,
+                           6, private_clean, 7, private_dirty,
+                           8, shared_clean, 9, shared_dirty,
+                           10, items[index].device, 11, inode, -1);
+    }
+    if (!complete)
+        lsm_ui_set_label_text(inspector->maps_status,
+                              "Memory-map inventory unavailable or incomplete");
+    else
+        lsm_ui_set_label_text(inspector->maps_status,
+                              "%zu virtual-memory area%s", count,
+                              count == 1U ? "" : "s");
+}
+
+static void present_threads(ProcessInspector *inspector,
+                            const LsmThreadInfo *items, size_t count,
+                            gboolean complete)
+{
+    gtk_list_store_clear(inspector->threads_store);
+    for (size_t index = 0U; index < count; index++) {
+        GtkTreeIter iterator;
+        char tid[32];
+        snprintf(tid, sizeof(tid), "%llu",
+                 (unsigned long long)items[index].tid);
+        gtk_list_store_append(inspector->threads_store, &iterator);
+        gtk_list_store_set(inspector->threads_store, &iterator,
+                           0, tid, 1, items[index].name,
+                           2, items[index].state, -1);
+    }
+    if (!complete)
+        lsm_ui_set_label_text(inspector->threads_status,
+                              "Thread inventory unavailable or incomplete");
+    else
+        lsm_ui_set_label_text(inspector->threads_status, "%zu thread%s", count,
+                              count == 1U ? "" : "s");
+}
+
+static void populate_family(ProcessInspector *inspector)
+{
+    gtk_list_store_clear(inspector->family_store);
+    const LsmProcessInfo *selected = snapshot_process(inspector->app, inspector->pid,
+                                                      inspector->instance_id);
+    if (!selected) {
+        lsm_ui_set_label_text(inspector->family_status,
+                              "Process family unavailable — the process has exited");
+        return;
+    }
+    size_t child_count = 0U;
+    for (size_t index = 0U; index < inspector->app->process.process_snapshot_count; index++) {
+        const LsmProcessInfo *process = &inspector->app->process.process_snapshot[index];
+        const char *relationship = NULL;
+        if (process->pid == selected->ppid) relationship = "Parent";
+        else if (process->ppid == selected->pid) {
+            relationship = "Child";
+            child_count++;
+        } else if (process->pid == selected->pid) relationship = "Selected";
+        if (!relationship) continue;
+        GtkTreeIter iterator;
+        char pid[32], cpu[32], memory[32];
+        snprintf(pid, sizeof(pid), "%llu",
+                 (unsigned long long)process->pid);
+        snprintf(cpu, sizeof(cpu), "%.1f%%",
+                 displayed_cpu(inspector->app, process->cpu_percent));
+        snprintf(memory, sizeof(memory), "%.1f%%", process->memory_percent);
+        gtk_list_store_append(inspector->family_store, &iterator);
+        gtk_list_store_set(inspector->family_store, &iterator,
+                           0, relationship, 1, pid, 2, process->name,
+                           3, process->state, 4, cpu, 5, memory, -1);
+    }
+    lsm_ui_set_label_text(inspector->family_status,
+        "Selected process, parent and %zu immediate child%s", child_count,
+        child_count == 1U ? "" : "ren");
+}
+
+static void mark_inventory_unavailable(ProcessInspector *inspector)
+{
+    if (!inspector) return;
+    gtk_list_store_clear(inspector->open_files_store);
+    gtk_list_store_clear(inspector->maps_store);
+    gtk_list_store_clear(inspector->threads_store);
+    gtk_list_store_clear(inspector->family_store);
+    lsm_ui_set_label_text(inspector->open_files_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->maps_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->threads_status,
+                          "Process exited or PID was reused");
+    lsm_ui_set_label_text(inspector->family_status,
+                          "Process exited or PID was reused");
+}
+
+static void process_inventory_worker(GTask *task, gpointer source_object,
+                                     gpointer task_data,
+                                     GCancellable *cancellable)
+{
+    (void)source_object;
+    (void)cancellable;
+    const ProcessInventoryRequest *request = task_data;
+    ProcessInventoryResult *result = g_new0(ProcessInventoryResult, 1U);
+    result->pid = request->pid;
+    result->instance_id = request->instance_id;
+    if (!lsm_process_inspection_identity_matches(
+            request->pid, request->instance_id)) {
+        g_task_return_pointer(task, result, process_inventory_result_free);
+        return;
+    }
+
+    LsmProcessInfo details = {0};
+    details.pid = request->pid;
+    details.instance_id = request->instance_id;
+    if (lsm_process_enrich(details.pid, &details,
+            LSM_PROCESS_SCAN_EXECUTABLE | LSM_PROCESS_SCAN_HANDLE_COUNT |
+            LSM_PROCESS_SCAN_CGROUP | LSM_PROCESS_SCAN_TECHNICAL)) {
+        lsm_copy_string(result->executable, sizeof(result->executable),
+                        details.executable);
+        result->descriptor_count = details.handle_count;
+        result->descriptor_count_available = details.handle_count_available;
+        result->details = details;
+        result->details_valid = TRUE;
+    }
+    result->open_files_valid = lsm_process_inspection_open_files_checked(
+        request->pid, &result->open_files, &result->open_file_count);
+    result->maps_valid = lsm_process_inspection_memory_maps_checked(
+        request->pid, &result->maps, &result->map_count);
+    result->threads_valid = lsm_process_inspection_threads_checked(
+        request->pid, &result->threads, &result->thread_count);
+    result->identity_valid = lsm_process_inspection_identity_matches(
+        request->pid, request->instance_id);
+    g_task_return_pointer(task, result, process_inventory_result_free);
+}
+
+static void process_inventory_complete(GObject *source_object,
+                                       GAsyncResult *async_result,
+                                       gpointer user_data)
+{
+    (void)user_data;
+    ProcessInventoryResult *result = g_task_propagate_pointer(
+        G_TASK(async_result), NULL);
+    ProcessInspector *inspector = source_object ?
+        g_object_get_data(source_object, LSM_INSPECTOR_OBJECT_KEY) : NULL;
+    if (!inspector) {
+        process_inventory_result_free(result);
+        return;
+    }
+    inspector->inventory_pending = FALSE;
+    if (!result || !result->identity_valid ||
+        result->pid != inspector->pid ||
+        result->instance_id != inspector->instance_id) {
+        mark_inventory_unavailable(inspector);
+        process_inventory_result_free(result);
+        return;
+    }
+
+    lsm_copy_string(inspector->executable, sizeof(inspector->executable),
+                    result->executable);
+    inspector->descriptor_count = result->descriptor_count;
+    inspector->descriptor_count_available = result->descriptor_count_available;
+    inspector->technical_details_valid = result->details_valid;
+    if (result->details_valid)
+        inspector->technical_details = result->details;
+    present_open_files(inspector, result->open_files, result->open_file_count,
+                       result->open_files_valid);
+    present_maps(inspector, result->maps, result->map_count,
+                 result->maps_valid);
+    present_threads(inspector, result->threads, result->thread_count,
+                    result->threads_valid);
+    populate_family(inspector);
+    process_inventory_result_free(result);
+}
+
+static void refresh_inventories(ProcessInspector *inspector)
+{
+    if (!inspector || inspector->inventory_pending) return;
+    if (!inspector_identity_current(inspector)) {
+        mark_inventory_unavailable(inspector);
+        return;
+    }
+
+    inspector->inventory_pending = TRUE;
+    lsm_ui_set_label_text(inspector->open_files_status, "Refreshing…");
+    lsm_ui_set_label_text(inspector->maps_status, "Refreshing…");
+    lsm_ui_set_label_text(inspector->threads_status, "Refreshing…");
+    populate_family(inspector);
+
+    ProcessInventoryRequest *request = g_new0(ProcessInventoryRequest, 1U);
+    request->pid = inspector->pid;
+    request->instance_id = inspector->instance_id;
+    GTask *task = g_task_new(G_OBJECT(inspector->window), NULL,
+                             process_inventory_complete, NULL);
+    g_task_set_task_data(task, request, g_free);
+    g_task_run_in_thread(task, process_inventory_worker);
+    g_object_unref(task);
+}
+
+static void set_large_metric(GtkWidget *label, const char *text)
+{
+    char *markup = g_markup_printf_escaped(
+        "<span size=\"xx-large\"><b>%s</b></span>", text);
+    gtk_label_set_markup(GTK_LABEL(label), markup);
+    g_free(markup);
+}
+
+static gboolean inspector_update(gpointer user_data)
+{
+    ProcessInspector *inspector = user_data;
+    const LsmProcessInfo *snapshot = snapshot_process(inspector->app,
+        inspector->pid, inspector->instance_id);
+    if (!snapshot || !inspector_identity_current(inspector)) {
+        lsm_ui_set_label_text(inspector->identity_label,
+                              "Process %llu has exited",
+                              (unsigned long long)inspector->pid);
+        mark_inventory_unavailable(inspector);
+        inspector->refresh_timer = 0U;
+        return G_SOURCE_REMOVE;
+    }
+
+    LsmProcessInfo process = *snapshot;
+    lsm_copy_string(process.executable, sizeof(process.executable),
+                    inspector->executable);
+    process.handle_count = inspector->descriptor_count;
+    process.handle_count_available = inspector->descriptor_count_available;
+    if (inspector->technical_details_valid &&
+        inspector->technical_details.pid == process.pid &&
+        inspector->technical_details.instance_id == process.instance_id) {
+        const LsmProcessInfo *technical = &inspector->technical_details;
+        process.writable_memory_bytes = technical->writable_memory_bytes;
+        process.writable_memory_available = technical->writable_memory_available;
+        lsm_copy_string(process.cgroup_path, sizeof(process.cgroup_path),
+                        technical->cgroup_path);
+        process.cgroup_v2 = technical->cgroup_v2;
+        lsm_copy_string(process.waiting_channel, sizeof(process.waiting_channel),
+                        technical->waiting_channel);
+        lsm_copy_string(process.security_context, sizeof(process.security_context),
+                        technical->security_context);
+        lsm_copy_string(process.unit, sizeof(process.unit), technical->unit);
+        lsm_copy_string(process.session, sizeof(process.session), technical->session);
+        lsm_copy_string(process.seat, sizeof(process.seat), technical->seat);
+        lsm_copy_string(process.owner, sizeof(process.owner), technical->owner);
+    }
+    char pid[32], ppid[32], started[64], elapsed[64], threads[32], handles[32];
+    char priority[64], nice_value[32], cpu[32], memory[32];
+    char read_rate[64], write_rate[64];
+    char cpu_time[64], gpu[32], gpu_memory[64];
+    char virtual_memory[64], resident_memory[64];
+    char writable_memory[64], shared_memory[64];
+    snprintf(pid, sizeof(pid), "%llu",
+             (unsigned long long)process.pid);
+    snprintf(ppid, sizeof(ppid), "%llu",
+             (unsigned long long)process.ppid);
+    if (process.start_time_epoch <= 0 ||
+        !lsm_temporal_format_epoch_seconds(
+            process.start_time_epoch, true, false, true,
+            started, sizeof(started))) {
+        snprintf(started, sizeof(started), "N/A");
+    }
+    (void)lsm_temporal_format_elapsed_seconds(
+        process.elapsed_seconds, elapsed, sizeof(elapsed));
+    snprintf(threads, sizeof(threads), "%u", process.threads);
+    snprintf(handles, sizeof(handles), "%u", process.handle_count);
+    lsm_copy_string(priority, sizeof(priority),
+                    lsm_process_priority_name(process.priority));
+    if (process.nice_value_available)
+        snprintf(nice_value, sizeof(nice_value), "%d", process.nice_value);
+    else
+        snprintf(nice_value, sizeof(nice_value), "N/A");
+    (void)lsm_temporal_format_duration_seconds(
+        process.cpu_time_seconds, cpu_time, sizeof(cpu_time));
+    if (process.virtual_memory_available)
+        lsm_format_bytes(process.virtual_memory_bytes,
+                         virtual_memory, sizeof(virtual_memory));
+    else
+        snprintf(virtual_memory, sizeof(virtual_memory), "N/A");
+    lsm_format_bytes(process.rss_bytes, resident_memory,
+                     sizeof(resident_memory));
+    if (process.writable_memory_available)
+        lsm_format_bytes(process.writable_memory_bytes,
+                         writable_memory, sizeof(writable_memory));
+    else
+        snprintf(writable_memory, sizeof(writable_memory), "N/A");
+    if (process.shared_memory_available)
+        lsm_format_bytes(process.shared_memory_bytes,
+                         shared_memory, sizeof(shared_memory));
+    else
+        snprintf(shared_memory, sizeof(shared_memory), "N/A");
+    if (process.gpu_available)
+        snprintf(gpu, sizeof(gpu), "%.1f%%", process.gpu_percent);
+    else
+        snprintf(gpu, sizeof(gpu), "N/A");
+    if (process.gpu_memory_available)
+        lsm_format_bytes(process.gpu_memory_bytes,
+                         gpu_memory, sizeof(gpu_memory));
+    else
+        snprintf(gpu_memory, sizeof(gpu_memory), "N/A");
+    const char *values[INSPECTOR_OVERVIEW_LABELS] = {
+        process.name, pid, ppid, process.user, process.state,
+        process.executable, process.command, started, elapsed, threads, handles,
+        priority, nice_value, cpu_time, virtual_memory, resident_memory,
+        writable_memory, shared_memory,
+        process.security_context[0] ? process.security_context : "N/A",
+        process.waiting_channel[0] ? process.waiting_channel : "N/A",
+        process.cgroup_path[0] ? process.cgroup_path : "N/A",
+        process.unit[0] ? process.unit : "N/A",
+        process.session[0] ? process.session : "N/A",
+        process.seat[0] ? process.seat : "N/A",
+        process.owner[0] ? process.owner : "N/A",
+        gpu,
+        process.gpu_available && process.gpu_engine[0]
+            ? process.gpu_engine : "N/A",
+        gpu_memory
+    };
+    for (size_t index = 0U; index < G_N_ELEMENTS(values); index++)
+        lsm_ui_set_label_text(inspector->overview_values[index], "%s",
+                              values[index] && *values[index] ? values[index] : "N/A");
+
+    const double cpu_value = displayed_cpu(inspector->app, process.cpu_percent);
+    snprintf(cpu, sizeof(cpu), "%.1f%%", cpu_value);
+    snprintf(memory, sizeof(memory), "%.1f%%", process.memory_percent);
+    if (process.io_rate_available) {
+        lsm_format_rate(process.read_bytes_per_sec, read_rate, sizeof(read_rate));
+        lsm_format_rate(process.write_bytes_per_sec, write_rate, sizeof(write_rate));
+    } else {
+        lsm_copy_string(read_rate, sizeof(read_rate), "N/A");
+        lsm_copy_string(write_rate, sizeof(write_rate), "N/A");
+    }
+    set_large_metric(inspector->cpu_value, cpu);
+    set_large_metric(inspector->memory_value, memory);
+    set_large_metric(inspector->read_value, read_rate);
+    set_large_metric(inspector->write_value, write_rate);
+    lsm_graph_push(inspector->performance_graph, process.cpu_percent,
+                   process.memory_percent, inspector->app->runtime.newer_on_right);
+    lsm_ui_set_label_text(inspector->identity_label,
+                          "%s — PID %llu — %s", process.name,
+                          (unsigned long long)process.pid,
+                          process.user);
+    return G_SOURCE_CONTINUE;
+}
+
+static void inspector_destroy(GtkWidget *widget, gpointer user_data)
+{
+    ProcessInspector *inspector = user_data;
+    g_object_set_data(G_OBJECT(widget), LSM_INSPECTOR_OBJECT_KEY, NULL);
+    if (inspector->refresh_timer) g_source_remove(inspector->refresh_timer);
+    if (inspector->performance_graph) lsm_graph_free(inspector->performance_graph);
+    if (inspector->open_files_store) g_object_unref(inspector->open_files_store);
+    if (inspector->maps_store) g_object_unref(inspector->maps_store);
+    if (inspector->threads_store) g_object_unref(inspector->threads_store);
+    if (inspector->family_store) g_object_unref(inspector->family_store);
+    g_free(inspector);
+}
+
+static void refresh_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    refresh_inventories(user_data);
+}
+
+/* Controls express neutral actions; the selected platform backend translates
+ * them to its native process-control mechanism. */
+static void apply_priority(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    ProcessInspector *inspector = user_data;
+    if (!require_current_identity(inspector, "Unable to change process priority"))
+        return;
+    const int selected = gtk_combo_box_get_active(
+        GTK_COMBO_BOX(inspector->priority_combo));
+    if (selected < (int)LSM_PROCESS_PRIORITY_HIGH ||
+        selected > (int)LSM_PROCESS_PRIORITY_LOW) return;
+    if (!lsm_process_set_priority(
+            inspector->pid, inspector->instance_id,
+            (LsmProcessPriority)selected)) {
+        char error[160];
+        lsm_process_error_message(error, sizeof(error));
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Unable to change process priority", "%s", error);
+    }
+}
+
+
+static void apply_nice(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    ProcessInspector *inspector = user_data;
+    if (!require_current_identity(inspector, "Unable to change process nice value"))
+        return;
+    const char *text = gtk_entry_get_text(GTK_ENTRY(inspector->nice_entry));
+    int64_t parsed = 0;
+    if (!lsm_parse_i64_range(text, 10U, -20, 19, &parsed)) {
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Invalid nice value",
+                          "Enter a whole number from -20 through 19.");
+        return;
+    }
+    if (!lsm_process_set_nice(inspector->pid, inspector->instance_id,
+                              (int)parsed)) {
+        char error[160];
+        lsm_process_error_message(error, sizeof(error));
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Unable to change process nice value", "%s", error);
+    }
+}
+
+static void affinity_apply(ProcessInspector *inspector)
+{
+    if (!require_current_identity(inspector, "Unable to read CPU affinity"))
+        return;
+    bool enabled[LSM_MAX_CPUS] = {0};
+    const size_t count = lsm_process_affinity_get(
+        inspector->pid, inspector->instance_id, enabled, LSM_MAX_CPUS);
+    if (!count) {
+        char error[160];
+        lsm_process_error_message(error, sizeof(error));
+        lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                          "Unable to read CPU affinity", "%s", error);
+        return;
+    }
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Set CPU affinity",
+        GTK_WINDOW(inspector->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_ACCEPT, NULL);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 620, 480);
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+    GtkWidget *description = gtk_label_new(
+        "Select the logical processors on which this process may run.");
+    gtk_widget_set_halign(description, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(content), description, FALSE, FALSE, 0);
+    GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_vexpand(scroller, TRUE);
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 6);
+    gtk_container_add(GTK_CONTAINER(scroller), grid);
+    gtk_box_pack_start(GTK_BOX(content), scroller, TRUE, TRUE, 8);
+    GtkWidget **checks = g_new0(GtkWidget *, count);
+    for (size_t index = 0U; index < count; index++) {
+        char label[32];
+        snprintf(label, sizeof(label), "CPU %zu", index);
+        checks[index] = gtk_check_button_new_with_label(label);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[index]),
+                                     enabled[index]);
+        gtk_grid_attach(GTK_GRID(grid), checks[index], (int)(index % 6U),
+                        (int)(index / 6U), 1, 1);
+    }
+    gtk_widget_show_all(dialog);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        bool any = false;
+        for (size_t index = 0U; index < count; index++) {
+            enabled[index] = gtk_toggle_button_get_active(
+                GTK_TOGGLE_BUTTON(checks[index]));
+            any = any || enabled[index];
+        }
+        if (!any)
+            lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                              "Unable to set CPU affinity",
+                              "At least one CPU must be selected.");
+        else if (!require_current_identity(inspector,
+                     "Unable to set CPU affinity")) {
+            /* The error dialog is displayed by require_current_identity(). */
+        } else if (!lsm_process_affinity_set(
+                       inspector->pid, inspector->instance_id,
+                       enabled, count))
+            {
+            char error[160];
+            lsm_process_error_message(error, sizeof(error));
+            lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                              "Unable to set CPU affinity", "%s", error);
+        }
+    }
+    g_free(checks);
+    gtk_widget_destroy(dialog);
+}
+
+static void affinity_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    affinity_apply(user_data);
+}
+
+static void end_process_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    ProcessInspector *inspector = user_data;
+    if (!require_current_identity(inspector, "Unable to end process")) return;
+    if (!inspector->app->runtime.confirm_process_actions) {
+        if (!lsm_process_control(inspector->pid, inspector->instance_id,
+                                 LSM_PROCESS_CONTROL_TERMINATE)) {
+            char error[160];
+            lsm_process_error_message(error, sizeof(error));
+            lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                              "Unable to end the process", "%s", error);
+        }
+        return;
+    }
+    GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(inspector->window),
+        GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE,
+        "End process %llu?", (unsigned long long)inspector->pid);
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+        "The process will be asked to shut down cleanly and save its state.");
+    gtk_dialog_add_buttons(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL,
+                           "End process", GTK_RESPONSE_ACCEPT, NULL);
+    const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    if (response == GTK_RESPONSE_ACCEPT) {
+        if (!require_current_identity(inspector, "Unable to end process"))
+            return;
+        if (!lsm_process_control(inspector->pid, inspector->instance_id,
+                                 LSM_PROCESS_CONTROL_TERMINATE)) {
+            char error[160];
+            lsm_process_error_message(error, sizeof(error));
+            lsm_ui_show_error(GTK_WINDOW(inspector->window),
+                              "Unable to end the process", "%s", error);
+        }
+    }
+}
+
+static GtkWidget *build_control_bar(ProcessInspector *inspector)
+{
+    GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *refresh = gtk_button_new_with_label("Refresh inspection");
+    GtkWidget *affinity = gtk_button_new_with_label("CPU affinity…");
+    GtkWidget *end = gtk_button_new_with_label("End process");
+    inspector->priority_combo = gtk_combo_box_text_new();
+    static const LsmProcessPriority priorities[] = {
+        LSM_PROCESS_PRIORITY_HIGH, LSM_PROCESS_PRIORITY_ABOVE_NORMAL,
+        LSM_PROCESS_PRIORITY_NORMAL, LSM_PROCESS_PRIORITY_BELOW_NORMAL,
+        LSM_PROCESS_PRIORITY_LOW
+    };
+    for (size_t index = 0U; index < G_N_ELEMENTS(priorities); index++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(inspector->priority_combo),
+                                       lsm_process_priority_name(priorities[index]));
+    const LsmProcessInfo *process = snapshot_process(inspector->app,
+        inspector->pid, inspector->instance_id);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(inspector->priority_combo),
+        process ? priority_index(process->priority) :
+                  (int)LSM_PROCESS_PRIORITY_NORMAL);
+    GtkWidget *apply = gtk_button_new_with_label("Apply priority");
+    inspector->nice_entry = gtk_entry_new();
+    char nice_text[16];
+    snprintf(nice_text, sizeof(nice_text), "%d",
+             process && process->nice_value_available ? process->nice_value : 0);
+    gtk_entry_set_text(GTK_ENTRY(inspector->nice_entry), nice_text);
+    GtkWidget *apply_nice_button = gtk_button_new_with_label("Apply nice");
+    gtk_box_pack_start(GTK_BOX(bar), refresh, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), gtk_separator_new(GTK_ORIENTATION_VERTICAL),
+                       FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), inspector->priority_combo, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), apply, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), inspector->nice_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), apply_nice_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), affinity, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(bar), end, FALSE, FALSE, 0);
+    g_signal_connect(refresh, "clicked", G_CALLBACK(refresh_clicked), inspector);
+    g_signal_connect(apply, "clicked", G_CALLBACK(apply_priority), inspector);
+    g_signal_connect(apply_nice_button, "clicked", G_CALLBACK(apply_nice), inspector);
+    g_signal_connect(affinity, "clicked", G_CALLBACK(affinity_clicked), inspector);
+    g_signal_connect(end, "clicked", G_CALLBACK(end_process_clicked), inspector);
+    return bar;
+}
+
+void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
+                                LsmProcessInstanceId instance_id)
+{
+    if (!app || pid < 1 || instance_id == 0U) return;
+    const LsmProcessInfo *process = NULL;
+    for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
+        if (app->process.process_snapshot[index].pid == pid &&
+            app->process.process_snapshot[index].instance_id == instance_id) {
+            process = &app->process.process_snapshot[index];
+            break;
+        }
+    if (!process) return;
+
+    ProcessInspector *inspector = g_new0(ProcessInspector, 1U);
+    inspector->app = app;
+    inspector->pid = pid;
+    inspector->instance_id = instance_id;
+    inspector->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    char title[256];
+    snprintf(title, sizeof(title), "%s — Process Inspector", process->name);
+    gtk_window_set_title(GTK_WINDOW(inspector->window), title);
+    lsm_ui_set_workarea_default_size(GTK_WINDOW(inspector->window), 980, 720);
+    gtk_window_set_transient_for(GTK_WINDOW(inspector->window),
+                                 GTK_WINDOW(app->shell.window));
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(inspector->window), TRUE);
+
+    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_container_set_border_width(GTK_CONTAINER(outer), 10);
+    gtk_container_add(GTK_CONTAINER(inspector->window), outer);
+    inspector->identity_label = gtk_label_new(NULL);
+    gtk_widget_set_halign(inspector->identity_label, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(outer), inspector->identity_label,
+                       FALSE, FALSE, 0);
+
+    GtkWidget *notebook = gtk_notebook_new();
+    gtk_box_pack_start(GTK_BOX(outer), notebook, TRUE, TRUE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        build_overview_page(inspector), gtk_label_new("Overview"));
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        build_performance_page(inspector), gtk_label_new("Performance"));
+
+    inspector->open_files_store = gtk_list_store_new(3,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    static const char *file_titles[] = {"FD", "Type", "Target"};
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        lsm_process_table_page(inspector->open_files_store, file_titles,
+                  G_N_ELEMENTS(file_titles), 2, &inspector->open_files_status),
+        gtk_label_new("Open Files"));
+
+    inspector->maps_store = gtk_list_store_new(12,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    static const char *map_titles[] = {
+        "Filename", "VM Start", "VM End", "VM Size", "Flags", "VM Offset",
+        "Private clean", "Private dirty", "Shared clean", "Shared dirty",
+        "Device", "Inode"
+    };
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        lsm_process_table_page(inspector->maps_store, map_titles,
+                  G_N_ELEMENTS(map_titles), 0, &inspector->maps_status),
+        gtk_label_new("Memory Map"));
+
+    inspector->threads_store = gtk_list_store_new(3,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    static const char *thread_titles[] = {"TID", "Name", "State"};
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        lsm_process_table_page(inspector->threads_store, thread_titles,
+                  G_N_ELEMENTS(thread_titles), 1, &inspector->threads_status),
+        gtk_label_new("Threads"));
+
+    inspector->family_store = gtk_list_store_new(6,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING);
+    static const char *family_titles[] = {
+        "Relationship", "PID", "Name", "State", "CPU", "Memory"
+    };
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+        lsm_process_table_page(inspector->family_store, family_titles,
+                  G_N_ELEMENTS(family_titles), 2, &inspector->family_status),
+        gtk_label_new("Process Family"));
+
+    gtk_box_pack_start(GTK_BOX(outer), build_control_bar(inspector),
+                       FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(inspector->window), LSM_INSPECTOR_OBJECT_KEY,
+                      inspector);
+    g_signal_connect(inspector->window, "destroy",
+                     G_CALLBACK(inspector_destroy), inspector);
+    refresh_inventories(inspector);
+    (void)inspector_update(inspector);
+    inspector->refresh_timer = g_timeout_add_seconds(1U, inspector_update,
+                                                     inspector);
+    gtk_widget_show_all(inspector->window);
+}

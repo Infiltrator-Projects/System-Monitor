@@ -1,0 +1,1023 @@
+# Changelog
+
+## 1.0.166 - 2026-10-06
+
+- Remove an invalid deallocation of the stack-backed process-log directory path.
+- Resynchronise top-level hardware navigation after live topology changes so hotplugged resource categories appear and disappear correctly.
+- Reuse the canonical process-priority names in both process actions and the process inspector instead of maintaining duplicate label tables.
+- Repair the System Monitor UI vision image reference and restore the missing 1.0.165 release notes.
+
+## 1.0.165 - 2026-10-06
+
+- Hide top-level hardware navigation categories when the corresponding resource group is unavailable instead of showing empty resource entries.
+- Group Bluetooth devices under Network and NPUs under GPU for top-level navigation while retaining their individual Performance pages.
+- Keep Battery navigation driven solely by actual battery records, including battery-capable peripherals surfaced by the monitor snapshot.
+
+## 1.0.164 - 2026-10-03
+
+- Reorganise Preferences into Updates & units, Graphs and Behaviour with aligned, consistently sized selectors and separate readable toggle rows.
+- Match the dialog, controls and Apply action to the Day/Night palette and canonical MB fonts; keep Apply/Cancel visible while small-screen content scrolls.
+- Preserve every preference and the existing Apply/Cancel persistence behaviour.
+
+## 1.0.163 - 2026-10-03
+
+- Flush the GTK display connection after hiding the main window and before quitting the event loop, so buffered unmap requests are sent before synchronous final-state persistence and cleanup.
+
+## 1.0.162 - 2026-10-03
+
+- Stop sampling immediately after runtime timers stop and release the GUI's backend ownership without waiting for device reads; the sampler retains its own lifetime reference.
+- Sanitise history fields once while copying the immutable save snapshot, eliminating four temporary allocations and frees per saved entry.
+- Skip obsolete or already-persisted history generations before directory creation and serialisation, retaining the publication mutex check and durable final save.
+
+## 1.0.161 - 2026-10-03
+
+- Restore the always-visible Settings gear in the titlebar, opening the existing preferences dialog.
+- Include Settings in rendered Day/Night icon colour checks and verify its click handler.
+
+## 1.0.160 - 2026-10-03
+
+- Install all three supplied MB Corpo faces with both the DEB and hardware-native installer, verifying the local archive and extracted files against Common's canonical SHA-256 values.
+- Apply MB Corpo A Cond to the custom window title and page headings, keeping MB Corpo S for UI text.
+- Give transparent titlebar controls and their symbolic images an explicit theme foreground, with white icons in Night mode and readable hover colours.
+- Replace the obsolete Linux font-exclusion checks with package-payload and rendered GTK typography/colour checks.
+
+## 1.0.157 - 2026-10-02
+
+- Batch App History retention overflow into one candidate scan and recency sort instead of rescanning the full 4096-entry table once per eviction, removing a remaining GTK-main-context latency spike after large live-process bursts or asynchronous persisted-history merges.
+- Defer retention eviction until the end of each process snapshot so every identity touched by that generation is protected before pruning and a burst of new identities is handled as one operation.
+- Extend the history-retention regression with a 128-identity burst at the retention ceiling to prove the bound and current-live protection survive the batched path.
+
+## 1.0.156 - 2026-10-01
+
+- Move persisted App History file I/O and parsing off the GTK main context, merge the worker result transactionally with live process accounting collected meanwhile, defer saves until that merge is complete, and avoid overwriting persisted history during shutdown if loading is still in flight.
+- Remove the full retained-history walk from every process sample by charging active time and peak RSS only to identities touched by that sample; make oldest-entry eviction one direct hash removal instead of a second full-table scan.
+- Remove obsolete count-only compatibility wrappers for native source enumeration, process inspection, mountinfo, BlueZ parsing and CPU temperature now that production and regression coverage use the authoritative checked contracts.
+- Correct the built-in help text so the normal Overview and Compact Summary behaviour no longer describes the superseded all-tabs summary strip.
+
+## 1.0.155 - 2026-10-01
+
+- Make the Overview resource tiers genuinely equal-width: CPU/Memory split the first row 50/50, Disk/Network/GPU split the second row into thirds, and Temperature/CPU Pressure/Memory Pressure/I/O Pressure split the third row into quarters.
+- Restore homogeneous twelve-column sizing now that no tier contains unequal spans, so sibling cards shrink together instead of letting individual content widths skew the row.
+- Extend the Xvfb Overview geometry regression to assert equal card widths in all three tiers in addition to the existing live-label graph-allocation stability checks.
+
+## 1.0.154 - 2026-09-30
+
+- Fix the Details process-tree PID retrieval width mismatch so a 64-bit GTK model value can no longer overwrite a 32-bit stack variable, and use unsigned pointer keys consistently for retained PID indexes.
+- Publish Linux monitor samples directly from the worker-owned retained sample buffer, removing one large fixed-capacity monitor copy from each completed sample while preserving the no-I/O-on-GTK-thread contract.
+- Keep failed Linux topology refreshes promptly retryable with bounded 1/2/4/5-second backoff instead of hammering a permanently blocked source every fast sample.
+- Throttle negative per-process DRM/GPU discovery to a slower cadence while retaining two-second refresh for processes with known GPU telemetry.
+- Deliver completed process snapshots into the GTK main context immediately without starting the next scan early, separating presentation latency from the configured sampling cadence, and make coalesced in-flight scan requests obey the scanner API's accepted-request return contract.
+- Keep Services, Users and File Systems periodic timers alive only while their owning slow page is active, eliminating idle wakeups after those pages have merely been visited.
+- Reuse the Windows PDH GPU formatted-counter buffer directly across samples rather than allocating/freeing it or repeating the sizing query every refresh, and replace linear per-engine aggregation lookup with a fixed open-addressed index.
+- Cache stable process grouping identity by PID plus process-instance identity for five seconds, invalidating it when application metadata changes and pruning it when processes disappear.
+- Report GTK CSS parser failures explicitly instead of silently discarding malformed theme diagnostics.
+
+## 1.0.153 - 2026-09-29
+
+- Give Day-mode menu bars, popup menus and menu popovers an explicit high-contrast light palette instead of relying on inherited GTK theme colours.
+- Keep normal and hovered menu text dark, make disabled actions visibly muted rather than nearly invisible, and strengthen popup separators and borders.
+- Leave the Night-mode menu path unchanged and add a source-policy regression for the Day-mode menu contrast selectors.
+
+## 1.0.152 - 2026-09-29
+
+- Refine Overview Day mode with neutral card surfaces, lighter shadows and substantially quieter category borders while preserving the vivid graph, gauge and icon colours.
+- Increase the contrast of small Day-mode Overview stat captions for easier reading.
+- Keep Night mode on its existing palette and styling path unchanged, including when Follow system resolves to a dark desktop.
+
+## 1.0.151 - 2026-09-29
+
+- Make central APT publication part of the release contract instead of reporting success after a single catalogue check.
+- Dispatch verified System Monitor releases directly to Infiltrator-Repository when the cross-repository token is available.
+- Fall back to the central five-minute publisher when immediate dispatch is unavailable, but keep the release workflow running until the exact System Monitor version is visible in the APT catalogue or fail after 20 minutes.
+
+## 1.0.150 - 2026-09-29
+
+- Keep ordinary GTK button foreground-state rules scoped to each button's direct label/icon child so hovered, active or disabled composite controls cannot overwrite the semantic text colours of nested Overview content.
+- Preserve Night-mode readability for CPU, Memory, Disk, Network, GPU, temperature and pressure cards while retaining the normal button hover treatment for simple controls.
+- Add a source-policy regression that rejects broad descendant button-state selectors in the shell theme.
+
+## 1.0.149 - 2026-09-29
+
+- Restore the strict C17 build after the grouped-process filter optimisation by removing its const-discarding pointer-array access.
+- Reuse Linux process rollback storage and grow the UID-name cache dynamically instead of allocating a full mutation journal every refresh or stopping account caching after 64 identities.
+- Reuse Windows process rollback storage, publish completed process snapshots in stable PID/instance order, cache resolved SID account names across processes and retry transient friendly-name failures without losing stable SID identity.
+- Replace quadratic systemd service merging with a temporary name index while preserving the final deterministic service ordering.
+- Keep App History accounting at the process cadence while throttling its expensive visible GTK rebuild, debounce History search, and replace formatted PID/instance hash keys with fixed binary identities.
+- Stop rebuilding the Details process tree when only mutable name, user or command text changes; retained rows now update those values in place.
+- Reuse the retained Processes PID index for grouped process-tree actions instead of repeatedly walking the process snapshot.
+- Revalidate cached GPU sysfs/hwmon paths during topology reconciliation so driver/hwmon path recreation recovers without an application restart.
+- Use binary lookup for the already-sorted Linux disk set while parsing diskstats.
+- Copy only live Windows disk partition records when publishing completed monitor snapshots instead of copying each fixed-capacity partition array.
+
+## 1.0.148 - 2026-09-29
+
+- Publish completed Windows monitor snapshots by copying only active device ranges instead of the full fixed-capacity monitor object, reducing lock-held memory traffic on every sample.
+- Update retained Windows process rows only when their displayed values actually change, while allowing late account/name enrichment without forcing a destructive ListView rebuild.
+
+## 1.0.147 - 2026-09-28
+
+- Move native Windows disk and network discovery off the fast monitoring cadence while retaining one-second performance counters.
+- Remove the redundant Windows monitor snapshot copy and retain process ListView rows when process membership is unchanged.
+- Replace Windows process-sample linear lookup with ordered lookup and cache stable user/account metadata per process instance.
+- Cache Linux CPU thermal sensor topology so fast samples read resolved sensor files instead of rescanning hwmon/thermal directories.
+- Preserve Linux network addresses transactionally across transient getifaddrs failures and treat malformed/lost rtnetlink events as topology invalidations.
+- Parse the owned Linux /proc/stat buffer in place and skip unchanged GTK Performance presentation between completed monitor generations.
+- Clean up dense hot-path formatting and redundant implementation comments without removing rationale comments.
+- Reuse retained Linux process PID/group lookup structures and group child-capacity across refreshes, and case-fold search/filter text once instead of per field/filter comparison.
+- Weight Linux cpufreq policy averages by the number of logical CPUs represented, accept range-form CPU lists, and replace fixed cache/core-topology tracking limits with dynamically bounded storage.
+- Cache static GPU VRAM totals, thermal limits and PWM maxima outside the one-second hot path while keeping dynamic usage, temperature, power and fan telemetry live.
+- Isolate x86 CPUID affinity probing on a disposable helper thread so a failed affinity restoration cannot pin the long-lived sampler.
+- Retain the Windows paint backbuffer across frames, suppress unchanged status invalidations, and use stock DC brush/pen objects for common panel drawing instead of allocating GDI objects per repaint.
+
+## 1.0.146 - 2026-09-28
+
+- Move native Windows Performance collection off the Win32 message thread into a refcounted completed-snapshot worker, keeping painting, navigation and shutdown responsive when storage, network or GPU providers are slow.
+- Treat first, reset and zero-length CPU counter intervals as unavailable gaps instead of fabricated 0% utilisation, with the same explicit availability semantics in Linux, Windows, Overview, per-core labels and diagnostic output.
+- Require complete cpufreq policy sampling for current CPU speed, reject partial policy averages and stop presenting a retained prior frequency as a live reading after collection failure.
+- Preserve the native logical-processor total separately from bounded per-core detail capacity and stop inventing one logical processor or partial physical/socket topology after failed native reads.
+- Make Linux process handle counts, AC-power discovery and topology refresh completion fail closed; incomplete enumeration no longer publishes partial counts, false battery-power state or a successful topology cadence.
+- Retry failed Linux topology discovery promptly instead of waiting for the normal topology interval, while preserving the last complete disk, network, GPU, battery and NPU topology.
+- Reject malformed trailing rtnetlink attributes and partial preference, PCI override, OS-release and AMD DPM-clock reads instead of accepting believable prefixes.
+- Bootstrap Git and its subcommands without root privileges on BigBedroom self-hosted runners when the runner service PATH lacks Git, preserving recursive Common checkout and self-hosted-runner priority.
+- Make CPU thermal sysfs discovery transactional across directory-read/close failure and keep failed Linux topology refreshes immediately retryable instead of aging them into the normal cadence.
+- Reject monitor-level Bluetooth controller/device overflow and Windows GPU-engine overflow instead of publishing bounded prefixes, and reject malformed Windows processor-topology streams before committing static details.
+- Preserve CPU-unavailable gaps in the native Windows history renderer and make Overview honour the explicit CPU availability contract.
+- Restore strict C17 compilation validation for the 1.0.146 changes, including the required standard declarations for dynamically allocated file content.
+
+## 1.0.145 - 2026-09-28
+
+- Treat the first valid cumulative sample after startup, loss or counter rollback as a baseline rather than a measured zero interval across Linux/Windows disk, network and GPU rate paths.
+- Make Intel PMU, DRM engine and hwmon discovery reject directory-read, close and bounded-capacity failures instead of publishing partial accelerator telemetry.
+- Make BlueZ adapter/device/battery snapshots transactional: bounded truncation or ObjectManager failure preserves the last complete snapshot rather than publishing a prefix or false disappearance.
+- Replace Windows physical-disk number probing with complete SetupAPI disk-interface discovery, reject over-capacity disk/network/GPU/volume topology, and roll disk/volume publication back as one transaction on failure.
+- Clear published Wi-Fi metadata when its current native refresh fails so stale SSID, access-point, signal, frequency and link-rate values cannot appear live.
+- Stop inventing dense CPU IDs or a one-node NUMA topology after Linux sysfs enumeration failure; failed topology reads now remain unavailable.
+- Make /proc/meminfo accounting transactional and remove the stale-cache-derived MemAvailable fallback; memory presentation shows N/A when the authoritative accounting sample is unavailable.
+- Load App History through temporary retained state so a short read or close failure cannot replace complete history with a file prefix that may later be persisted.
+- Bound BlueZ, Bluetooth HCI and Logitech HID++ worker shutdown waits; blocked providers may retain static worker resources until process exit rather than holding GUI shutdown indefinitely.
+- Reject Logitech hidraw enumeration errors, HID++ device-set overflow and SMBIOS module-detail overflow instead of silently treating incomplete bounded sets as complete.
+- Remove the remaining disk/battery header string truncation warnings and extend regression coverage for baseline, overflow and retained-state semantics.
+
+## 1.0.144 - 2026-09-28
+
+- Make Linux process snapshots genuinely transactional across directory-enumeration, allocation and close failures so a partial /proc walk can never replace the last complete process set.
+- Make process-tree termination enumerate the complete target tree before sending the first signal, aborting safely on allocation or directory-read failure.
+- Reject bounded topology truncation in checked disk, partition, network, GPU, NPU, battery and CPU-enumeration paths instead of publishing a capacity-limited prefix as authoritative.
+- Add checked Process Inspector inventory APIs that distinguish a legitimate empty result from incomplete open-file, memory-map, thread or file-user enumeration; the GUI now reports incomplete inventories rather than presenting partial counts.
+- Reject partial cpufreq policy discovery and incomplete per-process DRM GPU accounting, preserving fallback or prior state instead of under-reporting valid-looking metrics.
+- Harden startup-application and desktop-application catalogue enumeration against directory and allocation failures.
+- Remove the Windows process-worker shutdown use-after-free window by retaining worker-owned state when a native query ignores cancellation.
+- Add regression coverage requiring checked storage/network/GPU inventories to reject bounded truncation and exercise the new checked process-inspection contracts.
+
+## 1.0.143 - 2026-09-28
+
+- Make the checked mountinfo visitor contract genuinely transactional: a visitor that stops enumeration early now reports an incomplete read instead of allowing a bounded partial mount set to be published as authoritative.
+- Preserve the legacy count-only mountinfo helper's delivered-record count while the checked API separately exposes completeness.
+- Add a storage regression proving early visitor termination cannot be mistaken for successful read-to-EOF publication.
+
+
+## 1.0.142 - 2026-09-28
+
+
+- Abort grouped Processes publication on any allocation failure instead of presenting a knowingly incomplete group set.
+- Re-discover Linux cpufreq policy paths after sustained read failure so driver reloads and CPU-policy topology changes recover without restarting System Monitor.
+- Make Linux disk, partition, network and GPU discovery transactional: checked source APIs distinguish a valid empty inventory from enumeration failure, so Performance preserves the last completed topology instead of publishing transient device disappearance.
+- Keep disconnected Linux network adapters visible and retain their stable identity; failed disk/network telemetry now becomes an explicit graph gap/N/A instead of synthetic zero activity, while cumulative totals and recovery baselines remain correct.
+- Calculate network utilisation from the busier receive/transmit direction on full-duplex links on Linux and Windows instead of summing independent directions and prematurely clamping at 100%.
+- Preserve GPU, battery and NPU topology across transient discovery failures, and preserve the last valid CPU frequency/handle values while exposing handle availability explicitly.
+- Make grouped Processes collection fail atomically under allocation pressure; App History continues to protect every currently-live identity and prunes inactive history back to its 4,096-entry retention target when the live set contracts.
+- Stop Process Inspector polling after its exact process instance exits, stabilise its changing metric widths with tabular digits, and correct the Details explanation now that executable identity is always retained for App History.
+- Harden Windows disk/network/GPU enumeration against transient native API failures and bound process-worker shutdown instead of waiting forever on a native query that ignores cancellation.
+- Extend storage and metric smoke coverage for checked enumeration contracts and unavailable disk-sample semantics.
+
+## 1.0.139 - 2026-09-28
+
+- Preserve the last complete process snapshot when Linux process enumeration fails, distinguish a valid zero-process result from backend failure, and keep aggregate CPU baselines unchanged across failed /proc/stat reads.
+- Reduce Linux sampler publication traffic by copying only populated device ranges instead of every fixed-capacity disk, partition, network, Bluetooth, GPU, battery and NPU slot.
+- Stop fully formatting every hidden Performance resource page each sample; update compact rail summaries independently and fully present only the selected page.
+- Scale dynamic graphs from the history range actually visible on screen, restore graph expansion symmetrically after compact mode, and stabilise live metric geometry with tabular digits.
+- Add compact-layout hysteresis, make Compact Summary maximise restoration transaction-scoped, and reschedule process polling to the actual foreground/background cadence.
+- Keep thermal warning/fault pairs on one provenance, distinguish unavailable thermal telemetry from a nominal reading, and expand the documented fallback table for additional Intel Core Ultra U and AMD Ryzen 9000 processors.
+- Report durable preference and column-layout write failures instead of silently discarding them, remove the remaining bounded GPU-name concatenation, and remove a redundant Overview refresh from the global refresh path.
+- Extend deterministic thermal regression coverage for warning-only, critical-only and newly covered processor-table cases.
+- Keep the process-scan failure flag scoped to the authoritative `/proc` enumeration path so the hardened failure contract builds cleanly under strict C17 warnings.
+
+## 1.0.138 - 2026-09-27
+
+- Make `--system-package-mode` a production installation path instead of running the complete developer smoke suite on the target machine before compiling. Interactive native builds keep their existing test default; the OS-managed install now goes straight to the aggressive local build and PGO path.
+- Change automatic build parallelism to logical processors minus one, leaving one CPU free for the desktop/system.
+- Make the NVML smoke target explicitly depend on the pinned Common archive instead of relying on another parallel target to have produced it first.
+- Replace the previous system-package dry-run CI coverage with a real root `.run --profile aggressive --system-package-mode` build/install and verify the installed package version afterward.
+
+
+## 1.0.137 - 2026-09-27
+
+- Finish the remaining forensic device-identity hardening: Linux network identities now pair the kernel ifindex with the link-layer address when available, so a recycled interface index cannot inherit a removed NIC's retained rate baseline.
+- Make the sysfs fallback use the same identity policy for both inventory and counter samples, preserving coherent matching when rtnetlink is unavailable.
+- Replace the fixed Windows volume-extent query buffer with bounded dynamic growth for `ERROR_MORE_DATA` / `ERROR_INSUFFICIENT_BUFFER`, while retaining payload-length validation before every extent access.
+- Extend the storage/network smoke contract to require the stronger Linux interface identity.
+
+## 1.0.136 - 2026-09-27
+
+- Fix the self-extracting native `.run` wrapper so the explicit `--system-package-mode` argument reaches the root-capable bootstrap instead of being rejected before extraction.
+- Keep ordinary interactive root execution refused; only the explicit OS package integration path is allowed through the wrapper.
+- Add CI coverage that executes the generated `.run` as root in system-package dry-run mode so this integration boundary cannot regress silently.
+
+
+## 1.0.135 - 2026-09-27
+
+- Add explicit `--system-package-mode` support so Infiltrator OS can invoke the released native `.run` from a package-manager root context while ordinary interactive root builds remain refused.
+- In that mode, missing Debian-family build prerequisites are installed directly with `apt-get` and the locally built package is installed directly with `dpkg`, avoiding a redundant sudo boundary.
+- Preserve the aggressive local-build contract: target-machine ISA/tuning, `-O3`, LTO and measured two-pass PGO.
+
+## 1.0.134 - 2026-09-27
+
+- Repair the 1.0.133 canonical verification failure without weakening any gate: restore final newlines to the files touched by the monitor-ownership/window-fitting pass.
+- Complete Doxygen contracts for the monitor-owned NVML context lifecycle so create, refresh and destroy document return and parameter ownership explicitly.
+- Preserve the 1.0.132/1.0.133 functional repairs unchanged while making the exact release candidate pass the repository's source-style contract.
+
+## 1.0.133 - 2026-09-27
+
+- Move the optional NVML library/API lifetime out of process-global mutable storage and into each Linux monitor's hardware state, so one monitor instance cannot tear down another monitor's NVIDIA provider.
+- Extend the NVML smoke test to create two independent contexts, destroy one, and prove the other continues to refresh correctly.
+- Clamp Process Inspector, Help, Preferences, process-control, process-log, file-user and task-launcher window defaults to the usable desktop work area while preserving their existing preferred sizes on normal displays.
+
+
+## 1.0.132 - 2026-09-27
+
+- Bind Linux network counter baselines and topology changes to interface instance identity, reject truncated/interrupted rtnetlink dumps, and make IPv4 selection deterministic.
+- Preserve process I/O and handle-count availability across permission/read gaps so missing telemetry is shown as unavailable and recovery cannot create false rate spikes.
+- Use the portable C UINT_MAX sentinel in the GTK Details model so strict C17 verification and the real GTK build share the same unavailable-handle representation.
+- Bound Windows volume extent parsing by the actual IOCTL payload and use adapter LUID identity for topology changes.
+- Enumerate the actual online Linux cpuN identifiers for cache/socket topology instead of assuming dense CPU numbering.
+- Add narrow-window layout policy: compact Linux navigation rails below the responsive breakpoint, shrink the Performance device rail with them, and clamp native Windows startup/minimum geometry to the desktop work area.
+- Add permanent regression coverage for narrow-screen behaviour and Overview graph allocation stability.
+- Remove the Overview graphs' fixed horizontal minimum so the asymmetric grid can contract to small work areas without changing graph height or refresh stability.
+- Reflow CPU and Memory primary statistics from four columns to a 2×2 grid in compact layout so those cards no longer impose desktop-sized minimum widths.
+- Permit an internal horizontal Overview scrollbar only in compact layout; standard desktop layouts remain horizontally fixed, while narrow work areas can no longer force the top-level window wider than the screen.
+
+## 1.0.131 - 2026-09-27
+
+- Fix the Overview graph-geometry regression where telemetry refreshes could make the middle dashboard graphs grow and shrink on every pulse.
+- Make live card headline, metadata, detail and primary-stat labels layout-inert: text updates now ellipsize inside their existing allocations instead of changing GTK preferred widths and renegotiating the shared twelve-column grid.
+- Preserve normal responsive resizing when the user changes the window size; only sample-driven layout movement is suppressed.
+
+## 1.0.130 - 2026-09-27
+
+- Close the remaining Linux Mint System Monitor 45.0.2 inspection-detail gaps identified by the maintained forensic coverage ledger.
+- Resolve procfs socket descriptors against the inspected process network namespace so Open Files distinguishes local, IPv4 and IPv6 network sockets while preserving a generic Socket fallback when kernel tables are restricted.
+- Prefer procfs smaps for Memory Map and expose the complete technical mapping set: filename, VM start/end/size, flags, offset, private clean/dirty, shared clean/dirty, device and inode; fall back to maps with explicit unavailable residency accounting.
+- Update the coverage ledger from its 1.0.128 planning snapshot to the implemented 1.0.130 state and record deliberate supersessions for unstable legacy X-server accounting, arbitrary graph colours, duplicate memory-unit policy and GNOME's older adaptive-refresh implementation.
+- Complete Doxygen contracts for the newly configurable graph APIs, correct member documentation links, and update the process-HAL style audit so its native-primitive guard permits the explicitly documented optional Unix nice capability instead of rejecting its own public contract.
+
+## 1.0.129 - 2026-09-27
+
+- Implement the documented Linux Mint System Monitor 45.0.2 replacement tranche across the existing Infiltrator System Monitor information architecture.
+- Add All/Active/My process scopes, full technical process metadata, exact Linux nice control, force termination and configurable confirmation while preserving PID-reuse protection and platform-neutral control contracts.
+- Complete mounted File Systems parity with distinct Free versus Available capacity, independent refresh cadence, persistent configurable columns and direct mount-point activation.
+- Add configurable performance graph history, smooth/line rendering, stacked CPU user/kernel presentation, logarithmic Memory presentation and independent network-total units without discarding retained history.
+
+## 1.0.128 - 2026-09-27
+
+- Replace the Overview and CPU-page hard-coded 80/95 °C thermal thresholds with one processor-aware policy.
+- Prefer native Linux hwmon Tcontrol/max and Tjmax/critical limits from the same selected CPU/package sensor; accept explicitly CPU-labelled thermal-zone hot/critical trip points as the native fallback.
+- Add an internal manufacturer-documented CPU limit table for systems that expose temperature but not thresholds, including the 110 °C Core Ultra 5 125U limit and thermally distinct 89 °C Ryzen X3D examples; unknown CPUs retain the conservative 80/95 °C fallback.
+- Keep Overview and CPU Performance warning/fault colours on the same resolved thresholds and add deterministic sensor/table/fallback regression coverage.
+
+## 1.0.127 - 2026-09-26
+
+- Replace the generic Linux window decoration with the same branded client-side title-bar language used by System Settings: dark blue shell gradient, application icon block, product title/subtitle and explicit window controls.
+- Install the new GtkHeaderBar as the real window titlebar so dragging and title-bar double-click maximise/restore remain window-manager operations rather than a fake in-content imitation.
+- Keep existing System Monitor menus and page behaviour intact; this is a shell-chrome consistency change rather than a new feature surface.
+
+## 1.0.126 - 2026-09-26
+
+- Carry the 1.0.123-1.0.125 Linux UI fixes into one publishable release: System Monitor uses process-local 1x GTK rendering on a 2x Cinnamon desktop, restored geometry is bounded to the usable work area, and Overview can scroll internally on short displays.
+- Remove the redundant five-metric summary strip from normal technical pages while retaining it for Compact Summary mode.
+- Restore release identity consistency by advancing README and support/VERSION together so the immutable publication gate validates the release.
+
+## 1.0.125 - 2026-09-26
+
+- Remove the redundant CPU, Memory, Disk, Network and GPU summary strip from normal technical pages now that Overview is the authoritative whole-system summary.
+- Retain the five-metric strip only for Compact Summary mode, where it remains the purpose-built lightweight presentation.
+- Avoid hidden summary formatting on technical pages through the existing mapped-widget refresh guard.
+
+## 1.0.124 - 2026-09-26
+
+- Clamp restored Linux window geometry to the active monitor work area with decoration headroom so a persisted tall window cannot start underneath the desktop panel or title-bar boundary.
+- Restore an internal vertical-scroll fallback for Overview without propagating its natural height to the top-level window; normal-height displays retain the single-dashboard composition while shorter work areas remain fully usable.
+- Keep the 1.0.123 process-local 1x GTK policy, leaving Cinnamon desktop, panel, menu and icon scaling unchanged.
+
+## 1.0.123 - 2026-09-26
+
+- Keep Cinnamon and desktop HiDPI scaling untouched while forcing the Linux GTK System Monitor process itself to 1x rendering before GTK/GDK initialisation.
+- Prevent a 2x Cinnamon session from doubling restored/minimum System Monitor geometry (for example 1463x998 becoming 2926x1996), restoring a window size that can fit a 1920x1080 display without changing desktop icon or menu scaling.
+
+## 1.0.122 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.36 at `5e129851bbd7ac0b94bd8c2f48f32924016bdbda`.
+- Consume the completed temporal readability audit so selected ancient/historical clock systems identify their real units, boundaries and reconstruction assumptions instead of relying on specialist shorthand.
+- Preserve sampling, accounting and persisted timestamps in canonical SI/Unix units; historical systems remain presentation only.
+
+## 1.0.121 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.35 at `7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f`.
+- Consume clearer historical clock/calendar labels and native elapsed hierarchies for Chinese shíchén, Edo unequal hours and ancient Babylonian ūmu/bēru/UŠ.
+- Preserve canonical SI/Unix collection and accounting; only human-facing temporal presentation changes.
+
+## 1.0.120 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.34 at `1467755d088d740b873660a8f0c9a515e9a39046`.
+- Consume the audited temporal catalogue, including the distinct early-Edo sunrise/sunset and late-Edo 1797 twilight models and clearer model/range labels.
+- Keep internal sampling, rates, counters and stored timestamps in canonical SI/Unix units; historical systems remain presentation only.
+
+## 1.0.119 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.32 at `ba9386fad1944d3e575a28346a46f85108326051`.
+- Remove the redundant Modern Italian clock choice; ordinary modern Italian civil time is already the existing standard 24-hour clock.
+- Keep Historical Italian hours only for the genuinely distinct sunset-origin historical system.
+
+## 1.0.118 - 2026-09-26
+
+- Pin System Monitor to Infiltratr Common 1.19.31 at `fd51905f3cea1f051e1163fbdeea8b62b7069833`.
+- Separate modern Italian 24-hour civil time from historical sunset-origin Italian hours in the clock catalogue.
+- Correct ancient Babylonian presentation to fixed bēru/UŠ units from a sunset-start civil day, distinct from Renaissance European sunrise-origin “Babylonian hours”.
+- Use the fixed historical Nürnberg Wendetag schedule for the Nuremberg Great Clock and keep the location-aware solar reconstruction as a separate mode.
+
+## 1.0.117 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.30 at `9a9fae5b3f0d133d400310cdd316b21129631429`.
+- Distinguish the historical sunset-origin Italian clock from modern Italian civil time and the Renaissance European sunrise-origin "Babylonian hours" from genuinely ancient Babylonian seasonal hours.
+- Add Ancient Babylonian seasonal time to System Monitor's shared temporal presentation path, including anchored elapsed presentation in day/night simānu and explicit SI fallback for unanchored accumulated quantities.
+- Correct Nuremberg presentation to the discrete Wendetag allocation of equal hours between daylight and night instead of resetting at every actual sunrise and sunset.
+- Keep all sampling, scheduling, CPU accounting and persisted timestamps canonical SI/Unix; these changes affect presentation only.
+
+## 1.0.116 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.29 at `13b824e4c4e266426590d86597249a89d18ec2f0`.
+- Normalize Roman seasonal elapsed presentation into complete `dies` plus residual horae, vigiliae and unciae, so uptime no longer accumulates opaque totals across complete day/night cycles.
+- Present Chinese hundred-kè elapsed time with native 日/刻 hierarchy instead of hybrid modern `d` prefixes and redundant `/100` notation.
+- Preserve the historical clock policy in Common while keeping internal sampling and monotonic accounting in canonical SI time.
+
+## 1.0.115 - 2026-09-26
+
+- Pin System Monitor to released Infiltratr Common 1.19.28 at `e7e035d73474c3188cc6abb479702d43dd45710d`.
+- Correct Roman temporal uptime and process-age presentation so anchored elapsed intervals are integrated across the real local seasonal daylight horae and night vigiliae instead of being disguised modern H:M:S; fractional precision uses Roman unciae.
+- Correct Edo Japanese seasonal uptime and process-age presentation so anchored elapsed intervals integrate the six daytime and six nighttime koku/toki and use the historically attested half-period marker instead of fabricated modern minutes or seconds.
+- Keep accumulated quantities without a civil interval, such as CPU-time totals, explicitly labelled SI because applying a seasonal unit without an anchor would be false precision.
+- Preserve all collectors, scheduling, persisted timestamps and monotonic accounting in canonical Unix/SI time; only human-facing presentation changes.
+- Replace the old Roman/Edo regression that enforced `01:01:01` with coverage proving anchored native-unit output and explicit-SI unanchored fallback.
+
+## 1.0.114 - 2026-09-26
+
+- Separate completed-sample graph retention from GTK Performance presentation: every device keeps accurate history, while hidden pages no longer reformat and relayout their full widget trees every timer tick.
+- Generation-gate Overview presentation so monitor telemetry and process snapshots update only the portions that actually changed instead of causing duplicate full dashboard refreshes.
+- Load-shed the asynchronous monitor and process workers by coalescing redundant timer requests while a same-purpose scan is already in flight; changed process-enrichment requirements still queue one follow-up scan.
+- Keep Processes and Details on the foreground process cadence while Overview and other tabs use the existing two-second background cadence, preserving App History without a full one-second /proc sweep everywhere.
+- Cache per-process command-line and cgroup metadata for five seconds, sample expensive per-process GPU fdinfo at two-second intervals while GPU data is requested, and stop sorting the entire multi-kilobyte process-record array by CPU when presentation layers already own ordering.
+- Move Bluetooth HCI connection-list reconciliation to the topology cadence instead of opening a raw HCI socket and issuing HCIGETCONNLIST for every controller on every telemetry sample.
+- Render smooth Catmull-Rom graph history with Cairo cubic Bezier segments instead of five interpolated line segments per interval, preserving the curve while reducing path construction.
+- After Services, Users or File Systems has been opened, keep its timer lightweight while hidden and perform the actual inventory refresh only when that tab is active.
+- Skip hidden summary-bar formatting and restrict Performance widget presentation to the selected page plus mapped device-rail entries.
+
+## 1.0.113 - 2026-09-26
+
+- Fix the 1.0.112 Overview sizing regression that could make the application wider than the desktop and push the navigation rail/window controls off-screen.
+- Remove homogeneous sizing from the asymmetric twelve-column Overview grid; narrow diagnostic cards no longer multiply their minimum width across every grid column.
+- Preserve the original anti-jitter goal by reserving small fixed pixel widths only for rapidly changing headline values such as network rate, temperature and pressure.
+- Stop blank diagnostic-card metadata fields from carrying the 120-pixel hardware-name reservation used by CPU, Memory, Disk, Network and GPU.
+- Remove the GTK compatibility declarations that existed only for the reverted homogeneous/character-width sizing approach.
+
+## 1.0.112 - 2026-09-25
+
+- Stop the Overview plots from breathing wider and narrower as live values change by making the dashboard's twelve layout columns explicitly homogeneous.
+- Give rapidly changing non-gauge headline values fixed character allocations so transitions such as 9%→10% and KB/s→MB/s cannot feed new natural widths back into GTK layout.
+- Bound hardware/device metadata labels to a stable width while retaining end ellipsising.
+- Extend the syntax-test GTK compatibility surface for the layout APIs used by this fix.
+- Correct the README to describe the current five-row Top CPU process panel.
+
+## 1.0.111 - 2026-09-25
+
+- Replace the incorrect generic CPU gear and other Overview header glyphs with purpose-drawn neon resource icons; the CPU/GPU marks are now chip-shaped and pressure uses the waveform language from the approved reference.
+- Remove the oversized translucent resource glyphs from inside history plots so the graph itself is the visual focus.
+- Render Overview history with smooth Catmull-Rom curves rather than angular sample-to-sample polylines.
+- Make CPU user/kernel, Memory used/available and Network receive/send true solid multi-colour graphs with the reference cyan/violet, magenta/cyan and cyan/magenta pairings; keep Disk green, GPU emerald, Temperature amber, CPU pressure cyan, Memory pressure violet and I/O pressure green.
+- Increase CPU/Memory/GPU dial scale and centre-value typography so the gauges carry the same visual weight as the reference.
+- Rework CPU and Memory detail rows into icon-led metric cells, including coloured Memory composition markers.
+- Expand Top CPU processes from three to five compact rows and add a working View All button that opens Processes.
+- Reduce the Overview hero's hard cyan border to a restrained edge so the banner reads as artwork rather than another card.
+- Retain Memory available percentage in completed Overview history so its second graph series is real telemetry rather than decoration.
+
+## 1.0.110 - 2026-09-25
+
+- Replace the legacy menubar and cross-tab summary strip on Overview with the dashboard's integrated hero chrome while retaining those global controls on technical pages and in compact-summary mode.
+- Add target-style live health and System Settings-aware uptime blocks to the Overview hero.
+- Move CPU, Memory and GPU percentages into the centres of their multicolour radial gauges with metric captions.
+- Rebuild Overview card headers around resource icons, hardware/device identity and navigation chevrons.
+- Add CPU detail beneath the graph for maximum frequency, physical cores, logical threads and temperature.
+- Add Memory detail beneath the graph for used, cached, available and swap memory, with installed capacity/type in the card header.
+- Preserve the 1.0.109 dual-series CPU user/kernel history and aggregate disk semantics while enriching presentation without duplicating collectors.
+
+## 1.0.109 - 2026-09-25
+
+- Retain CPU user/non-kernel and kernel percentages in the bounded completed-snapshot Overview history instead of discarding that split after collection.
+- Make the Overview CPU plot a true dual-series instrument like the approved reference: solid cyan user/non-kernel activity and dashed violet kernel activity share the same 0-100% graph.
+- Keep the large CPU value and radial gauge as total utilisation while replacing the generic card caption with the live User and Kernel percentages.
+- Add deterministic Overview-history regression coverage for the retained CPU split.
+
+## 1.0.108 - 2026-09-25
+
+- Recompose Overview as a single-viewport dashboard: remove its document-style scroller and fixed card heights so the normal window is filled rather than extending below the page.
+- Make the dashboard genuinely asymmetric instead of merely grouping equal tiles: CPU, Memory, Disk, Network, GPU and the compact diagnostic cards now use deliberately different column spans and graph heights.
+- Move each resource icon into its live plot as a translucent instrument watermark instead of consuming a separate header slot.
+- Keep every Overview plot/card on one shared visual surface; resource identity comes from graph, icon, border and dial accents rather than different background treatments.
+- Replace the circular gauge's spatial linear gradient with a segmented three-stop colour interpolation around the arc, making CPU, Memory and GPU dials visibly multicolour.
+- Extend the no-GTK syntax compatibility header for GtkOverlay so the new graph composition remains covered by the existing build checks.
+
+## 1.0.107 - 2026-09-25
+
+- Reshape Overview to the approved asymmetric dashboard geometry instead of nine same-sized tiles: CPU and Memory are the wide primary row, Disk/Network/GPU form the device row, and Temperature/pressure cards form a compact diagnostic row.
+- Give primary and secondary cards deliberately different graph heights so the hierarchy reads visually rather than procedurally.
+- Keep every Overview card on one coherent shared panel background; resource identity now comes from icon, border, graph and dial accents rather than unrelated card fills.
+- Increase resource-icon presence and replace the single-colour CPU/Memory/GPU rings with native Cairo three-stop gradient dials.
+- Compress the diagnostic row and retain scrolling only as a small-window fallback so the normal 1080-line Overview fills the available page rather than extending below it.
+- Carry forward the 1.0.106 Linux process-CPU accounting repair, which fixes the Top CPU processes rows previously appearing as 0.0% despite real CPU use.
+
+## 1.0.106 - 2026-09-25
+
+- Fix Overview Top CPU processes reporting 0.0% by repairing Linux process CPU accounting: the strict bounded text helper correctly rejected the truncated 512-byte read of /proc/stat, leaving the aggregate CPU denominator at zero. Read the complete procfs snapshot and explicitly parse the aggregate cpu row instead.
+- Add deterministic /proc/stat aggregate CPU parsing coverage and refresh Overview immediately when a completed process snapshot is published.
+- Push Overview materially closer to the approved graphical north star while preserving its real information architecture: add coloured resource icons, richer per-resource gradient cards, a graphical brand mark, stronger value hierarchy and full dashboard graph grids.
+- Upgrade the native Cairo history renderer with vertical gradient fills and restrained line glow so charts read as instrumentation instead of flat procedural plots.
+- Replace the textual Top CPU process chips with graphical rows containing process name, live CPU activity bar, CPU percentage and resident-memory value.
+- Add native Cairo radial utilisation gauges to CPU, Memory and GPU Overview cards and give those primary resources more visual weight than the secondary diagnostic cards.
+- Keep the presentation native GTK/Cairo and data-driven; no generated decorative artwork is embedded in the application.
+- Keep the richer dashboard CSS split into ISO-portable literals and extend the strict GTK/Cairo test shim so the graphical code remains covered by canonical builds.
+
+
+## 1.0.105 - 2026-09-25
+
+- Make the Overview Disk activity card system-wide instead of silently changing identity to whichever physical disk is busiest in each sample.
+- Graph mean active time across all measured physical disks and sum read/write throughput across all disks, with an explicit physical-disk count in the card detail.
+- Make the Overview Disk card navigate to the Disks category rather than to a retained busiest-device identity.
+- Preserve Linux PSI precision on the CPU, Memory and I/O pressure cards to two decimal places; small but real stalls below one percent no longer render as a misleading 0%.
+- Clarify the pressure-card captions as kernel PSI 10-second stall averages and add deterministic aggregate-disk regression coverage.
+
+
+## 1.0.104 - 2026-09-25
+
+- Fix the category device rail after live 1.0.103 testing showed the correct empty rail width but no visible device buttons for multi-device categories.
+- Remove GTK no-show-all suppression from Performance device rows and the device scroller; the suppression prevented wanted Disk, Network, GPU/NPU and Battery rows from ever being mapped.
+- Show the newly built Performance tree first and apply the category filter afterwards, so GTK cannot undo the filter and the filter cannot suppress legitimate device rows.
+- Keep CPU and Memory full-width with no redundant secondary rail while restoring every device selector for categories that contain two or more pages.
+
+
+## 1.0.103 - 2026-09-25
+
+- Remove the duplicate all-resources Performance rail introduced by the first primary-sidebar pass.
+- Treat the left application rail as the resource category selector: CPU shows CPU only, Memory shows Memory only, Disks shows disk devices only, Network shows network/Bluetooth devices only, GPU shows GPU/NPU devices only, and Battery shows battery/peripheral-battery devices only.
+- Collapse the secondary device rail entirely when the selected category has a single page, eliminating redundant CPU and Memory rows and giving the selected page the full content width.
+- Preserve per-device selection where a category genuinely has multiple devices, including multiple disks, interfaces, accelerators or batteries.
+- Keep Bluetooth reachable through Network and NPU through GPU while keeping the primary rail selection synchronised with those grouped detail pages.
+- Add presentation-contract regression coverage for the primary resource grouping semantics.
+
+
+## 1.0.102 - 2026-09-25
+
+- Stabilise the new icon-led primary navigation after live testing exposed a crash when switching from CPU to Memory.
+- Activate the Performance shell before changing its inner resource and avoid synchronous topology rebuilds for the topology-independent CPU and Memory singleton pages.
+- Switch heavyweight live Performance pages without GTK cross-fade animation so two graph-rich widget trees are never rendered concurrently during resource navigation.
+- Harden the Memory composition drawing path against invalid widget/context geometry and clamp retained memory segments to the current total.
+- Add a hosted Xvfb smoke that navigates directly to the Memory resource so future releases cannot regress this crash path unnoticed.
+
+
+## 1.0.101 - 2026-09-25
+
+- Replace the visible Linux top-level notebook tab strip with a persistent left navigation rail matching the approved UI mockup direction.
+- Promote Overview, CPU, Memory, Disks, Network, GPU and Battery to icon-led primary destinations while preserving the existing Performance resource/device identities and lazy page construction.
+- Keep Processes, App History, Startup Apps, Users, Details, Services and File Systems in the same rail so the whole application reads as one GUI-first product rather than a row of administrative tabs.
+- Add resource-coloured symbolic icons, a stronger cyan selected state, compact separators and a dedicated graphite navigation surface without changing collectors or monitoring semantics.
+- Keep the notebook internally as the stable page container and synchronise the new rail with both notebook changes and Performance device selection.
+
+
+## 1.0.100 - 2026-09-25
+
+- Preserve the approved graphical System Monitor UI mockup directly in the repository and make the maintained UI vision document reference that image.
+- Remove the temporary hand-built SVG substitute so future UI work has one unambiguous visual north star.
+- Carry forward the 1.0.99 graphical Overview polish unchanged while advancing the immutable release identity after 1.0.99 was published.
+
+
+## 1.0.99 - 2026-09-25
+
+- Record the graphical System Monitor UI north star, including the dashboard reference mockup and the Amiga/Workbench-inspired GUI-first design intent.
+- Begin the first implementation polish without changing monitoring semantics: Overview now opens as the default destination for fresh profiles after the fast Performance first paint.
+- Rework Overview hierarchy around a visual hero, live-state chip, larger metric values, resource-coloured card accents and a more compact graphical top-process treatment.
+- Reorder Overview cards by visual priority so CPU, memory and GPU lead the dashboard while disk, network, temperature and pressure remain immediately visible.
+- Keep every card wired to the existing completed-snapshot history and detailed Performance navigation; this is presentation work, not a parallel monitoring path.
+
+
+## 1.0.98 - 2026-09-25
+
+- Define System Monitor explicitly as a coherent monitoring and diagnostic product rather than a feature-count exercise.
+- Treat competitor implementations as evidence and idea sources instead of parity backlogs; distinctive features are admitted only when they materially strengthen the established product purpose and integrate with its architecture, navigation and presentation.
+- Establish a presentation rule that approachable monitoring surfaces favour visual hierarchy, graphs, compact state/value treatment and meaningful grouping over explanatory prose, while deliberately technical surfaces retain exact text and dense tables where that density serves the task.
+- Add the product-coherence gate to Design, Decisions and Roadmap so future feature work has one maintained admission standard.
+
+## 1.0.97 - 2026-09-25
+
+- Add an appended Overview tab without renumbering the existing eight persisted tab identities.
+- Retain a bounded, timestamped history of backend-completed monitor snapshots independently of the visible page; duplicate publications are ignored, skipped generations become explicit graph gaps, and unavailable metrics remain unavailable.
+- Present CPU, memory, busiest disk/network/GPU, hottest available temperature and CPU/memory/I/O pressure cards plus the three busiest CPU processes; cards navigate to the corresponding current Performance resource.
+- Resolve retained disk/network/GPU identities against current topology before navigation so hotplug and reordering cannot silently target another device.
+- Give Linux and Windows native backends explicit completed-sample generation/timestamp publication semantics and cover duplicate snapshots, missing metrics, gaps, hotplug identity, process ranking and ring wraparound in the deterministic metrics suite.
+- Add the native Windows Overview surface and keep Windows sampling active independently of the selected page, matching the shared completed-history contract.
+- Add a hosted GTK Overview navigation smoke under Xvfb so the new lazy page is constructed on a real display server during release verification.
+
+## 1.0.96 - 2026-09-25
+
+- Close the Linux sampler timeout/exit ownership race with independently retained caller and worker references; synchronize the startup topology retry flag.
+- Suppress CPU counter-rollback spikes, invalidate disk/network baselines across missing samples, and reject missing or malformed network counters instead of reporting sampled zero.
+- Separate GPU memory capacity from adapter-wide usage availability; stop presenting DXGI process-local memory as whole-GPU consumption, and show unavailable usage explicitly in both native presentations.
+- Stop substituting nominal CPU frequency for unavailable current/maximum telemetry; remove unaligned CPUID brand-buffer writes and bound netlink attribute decoding.
+- Reject invalid persisted history durations and avoid signed rounding overflow during display.
+- Match file users by device/inode identity, including hard links and pathname replacement, rather than by canonical path text.
+- Serialize release package creation to prevent tar/source-directory races; exclude Windows binaries from source payloads, avoid pipefail/SIGPIPE in version inspection, and discard archive ownership during font preparation.
+- Add deterministic regressions within the existing subsystem suites and correct asynchronous API, ownership, metric-availability and Windows documentation contracts.
+
+## 1.0.95 - 2026-09-25
+
+- Remove the native Windows copies of Common's Day/Night palette and System/Day/Night enum; Win32 now projects its `COLORREF` adapter directly from the exact Common 1.19.27 theme contract.
+- Remove duplicated Windows screen/section/control spacing and radius constants and consume Common's design metrics at the rendering boundary, with ABI/size/range validation before the window is created.
+- Centralise the five-item cross-tab summary labels and formatted values in the platform-neutral presentation layer so GTK and Win32 share CPU, memory, disk, network and GPU availability/unit semantics; Windows now shows the live disk/network/GPU summary values it already collected instead of permanent placeholders.
+- Remove the accidental Windows summary-loop dependency on `LSM_MEMORY_DETAIL_COUNT`; summary iteration is now typed by its own `LSM_SUMMARY_COUNT` contract.
+- Make Win32 UTF-8 conversion strict by removing the ANSI-code-page fallback that could silently reinterpret malformed project text.
+- Add deterministic summary projection coverage and source-ownership gates preventing local Common palette/geometry copies or ACP fallback from returning.
+
+
+## 1.0.94 - 2026-09-25
+
+- Pin Make, CMake and the source gitlink to released Infiltratr Common 1.19.27 at `3ef3710df6563df305b6d8e2dc9d1a41c61843ba`.
+- Replace System Monitor's private monotonic-nanosecond clock conversion with Common's overflow-checked `infiltratr_monotonic_nanoseconds()` while preserving the temporal-policy cache's reload-on-clock-failure behaviour.
+- Replace the final locale-sensitive digit classification in numeric UTC-offset parsing with Common's deterministic ASCII classifier.
+- Route CPU user/kernel one-decimal percentage presentation through Common's generic scalar formatter instead of retaining a private finite/N/A/precision formatter.
+- Refresh maintained Common-version documentation to the exact 1.19.27 dependency; historical changelog entries remain unchanged.
+
+## 1.0.93 - 2026-09-25
+
+- Align the native Linux titlebar with the suite-wide 44 px publisher chrome height.
+- Preserve collectors, page structure, platform backends, dependencies and Common APIs unchanged.
+
+## 1.0.92 - 2026-09-24
+
+- Pin System Monitor to released Infiltratr Common 1.19.26 and use its single exhaustive clock-mode duration formatter instead of a decimal-only local special case.
+- Apply System Settings temporal presentation to every user-facing duration that has a meaningful conversion: CPU uptime, process age, process CPU time, App History CPU/active time, battery time remaining and diagnostic-snapshot uptime.
+- Use the real elapsed representation for French decimal time, Internet beats, Unix seconds, binary H:M:S, hexadecimal ticks, Julian/MJD day fractions, sidereal time, Chinese double-hours/hundred-kè and Indian ghaṭī/vighaṭī.
+- Anchor apparent-solar uptime/process-age/remaining intervals to the real civil interval endpoint; retain equal 60/60 units for mean-solar, Italian, Babylonian and Nuremberg clocks because those systems change the origin rather than the elapsed unit.
+- Deliberately keep Roman temporal and Edo Japanese seasonal durations in conventional elapsed H:M:S because their unequal daylight/night periods are clock labels, not one fixed duration unit.
+- Keep all collectors, CPU accounting, sampling cadence, persisted values and monotonic calculations in canonical SI/Unix time; only human-facing formatting changes.
+
+## 1.0.91 - 2026-09-24
+
+- Make CPU uptime follow French decimal time when System Settings selects the decimal clock, while preserving the underlying canonical SI-second uptime counter.
+- Render decimal elapsed time with 100 seconds per minute and 100 minutes per hour; keep whole 24-hour days explicit.
+- Keep conventional elapsed-duration formatting for ordinary and astronomical/historical clock modes, whose civil-time semantics do not define elapsed intervals.
+- Add a regression at the exact decimal rollover: 86 SI seconds renders as 0:00:99 and 87 SI seconds as 0:01:00.
+
+This changelog records user-visible, compatibility, architecture and validation changes for System Monitor. Detailed commit-by-commit history remains in Git.
+
+
+## 1.0.90 - 2026-09-24
+
+- Give notebook tabs one extra pixel of vertical breathing room to match the suite compact-spacing rhythm.
+- Keep collectors, page structure, platform backends, dependencies and Common APIs unchanged.
+
+## 1.0.89 - 2026-09-24
+
+- Pin the application to released Infiltratr Common 1.19.25 and its complete explicit clock-mode formatter.
+- Make human-facing session-login, application-history, process-start and diagnostic-snapshot timestamps follow the validated temporal-v3 authority published by Infiltrator System Settings.
+- Preserve the native operating-system locale as the fallback when System Settings is absent or has not published a valid policy, while keeping canonical timestamps, process accounting, CPU sampling, refresh cadence, timeouts and elapsed durations unchanged.
+- Support decimal, Roman temporal and every other explicit shared clock mode without copying clock algorithms into System Monitor; location-dependent modes require the configured policy location rather than fabricating one.
+- Add application-level regression coverage for decimal and Roman presentation plus provider-withdrawal fallback.
+
+## 1.0.88 - 2026-09-24
+
+- Align the Performance side-navigation corner radius with the shared compact suite radius already used by the publisher shell.
+- Keep the change presentation-only: no collector, backend, dependency or Common API changes.
+
+## 1.0.87 - 2026-09-24
+
+- Make the native Windows build consume Common 1.19.24's canonical typography contract instead of hard-coded family names and weights.
+- Embed the three Common-verified MB Corpo faces in the portable Windows executable as process-private resources, validate their Common-owned hashes at build time, and reject silent GDI font substitution.
+- Populate Windows physical/logical core counts, socket count, NUMA-node count and L1/L2/L3 cache totals through the native logical-processor topology API.
+- Populate Windows CPU current/max frequency from the processor-power interface, retain registry-reported base frequency when available, prefer the registry processor name over the generic environment identifier, and expose firmware virtualisation state when Windows reports it.
+- Keep the Windows renderer on the shared CPU Performance view so newly available topology values require no Windows-specific presentation policy.
+
+## 1.0.86 - 2026-09-24
+
+- Reduce periodic App History allocation churn by consolidating per-snapshot live-set, RSS and active-time accounting.
+- Replace remaining generic Windows arithmetic, counter-rate, bounded-copy and dynamic-array helpers with the pinned Common 1.19.24 contracts where Common is equal or stronger.
+- Remove obsolete external-ancestry wording and notice requirements after re-checking the current native C/GTK/Win32 implementation and project artwork for retained third-party source or asset dependencies.
+- Replace the imported PCI database corpus with a project-defined flat aggregation of factual vendor/direct-device mappings, excluding subsystem/class/comment/version structure; generate deduplicated numeric lookup tables and binary-search them at runtime instead of scanning embedded text.
+- Standardise project-owned copyright declarations on Copyright (c) 2000-2026 Shannon Smith while preserving real third-party ownership boundaries.
+
+## 1.0.85 - 2026-09-24
+
+- Make App History open substantially more efficiently by avoiding the duplicate first-navigation refresh that rebuilt the same model immediately after construction.
+- Populate the bounded App History model without re-sorting the whole list after every inserted row, then restore the requested sort once after the bulk refresh.
+- Track the latest durably written history generation so shutdown does not wait for a periodic save and then write the identical generation a second time.
+- Teach synchronous shutdown persistence to treat an already-written matching generation as durable success, preserving the dirty-state contract without duplicate I/O.
+- Extend the strict GTK compatibility shim with the standard unsorted tree-model sentinel required by the bulk-refresh path.
+
+## 1.0.84 - 2026-09-23
+
+- Preserve the currently selected Performance device when delayed topology discovery changes a device's presentation stack identity while the semantic device is unchanged.
+- Retain a separate semantic selection identity for each Performance page: disk kernel name, network interface, Bluetooth address and the corresponding stable identifier for other device classes.
+- Restore topology rebuild selection by exact stack identity first and by same-type semantic identity second; fall back to CPU only when the selected resource genuinely no longer exists.
+- Add deterministic regression coverage for Disk identity promotion so Bluetooth discovery cannot move an unchanged Disk selection back to CPU.
+
+## 1.0.83 - 2026-09-23
+
+- Preserve the currently selected Linux Performance device when asynchronous topology discovery adds Bluetooth devices by validating Disk pages with the same stable identity key used to build them, rather than the retired literal `disk-<name>` form.
+- Keep CPU/GPU hot-temperature status pills geometrically stable across normal, warning and fault states by reserving their padding and border footprint continuously while leaving the normal border transparent; threshold crossings no longer resize the metric area or graph.
+- Hide the GTK main window immediately on a close request and perform preference/layout persistence once during final shutdown, removing the visible teardown stall and duplicate close-path state writes while retaining bounded backend cleanup.
+
+## 1.0.82 - 2026-09-23
+
+- Continue the cross-platform presentation consolidation after 1.0.81 by making the Linux GTK Disk, Network and GPU presenters consume the same toolkit-neutral device projection used by Win32 for overlapping user-facing values.
+- Add stable named indices for shared disk, network and GPU view metrics so native renderers and tests do not depend on unexplained numeric positions.
+- Keep Linux-only graph mechanics, pressure data, partition tables, cumulative network totals, wireless details and advanced GPU engine telemetry local to GTK while sharing only semantics that are genuinely common to both platforms.
+- Preserve the richer Linux GPU telemetry-source fallback in the shared model: native driver telemetry and basic-identification states remain meaningful instead of being weakened to `N/A` for reuse.
+- Extend deterministic presentation regression coverage to lock the named device-value contract and GPU telemetry fallbacks.
+- Fix the Windows normal-start crash introduced by physical-disk discovery: the collector no longer places multi-megabyte arrays of partition-rich `LsmDiskInfo` objects on the GUI thread's default stack; discovery staging now lives on the heap and is copied into the shared monitor snapshot only after identity reconciliation.
+- Remove unnecessary duplicate old-network and old-GPU stack snapshots by comparing newly discovered identities against the retained shared model before publication.
+- Strengthen native Windows CI so verification now exercises both the lightweight first-paint smoke path and the real normal startup/backend path for five seconds, preventing collector-start crashes from passing as successful GUI startup.
+- Extend the Windows GPU backend from identification-only to live native telemetry without vendor SDKs: correlate active display adapters to Windows adapter LUIDs, sample the built-in GPU Engine performance counters, collapse per-process rows back into physical engines, and publish render, compute, video, video-processing, copy, overall utilisation and active-engine state through the existing shared `LsmGpuInfo` model.
+- Add DXGI adapter-memory telemetry keyed by the same LUID, publishing dedicated VRAM used/total/percentage for discrete adapters while explicitly classifying unified/shared-memory adapters instead of presenting system RAM as dedicated VRAM.
+- Add conservative SetupAPI display-adapter metadata, publishing driver provider/description, driver version and physical location only when Windows supplies a sufficiently strong device-identity match.
+- Keep unsupported generic Windows GPU measurements such as temperature, power and fan state explicitly unavailable rather than synthesising values or adding vendor-specific runtime dependencies.
+- Extend the verified Windows system-library contract for PDH, DXGI and SetupAPI while keeping the Windows artifact free of third-party runtime dependencies.
+- Recover GitHub Actions verification from a superseded hosted-run concurrency stall by advancing the Verify concurrency epoch without weakening main-only, exact-tested-commit release gating.
+
+## 1.0.81 - 2026-09-23
+
+- Extend the native Windows monitor adapter behind the existing shared `monitor_platform.h` seam instead of creating Windows-only application models.
+- Discover physical disks through native storage IOCTLs, retain stable `PhysicalDriveN` counter baselines, publish size/model/bus/media identity, read/write throughput, active time, response time and queue depth, and map Windows volumes back to physical disks for filesystem/usage/system-disk presentation.
+- Discover network interfaces through IP Helper, publishing friendly/product identity, IPv4/IPv6, MAC address, connection state, negotiated link speed, cumulative traffic, live receive/send rates and link utilisation into the existing `LsmNetInfo` model.
+- Add native Windows graphics-adapter identification without inventing unsupported telemetry: adapter identity is published into `LsmGpuInfo`, while utilisation, temperature and other uncollected GPU metrics remain explicitly unavailable.
+- Extend `performance_view.[ch]` with toolkit-neutral disk, network and GPU projections so native renderers consume the same titles, rail summaries, units and availability-to-text policy rather than maintaining Windows-specific formatting rules.
+- Replace the Win32 Performance rail's one-device-per-category assumption with type-plus-device-index selection, enumerate every discovered disk/network/GPU instance, add bounded wheel scrolling, and clip hit targets to the visible rail.
+- Add deterministic shared-view regression coverage for disk/network/GPU projection and update both MinGW and native Windows verification/release link contracts for IP Helper and Winsock.
+- Verify the completed change through the native Windows GUI build/launch gate, MinGW cross-build, CMake application build, canonical verification suite, sanitizers, release-package verification and aggressive PGO installer test.
+
+## 1.0.80 - 2026-09-23
+
+- Correct the cross-platform architecture so Linux and Windows consume one platform-neutral System Monitor presentation contract instead of maintaining independent copies of page identity, tab labels, Performance resource identity, colours, geometry, CPU/Memory field ordering and value-formatting policy.
+- Move top-level tab labels, Performance titles/stack identities, canonical rail/graph geometry, resource colours, CPU/Memory metric captions, detail captions and grid positions into `presentation_contract.[ch]`.
+- Add `performance_view.[ch]` as a toolkit-neutral CPU/Memory view model. Both GTK and Win32 now receive the same subtitle, rail summary, metric strings and detail strings from one `LsmMonitor` snapshot.
+- Make optional CPU telemetry availability explicit for virtualisation, temperature, load average, interrupt rate and context-switch rate so valid zero/false values are distinct from unsupported or uncollected data.
+- Convert the GTK CPU/Memory builders and presenter to consume the shared field-placement schema and shared view model instead of hard-coded grid attachments and private value formatting.
+- Convert the Win32 renderer to consume the same `LsmTabIndex`, `LsmPageType`, labels, colours, geometry, field-placement schema and formatted CPU/Memory view model.
+- Link the pinned Common 1.19.24 portable formatter sources into the native Windows preview/release build, so both platforms use the same generic formatting implementation rather than parallel unit-formatting code.
+- Add a toolkit-neutral presentation smoke test that locks shared labels, field positions and availability semantics, including sampled zero values versus `N/A`.
+- Build the shared presentation modules into Linux, MinGW cross-builds, native Windows startup verification and Windows release artifacts.
+- Keep toolkit mechanics native: GTK remains the Linux renderer and Win32/GDI remains the Windows renderer; collectors remain native OS adapters, while product semantics and presentation policy no longer fork by operating system.
+
+## 1.0.79 - 2026-09-23
+
+- Correct release verification after 1.0.78 by treating central Infiltrator-Repository APT discovery as asynchronous instead of failing a valid GitHub release while the scheduled central publisher has not yet run.
+- Keep an immediate catalogue check for already-published packages, but record deferred discovery as a notice rather than a false release failure.
+- Preserve the existing immutable-release, exact-source-version and central-publisher ownership boundaries.
+
+## 1.0.78 - 2026-09-23
+
+- Fix the themed Windows About window clipping its second paragraph at the bottom of the content card.
+- Measure the wrapped About text with the active native font before creating the window, then derive the client and outer window height from that measurement.
+- Preserve the existing themed card/button composition while making the dialog resilient to DPI scaling and font substitution instead of relying on a fixed 285-pixel outer height.
+
+## 1.0.77 - 2026-09-23
+
+- Fix the Windows About surface so its displayed version is supplied from `support/VERSION` at compile time instead of being hard-coded in `main_windows.c`.
+- Replace the stock bright Win32 MessageBox About panel with a native themed About window painted from the active System Monitor Day/Night palette.
+- Update Windows verification and release compilation to inject the authoritative project version into the Windows executable.
+
+## 1.0.76 - 2026-09-23
+
+- Size Windows CPU and Memory detail-label columns from the actual native font metrics instead of a fixed 116-pixel split, preventing avoidable ellipsis in labels such as "Logical processors", "Maximum speed" and "Context switches/s".
+- Match the Linux CPU side-rail value semantics: usage plus current speed when available, otherwise usage plus `N/A`, instead of displaying the Windows-only logical-processor count in the value line.
+- Keep the canonical 220-pixel Performance rail while using a dedicated compact native value font so CPU and Memory summaries fit the same geometry more naturally.
+
+## 1.0.75 - 2026-09-23
+
+- Mirror the actual Linux Performance-page composition in the native Windows preview instead of only approximating its colour scheme.
+- Rebuild CPU with the compact horizontal title/model header, separate "% Utilisation / 100%" scale row, primary history graph and the Linux-style lower metrics/details panel.
+- Rebuild Memory with the title/total and usage-scale header, primary graph, memory-composition bar, usage metrics grid and hardware-information section.
+- Keep unimplemented Windows telemetry fields visible as explicit `N/A` values so presentation can reach parity before collector coverage does.
+- Correct Windows Performance typography to use the Common UI sans family, matching Linux page titles instead of incorrectly applying the brand serif face.
+- Reduce the headline summary and notebook-strip heights to better match the GTK composition and return vertical space to useful page content.
+
+## 1.0.74 - 2026-09-23
+
+- Refine the native Windows presentation toward Linux visual parity without changing backend semantics.
+- Add compact live CPU and Memory sparklines to the Performance resource rail and use the Linux resource colours: cyan for CPU and blue for Memory.
+- Add View → Theme with Follow system, Day and Night; consume Common 1.19.24's exact Day/Night palette roles and persist the Windows theme choice per user.
+- Add hover states to the custom menu strip, top tabs and Performance rail so interactive regions no longer feel like static painted labels.
+- Detect unavailable MB Corpo faces and explicitly fall back to Segoe UI instead of relying on opaque GDI font substitution.
+- Theme the Windows process-list rows and header and remove harsh stock gridlines while retaining the native read-only list control.
+- Refresh Follow system when Windows appearance settings change and update the DWM title-bar preference together with the client palette.
+
+## 1.0.73 - 2026-09-23
+
+- Replace the raw white Win32 preview layout with the current System Monitor/Infiltratr presentation hierarchy: top-level product tabs across the top and a dedicated Performance resource rail on the left.
+- Apply Common 1.19.24's Night design contract to the native Windows shell, including the #050608 canvas, graphite panel/card/surface layers, #00ADEF accent, shared spacing/radius metrics and project typography fallbacks.
+- Add the Windows headline summary bar and live CPU/memory history graphs so Performance visually follows the Linux product grammar while retaining the existing native Windows data sources.
+- Keep Processes as a dark native read-only list and keep unimplemented Windows pages visible as explicit placeholders instead of presenting unrelated native-control layouts.
+- Use a dark Windows title-bar hint where supported without making startup depend on that optional non-client styling.
+
+## 1.0.72 - 2026-09-23
+
+- Move the large retained Windows application state, including `LsmMonitor`, from the default GUI-thread stack to heap ownership; native Windows validation reproduced the previous startup failure as `STATUS_STACK_OVERFLOW` before first paint.
+- Make first paint independent of Windows backend startup: create and show the Win32 shell before initialising Performance telemetry, and defer the process backend until the Processes page is selected.
+- Keep the GUI open when a Windows backend is unavailable instead of allowing backend initialisation or process scanning to block the initial window.
+- Link the Windows GUI with the MinGW runtime statically and make CI/release validation prove that the published PE is a Windows GUI-subsystem executable with only approved Windows system DLL imports.
+
+## 1.0.71 - 2026-09-23
+
+- Add the first native Win32 System Monitor GUI so Windows testing starts with the visible product shell rather than a console-only backend probe.
+- Present all eight top-level product areas in the Windows window; populate Performance with live CPU/memory telemetry and Processes with the existing read-only Windows process backend.
+- Keep App History, Startup Apps, Users, Details, Services and File Systems visible as explicit placeholders until their native Windows backends are implemented.
+- Build the Windows preview as a GUI-subsystem executable with no console window and publish `system-monitor-1.0.71-windows.exe` as the Windows release asset.
+- Keep Linux Make/CMake builds unchanged by treating the Win32 entry point as platform-specific source, while the Linux i386 gate continues to exclude Windows translation units.
+
+## 1.0.70 - 2026-09-23
+
+- Add the first deliberately limited Windows native monitor backend behind the existing `monitor_platform.h` seam.
+- Collect aggregate CPU utilisation, logical processor count, uptime, system process/thread/handle totals and physical/commit memory directly through Win32/PSAPI while leaving unsupported device telemetry unavailable.
+- Add a read-only Windows process backend using Tool Help plus native process queries for PID/name/parent/thread inventory and permission-dependent CPU, working-set, I/O, priority, executable and handle details; retain creation-time identity so PID reuse cannot contaminate rates.
+- Resolve Windows process account identity and current-user ownership from access-token SIDs so process categorisation and application-history keys do not use a PID-based approximation.
+- Keep Windows command-line and GPU/cgroup enrichment plus all process-control operations explicitly unsupported in this first slice rather than fabricating parity.
+- Add a MinGW cross-compile gate for both Windows backend translation units and keep the existing i386 ELF portability gate scoped to Linux sources, without claiming a complete or supported Windows application build; Linux remains the released desktop target.
+- Publish a small Windows console backend-probe executable with 1.0.70 so the new CPU/memory and read-only process collectors can be exercised on real Windows systems before the full Windows GUI exists.
+
+## 1.0.69 - 2026-09-22
+
+- Pin Make, CMake and the source gitlink to released Common 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`, keeping all build paths on the same exact shared revision.
+- Align maintained README, architecture and portability documentation with the new Common pin.
+- Re-audit Common 1.19.24's graphics hardening against System Monitor and keep the GTK/Cairo graph renderer local: Common's changed bitmap-surface clipping/copy/blit/scale/rotation contracts are a different abstraction and do not replace System Monitor presentation code.
+- Re-audit the remaining large source files and retain their present module boundaries where splitting would introduce new internal state-sharing APIs without reducing coupling.
+
+## 1.0.68 - 2026-09-22
+
+- Restore the exact `/proc/uptime` first-field boundary contract after the Common token-parser migration: numeric prefixes followed by junk are rejected, while complete standalone and whitespace-delimited records remain accepted; add a permanent process-suite regression.
+- Preserve cached storage-metadata framing while retaining Common line-ending trimming: embedded CR/LF still terminates the captured property exactly as before 1.0.67; add a malformed-record regression fixture.
+- Split Performance snapshot presentation into core-resource and device-oriented modules, retain one small dispatcher/shared temperature-state boundary, and remove the duplicate hardware-name predicate/title composition in favour of the existing Performance helpers.
+- Split exact-file process-owner search out of the Process Inspector and share its sortable text-table construction instead of duplicating GTK table mechanics.
+- Split monitor-level Bluetooth membership/traffic baseline handling out of accelerator collection while retaining raw HCI accounting in the existing Bluetooth transport module.
+- Align README platform wording with the feature-complete roadmap: additional native backends are optional expansion rather than unfinished mandatory work.
+
+## 1.0.67 - 2026-09-22
+
+- Pin Make, CMake, maintained documentation and the source gitlink to released Common 1.19.23 at `a9cf2957cffeefe6001830916b8a32c2ef58a551`.
+- Replace two remaining manual parent-directory slices in block-device identity and partition discovery with Common's lexical dirname contract, preserving the same canonical sysfs inputs while removing duplicate path mechanics.
+- Parse the first `/proc/uptime` field directly with Common's locale-independent floating-point token parser instead of mutating the procfs record into a standalone number.
+- Route cached storage-metadata CR/LF cleanup through Common's line-ending trim primitive while keeping Linux record grammar and hardware policy local to System Monitor.
+
+## 1.0.66 - 2026-09-22
+
+- Complete the forensic maintenance pass for the declared Linux product scope and document System Monitor as feature-complete rather than treating optional expansion as unfinished work.
+- Remove redistribution of proprietary MB Corpo font binaries while preserving the Common typography family preference and required GTK/system fallback.
+- Make source policy and release-package validation reject any future bundled proprietary font payload.
+- Document the retained-snapshot, PID-instance identity, presentation-only and lazy-shell invariants directly at the implementation boundaries where regressions would be most expensive to diagnose.
+
+
+- Consume Common 1.19.22's strict bounded UTF-8 validator at genuine firmware/sysfs human-readable metadata boundaries without applying text semantics to arbitrary SSID, process-command or protocol bytes.
+- Reject malformed SMBIOS and sysfs identity strings before GTK presentation while preserving existing fallback discovery; UTF-8-safe SMBIOS truncation never splits a multibyte sequence.
+
+- Reduce the smoke-test estate from 49 focused `*_smoke.c` files to 18 physical smoke sources/executables by merging related regression cases into seven coherent subsystem suites while preserving the original case-level assertions and diagnostics.
+- Remove the obsolete suite-runner/header and per-case Make/CMake targets; sanitizer and deterministic-coverage gates now consume the consolidated subsystem sources directly instead of rebuilding one-case smoke programs.
+
+- Decouple persistent App History accounting from lazy GTK page construction so process history starts after first paint and is retained even when the App History tab has never been opened.
+- Keep App History persistence asynchronous without requiring its GTK list model by anchoring save completion to the application window while immutable save requests retain their own data lifetime.
+
+- Make the Clang and Doxygen documentation gates fail closed so checker errors cannot be masked by a following success message.
+- Scope generated Doxygen validation to System Monitor-owned source instead of recursively enforcing this repository's documentation policy on the pinned Common submodule, and remove the obsolete `CLASS_DIAGRAMS` setting.
+- Limit generated API documentation to header-defined types so private implementation-only structs in `.c` files remain internal while public API documentation stays warning-clean.
+- Treat the existing `io.github.theinfiltratr.SystemMonitor` GApplication ID as an intentional stable compatibility key rather than accidental branding residue.
+- Strengthen the source audit so the CMake local smoke/CTest path must retain its source-coverage drift guard and test registration without replaying CTest in hosted CI.
+
+- Remove obsolete pre-rebrand package, configuration-directory and tab-layout migration code so current System Monitor starts and persists only the canonical identity and layout.
+- Remove the old `system-monitor` / `linux-system-monitor` Debian compatibility aliases and native-installer removal path; `infiltrator-system-monitor` is now the sole package identity.
+- Rename the remaining old `LINUX_SYSTEM_MONITOR_*` include-guard namespace to the current `INFILTRATOR_SYSTEM_MONITOR_*` namespace.
+- Complete the Shannon Smith-owned project copyright normalization to the actual 2016 project start across production sources, tests, tools, packaging and icon metadata while preserving third-party ancestry and licence notices unchanged.
+
+- Remove the source-repository PAT dependency from APT publication. System Monitor now publishes only its own immutable release and the central APT repository independently discovers it.
+- Verify that the central catalogue advertises the exact System Monitor version within 15 minutes of publication, without requiring a custom cross-repository secret.
+- Keep the APT repository authoritative for package discovery and indexing so release synchronisation remains tokenless and self-healing.
+- Collapse CI to one hosted Verify job instead of replaying the full regression suite in a second nominally native hosted job.
+- Make the Makefile the canonical executed verification suite; CMake now proves the alternate application build path without rerunning every smoke executable through CTest in CI.
+- Remove the redundant backend-only strict syntax pass because the project-wide strict gate already compiles those translation units under the same warning policy.
+- Stop rerunning Common's own upstream core smoke test inside System Monitor; retain the System Monitor/Common integration smoke and the exact Common version/commit pin instead.
+- Keep release publication gated by the exact successful Verify SHA and rebuild/validate the release artifacts without rerunning the complete test suite a third time.
+
+## 1.0.63 - 2026-09-21
+
+- Eliminate the two GCC `-Wstringop-overread` diagnostics exposed by the target-machine PGO/LTO rebuild without weakening bounds: descriptor-kind presentation now uses a directly formatted NUL-terminated label, and the battery-title fallback explicitly bounds reads to the known source array.
+- Keep Common's overlap-safe bounded-copy primitive unchanged; the fixes stay at the System Monitor call sites whose source extents are known more precisely than the generic shared contract.
+- Extend the end-to-end aggressive native-installer release gate to capture the complete PGO build log and reject any recurrence of `stringop-overread` diagnostics before publication.
+
+## 1.0.62 - 2026-09-21
+
+- Turn the hardware-native `aggressive` profile into a true two-pass target-machine optimisation pipeline: `-O3`, native ISA/tuning, LTO, profile generation, representative native training and a final profile-use rebuild.
+- Add a private headless `--pgo-train` execution mode that exercises the real monitor lifecycle, topology refreshes and retained process scans without starting GTK or performing destructive process actions.
+- Require the selected compiler to prove support for the PGO generation/use flags and require actual `.gcda` profile output before the final aggressive rebuild; the installer fails rather than silently claiming PGO.
+- Use `-fprofile-correction` and `-fprofile-partial-training` so measured hot paths guide layout/inlining/branch decisions while unvisited code retains normal optimisation.
+- Preserve correctness-oriented floating-point semantics; `-Ofast` and unsafe global math transformations remain deliberately excluded.
+- Record the real selected build profile in application metadata and native BUILD-INFO instead of internally labelling every installer build as merely `native`.
+- Gate releases with an end-to-end aggressive `.run` execution on a disposable hosted Linux runner, proving the instrumented build, headless training, generated profile, profile-use rebuild, package creation and final dpkg installation all succeed before publication.
+
+## 1.0.61 - 2026-09-21
+
+- Advance System Monitor from Common 1.19.17 to the current Common 1.19.18 release.
+- Pin Make, CMake and the actual `src/infiltratr-common` gitlink to `af4942ab03ceac4b9a3c46519c5670f18344cb8e`.
+- Keep System Monitor's existing Common ownership split unchanged; Common 1.19.18 only advances the shared temporal/calendar authority and does not alter the generic counter, path, hashing, ASCII, POSIX deadline or file contracts used by System Monitor.
+- Update maintained architecture, portability, roadmap and README references to the exact Common 1.19.18 foundation.
+
+## 1.0.60 - 2026-09-20
+
+- Complete a fourth bidirectional System Monitor/Common ownership pass against Common's maintained architecture, design and consumer-boundary documents.
+- Promote generic monotonic unsigned-counter delta handling and normalized absolute POSIX-clock deadline conversion into released Common 1.19.17, then consume those contracts in System Monitor.
+- Replace repeated CPU, process and Intel PMU monotonic subtraction/rollback mechanics with Common while preserving System Monitor's domain-specific baseline, high-water, identity and hardware-wrap policies.
+- Replace HID++ timeout arithmetic, BlueZ refresh deadline construction and sampler-shutdown timespec normalization with Common's errno-style deadline helpers while retaining pthread/device scheduling and cancellation policy locally.
+- Consume Common's existing ordered first-u64 reader for peripheral battery charge-telemetry discovery and use Common's monotonic clock directly in the process-scan benchmark.
+- Advance both build systems and the gitlink to exact Common 1.19.17 at `9734c32f37b5863af571ebf2226e23642bc2baa6`.
+- Keep transient DRM high-water normalization, Intel energy-counter wrap semantics, Linux hardware interpretation and GTK/pthread ownership in System Monitor because those remain product/domain policy rather than generic Common mechanics.
+
+## 1.0.59 - 2026-09-20
+
+- Complete a third bidirectional System Monitor/Common ownership pass after the 1.0.58 release, reviewing both remaining local generic mechanics and newly released Common contracts.
+- Promote deterministic ASCII case-insensitive lexical ordering and stable non-cryptographic FNV-1a byte/text/u64 mixing into released Common 1.19.15, then consume those contracts in System Monitor.
+- Remove the final production `strcasecmp` sort and residual `strcasestr` identifier/sensor matching in favour of Common's locale-independent ASCII contracts.
+- Replace repeated private FNV-1a text/byte/u64 loops used for stable page identities and refresh signatures while keeping process/group/partition signature composition local to System Monitor.
+- Advance both build systems and the gitlink to exact Common 1.19.15 at `e93c7bf55bb2238ad647ecb701ec9614c1055af1`.
+- Review Common 1.19.14's temporal-presentation API but leave System Monitor's date/time policy unchanged until the application has a real system-wide clock-profile source; reuse is not forced where the product contract is not yet present.
+
+## 1.0.58 - 2026-09-20
+
+- Complete a second bidirectional System Monitor/Common ownership pass against Common's maintained admission rules rather than treating reuse as a one-way dependency.
+- Promote toolkit-neutral current-user HOME, XDG config/data-home resolution and recursive directory creation from System Monitor's remaining GLib-assisted paths into released Common 1.19.13, then consume those contracts throughout configuration, startup, application-catalogue, logging and persistence paths.
+- Complete Common's deterministic ASCII family with whitespace, alpha, digit, alphanumeric, hexadecimal and case-insensitive substring contracts, then use them in Linux kernel/protocol/identifier parsers and system-theme detection instead of locale/toolkit helpers.
+- Replace remaining production `g_file_get_contents` configuration reads with Common's complete allocated text reader where the data contract is toolkit-neutral.
+- Pin both build systems and the gitlink to released Common 1.19.13 at `43f87ce6f8a47425f7823324d38cfdb2c328bb06`.
+- Make the project-identity regression assert Common's published version macro instead of embedding a stale release number.
+- Keep GTK presentation, GTask/GObject ownership, GDBus semantics, XDG desktop-entry policy, System Monitor history grammar and graph-history policy local where they remain UI/product/domain responsibilities rather than generic Common contracts.
+
+## 1.0.57 - 2026-09-20
+
+- Complete a bidirectional System Monitor/Common ownership pass against Common's maintained admission and consumer-boundary contracts.
+- Pin System Monitor to released Common 1.19.11 at `3d42a55195d344cd5fabe1487c0f1515993c47fe`.
+- Promote canonical lowercase System/Day/Night persistence keys and parsing into Common, then remove System Monitor's private theme serialization table.
+- Promote System Monitor's two-decimal GHz presentation into Common's existing metric-format family and replace the local inline formatter with the shared contract.
+- Replace NVML's private required/optional symbol-loading loop with Common's atomic dynamic-library symbol-table binder while preserving the same required and optional NVIDIA entry points.
+- Use Common's canonical build-profile labels for About presentation while keeping System Monitor's native-installer profile aliases as product-owned policy.
+- Retain Linux HCI/capability security policy, legacy decimal-comma migration, page presentation policy and graph-history semantics locally because they remain product-specific rather than generic Common contracts.
+
+## 1.0.56 - 2026-09-20
+
+- Define zero avoidable third-party dependencies as an explicit architecture target before beginning the dependency-reduction implementation.
+- Record the preservation rule: dependency reduction must not remove or silently degrade any documented System Monitor feature.
+- Replace the BlueZ development-header dependency with a minimal, compile-time-checked project-owned Linux HCI ABI boundary while preserving exact per-device Bluetooth traffic.
+- Replace installation-time `setcap` with a root-only internal mode that writes and verifies the exact CAP_NET_RAW `security.capability` xattr directly; `libcap2-bin` is no longer a build or package requirement.
+- Remove custom font-cache maintainer-script calls and the explicit Fontconfig runtime dependency; GTK's platform font stack remains the presentation boundary.
+- Add dependency-audit gates that reject reintroduction of BlueZ development headers, libcap tooling, explicit Fontconfig cache helpers and command-wrapper telemetry providers.
+
+## 1.0.55 - 2026-09-20
+
+- Complete a documentation-to-implementation feature pass rather than treating a green build as feature completeness.
+- Move Startup Apps discovery off the GTK main thread and coalesce overlapping refresh requests; durable enable/disable override writes now run on a worker as well.
+- Keep startup search filtering on the GTK thread over completed worker results, preserving the current query while filesystem discovery is in flight.
+- Expand diagnostic snapshots to cover the complete displayed hardware families by adding Bluetooth controllers, connected Bluetooth-device traffic and system/peripheral battery state.
+- Add CPU runtime counts and detailed memory commit/cache/kernel accounting to diagnostic snapshots so the exported report matches the information advertised by the Performance views.
+- Extend the snapshot regression fixture to prove Bluetooth, battery and detailed-memory sections are emitted while preserving the project's traditional KB/MB/GB labelling contract.
+
+## 1.0.54 - 2026-09-20
+
+- Standardise the application artwork on the canonical non-automotive Infiltrator blue `#00ADEF`, retaining the existing monitor glyph and single packaged icon source across launcher, taskbar, About and Mint metadata.
+
+- Complete the first-paint startup work by making every non-Performance notebook page genuinely first-use lazy instead of constructing all hidden pages from a post-paint idle queue.
+- Restore the previously selected tab only after the initial Performance frame is eligible to paint, and ignore notebook switch signals emitted while placeholder pages are still being assembled.
+- Start Services, Users and File Systems periodic timers only after those pages have actually been constructed, removing needless wake-ups for pages the user never opens.
+- Add native Linux Pressure Stall Information collection for CPU, memory and I/O through `/proc/pressure/*`, sampled on the existing monitor worker rather than the GTK thread.
+- Present 10-second PSI pressure on CPU, Memory and Disk pages, retain optional full-pressure semantics, include PSI in diagnostic snapshots, and cover the parser with strict smoke, analyser, sanitizer and deterministic coverage gates.
+- Add optional cgroup-v2 process identity collection only while the friendly Processes page needs it.
+- Use the standardized cross-desktop systemd application-unit convention and `app.slice`/`background.slice` as additional grouping evidence, while retaining XDG executable and process-ancestor matching as the fallback rather than guessing arbitrary systemd unit mappings.
+- Keep System Monitor pinned to the latest released Common 1.19.10 at `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`; the newer Common main commits inspected during this pass contain copyright/documentation normalization only and no functional library changes.
+
+## 1.0.53 - 2026-09-20
+
+- Rework application startup around first paint: construct only the window shell and Performance page before showing the GTK window instead of eagerly building all eight notebook pages.
+- Build Processes, Details, Users, Services, File Systems, Startup Apps and App History after the first frame through the original deferred-page path, while first navigation to any page builds that page immediately; 1.0.54 replaces that deferred construction with true first-use laziness.
+- Move XDG application-catalog scanning off the GTK main thread into a GTask worker and publish the completed catalogue back to the process model without blocking window creation.
+- Stop scanning Startup Apps during page construction; the inventory is collected only when that tab becomes active or the user explicitly refreshes it.
+- Preserve restored-tab behaviour under lazy construction, including page-specific refresh, process navigation to Details and user-session navigation to Processes.
+- Guard process scan policy while the Details page is not yet constructed so periodic background sampling cannot dereference lazy widgets.
+- Cancel deferred page construction and detach asynchronous catalogue publication safely during shutdown.
+
+## 1.0.52 - 2026-09-20
+
+- Move beyond palette matching and apply MBLINK's composition grammar directly to System Monitor performance pages: rounded graphite header and detail cards, card-contained GPU modules and curved graph surfaces.
+- Centralise the performance-card and performance-header treatment so CPU, memory, disk, network, Bluetooth, GPU, battery and NPU pages use the same visual hierarchy instead of accumulating page-local styling.
+- Derive card radii and padding from Common design metrics rather than hard-coded geometry, preserving Common 1.19.10 as the presentation authority.
+- Promote warning and fault temperatures from coloured text into MBLINK-style pill states, using Common gold/red semantic colours while leaving normal telemetry unadorned.
+- Keep canonical cyan interaction emphasis, canonical gold battery telemetry and the layered graphite gradient while preserving all existing monitoring behaviour and page functionality.
+- Start a clean Verify concurrency epoch after a stale cancelled self-hosted run wedged the previous group; normal cancel-in-progress behaviour remains intact for future main pushes.
+
+## 1.0.51 - 2026-09-20
+
+- Carry the MBLINK visual language beyond palette reuse: rounded Common-metric controls and graphs, subtle graphite card gradients, stronger cyan interaction accents and semantic gold/red status colour.
+- Match MBLINK navigation more directly with a translucent cyan selected-row fill, cyan border and cyan selected title instead of relying on a narrow leading edge alone.
+- Use canonical Common/MBLINK cyan for CPU telemetry and canonical gold for battery telemetry so the performance face visibly participates in the shared product palette.
+- Round and clip Cairo performance graphs using Common design radii, preserving metric traces and fills inside the curved card surface.
+- Give the summary strip explicit muted-caption and bright-value roles and round the strip, frames, controls and tab corners from Common design metrics.
+- Render CPU and GPU temperatures through Common warning/fault states so hot hardware is visibly gold before the fault threshold and red at the fault threshold rather than remaining plain white.
+- Extend strict GTK/Cairo compatibility declarations for the new style-state and rounded-rendering APIs so warning-as-error verification continues to cover the real implementation.
+- Keep the graphite card gradient on the proven GTK3 `to bottom right` syntax used by the existing application styling path.
+
+## 1.0.50 - 2026-09-20
+
+- Match the visible System Monitor hierarchy more closely to the established InfiltratorFS/Common Night presentation instead of merely sharing its palette values.
+- Move the performance sidebar onto the Common panel layer and change selected device rows to the InfiltratorFS selection treatment: graphite selection fill, normal border and a narrow cyan leading edge.
+- Replace boxed cyan notebook selection with the same restrained cyan underline treatment used by the InfiltratorFS stack switcher.
+- Restore Common's dedicated button background and foreground roles for ordinary GTK controls, leaving the darker operation surface for components that semantically require it.
+- Render primary performance graphs on the Common card surface while keeping compact sidebar graphs on the quieter surface layer, with softer grid/fill emphasis and neutral graphite frames.
+- Apply Common detail-label, heading, kicker, summary and selected-summary roles to performance captions, values and device-row metadata so text hierarchy matches the rest of the Infiltrator family.
+- Remove the remaining hard-coded purple memory-composition frame and resolve its background/border through the active Common palette.
+- Preserve the correct Common foreground roles through normal, hover, checked and disabled button states so custom dark navigation rows never inherit the light-button foreground colour.
+- Extend the strict GTK compatibility surface for the style-class API used by the new hierarchy so warning-as-error Make verification covers the same calls as the real GTK build.
+
+## 1.0.49 - 2026-09-20
+
+- Refine GTK Night presentation to follow MBLINK's visual hierarchy rather than only sharing its raw colour values.
+- Keep ordinary buttons and controls on graphite operation surfaces with restrained borders; reserve cyan for selection, interaction emphasis and product metrics.
+- Remove always-cyan performance navigation borders so unselected device rows remain visually quiet and selected rows use MBLINK's translucent cyan treatment.
+- Render performance graphs on Common surface layers with subtle graphite frames and reduced grid emphasis instead of metric-coloured outer boxes.
+- Give the performance split panes explicit theme identities so the sidebar, content canvas and separator retain the intended layered graphite structure.
+- Keep menus, tabs, scrollbars, text surfaces and About-dialog controls within the same Common 1.19.10 MBLINK-derived Night hierarchy.
+- Build the generated GTK theme stylesheet in strict-C-safe fragments so the richer visual contract remains portable under the project's warning-as-error checks.
+
+## 1.0.48 - 2026-09-20
+
+- Pin the project and gitlink to Common 1.19.10 at `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`.
+- Replace the temporary single-grey Night override with Common's complete Linux MBLINK reference palette.
+- Use the MBLINK canvas, titlebar, connection-bar, card/surface, border, heading/summary and accent-hover roles directly so Night retains the layered graphite appearance instead of collapsing into one black or grey field.
+- Style System Monitor summary frames and general frames with those same semantic layers while keeping product-specific performance colours local.
+
+## 1.0.47 - 2026-09-20
+
+- Restore the established MB graphite-grey Night shell instead of presenting the near-black Common canvas as the application background.
+- Keep Common 1.19.8 authoritative for semantic component colours and typography while mapping the top-level Night shell to the existing #2B2B30 System Monitor graphite used by graph/drawing fallback rendering.
+- Apply the same graphite shell when Follow system resolves a dark host theme, so explicit Night and system-dark presentation remain visually consistent.
+- Validate the resolved Common palette and typography before deriving the shell background so the appearance path remains fail-safe.
+
+## 1.0.45 - 2026-09-20
+
+- Complete a second forensic Common 1.19.8 usage pass without changing Common itself.
+- Source MB Corpo family names and role weights from Common's typography contract, and use Common's canonical theme names where they match System Monitor's UI wording.
+- Replace remaining equivalent private counter-rate arithmetic, allocation-growth overflow checks, bounded string-copy formatting and simple lexical path joining with Common contracts while preserving Linux, hardware and presentation policy locally.
+
+## 1.0.44 - 2026-09-19
+
+- Complete the forensic Common 1.19.8 integration by routing strict numeric-token conversion, checked addition, prefix checks, quantity parsing, trimming and lexical-basename handling through Common where its contract is equal or stronger.
+- Keep Linux procfs/sysfs grammars, pthread absolute-deadline semantics, hardware policy and GTK presentation local where Common deliberately does not own them.
+- Preserve all existing functionality while reducing private generic mechanics and making the Common ownership boundary explicit.
+
+## 1.0.43 - 2026-09-19
+
+- Pin both Make and CMake builds, the source gitlink, project-identity regression test and maintained documentation to exact Common 1.19.8.
+- Consume Common 1.19.8's internal duplicate-code cleanup without changing System Monitor's public behaviour or Linux/hardware ownership boundaries.
+- Replace remaining private generic quantity, numeric-token, checked-arithmetic, prefix, trimming and lexical-basename mechanics with Common where Common's contract is equal or stronger; retain Linux record grammar and product policy locally.
+- Restore one authoritative Common version across all build paths after the 1.19.6/1.19.7 metadata drift that caused the Make verification gate to fail.
+- Repair the strict-check GTK compatibility declarations required by the System-theme observer introduced in the 1.0.43 appearance work.
+
+## 1.0.42 - 2026-09-19
+
+- Advance to Common 1.19.4 and remove remaining private generic parsing, endian, saturation, allocated text-read and CSV-field mechanics where Common now owns an equal or stronger contract.
+- Use Common's locale-independent fixed-point formatter for preferences, history, recorder and export persistence while retaining System Monitor's legacy decimal-comma recovery policy.
+- Consolidate bounded string copies and lexical path basenames onto Common without moving Linux, hardware or GTK policy out of System Monitor.
+
+## 1.0.41 - 2026-09-19
+
+- Bundle the MB Corpo UI fonts with both Debian and native-installer releases, refresh the font cache during package lifecycle changes, and remove the explicit system Sans fallback.
+
+## 1.0.40 - 2026-09-19
+
+- Replace the application artwork with the shared non-automotive Infiltrator icon language: dark graphite field, #72dcff cyan linework and a simplified system-monitor glyph.
+- Keep the same project-owned icon source wired through the desktop launcher and Debian/Mint package aliases so the menu, application and Software Manager remain consistent.
+
+- Documentation baseline aligned with the Infiltrator project family.
+
+## Recording policy
+
+Record additions, removals, behavioural fixes, compatibility changes, dependency changes that affect consumers, and material validation/release changes. Pure refactoring needs an entry only when it changes maintenance or portability expectations.
+
+## Historical releases
+
+Existing Git tags and GitHub Releases remain the authoritative identity for exact historical source and release assets. Do not reconstruct detailed historical claims here without evidence from those immutable records.

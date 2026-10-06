@@ -1,0 +1,571 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # v7 starts a clean concurrency epoch after a superseded self-hosted Verify
+  # remained in-progress while cancellation was pending and blocked the current
+  # release head. Future pushes still cancel older runs within this v7 group.
+  group: verify-v7-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
+    timeout-minutes: 30
+    env:
+      # Self-hosted runner services can inherit a deliberately minimal PATH.
+      # Keep checkout/tool discovery deterministic instead of falling back to
+      # the REST archive path, which cannot initialise the Common submodule.
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - name: Ensure Git is available on self-hosted runners
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null 2>&1; then
+            git --version
+            exit 0
+          fi
+          if ! command -v apt-get >/dev/null 2>&1 ||
+             ! command -v dpkg-deb >/dev/null 2>&1; then
+            echo "Git is required for recursive Common checkout and local package extraction is unavailable." >&2
+            exit 1
+          fi
+
+          # The BigBedroom service account intentionally has no passwordless
+          # sudo. Materialise the distro Git package under RUNNER_TEMP instead
+          # of mutating the host, then expose it to later workflow steps.
+          git_root="$RUNNER_TEMP/system-monitor-git"
+          package_dir="$RUNNER_TEMP/system-monitor-git-package"
+          rm -rf "$git_root" "$package_dir"
+          mkdir -p "$git_root" "$package_dir"
+          (
+            cd "$package_dir"
+            apt-get download git
+            package="$(find . -maxdepth 1 -type f -name 'git_*.deb' -print -quit)"
+            test -n "$package"
+            dpkg-deb -x "$package" "$git_root"
+          )
+          test -x "$git_root/usr/bin/git"
+          "$git_root/usr/bin/git" --version
+          test -x "$git_root/usr/lib/git-core/git-submodule"
+          echo "$git_root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$git_root/usr/lib/git-core" >> "$GITHUB_ENV"
+
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reject destructive repository automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          force_push='git[[:space:]]+push[^#]*--'force
+          delete_ref='git[[:space:]]+push[^#]*--'delete
+          release_delete='gh[[:space:]]+relea''se[[:space:]]+dele''te([[:space:]-]|$)'
+          tag_delete='git[[:space:]]+push[^#]*:refs/tags/'
+          api_delete='gh[[:space:]]+api[^#]*(--method|-X)[[:space:]]+DEL''ETE'
+          http_delete='(curl|wget)[^#]*-X[[:space:]]+DEL''ETE'
+
+          if grep -REn --include='*.yml' --include='*.yaml' \
+            -e "$force_push" -e "$delete_ref" \
+            -e "$api_delete" -e "$http_delete" .github/workflows; then
+            echo "Destructive repository automation is forbidden." >&2
+            exit 1
+          fi
+
+          # The only permitted destructive operations are bounded release
+          # retention in release.yml: superseded GitHub release entries and
+          # their superseded tag refs may be removed after the newest five.
+          # Branch history and repository files remain protected here.
+          mapfile -t release_deletes < <(
+            grep -REn --include='*.yml' --include='*.yaml' \
+              -e "$release_delete" .github/workflows || true
+          )
+          if (( ${#release_deletes[@]} > 1 )); then
+            printf 'Unexpected release deletion automation:\n%s\n' \
+              "$(printf '%s\n' "${release_deletes[@]}")" >&2
+            exit 1
+          fi
+          if (( ${#release_deletes[@]} == 1 )); then
+            release_delete_source="${release_deletes[0]%%:*}"
+            release_delete_command="${release_deletes[0]#*:*:}"
+            expected_release_delete='              gh rele''ase dele''te "$tag" --repo "$GITHUB_REPOSITORY" --yes'
+            if [[ "$release_delete_source" != ".github/workflows/release.yml" ]] ||
+               [[ "$release_delete_command" != "$expected_release_delete" ]]; then
+              printf 'Unapproved release deletion automation: %s\n' "${release_deletes[0]}" >&2
+              exit 1
+            fi
+            grep -Fq 'name: Keep only the five newest GitHub releases and release tags' .github/workflows/release.yml
+            grep -Fq 'needs: publish' .github/workflows/release.yml
+            grep -Fq 'sort -Vr' .github/workflows/release.yml
+            grep -Fq 'Pruning superseded published release and tag' .github/workflows/release.yml
+          fi
+
+          mapfile -t tag_deletes < <(
+            grep -REn --include='*.yml' --include='*.yaml' \
+              -e "$tag_delete" .github/workflows || true
+          )
+          if (( ${#tag_deletes[@]} > 1 )); then
+            printf 'Unexpected tag deletion automation:\n%s\n' \
+              "$(printf '%s\n' "${tag_deletes[@]}")" >&2
+            exit 1
+          fi
+          if (( ${#tag_deletes[@]} == 1 )); then
+            tag_delete_source="${tag_deletes[0]%%:*}"
+            tag_delete_command="${tag_deletes[0]#*:*:}"
+            expected_tag_delete='                git pu''sh origin ":refs/tags/$tag"'
+            if [[ "$tag_delete_source" != ".github/workflows/release.yml" ]] ||
+               [[ "$tag_delete_command" != "$expected_tag_delete" ]]; then
+              printf 'Unapproved tag deletion automation: %s\n' "${tag_deletes[0]}" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Enforce main-only automatic immutable publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=.github/workflows/release.yml
+          grep -Fq '  workflow_run:' "$release"
+          grep -Fq 'workflows: ["Verify"]' "$release"
+          grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
+          grep -Fq "github.event.workflow_run.head_branch == 'main'" "$release"
+          grep -Fq 'published releases are immutable' "$release"
+          if grep -Eq '^  workflow_dispatch:|^  pull_request:|^  schedule:' "$release"; then
+            echo "Release publication must be automatic from tested main only." >&2
+            exit 1
+          fi
+          if grep -Eq '^  pull_request:|^  merge_group:' .github/workflows/ci.yml; then
+            echo "System Monitor CI must use main only." >&2
+            exit 1
+          fi
+
+      - name: Validate source version and immutable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'Invalid source version: %s\n' "$version" >&2
+            exit 1
+          fi
+
+          readme_version=$(sed -nE \
+            's/^\*\*Current source version:\*\* ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' \
+            README.md)
+          if [[ "$readme_version" != "$version" ]]; then
+            printf 'README source version %s does not match support/VERSION %s.\n' \
+              "${readme_version:-missing}" "$version" >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "v${version}")
+            head_commit=$(git rev-parse HEAD)
+            if [[ "$tag_commit" != "$head_commit" ]] &&
+               ! git diff --quiet "$tag_commit" HEAD -- . ':!.github/workflows'; then
+              printf 'Source version %s is already published at %s; advance support/VERSION before changing main.\n' \
+                "$version" "$tag_commit" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Install build dependencies
+        if: runner.environment == 'github-hosted'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake doxygen gcc-multilib g++-multilib git libc6-dev-i386 \
+            gcc-mingw-w64-x86-64 libgtk-3-dev pkg-config xauth xvfb
+
+      - name: Verify self-hosted build dependencies
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command_name in cmake doxygen gcc g++ git make pkg-config x86_64-w64-mingw32-gcc x86_64-w64-mingw32-objdump xauth Xvfb xvfb-run; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "Self-hosted runner is missing $command_name." >&2
+              exit 1
+            }
+          done
+          pkg-config --exists gtk+-3.0
+          probe="$(mktemp --suffix=.c)"
+          printf 'int main(void){return 0;}\n' > "$probe"
+          gcc -m32 "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe"
+
+      - name: Verify CMake application build
+        run: |
+          # CMake is a supported build path, but Make owns the canonical
+          # project verification suite. Build only the application here so
+          # the same smoke executables are not compiled and executed twice.
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --target system-monitor --parallel 2
+
+      - name: Verify GTK Overview navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-overview \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DLSM_TEST_PAGE_INDEX=8"
+          cmake --build build-overview --target system-monitor --parallel 2
+          status=0
+          timeout 5s xvfb-run -a ./build-overview/system-monitor || status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "Overview GTK smoke exited unexpectedly with status $status." >&2
+            exit 1
+          fi
+
+      - name: Verify GTK Overview geometry at 1024x768
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-overview-geometry \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-DLSM_TEST_PAGE_INDEX=8 -DLSM_TEST_OVERVIEW_GEOMETRY=1"
+          cmake --build build-overview-geometry --target system-monitor --parallel 2
+          status=0
+          timeout 10s xvfb-run -a -s "-screen 0 1024x768x24" \
+            ./build-overview-geometry/system-monitor || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Overview geometry regression failed with status $status." >&2
+            exit 1
+          fi
+
+      - name: Verify GTK Memory resource navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-memory-nav \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-DLSM_TEST_PERFORMANCE_RESOURCE=1 -fsanitize=address -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+          cmake --build build-memory-nav --target system-monitor --parallel 2
+          status=0
+          ASAN_OPTIONS=abort_on_error=1:detect_leaks=0 \
+            timeout 5s xvfb-run -a ./build-memory-nav/system-monitor || status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "Memory GTK navigation smoke exited unexpectedly with status $status." >&2
+            exit 1
+          fi
+
+      - name: Cross-compile experimental Windows GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          version_header=build-cmake/windows-version.h
+          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          common_portable=( \
+            src/infiltratr-common/src/core.c \
+            src/infiltratr-common/src/arithmetic.c \
+            src/infiltratr-common/src/config.c \
+            src/infiltratr-common/src/i18n.c \
+            src/infiltratr-common/src/token.c \
+            src/infiltratr-common/src/timing.c \
+            src/infiltratr-common/src/temporal.c \
+            src/infiltratr-common/src/format.c \
+            src/infiltratr-common/src/quantity.c \
+            src/infiltratr-common/src/graphics.c \
+            src/infiltratr-common/src/escape.c \
+            src/infiltratr-common/src/design.c \
+          )
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            support/tools/prepare_windows_typography.cpp \
+            -o build-cmake/prepare-windows-typography
+          build-cmake/prepare-windows-typography \
+            src/infiltratr-common/cmake/InfiltratrTypographyAssets.cmake \
+            build/windows-fonts
+          x86_64-w64-mingw32-windres -Isrc \
+            support/windows/system-monitor-fonts.rc -O coff \
+            -o build-cmake/windows-fonts.o
+          x86_64-w64-mingw32-gcc \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            -Wstrict-prototypes -Wmissing-prototypes \
+            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
+            src/main_windows.c src/presentation_contract.c src/performance_view.c \
+            src/overview_history.c src/monitor_backend_windows.c src/process_backend_windows.c \
+            build-cmake/windows-fonts.o "${common_portable[@]}" \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
+            -static-libgcc -mwindows \
+            -o build-cmake/system-monitor-windows.exe
+          strings build-cmake/system-monitor-windows.exe | grep -Fq "$version"
+          pe_info=$(x86_64-w64-mingw32-objdump -p build-cmake/system-monitor-windows.exe)
+          grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
+          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi               'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|PDH\.DLL|POWRPROF\.dll|DXGI\.dll|SETUPAPI\.dll|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
+            echo "Windows GUI has an unexpected non-system runtime dependency." >&2
+            exit 1
+          fi
+
+      - name: Run canonical verification suite
+        run: |
+          # The NVML fixture retains two 4.8 MB monitoring snapshots.
+          # Give test processes enough stack regardless of service defaults.
+          ulimit -s 65536
+          REQUIRE_I386=1 make check
+
+      - name: Verify with sanitizers
+        run: |
+          ulimit -s 65536
+          make sanitizer-check
+
+      - name: Verify release packaging without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -j2 release
+          version=$(tr -d '[:space:]' < support/VERSION)
+          deb="infiltrator-system-monitor_${version}_amd64.deb"
+          test -f "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
+          dependencies=$(dpkg-deb -f "$deb" Depends)
+          grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
+          if grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"; then
+            printf 'Avoidable runtime dependency reappeared: %s\n' "$dependencies" >&2
+            exit 1
+          fi
+
+          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
+          actual_members=$(ar t "$deb")
+          if [[ "$actual_members" != "$expected_members" ]]; then
+            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
+            printf 'Found:\n%s\n' "$actual_members" >&2
+            exit 1
+          fi
+
+          contents=$(dpkg-deb --contents "$deb")
+          if grep -q '1970-01-01' <<<"$contents"; then
+            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
+            exit 1
+          fi
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          dpkg-deb -x "$deb" "$tmp/root"
+          dpkg-deb -e "$deb" "$tmp/control"
+          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
+          if grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"; then
+            printf 'Debian maintainer script regained an external setup helper.\n' >&2
+            exit 1
+          fi
+          font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
+          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
+            test -f "$font_root/$face"
+            cmp "build/fonts/$face" "$font_root/$face"
+          done
+          make build/gtk-typography-chrome
+          cat > "$tmp/fonts.conf" <<EOF
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+          <fontconfig><dir>$font_root</dir><cachedir>$tmp/font-cache</cachedir></fontconfig>
+          EOF
+          FONTCONFIG_FILE="$tmp/fonts.conf" xvfb-run -a ./build/gtk-typography-chrome
+          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
+          gzip -t "$changelog"
+          first_line=$(gzip -cd "$changelog" | sed -n '1p')
+          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
+          if [[ "$first_line" != "$expected_line" ]]; then
+            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
+            exit 1
+          fi
+          gzip -cd "$changelog" > "$tmp/debian-changelog"
+          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
+
+      - name: Upload native installer for clean-host qualification
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-monitor-native-installer
+          path: |
+            infiltrator-system-monitor-*-native-installer.run
+            build/fonts/*.ttf
+          if-no-files-found: error
+
+  clean-installer:
+    name: Verify native installer on a clean host
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact tested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+      - name: Install clean-host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake doxygen git libgtk-3-dev pkg-config xauth xvfb
+      - name: Download tested native installer
+        uses: actions/download-artifact@v4
+        with:
+          name: system-monitor-native-installer
+      - name: Restore installer executable permission
+        run: chmod +x infiltrator-system-monitor-*-native-installer.run
+
+      - name: Verify aggressive PGO native installer end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -s 65536
+          version=$(tr -d '[:space:]' < support/VERSION)
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          test -x "$installer"
+          sudo ./"$installer" --profile aggressive --system-package-mode
+          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" = "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" = "$version"
+          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
+            cmp "build/fonts/$face" "/usr/share/fonts/truetype/infiltrator-system-monitor/$face"
+          done
+          pgo_log=$(mktemp)
+          ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
+          if grep -Fq 'stringop-overread' "$pgo_log"; then
+            echo "Aggressive PGO build emitted a stringop-overread diagnostic." >&2
+            exit 1
+          fi
+          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" =             "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" =             "$version"
+
+  windows-startup:
+    name: Verify Windows GUI startup
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Build and launch native Windows GUI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidates = @(
+            'C:\msys64\ucrt64\bin\gcc.exe',
+            'C:\msys64\mingw64\bin\gcc.exe'
+          )
+          $pathGcc = Get-Command gcc.exe -ErrorAction SilentlyContinue
+          if ($pathGcc) { $candidates += $pathGcc.Source }
+          $gcc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $gcc) { throw 'No native MinGW GCC compiler is available on the Windows runner.' }
+          Write-Host "Using Windows compiler: $gcc"
+
+          $version = (Get-Content support/VERSION -Raw).Trim()
+          $versionHeader = Join-Path $PWD 'windows-version.h'
+          Set-Content -LiteralPath $versionHeader -Value "#define LSM_VERSION `"$version`"" -Encoding ascii
+          & (Join-Path $PWD 'support/windows/prepare-typography.ps1')
+          if ($LASTEXITCODE -ne 0) { throw "Windows typography preparation failed." }
+          $windres = Join-Path (Split-Path -Parent $gcc) 'windres.exe'
+          if (-not (Test-Path $windres)) { throw "No matching MinGW windres is available." }
+          & $windres '-Isrc' 'support/windows/system-monitor-fonts.rc' '-O' 'coff' '-o' 'build/windows-fonts.o'
+          if ($LASTEXITCODE -ne 0) { throw "Windows font resource compilation failed." }
+
+          $arguments = @(
+            '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
+            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
+            '-Wstrict-prototypes', '-Wmissing-prototypes',
+            '-Isrc', '-Isrc/infiltratr-common/include',
+            '-include', $versionHeader,
+            'src/main_windows.c', 'src/presentation_contract.c', 'src/performance_view.c',
+            'src/overview_history.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'build/windows-fonts.o',
+            'src/infiltratr-common/src/core.c',
+            'src/infiltratr-common/src/arithmetic.c',
+            'src/infiltratr-common/src/config.c',
+            'src/infiltratr-common/src/i18n.c',
+            'src/infiltratr-common/src/token.c',
+            'src/infiltratr-common/src/timing.c',
+            'src/infiltratr-common/src/temporal.c',
+            'src/infiltratr-common/src/format.c',
+            'src/infiltratr-common/src/quantity.c',
+            'src/infiltratr-common/src/graphics.c',
+            'src/infiltratr-common/src/escape.c',
+            'src/infiltratr-common/src/design.c',
+            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-lpowrprof', '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
+            '-o', 'system-monitor-windows.exe'
+          )
+          & $gcc @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Windows GUI compile failed with exit code $LASTEXITCODE." }
+          $embedded = [Text.Encoding]::ASCII.GetString(
+            [IO.File]::ReadAllBytes((Join-Path $PWD 'system-monitor-windows.exe')))
+          if (-not $embedded.Contains($version)) {
+            throw "Windows GUI does not contain source version $version."
+          }
+
+          Remove-Item windows-startup-smoke.txt -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -ArgumentList '--startup-smoke' -PassThru
+          if (-not $process.WaitForExit(30000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw 'Windows GUI startup smoke timed out.'
+          }
+          if (Test-Path windows-startup-smoke.txt) {
+            $status = (Get-Content windows-startup-smoke.txt -Raw).Trim()
+            Write-Host "Windows startup smoke status: $status"
+          } else {
+            $status = 'missing'
+            Write-Host 'Windows startup smoke status: missing'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Windows GUI startup smoke failed with exit code $($process.ExitCode); stage: $status"
+          }
+          if ($status -ne 'success') {
+            throw "Windows GUI startup stage failed: $status"
+          }
+
+          # The lightweight startup-smoke path intentionally exits before
+          # backend initialisation. Also exercise the real launch path long
+          # enough to initialise and refresh native collectors so a backend
+          # crash cannot masquerade as successful GUI startup.
+          $normal = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -PassThru
+          Start-Sleep -Seconds 5
+          if ($normal.HasExited) {
+            throw "Windows GUI exited during normal backend startup with code $($normal.ExitCode)."
+          }
+          Stop-Process -Id $normal.Id -Force
+          $normal.WaitForExit()
+          Write-Host 'Windows normal-mode backend startup remained alive for 5 seconds.'
+
+          # Assert that the native backend actually populated CPU topology,
+          # rather than merely surviving initialisation with N/A values.
+          $probeArguments = @(
+            '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601',
+            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
+            '-Wstrict-prototypes', '-Wmissing-prototypes',
+            '-Isrc', '-Isrc/infiltratr-common/include',
+            'support/tools/windows_backend_probe.c',
+            'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            'src/infiltratr-common/src/core.c',
+            'src/infiltratr-common/src/arithmetic.c',
+            'src/infiltratr-common/src/config.c',
+            'src/infiltratr-common/src/i18n.c',
+            'src/infiltratr-common/src/token.c',
+            'src/infiltratr-common/src/timing.c',
+            'src/infiltratr-common/src/temporal.c',
+            'src/infiltratr-common/src/format.c',
+            'src/infiltratr-common/src/quantity.c',
+            'src/infiltratr-common/src/graphics.c',
+            'src/infiltratr-common/src/escape.c',
+            'src/infiltratr-common/src/design.c',
+            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-lpowrprof',
+            '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-static-libgcc',
+            '-o', 'windows-backend-probe.exe'
+          )
+          & $gcc @probeArguments
+          if ($LASTEXITCODE -ne 0) { throw "Windows backend probe compile failed with exit code $LASTEXITCODE." }
+          & (Join-Path $PWD 'windows-backend-probe.exe')
+          if ($LASTEXITCODE -ne 0) { throw "Windows backend topology probe failed with exit code $LASTEXITCODE." }
