@@ -2,150 +2,46 @@
 
 ## Purpose
 
-Validation distinguishes implemented behaviour from behaviour that has actually been demonstrated. A build proves compilation; it does not by itself prove runtime, hardware or integration correctness.
+Validation defines the evidence required for System Monitor behaviour. Compilation, deterministic tests, runtime checks and physical-device evidence cover different parts of the product contract and are not treated as interchangeable.
 
 ## Automated evidence
 
-The repository currently uses:
+The repository uses `.github/workflows/ci.yml` for verification and `.github/workflows/release.yml` for publication.
 
-- .github/workflows/ci.yml
-- .github/workflows/release.yml
+The verification estate covers accounting, hardware, Bluetooth, GPU, battery, filesystem, history, portability, Common integration, presentation and lifecycle behaviour. Related cases are grouped by subsystem so the maintained suite tests product contracts rather than preserving one-off test structure.
 
-`support/tests` contains accounting, hardware, Bluetooth, GPU, battery, filesystem, history, portability and Common-integration regression coverage. The estate currently has 20 physical `*_smoke.c` sources: consolidated subsystem suites and specialised presentation, integration and lifecycle fixtures. Related regression cases live inside their owning subsystem source rather than as separate one-case translation units. Make is the canonical executed suite. CMake retains target registration and local CTest support, while CI builds only the application through CMake so the same smoke programs are not executed twice.
+Automated checks include strict C compilation, CMake and Make builds, deterministic subsystem tests, sanitizer checks, 32-bit portability compilation, documentation validation, package construction and release-contract checks. Hosted verification also starts the GTK Overview under Xvfb so application construction and navigation execute against a display server.
 
-Automated checks should cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the project. The metrics suite specifically covers Overview duplicate-completion suppression, explicit gaps, unavailable metrics, hotplug identity resolution, deterministic top-process ranking and bounded-ring wraparound. Hosted release verification also starts the lazily-built Overview under Xvfb so GTK construction and notebook navigation execute against a real display server.
-
-Generated Doxygen API validation is intentionally scoped to System Monitor-owned source and header-defined API types. Private implementation compounds defined only inside `.c` files are not promoted into the generated API surface; Clang documentation syntax checks still cover the complete owned source set.
+Important boundaries include malformed or unavailable inputs, completed-snapshot publication, counter baselines, topology changes, bounded inventories, process identity, persistence ordering and explicit `N/A` availability semantics.
 
 ## Manual and environment-dependent evidence
 
-Hardware-specific telemetry and privileged actions still require real-device validation because synthetic CI cannot prove a particular firmware, driver or kernel exposes a metric correctly.
+Some behaviour can only be demonstrated on the relevant target environment. Physical GPU, NPU, battery, Bluetooth and thermal telemetry depend on the firmware, driver and kernel interfaces exposed by the machine. Privileged process actions require the affected operating-system path. Native Windows runtime behaviour requires Windows rather than cross-compilation alone.
 
-Manual evidence supplements automation and must be described at the level actually observed. A simulator, fixture or mocked provider must not be described as physical-device proof.
+Manual evidence must identify the environment actually exercised. Simulator, fixture and mocked-provider results remain useful deterministic evidence but are not described as physical-device proof.
 
 ## Release criterion
 
-The exact revision intended for release must pass the required automated gates. Release assets must be derived from that revision, and documentation must not advertise known-failing or merely planned behaviour as supported.
+A release is publishable only when the exact current `main` revision passes the required Verify workflow. Release assets are produced from that revision. The version in `support/VERSION`, source tree, tag and published release must identify the same product state.
 
-## Regression rule
+Published tags and release assets are immutable. Any later source change advances `support/VERSION` before publication.
 
-Every fixed defect should gain the narrowest useful permanent regression check when reproducible. Tests are part of the product contract rather than disposable scaffolding.
+## Regression coverage
 
-## 1.0.145 forensic repair record — 2026-09-28
+Permanent tests are maintained around product contracts that are useful to protect over time, including:
 
-The follow-up audit after 1.0.144 concentrated on the remaining places where a
-partial, first-baseline or stale observation could still look like a completed
-measurement. Disk, network and cumulative GPU accounting now leave startup,
-recovery and rollback intervals unavailable until two valid counter observations
-exist. Intel/DRM telemetry discovery, BlueZ inventories, Windows disk/network/GPU
-topology, Logitech HID++ tracking and SMBIOS module detail reject incomplete
-bounded sets rather than committing prefixes. Linux memory accounting commits
-only after a clean /proc/meminfo read, and App History similarly commits a load
-only after clean EOF/close.
+- CPU, memory, disk, network, GPU and pressure accounting;
+- first-sample, unavailable-sample and counter-reset semantics;
+- transactional hardware and process inventories;
+- stable device and process identity across topology changes;
+- Overview completed-snapshot history and navigation;
+- persisted history range and ordering rules;
+- Linux and Windows presentation contracts;
+- installer, package and release-asset construction; and
+- Common integration and portability boundaries.
 
-Regression fixtures cover first/recovery disk baselines, Intel first-sample
-availability, checked BlueZ overflow, HID++ device-set overflow, retained memory
-state on rejected input and SMBIOS module-capacity rejection. The Windows
-cross-build remains the compile-time gate for the SetupAPI topology changes;
-native Windows hardware behavior and physical-device behavior remain
-environment-dependent evidence rather than claims made by synthetic CI.
+## Evidence boundaries
 
-## 1.0.96 forensic audit record — 2026-09-25
+Passing hosted verification demonstrates the contracts exercised by the hosted environment. It does not manufacture telemetry that the target hardware does not expose. Unsupported or inaccessible metrics remain explicitly unavailable in the product.
 
-Baseline: System Monitor 1.0.95, commit
-`b9660fa417708f3b0d68e967c85bd9400a8ab1fe`. Common remains pinned to
-1.19.27, `3ef3710df6563df305b6d8e2dc9d1a41c61843ba`.
-
-### Scope and method
-
-The review examined source contracts, collector arithmetic and failure paths,
-worker ownership, persistence, selected presentation paths, documentation,
-comments, build rules and packaging. Manual inspection traced the affected
-contracts from producer through retained state to presentation and tests.
-Strict compilation, Clang analysis, documentation syntax and source-contract
-checks provide broader automated coverage. Generated PCI lookup data and the
-separately maintained Common submodule were not independently re-audited.
-
-This is a bounded engineering audit, not an exhaustive manual sign-off of every
-line or proof of defect freedom. In particular, the complete GTK/Win32 event and
-rendering surface has not received a fresh manual line-by-line review. Passing
-source-style or documentation checks is not evidence that every comment is
-semantically correct. The findings below distinguish implemented corrections
-from remaining assurance work; no academic certification is implied.
-
-### Corrected findings
-
-| Finding | Failure and correction | Permanent regression/evidence |
-| --- | --- | --- |
-| Sampler ownership | A worker could exit before a timed-out caller transferred cleanup responsibility, leaking the sampler/backend. Independent references now cover either exit order; startup retry writes use the publication mutex. | `backend_smoke.c` forces worker exit before a reported timeout and requires exactly one source-context destruction; runtime lifecycle suite. |
-| CPU rollback | Failed idle deltas could appear as 100% busy, while total rollback retained stale usage. Reset affected percentages before accepting a valid interval. | `metrics_smoke.c`: idle rollback, total rollback and recovery. |
-| Disk/network sample gaps | Retained baselines could turn missing intervals into a recovery spike. Missing records invalidate baselines; first recovery establishes a baseline. Sysfs missing/malformed counters are omitted, while measured zero remains valid. | Metrics, backend and storage suites cover missing samples and recovery. |
-| GPU memory semantics | DXGI `CurrentUsage` is per application, not adapter-wide. Remove that misleading value; add independent used-memory availability to the shared model, Linux providers and both presentations. Missing Linux reads no longer imply measured zero. | Presentation suite tests capacity-only, measured zero and unavailable stale usage; NVML suite asserts valid usage availability; Windows cross-build. |
-| CPU frequency availability | Nominal/base clock was used when current or maximum clock was unavailable. Those fields now remain unavailable. | Backend fixture has a known nominal clock and no current/max provider. |
-| CPU thermal thresholds | One global 80/95 °C pair falsely warned on CPUs with higher documented thermal limits. Prefer native hwmon/Tcontrol/Tjmax thresholds, then a documented SKU table, then the conservative legacy fallback. | Storage fixture validates `temp*_max`/`temp*_crit`; metrics suite validates sensor precedence, Core Ultra 5 125U, Ryzen 7800X3D and unknown-CPU fallback. |
-| Persisted durations | Negative and excessively large durations were accepted; signed rounding could overflow during display. Validate the persisted range and clamp before unsigned conversion. | History retention suite adds negative and oversized fixtures while preserving legacy decimal-comma migration. |
-| CPUID representation | Brand extraction wrote through an unsigned pointer into a character buffer. Use aligned register storage and copy the resulting bytes. | CPUID fixture, strict builds, ASan/UBSan and i386 compilation. |
-| File-user identity | Path-string comparison missed hard links and could confuse an old open file with a new file at its former path. Compare device/inode identity through the procfs descriptor. | Process suite covers hard links and a replaced pathname; API comments document descriptor churn. |
-| Netlink/source contracts | Missing statistics looked like zero; interface-name copies assumed a terminator; message headers assumed alignment/minimum payload size. Track counter presence and validate bounds/alignment; source initialization clears its output on failure. | Storage missing/malformed/zero fixtures, native backend smoke, strict and i386 builds. Malformed raw-netlink fuzz coverage remains outstanding. |
-| Release tooling | Parallel package creation changed the source directory during tar traversal. CI/publication now use the existing serial `release` target. Source payloads exclude `.exe` artifacts; version inspection avoids an early-closing pipe; font extraction ignores archived UID/GID. | Exact workflow build commands; deterministic installer/package checks; archive-content assertion with the Windows executable present. |
-| Documentation/comments | Async requests were described as synchronous collection; cleanup ownership, CPU kernel counters, temperature discovery and file matching had inaccurate comments. Windows GPU and typography documentation also lagged implementation. | Updated API/internal comments, Architecture, Portability, Roadmap, README and changelog; Doxygen/Clang documentation gates. |
-
-The source semantics behind the CPU and GPU corrections are documented by the
-[Linux procfs interface](https://www.kernel.org/doc/html/v6.9/filesystems/proc.html)
-and Microsoft's
-[DXGI memory-info contract](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info).
-
-### Executed local validation
-
-Environment: Linux x86-64 container with GTK 3 development libraries, GCC,
-Clang, CMake, Doxygen, MinGW and i386 development support.
-
-- `make check`: strict builds, analyzer, documentation, deterministic subsystem,
-  backend/worker/lifecycle, coverage and installer checks passed. A prior
-  development run produced a gcov profile-stamp mismatch; an
-  isolated coverage rebuild and subsequent complete suite passed.
-- `cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release` and
-  `cmake --build build-cmake --target system-monitor --parallel 2`: passed.
-- `make portability-check`: every Linux application translation unit compiled
-  to an ELF i386 object. This is compilation evidence, not 32-bit runtime proof.
-- ASan/UBSan: runtime, metrics, storage, process, history and application-catalog
-  suites passed with leak detection disabled in a temporary local Makefile.
-  The committed sanitizer gate is unchanged. Ordinary `make sanitizer-check`
-  could not complete here because LeakSanitizer rejected the traced execution
-  environment; this is **not** a LeakSanitizer pass.
-- Release-package commands built the Debian package and native installer, with
-  byte-reproducibility checks. MinGW built the native Windows GUI using verified
-  embedded font hashes; PE subsystem and system-DLL checks passed.
-- A real GTK startup attempt under Xvfb was blocked because this environment
-  could not create X server listening sockets. No visual/runtime desktop result
-  is claimed from that attempt. Installation on the host was not performed.
-
-The coverage gate applies to 17 selected deterministic modules, each at least
-65% line coverage. It is neither whole-application coverage nor a measure of
-manual audit completeness. Hosted verification/publication must still report
-its own result for the exact candidate revision.
-
-### Remaining assurance and investigation
-
-These items are not closed by this patch or by successful cross-compilation:
-
-- Native Windows runtime/metric comparison, GTK navigation and visual checks,
-  privileged process/service actions, physical GPU/NPU/battery/Bluetooth devices,
-  and actual device hotplug require target-system evidence.
-- Sparse Linux CPU IDs no longer fall back to invented dense topology after a
-  failed online-CPU enumeration; targeted live hotplug evidence is still useful
-  because synthetic CI cannot reproduce every kernel topology transition.
-- Network replacement under an unchanged interface name needs continued live
-  hotplug evidence. Linux now keys retained counter state by the interface's
-  native instance identity where available; process I/O permission loss/recovery
-  also remains environment-dependent assurance work.
-- Raw netlink truncation/interrupted dumps, Windows IOCTL payload bounds and the
-  wider UI callback/lifetime surface warrant further manual review and fault
-  injection. These are investigation areas, not claims of reproduced exploits.
-- Some optional Linux providers are process-global; concurrent monitor instances
-  or immediate reinitialization while a detached collector remains blocked have
-  not been established as supported. Bounded shutdown cannot cancel a permanently
-  blocked kernel or filesystem operation.
-
-A rigorous completeness claim requires closing these review and runtime gates,
-not merely increasing test counts or restating the feature-complete roadmap.
+Code and tests are authoritative for executable behaviour. This document defines the evidence model used to decide when that behaviour is ready to publish.

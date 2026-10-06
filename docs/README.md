@@ -1,30 +1,30 @@
 # Documentation
 
-This directory is the canonical documentation entry point for System Monitor. The Infiltrator project family uses the same baseline document roles in every repository so readers can move between projects without relearning the structure.
+This directory is the canonical documentation entry point for System Monitor. The Infiltrator project family uses the same baseline document roles across repositories so readers can move between projects without relearning the structure.
 
 ## Canonical baseline
 
 - [Architecture](ARCHITECTURE.md) — ownership, layers, dependencies and system boundaries.
 - [Design](DESIGN.md) — first-principles goals, non-goals, trade-offs and failure philosophy.
 - [Decisions](DECISIONS.md) — durable architectural decisions, alternatives and consequences.
-- [Roadmap](ROADMAP.md) — current foundation, near-term priorities and longer-term direction.
+- [Roadmap](ROADMAP.md) — current foundation, maintenance priorities and optional expansion.
 - [Validation](VALIDATION.md) — automated, manual and environment-specific evidence boundaries.
 - [Project README](../README.md) — product overview, capabilities, build/use entry point and engineering ethos.
-- [Changelog](../CHANGELOG.md) — user-visible and contract-relevant change history.
+- [Changelog](../CHANGELOG.md) — public product milestones and contract-relevant release history.
 - [Contributing](../CONTRIBUTING.md) — development, ownership and verification rules.
 - [Security](../SECURITY.md) — vulnerability scope, reporting and response policy.
 
 ## Documentation authority
 
-The baseline files have distinct responsibilities and should not compete as alternate sources of truth. Architecture describes where behaviour belongs; Design explains why; Roadmap describes direction; Validation records what evidence is required. Code and tests remain authoritative for executable behaviour, while immutable tags/releases identify historical source.
+The baseline files have distinct responsibilities and should not compete as alternate sources of truth. Architecture describes where behaviour belongs; Design explains why; Roadmap describes direction; Validation defines the evidence required for publication. Code and tests remain authoritative for executable behaviour, while release tags identify published source states.
 
-Specialist documents may go deeper into one subsystem, protocol, platform, research area or historical investigation. They should link back to the canonical baseline when a reader needs the wider project context.
+Specialist documents may go deeper into one subsystem, protocol, platform or reference comparison. They should link back to the canonical baseline when a reader needs the wider project context.
 
 ## Specialist documentation
 
-- docs/HARDWARE.md — specialist or historical detail retained alongside the canonical baseline.
-- docs/PORTABILITY.md — specialist or historical detail retained alongside the canonical baseline.
-- [Linux Mint System Monitor function ownership audit](LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md) — forensic GNOME System Monitor 45.0.2 capability inventory and placement across the 22-repository suite.
+- [Hardware collection](HARDWARE.md) — native hardware identity, telemetry and availability contracts.
+- [Portability](PORTABILITY.md) — supported build/runtime boundaries and platform-specific implementation notes.
+- [Linux Mint System Monitor capability coverage](LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md) — reference capability map and ownership placement across the Infiltrator suite.
 
 ## Maintenance rule
 
