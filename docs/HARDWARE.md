@@ -4,10 +4,6 @@
 
 This document records hardware-specific rules that are not already defined by [Architecture](ARCHITECTURE.md).
 
-## Evidence
-
-Use documented kernel/driver or native operating-system interfaces with defined semantics and units. Conservative fallbacks are acceptable only when independently verifiable; otherwise report the value unavailable. A convenient filename, vendor convention or plausible numeric range is not evidence.
-
 ## CPU and memory
 
 CPU and memory data comes from Linux procfs/sysfs, CPUID where applicable, `sysinfo` and retained accounting state. Linux `kB` memory quantities use exactly 1024 bytes per KB.
@@ -28,9 +24,7 @@ BlueZ supplies controller/device identity and connection state over D-Bus. Conne
 
 Per-device throughput uses Linux's read-only HCI monitor channel. Controller, direction and connection handle are combined with a read-only connection snapshot to attribute payload bytes to the matching device. HCI handles are controller-local and reusable, so observing a handle with a different remote address resets its retained counters.
 
-The application owns only the narrow kernel-facing HCI declarations it consumes and does not require the BlueZ development library for traffic capture.
-
-The packaged executable carries only the `CAP_NET_RAW` file capability required to open the monitor channel. It opens that endpoint during startup and clears process capability sets before normal GTK or monitoring work begins. Failure to drop capabilities aborts startup. The monitor path issues no HCI commands, resets or controller reconfiguration. Without the capability or monitor interface, identity remains available and traffic remains unavailable.
+The application owns only the narrow kernel-facing HCI declarations it consumes and does not require the BlueZ development library for traffic capture. Without the required monitor access, identity remains available and traffic remains unavailable. Privilege handling is defined in [Security](../SECURITY.md).
 
 ## GPUs
 
@@ -55,7 +49,3 @@ Storage and memory labels use binary scaling: 1 KB = 1024 bytes, 1 MB = 1024 KB,
 System Monitor does not distribute an external PCI database file or reproduce its hierarchy. The project registry retains factual top-level vendor assignments and direct vendor:device mappings, normalizes them into a flat System Monitor schema, drops subsystem/class/comment/version records, and generates sorted numeric lookup tables with a deduplicated name pool.
 
 Runtime lookup is a binary search over those generated tables; it does not parse a pci.ids-style document or require lspci, pciutils or another runtime database. A missing friendly name is non-fatal: native firmware/sysfs identity is preferred where available and exact numeric vendor:device identity remains the fallback.
-
-## Adding hardware support
-
-New support must establish stable identity, a native interface with known semantics, explicit availability, safe retained state and deterministic tests. Keep expensive discovery away from high-frequency sampling and do not add shell-command providers or vendor guesses merely to fill a field.
