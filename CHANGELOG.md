@@ -6,19 +6,11 @@
 - Keep logical-CPU graph ownership aligned with the exact constructed graph count.
 - Centralise shared process sampling, selection, actions, recording and foreground cadence classification.
 
-## 1.0.174 - 2026-10-06
-
-- Consolidate maintained documentation around the architecture and hardware contracts.
-
 ## 1.0.173 - 2026-10-06
 
 - Centralise top-level page construction, manual refresh ownership and active-page refresh policy.
 - Replace three page-specific slow-refresh timers with one active-page timer.
 - Size the native Windows Performance hit-test inventory from every shared resource class.
-
-## 1.0.172 - 2026-10-06
-
-- Establish the concise maintained documentation baseline.
 
 ## 1.0.171 - 2026-10-06
 
@@ -55,5 +47,3 @@
 
 - Establish deterministic subsystem tests, strict compilation, portability checks, sanitizers, documentation checks and release-package verification.
 - Define explicit availability and completed-snapshot contracts for monitor data.
-
-Earlier numbered releases established the core Linux process, performance, hardware, history, service, user and filesystem surfaces that remain part of the current product.
