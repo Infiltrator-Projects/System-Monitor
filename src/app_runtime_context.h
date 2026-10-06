@@ -40,21 +40,44 @@ typedef struct {
     gboolean process_recording;
 } LsmRuntimeControlView;
 
-/** Copy the timer coordinator's permitted view of application state. */
+/**
+ * Copy the timer coordinator's permitted view of application state.
+ * @param [in] app Application owning runtime state.
+ * @param [out] view Destination receiving the narrow runtime snapshot.
+ * @return true when both arguments are valid; otherwise false.
+ */
 bool lsm_app_runtime_control_view(const LsmApp *app,
                                   LsmRuntimeControlView *view);
 
-/** Remove one timer identifier from application ownership and return it. */
+/**
+ * Remove one timer identifier from application ownership and return it.
+ * @param [in,out] app Application owning timer state.
+ * @param [in] timer Timer slot to clear.
+ * @return Previous GLib source identifier, or zero when unavailable.
+ */
 guint lsm_app_runtime_take_timer(LsmApp *app, LsmRuntimeTimer timer);
 
-/** Store one timer identifier in application-owned runtime state. */
+/**
+ * Store one timer identifier in application-owned runtime state.
+ * @param [in,out] app Application owning timer state.
+ * @param [in] timer Timer slot to update.
+ * @param [in] source GLib source identifier to retain.
+ */
 void lsm_app_runtime_set_timer(LsmApp *app, LsmRuntimeTimer timer,
                                guint source);
 
-/** Update the process cadence baseline without exposing LsmRuntimeState. */
+/**
+ * Update the process cadence baseline without exposing LsmRuntimeState.
+ * @param [in,out] app Application owning process cadence state.
+ * @param [in] monotonic Most recent successful process refresh time.
+ */
 void lsm_app_runtime_set_process_refresh_time(LsmApp *app, double monotonic);
 
-/** Update pause state without exposing LsmRuntimeState. */
+/**
+ * Update pause state without exposing LsmRuntimeState.
+ * @param [in,out] app Application owning pause state.
+ * @param [in] paused TRUE to pause periodic presentation updates.
+ */
 void lsm_app_runtime_set_paused(LsmApp *app, gboolean paused);
 
 #endif

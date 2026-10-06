@@ -12,7 +12,10 @@
 
 #include "app.h"
 
-/** Connect the single page-aware key handler to the application window. */
+/**
+ * Connect the single page-aware key handler to the application window.
+ * @param [in,out] app Application whose shell receives keyboard commands.
+ */
 void lsm_app_keyboard_connect(LsmApp *app);
 
 #endif

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.177 - 2026-10-07
+
+- Route main-loop cadence through a narrow runtime context instead of exposing the complete private application layout.
+- Move page-aware keyboard command policy out of the central page registry into its own presentation owner.
+- Remove transitive private-application-state exposure from the generic Performance construction contract.
+
 ## 1.0.176 - 2026-10-06
 
 - Move shared process snapshot lifecycle and cross-page coordination into a dedicated process workspace owner.

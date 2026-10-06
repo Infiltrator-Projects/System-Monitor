@@ -56,9 +56,9 @@ void performance_record_device_page_sample(
 
 /**
  * Rebuild one GPU graph selector from metrics supplied by the current backend.
- *
- * The selector uses presentation-owned widget state, so its declaration lives
- * with the presentation-private contract instead of performance_internal.h.
+ * @param [in,out] slot GPU graph slot whose selector mapping is refreshed.
+ * @param [in] gpu Current GPU snapshot used to derive selectable metrics.
+ * @param [in] preferred Preferred metric when it is supported.
  */
 void lsm_performance_populate_gpu_metric_selector(
     LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
