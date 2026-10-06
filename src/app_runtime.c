@@ -16,6 +16,7 @@
 #include "app_page_registry.h"
 
 #include "common.h"
+#include "details_page.h"
 #include "performance.h"
 #include "processes_ui.h"
 #include "refresh_policy.h"
