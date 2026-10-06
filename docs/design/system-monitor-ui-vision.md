@@ -2,6 +2,10 @@
 
 # System Monitor UI Vision
 
+## Provenance
+
+This UI programme is part of System Monitor's original clean-sheet design. It is not a recreation, port or adaptation of another system monitor's interface. The implementation and product hierarchy remain System Monitor-owned and are built on the project's own monitoring model, presentation contracts and first-party Infiltrator visual language.
+
 ## Purpose
 
 This document records the current visual north star for the System Monitor redesign.
@@ -10,13 +14,13 @@ This document records the current visual north star for the System Monitor redes
 
 System Monitor should feel graphical, premium, colourful, modern, GUI-first, welcoming and visually rich. It should not feel text-heavy, austere, purely administrative, CLI-minded or like an early-alpha control utility.
 
-The intended spirit is closer to Amiga/Workbench-era visual desktop thinking translated into a modern Infiltrator product: strong colour, obvious objects, direct manipulation, clear grouping and a coherent visual identity.
+The intended spirit is direct, object-oriented desktop interaction translated into the modern Infiltrator product language: strong colour, obvious objects, direct manipulation, clear grouping and a coherent visual identity.
 
-## Reference mockup
+## Project mockup
 
 See [image.png](image.png).
 
-The reference is a direction, not a pixel contract. It establishes the product hierarchy: a strong graphical Overview, persistent category navigation, large live resource cards, colour-coded graphs and status, and compact technical detail beneath the primary visual signal.
+The image is this project's own visual direction, not an external product specification. It establishes the product hierarchy: a strong graphical Overview, persistent category navigation, large live resource cards, colour-coded graphs and status, and compact technical detail beneath the primary visual signal.
 
 ## Design principles
 
@@ -41,6 +45,6 @@ The long-term shell direction is a persistent graphical category rail rather tha
 
 Version 1.0.99 began the transition by strengthening the existing Overview rather than replacing working architecture. It adds a visual hero, live-state treatment, stronger metric hierarchy, resource-coloured card accents, larger values, visual-priority card ordering and a cleaner top-process summary. Fresh profiles land on Overview after the intentionally fast Performance first paint.
 
-By 1.0.108 the implemented Overview includes the icon-led primary rail, a single-viewport tiered dashboard with equal-width cards within each row, resource icons integrated into the live plots, visibly multicolour native Cairo radial gauges for CPU/Memory/GPU, shared panel surfaces, richer gradient/grid history charts and graphical process activity rows. These are implementation steps toward the reference, not a claim that the visual programme is complete.
+By 1.0.108 the implemented Overview includes the icon-led primary rail, a single-viewport tiered dashboard with equal-width cards within each row, resource icons integrated into the live plots, visibly multicolour native Cairo radial gauges for CPU/Memory/GPU, shared panel surfaces, richer gradient/grid history charts and graphical process activity rows. These are implementation steps toward the project mockup, not a claim that the visual programme is complete.
 
-Subsequent polish should continue toward the reference without adding features merely to fill the mockup.
+Subsequent polish should continue toward the project mockup without adding features merely to fill it.
