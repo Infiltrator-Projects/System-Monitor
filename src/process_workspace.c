@@ -12,7 +12,9 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
+#define LSM_PROCESS_WORKSPACE_NO_ALIASES
 #include "process_workspace.h"
+#undef LSM_PROCESS_WORKSPACE_NO_ALIASES
 
 #include "app_internal.h"
 #include "details_page.h"
@@ -27,7 +29,6 @@ static unsigned process_scan_flags(const LsmApp *app)
 {
     if (!app) return LSM_PROCESS_SCAN_EXECUTABLE;
 
-    /* App History always needs stable executable-image identity. */
     unsigned flags = LSM_PROCESS_SCAN_EXECUTABLE;
     switch ((LsmTabIndex)app->runtime.active_tab) {
         case LSM_TAB_PROCESSES:
@@ -108,12 +109,12 @@ static gboolean consume_completed_process_snapshot(LsmApp *app)
     return TRUE;
 }
 
-void lsm_processes_present_ready_snapshot(LsmApp *app)
+void lsm_process_workspace_present_ready_snapshot(LsmApp *app)
 {
     (void)consume_completed_process_snapshot(app);
 }
 
-gboolean lsm_processes_update(gpointer user_data)
+gboolean lsm_process_workspace_update(gpointer user_data)
 {
     LsmApp *app = user_data;
     if (!app || app->runtime.shutting_down)
@@ -127,7 +128,7 @@ gboolean lsm_processes_update(gpointer user_data)
     return G_SOURCE_CONTINUE;
 }
 
-void lsm_processes_go_to_details(LsmApp *app)
+void lsm_process_workspace_go_to_details(LsmApp *app)
 {
     if (!app || app->process.selected_pid <= 0 || !app->shell.notebook)
         return;
