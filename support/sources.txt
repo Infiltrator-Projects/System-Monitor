@@ -36,6 +36,7 @@ performance_present.c
 performance_present_core.c
 performance_present_devices.c
 details_page.c
+process_workspace.c
 process_actions.c
 process_recorder.c
 process_scanner.c
