@@ -14,7 +14,7 @@ System Monitor is an original clean-sheet implementation designed and written fr
 
 Implementation decisions come from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts. Product comparisons, where performed, are capability validation only and do not establish source, design or implementation ancestry.
 
-**Current source version:** 1.0.173 ([version file](support/VERSION))  
+**Current source version:** 1.0.174 ([version file](support/VERSION))  
 **Shared foundation:** exact Common 1.19.35 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
 **Licence:** GPL-3.0-or-later
