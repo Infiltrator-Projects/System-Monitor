@@ -148,6 +148,20 @@ typedef struct {
     size_t choice_count;                       /**< Number of valid entries in @c choices. */
 } LsmGpuGraphSlot;
 
+/**
+ * Rebuild one GPU graph selector from metrics supplied by the current backend.
+ *
+ * This helper consumes the private widget-bearing GPU slot representation, so
+ * its declaration deliberately stays with that private type rather than
+ * leaking the complete application layout through performance_internal.h.
+ *
+ * @param [in,out] slot GPU graph slot whose selector mapping is refreshed.
+ * @param [in] gpu Current GPU snapshot used to derive selectable metrics.
+ * @param [in] preferred Preferred metric when it is supported.
+ */
+void lsm_performance_populate_gpu_metric_selector(
+    LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
+
 /** Named graphics-page widgets for generic and native presentations. */
 typedef struct {
     GtkWidget *utilisation;
