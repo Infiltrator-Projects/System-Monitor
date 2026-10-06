@@ -2,10 +2,13 @@
 
 # Contributing to System Monitor
 
+System Monitor is an original clean-sheet implementation. Its application source was designed and written from the ground up for this project and was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. External system-monitor source code is not an implementation input for this project. Platform specifications, documented operating-system and hardware interfaces, standards and project-owned Common contracts are the implementation authorities.
+
 System Monitor uses C and C++ as equal first-class project languages. C, procedural C++ and object-oriented C++ are implementation styles, not competing identities: choose the style that expresses the component most clearly and strongly. The decision is based on correctness, clarity, performance, maintainability and control. Other language/runtime ecosystems require a concrete capability that C/C++ cannot reasonably provide.
 
 ## Engineering rules
 
+- Preserve the clean-sheet boundary: do not copy, translate, adapt, port or derive implementation code from another system-monitoring application.
 - Go as low in the stack as practical and prefer authoritative native interfaces over parsing external monitoring utilities.
 - Do not introduce objects, inheritance or virtual dispatch merely because C++ permits them; use OO where encapsulated state or genuine polymorphism makes the design stronger, and prefer direct procedural/value-oriented code otherwise.
 - Use C++ facilities such as RAII, stronger types, templates or scoped ownership when they make the implementation safer or clearer without hiding important control flow or machine semantics.
@@ -32,6 +35,8 @@ cmake --build build-cmake --target system-monitor --parallel
 ## Documentation and comments
 
 The canonical map is `docs/README.md`. Maintain architecture, design, decisions, roadmap and validation in their named documents instead of creating overlapping Markdown.
+
+Documentation must preserve the provenance distinction between implementation and later comparison. A post-implementation capability audit may compare user-visible behaviour, but it must never be described as an implementation source, design ancestor or source-code reference.
 
 Comments document invariants, concurrency ordering, ownership transfer, units, ABI quirks, security boundaries, complexity choices and non-obvious reasons. They should not narrate straightforward statements.
 
