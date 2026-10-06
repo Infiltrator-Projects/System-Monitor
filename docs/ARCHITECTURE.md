@@ -2,7 +2,7 @@
 
 # Architecture
 
-System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. Presentation consumes completed state; collectors own operating-system knowledge and retained native state.
+System Monitor separates presentation, platform-neutral state, native backends and reusable Common mechanisms. Presentation consumes completed state; backends own operating-system knowledge and native state.
 
 ## Provenance
 
@@ -11,66 +11,54 @@ System Monitor is an original clean-sheet implementation designed and written fr
 ## Structure
 
 ```text
-presentation: GTK 3 (Linux) / Win32 (Windows)
-                    ↓
-       presentation contracts and models
-                    ↓
-             platform contracts
-              ↙           ↘
-     Linux backends     Windows backends
-              ↓           ↓
-       native OS / kernel / driver APIs
+GTK 3 (Linux) / Win32 (Windows)
+              ↓
+ presentation contracts/models
+              ↓
+       platform contracts
+          ↙       ↘
+      Linux       Windows
+          ↓       ↓
+       native OS/kernel/driver APIs
 
-Common 1.19.35
-    ↓
-shared formatting, parsing, timing, path,
-arithmetic and design primitives
+Common 1.19.35 → shared generic mechanisms
 ```
 
-Renderers own native widgets, drawing, events and accessibility. Shared labels, field order, units and availability semantics stay above the renderer. Native paths, handles, ioctls, D-Bus details, driver knowledge and retained platform state stay below platform contracts.
+Renderers own widgets, drawing, events and accessibility. Shared labels, units and availability semantics stay above renderer boundaries; native paths, handles, ioctls, D-Bus and driver state stay below platform contracts. Application-facing monitor and process contracts remain plain C.
 
-Application-facing monitor and process contracts remain plain C. Platform differences use native implementations or explicit unavailability rather than changing the shared product contract.
+## Core contracts
 
-## State and ownership
+- Availability is distinct from value; valid zero is never used to mean unavailable.
+- Retained device state and history use stable resource identity.
+- External binary data uses explicit widths, defined byte order and alignment-safe decoding.
+- GTK objects stay on the GTK main thread; potentially blocking native work runs off it where practical.
+- Workers exchange plain data or immutable requests and publish only completed collection cycles.
+- Published snapshots carry a generation and monotonic completion time. Re-presenting one is not a new measurement.
+- Duplicate periodic work coalesces. Persisted state is generation ordered.
+- Shutdown owns worker lifetime and must not wait indefinitely on an uncancellable native call.
 
-Availability is separate from numeric value; zero does not mean unavailable when zero is valid.
+## Startup and refresh
 
-Resource-owning subsystems have explicit initialise/update and shutdown paths. Native handles, worker synchronization, paths and cumulative baselines remain private to the owning backend. Retained device history is keyed by stable identity.
-
-External binary structures use explicit widths, defined byte order and alignment-safe decoding. Allocation and cumulative arithmetic must not overflow silently.
-
-## Collection and concurrency
-
-GTK objects stay on the GTK main thread. Potentially blocking procfs, NSS, D-Bus, device-I/O or persistence work runs off the UI thread where practical.
-
-Workers exchange plain data or immutable requests. A collection cycle is published only when complete, with generation and monotonic completion time assigned after collection. Re-presenting the same snapshot is not a new measurement.
-
-Periodic work coalesces duplicate requests. Persistence is generation ordered so stale work cannot overwrite newer state. Shutdown must not leave owned workers running or block indefinitely on an uncancellable native call.
-
-## Startup and presentation
-
-Startup is first-paint oriented: build the shell and initial presentation first, and create other pages on first use where practical.
-
-Persistent non-visual models do not depend on whether their page has been opened. Slow page-specific work runs only while its page is active when continuous background sampling is unnecessary. Completed generations feed retained history once.
+Startup favours first paint: build the shell and initial presentation first, then create other pages on first use where practical. Persistent models do not depend on a page being opened. Page-specific slow work runs only while needed unless continuous sampling is part of the model.
 
 ## Failure model
 
-Optional telemetry fails independently unless a contract requires rejecting the whole inventory. Unsupported or inaccessible information remains unavailable rather than guessed.
+Optional telemetry fails independently unless its contract requires rejecting the whole inventory. Unsupported or inaccessible information remains unavailable rather than guessed.
 
-Cumulative rates require the same stable identity and a positive monotonic interval. Startup, reset, rollback, replacement, missing samples or invalid elapsed time break the baseline; the next valid observation establishes a new one.
+Rates require stable identity and a positive monotonic interval. Reset, rollback, replacement, missing samples or invalid elapsed time break the baseline rather than creating a fabricated rate.
 
-Malformed external data is rejected at the narrowest practical boundary. Bounded inventories are complete-or-preserved: overflow or incomplete discovery does not publish a partial inventory as complete.
+Malformed external data is rejected at the narrowest practical boundary. Bounded inventories are complete-or-preserved: incomplete discovery is not published as complete.
 
 ## Native interfaces and dependencies
 
 Prefer direct procfs, sysfs, ioctl, D-Bus, Win32, kernel, driver or documented in-process interfaces over external command output when they provide the stronger contract.
 
-GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/common-controls and carries no GTK runtime dependency. Optional vendor libraries may be loaded in-process but are not required for core startup.
+GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/common-controls and has no GTK runtime dependency. Optional vendor libraries may be loaded in-process but are not required for core startup.
 
 Project-owned declarations may cover narrow stable native ABIs but do not justify copying library internals. Dependencies that provide substantial semantics remain dependencies unless independently replaced. Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or `/dev`.
 
 ## Common
 
-`src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Generic mechanisms move to Common when its contract is at least as strong as the local implementation; monitoring policy, hardware interpretation and product presentation remain local to System Monitor.
+`src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
 
-Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security reporting and privilege boundaries live in [Security](../SECURITY.md).
+Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../SECURITY.md).
