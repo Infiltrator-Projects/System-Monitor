@@ -48,5 +48,3 @@
 - Define explicit availability and completed-snapshot contracts for monitor data rather than presenting unsupported values as measured data.
 
 Earlier numbered releases established the core Linux process, performance, hardware, history, service, user and filesystem surfaces that remain part of the current product.
-
-System Monitor is an original clean-sheet implementation. Its application source was designed and written from the ground up for this project and was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. Later capability comparisons are validation/audit material only and do not describe source ancestry or implementation origin.
