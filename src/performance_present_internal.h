@@ -55,15 +55,6 @@ void performance_record_device_page_sample(
     LsmApp *app, LsmDevicePage *page);
 
 /**
- * Rebuild one GPU graph selector from metrics supplied by the current backend.
- * @param [in,out] slot GPU graph slot whose selector mapping is refreshed.
- * @param [in] gpu Current GPU snapshot used to derive selectable metrics.
- * @param [in] preferred Preferred metric when it is supported.
- */
-void lsm_performance_populate_gpu_metric_selector(
-    LsmGpuGraphSlot *slot, const LsmGpuInfo *gpu, LsmGpuMetric preferred);
-
-/**
  * Choose the best user-facing hardware name without promoting bus identifiers.
  *
  * @param [in] product Product/model text, or NULL.
