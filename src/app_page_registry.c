@@ -12,15 +12,20 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
+#define LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 #include "app_page_registry.h"
-#include "app_internal.h"
-#include "app_runtime.h"
+#undef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 
+#include "app_internal.h"
+#include "app_menu.h"
+#include "app_runtime.h"
+#include "app_shell.h"
 #include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
 #include "overview.h"
 #include "performance.h"
+#include "process_export.h"
 #include "process_workspace.h"
 #include "processes_ui.h"
 #include "services.h"
@@ -229,4 +234,172 @@ gboolean lsm_app_page_registry_active_periodic_update(gpointer user_data)
         return G_SOURCE_REMOVE;
 
     return descriptor->periodic_update(app);
+}
+
+static void restore_page_scroll(LsmApp *app, guint page)
+{
+    if (!app || page >= LSM_TAB_COUNT ||
+        !app->runtime.page_scrollers[page])
+        return;
+    GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(
+        GTK_SCROLLED_WINDOW(app->runtime.page_scrollers[page]));
+    if (adjustment)
+        gtk_adjustment_set_value(adjustment, app->runtime.page_scroll[page]);
+}
+
+static void sync_overview_chrome(LsmApp *app)
+{
+    if (!app || !app->shell.window) return;
+    const gboolean integrated =
+        !app->runtime.compact_summary &&
+        app->runtime.active_tab == LSM_TAB_OVERVIEW;
+    GtkWidget *menu_bar = g_object_get_data(
+        G_OBJECT(app->shell.window), "lsm-main-menu-bar");
+    if (menu_bar) gtk_widget_set_visible(menu_bar, !integrated);
+    if (app->shell.summary_bar)
+        gtk_widget_set_visible(
+            app->shell.summary_bar, app->runtime.compact_summary);
+}
+
+static void on_registry_tab_switched(GtkNotebook *notebook, GtkWidget *page,
+                                     guint page_number, gpointer user_data)
+{
+    (void)notebook;
+    (void)page;
+    LsmApp *app = user_data;
+    if (!app || !app->runtime.shell_shown || page_number >= LSM_TAB_COUNT)
+        return;
+
+    lsm_app_shell_save_page_scroll(app, app->runtime.active_tab);
+    app->runtime.active_tab = (gint)page_number;
+    app->runtime.last_tab = (gint)page_number;
+    lsm_app_runtime_navigation_changed(app);
+
+    const gboolean page_was_built = app->runtime.page_built[page_number];
+    lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
+    lsm_app_page_registry_enter(
+        app, (LsmTabIndex)page_number, page_was_built);
+
+    restore_page_scroll(app, page_number);
+    sync_overview_chrome(app);
+    lsm_app_shell_sync_navigation(app);
+}
+
+void lsm_app_page_registry_connect_notebook(LsmApp *app)
+{
+    if (!app || !app->shell.notebook) return;
+    g_signal_connect(app->shell.notebook, "switch-page",
+                     G_CALLBACK(on_registry_tab_switched), app);
+}
+
+static gboolean focus_allows_pause(const LsmApp *app, GtkWidget *focus)
+{
+    return !focus || focus == app->shell.notebook ||
+           focus == app->processes.processes_tree ||
+           focus == app->details.details_tree ||
+           focus == app->performance.performance_stack;
+}
+
+static gboolean registry_key_press(GtkWidget *widget, GdkEventKey *event,
+                                   gpointer user_data)
+{
+    (void)widget;
+    LsmApp *app = user_data;
+    if (!app) return FALSE;
+
+    const gboolean control = (event->state & GDK_CONTROL_MASK) != 0;
+    const gboolean shift = (event->state & GDK_SHIFT_MASK) != 0;
+    const gboolean alt = (event->state & GDK_MOD1_MASK) != 0;
+
+    if (event->keyval == GDK_KEY_F5) {
+        lsm_app_menu_refresh(NULL, app);
+        return TRUE;
+    }
+    if (control && (event->keyval == GDK_KEY_f ||
+                    event->keyval == GDK_KEY_F)) {
+        const gint current = gtk_notebook_get_current_page(
+            GTK_NOTEBOOK(app->shell.notebook));
+        GtkWidget *search = current >= 0 && current < LSM_TAB_COUNT
+            ? lsm_app_page_registry_search_widget(
+                  app, (LsmTabIndex)current)
+            : NULL;
+        if (search) {
+            gtk_widget_grab_focus(search);
+            return TRUE;
+        }
+    }
+    if (control && shift && (event->keyval == GDK_KEY_s ||
+                             event->keyval == GDK_KEY_S)) {
+        lsm_app_menu_save_snapshot(NULL, app);
+        return TRUE;
+    }
+    if (control && (event->keyval == GDK_KEY_c ||
+                    event->keyval == GDK_KEY_C)) {
+        const gint current = gtk_notebook_get_current_page(
+            GTK_NOTEBOOK(app->shell.notebook));
+        GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
+        if ((current == LSM_TAB_PROCESSES &&
+             focus == app->processes.processes_tree) ||
+            (current == LSM_TAB_DETAILS &&
+             focus == app->details.details_tree)) {
+            lsm_process_export_copy_selected(app);
+            return TRUE;
+        }
+    }
+    if (alt && event->keyval >= GDK_KEY_1 && event->keyval <= GDK_KEY_9) {
+        const gint page_index = (gint)(event->keyval - GDK_KEY_1);
+        if (page_index < LSM_TAB_COUNT) {
+            gtk_notebook_set_current_page(
+                GTK_NOTEBOOK(app->shell.notebook), page_index);
+            return TRUE;
+        }
+    }
+
+    GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
+    if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
+        if (app->shell.pause_menu_item)
+            gtk_check_menu_item_set_active(
+                GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item),
+                !app->runtime.paused);
+        return TRUE;
+    }
+
+    const gint current = gtk_notebook_get_current_page(
+        GTK_NOTEBOOK(app->shell.notebook));
+    if ((current == LSM_TAB_PROCESSES &&
+         focus == app->processes.processes_tree) ||
+        (current == LSM_TAB_DETAILS &&
+         focus == app->details.details_tree)) {
+        if (event->keyval == GDK_KEY_Return ||
+            event->keyval == GDK_KEY_KP_Enter) {
+            if (current == LSM_TAB_PROCESSES)
+                lsm_processes_go_to_details(app);
+            else
+                lsm_processes_show_selected_details(app);
+            return TRUE;
+        }
+        if (event->keyval == GDK_KEY_Delete) {
+            lsm_processes_end_selected(app);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void lsm_app_page_registry_connect_window(LsmApp *app)
+{
+    if (!app || !app->shell.window) return;
+
+    /* Preserve shell-owned close/geometry/window-state hooks, then replace
+     * only the key handler whose page knowledge belongs in this registry. */
+    lsm_app_shell_connect_window(app);
+    const guint key_signal = g_signal_lookup(
+        "key-press-event", GTK_TYPE_WIDGET);
+    if (key_signal != 0U)
+        g_signal_handlers_disconnect_matched(
+            app->shell.window,
+            G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_DATA,
+            key_signal, 0U, NULL, NULL, app);
+    g_signal_connect(app->shell.window, "key-press-event",
+                     G_CALLBACK(registry_key_press), app);
 }
