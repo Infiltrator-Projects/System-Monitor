@@ -2,6 +2,14 @@
 
 This file records durable architectural choices for System Monitor.
 
+## ADR-000 — Clean-sheet implementation provenance
+
+**Decision.** System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source is not forked, copied, translated, adapted, ported or derived from another system-monitoring application. Other monitor source code is not an implementation authority.
+
+**Rationale.** Product behaviour should be owned and justified from System Monitor's requirements, authoritative operating-system/hardware interfaces, documented standards and project-owned Common contracts rather than inherited from another application's source, architecture or implementation assumptions.
+
+**Consequence.** External product comparisons, when performed, are post-implementation capability audits only. They do not define code structure, algorithms, architecture, product ancestry or implementation technique.
+
 ## ADR-001 — Native interfaces before utility output
 
 **Decision.** Collect directly from procfs, sysfs, ioctls, D-Bus or documented in-process interfaces wherever practical instead of parsing external monitoring commands.
@@ -44,8 +52,8 @@ This file records durable architectural choices for System Monitor.
 
 ## ADR-006 — Coherent product over feature accumulation
 
-**Decision.** System Monitor admits features according to product purpose and integration quality rather than feature-count parity. External products may supply useful ideas, including genuinely distinctive features, but those ideas are adopted only when they strengthen the existing monitoring and diagnostic model and can be integrated consistently with established architecture and presentation.
+**Decision.** System Monitor admits features according to its own product purpose and integration quality rather than feature-count parity with another application. Another product is not a design source or implementation blueprint. A later capability audit may identify an area worth considering, but any resulting feature is independently designed against System Monitor's requirements and authoritative native interfaces.
 
-**Rationale.** A monitoring product becomes harder to understand when adjacent utilities, duplicated views and isolated capabilities accumulate without reinforcing one mental model. Conversely, a smaller set of measurements, relationships and actions can be more useful when they work together coherently. Competitor comparison is therefore most valuable as evidence about stronger approaches, not as a backlog generator.
+**Rationale.** A monitoring product becomes harder to understand when adjacent utilities, duplicated views and isolated capabilities accumulate without reinforcing one mental model. Conversely, a smaller set of measurements, relationships and actions can be more useful when they work together coherently. Post-implementation comparison is useful only for validating coverage; it does not establish design ancestry.
 
 **Consequence.** New work must identify the user problem and the established product quality it improves. Prefer improvements that connect existing measurements, navigation or actions over independent feature islands. Reject technically possible additions that do not materially strengthen System Monitor's purpose. On approachable monitoring surfaces, prefer visual hierarchy, graphs, compact status/value treatment and meaningful grouping over explanatory prose; retain dense tables and exact text where the task is intentionally technical.
