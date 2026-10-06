@@ -12,7 +12,7 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux, with a na
 
 System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from GNOME System Monitor, Linux Mint System Monitor, Windows Task Manager or any other system-monitoring application. No other system monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority for this project.
 
-Implementation decisions come from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts. Product comparisons, where performed, are capability validation only and do not establish source, design or implementation ancestry.
+Implementation decisions come from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts.
 
 **Current source version:** 1.0.174 ([version file](support/VERSION))  
 **Shared foundation:** exact Common 1.19.35 gitlink at `src/infiltratr-common`  
@@ -42,7 +42,7 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the authoritative project verification suite. CI also verifies the CMake path, sanitizers, 32-bit portability, documentation and release-package construction. Direct `make install` is disabled; installation is owned by the Debian package or native installer.
+Run `make check` for the authoritative verification suite. Direct `make install` is disabled; installation is owned by the Debian package or native installer.
 
 ## Release assets
 
@@ -52,18 +52,17 @@ Each numbered release publishes:
 - `infiltrator-system-monitor-<version>-native-installer.run`
 - `system-monitor-<version>-windows.exe`
 
-Development stays on `main`. Releases are publishable only from the exact current commit that passed the required Verify workflow. Published tags and release assets are immutable.
+Development stays on `main`. A release must come from the exact current commit that passed the required Verify workflow. Published tags and release assets are immutable.
 
-## Technical documentation
+## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — ownership, data flow, concurrency, platform boundaries and failure behaviour.
-- [Hardware collection](docs/HARDWARE.md) — hardware-specific evidence, telemetry and device rules.
-- [Validation](docs/VALIDATION.md) — test evidence and release readiness.
-- [Contributing](CONTRIBUTING.md) — contribution and repository rules.
+- [Architecture](docs/ARCHITECTURE.md) — architecture, ownership, concurrency, platform boundaries and failure behaviour.
+- [Hardware collection](docs/HARDWARE.md) — non-obvious hardware interfaces, evidence, units and device rules.
+- [Contributing](CONTRIBUTING.md) — build, test and repository rules.
 - [Security](SECURITY.md) — vulnerability scope and reporting.
 
 ## Licence and provenance
 
-Shannon Smith-owned System Monitor source, documentation and application artwork are licensed under GPL-3.0-or-later. Documented platform/runtime dependencies, first-party Common infrastructure and separately licensed assets retain their own identities and licences.
+Shannon Smith-owned System Monitor source, documentation and application artwork are licensed under GPL-3.0-or-later. Documented dependencies, first-party Common infrastructure and separately licensed assets retain their own identities and licences.
 
 The embedded PCI identity registry contains normalized factual vendor/device mappings in a project-defined flat schema and generated numeric lookup tables. The supplied MB Corpo font assets retain their embedded copyright and licence metadata and are separate from the project's GPL source.
