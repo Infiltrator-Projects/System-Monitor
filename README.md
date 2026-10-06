@@ -12,8 +12,6 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux, with a na
 
 System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from GNOME System Monitor, Linux Mint System Monitor, Windows Task Manager or any other system-monitoring application. No other system monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority for this project.
 
-Implementation decisions come from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts.
-
 **Current source version:** 1.0.175 ([version file](support/VERSION))  
 **Shared foundation:** exact Common 1.19.35 gitlink at `src/infiltratr-common`  
 **Platform:** Linux desktop; native Windows GUI preview  
@@ -52,17 +50,15 @@ Each numbered release publishes:
 - `infiltrator-system-monitor-<version>-native-installer.run`
 - `system-monitor-<version>-windows.exe`
 
-Development stays on `main`. A release must come from the exact current commit that passed the required Verify workflow. Published tags and release assets are immutable.
+Development stays on `main`. Releases come from the exact tested commit; published tags and release assets are immutable.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — architecture, ownership, concurrency, platform boundaries and failure behaviour.
-- [Hardware collection](docs/HARDWARE.md) — non-obvious hardware interfaces, evidence, units and device rules.
+- [Architecture](docs/ARCHITECTURE.md) — architecture and durable engineering contracts.
+- [Hardware collection](docs/HARDWARE.md) — hardware-specific interfaces, units and evidence rules.
 - [Contributing](CONTRIBUTING.md) — build, test and repository rules.
 - [Security](SECURITY.md) — vulnerability scope and reporting.
 
-## Licence and provenance
+## Licence
 
 Shannon Smith-owned System Monitor source, documentation and application artwork are licensed under GPL-3.0-or-later. Documented dependencies, first-party Common infrastructure and separately licensed assets retain their own identities and licences.
-
-The embedded PCI identity registry contains normalized factual vendor/device mappings in a project-defined flat schema and generated numeric lookup tables. The supplied MB Corpo font assets retain their embedded copyright and licence metadata and are separate from the project's GPL source.
