@@ -24,12 +24,18 @@
 
 typedef struct LsmProcessScanner LsmProcessScanner;
 
+/**
+ * @brief Process-workspace runtime facts copied from private application state.
+ *
+ * This view deliberately contains no GTK widget pointers or feature-owned
+ * mutable storage, keeping the sampling workspace independent of LsmApp layout.
+ */
 typedef struct {
-    LsmTabIndex active_tab;
-    gboolean paused;
-    gboolean shutting_down;
-    gboolean processes_built;
-    gboolean details_built;
+    LsmTabIndex active_tab; /**< Active top-level page. */
+    gboolean paused; /**< TRUE while process updates are paused. */
+    gboolean shutting_down; /**< TRUE once application teardown begins. */
+    gboolean processes_built; /**< TRUE once the grouped Processes page exists. */
+    gboolean details_built; /**< TRUE once the technical Details page exists. */
 } LsmProcessRuntimeView;
 
 /**
