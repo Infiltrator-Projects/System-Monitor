@@ -22,12 +22,9 @@ System Monitor is an original clean-sheet implementation designed and written fr
 - CPU, memory, storage, network, GPU, NPU, temperature, pressure, battery and supported peripheral monitoring.
 - Processes, application history, startup, users, details, services and filesystems.
 - Process inspection and control, including termination, suspend/resume, priority, efficiency mode and CPU affinity.
-- Native hardware identity and telemetry with explicit unavailable states for unsupported data.
 - cgroup-v2-aware application grouping, process history, snapshots and process-table export.
 
 ## Build and test
-
-On Debian, Ubuntu or Linux Mint:
 
 ```bash
 sudo apt install build-essential git pkg-config libgtk-3-dev
@@ -37,18 +34,18 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the authoritative verification suite. Direct `make install` is disabled; installation is owned by the Debian package or native installer.
+Run `make check` for the authoritative verification suite. Installation is owned by the Debian package or native installer; direct `make install` is disabled.
 
 ## Releases
 
-Numbered releases publish the Debian package, native Linux installer and native Windows executable. Development stays on `main`; releases are produced from the exact tested commit and published tags/assets are immutable.
+Development stays on `main`. Releases are produced from the exact tested commit; published tags and assets are immutable.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
-- [Hardware collection](docs/HARDWARE.md) — hardware interfaces, units and evidence rules.
-- [Contributing](CONTRIBUTING.md) — build, test and repository rules.
-- [Security](SECURITY.md) — vulnerability scope and reporting.
+- [Hardware collection](docs/HARDWARE.md) — hardware rules, units and evidence.
+- [Contributing](CONTRIBUTING.md) — verification and repository discipline.
+- [Security](SECURITY.md) — security boundaries and reporting.
 
 ## Licence
 
