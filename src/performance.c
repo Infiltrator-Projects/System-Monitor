@@ -90,7 +90,7 @@ void lsm_performance_apply_graph_preferences(LsmApp *app)
     }
     if (app->performance.cpu_core_graphs) {
         for (unsigned index = 0U;
-             index < app->monitor.cpu.logical_cores; index++)
+             index < app->performance.cpu_core_graph_count; index++)
             configure_graph_preferences(
                 app, app->performance.cpu_core_graphs[index],
                 LSM_PAGE_CPU, FALSE);
@@ -454,7 +454,6 @@ GtkWidget *performance_make_metric_block(const char *name, GtkWidget **value_out
     return box;
 }
 
-
 /**
  * Draw the original three-part physical-memory composition bar.
  *
@@ -684,6 +683,7 @@ static void build_performance_contents(LsmApp *app, const char *visible_page)
 
     app->performance.device_pages = g_ptr_array_new();
     performance_build_cpu_page(app);
+    app->performance.cpu_core_graph_count = app->monitor.cpu.logical_cores;
     performance_build_memory_page(app);
     for (size_t i = 0; i < app->monitor.disk_count; i++) performance_build_disk_page(app, i);
     for (size_t i = 0; i < app->monitor.net_count; i++) performance_build_network_page(app, i);
@@ -808,13 +808,14 @@ void lsm_performance_destroy(LsmApp *app)
         g_ptr_array_free(app->performance.device_pages, TRUE);
         app->performance.device_pages = NULL;
     }
-    for (unsigned i = 0; i < app->monitor.cpu.logical_cores; i++) {
+    for (unsigned i = 0; i < app->performance.cpu_core_graph_count; i++) {
         if (app->performance.cpu_core_graphs) lsm_graph_free(app->performance.cpu_core_graphs[i]);
     }
     g_free(app->performance.cpu_core_graphs);
     g_free(app->performance.cpu_core_labels);
     app->performance.cpu_core_graphs = NULL;
     app->performance.cpu_core_labels = NULL;
+    app->performance.cpu_core_graph_count = 0U;
     app->performance.recorded_sample_generation = 0U;
     app->performance.displayed_sample_generation = 0U;
     app->performance.performance_stack = NULL;
@@ -839,7 +840,9 @@ typedef struct {
 } LsmGraphHistorySnapshot;
 
 typedef struct {
+    LsmPageType type;
     char stack_name[96];
+    char selection_identity[LSM_IDENTITY_LEN];
     LsmGraphHistorySnapshot graph;
     LsmGraphHistorySnapshot secondary_graph;
     LsmGraphHistorySnapshot side_graph;
@@ -870,13 +873,24 @@ static void restore_graph_history(LsmGraph *graph,
     lsm_graph_queue_draw(graph);
 }
 
-static LsmPageHistorySnapshot *find_page_history(GPtrArray *snapshots,
-                                                 const char *stack_name)
+static gboolean page_history_matches(const LsmPageHistorySnapshot *snapshot,
+                                     const LsmDevicePage *page)
 {
-    if (!snapshots || !stack_name) return NULL;
+    if (!snapshot || !page || snapshot->type != page->type)
+        return FALSE;
+    if (snapshot->selection_identity[0] && page->selection_identity[0] &&
+        strcmp(snapshot->selection_identity, page->selection_identity) == 0)
+        return TRUE;
+    return strcmp(snapshot->stack_name, page->stack_name) == 0;
+}
+
+static LsmPageHistorySnapshot *find_page_history(GPtrArray *snapshots,
+                                                 const LsmDevicePage *page)
+{
+    if (!snapshots || !page) return NULL;
     for (guint index = 0U; index < snapshots->len; index++) {
         LsmPageHistorySnapshot *snapshot = g_ptr_array_index(snapshots, index);
-        if (strcmp(snapshot->stack_name, stack_name) == 0) return snapshot;
+        if (page_history_matches(snapshot, page)) return snapshot;
     }
     return NULL;
 }
@@ -890,7 +904,12 @@ static GPtrArray *capture_page_histories(const LsmApp *app)
         const LsmDevicePage *page =
             g_ptr_array_index(app->performance.device_pages, index);
         LsmPageHistorySnapshot *snapshot = g_new0(LsmPageHistorySnapshot, 1);
-        lsm_copy_string(snapshot->stack_name, sizeof(snapshot->stack_name), page->stack_name);
+        snapshot->type = page->type;
+        lsm_copy_string(snapshot->stack_name, sizeof(snapshot->stack_name),
+                        page->stack_name);
+        lsm_copy_string(snapshot->selection_identity,
+                        sizeof(snapshot->selection_identity),
+                        page->selection_identity);
         capture_graph_history(page->graph, &snapshot->graph);
         capture_graph_history(page->secondary_graph,
                               &snapshot->secondary_graph);
@@ -925,7 +944,7 @@ static void restore_page_histories(LsmApp *app, GPtrArray *snapshots)
         LsmDevicePage *page =
             g_ptr_array_index(app->performance.device_pages, index);
         LsmPageHistorySnapshot *snapshot =
-            find_page_history(snapshots, page->stack_name);
+            find_page_history(snapshots, page);
         if (!snapshot) continue;
 
         restore_graph_history(page->graph, &snapshot->graph);
@@ -990,7 +1009,7 @@ static void rebuild_for_topology_change(LsmApp *app)
     char *saved_cpu_mode = cpu_mode ? g_strdup(cpu_mode) : NULL;
     GPtrArray *histories = capture_page_histories(app);
 
-    const unsigned core_count = app->monitor.cpu.logical_cores;
+    const unsigned core_count = app->performance.cpu_core_graph_count;
     LsmSampleHistory *core_histories =
         core_count > 0U ? g_new0(LsmSampleHistory, core_count) : NULL;
     gboolean *core_history_present =
@@ -1019,7 +1038,10 @@ static void rebuild_for_topology_change(LsmApp *app)
 
     restore_page_histories(app, histories);
     if (saved_cpu_mode) performance_set_cpu_graph_mode(app, saved_cpu_mode);
-    for (unsigned core = 0U; core < core_count; core++) {
+    const unsigned restored_core_count =
+        core_count < app->performance.cpu_core_graph_count
+            ? core_count : app->performance.cpu_core_graph_count;
+    for (unsigned core = 0U; core < restored_core_count; core++) {
         if (core_history_present[core] && app->performance.cpu_core_graphs &&
             app->performance.cpu_core_graphs[core]) {
             app->performance.cpu_core_graphs[core]->primary =

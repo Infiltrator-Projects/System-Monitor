@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.175 - 2026-10-06
+
+- Retain Performance graph history by stable resource identity across topology reconstruction rather than relying only on transient GTK stack names.
+- Track the exact constructed logical-CPU graph count so topology changes cannot make graph preservation or destruction follow a newer monitor count than the allocated UI state.
+- Give shared process sampling, selection, actions and recording their own workspace interface, and move foreground process-cadence classification into the central page registry.
+
 ## 1.0.174 - 2026-10-06
 
 - Consolidate maintained documentation around one architecture contract and one hardware-specific collection guide.

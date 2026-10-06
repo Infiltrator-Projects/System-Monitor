@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_page_registry.c
- * @brief Central GTK page construction and refresh ownership registry.
+ * @brief Central GTK page construction, refresh and cadence ownership registry.
  *
- * Top-level page wiring belongs here so app.c and app_runtime.c do not each
- * maintain their own parallel switches, timer slots and feature include sets.
- * The descriptor table is indexed by stable LsmTabIndex identity and uses
- * designated initialisers so enum order changes cannot silently retarget a
- * callback to another page.
+ * Top-level page wiring belongs here so app.c and app_runtime.c do not maintain
+ * parallel switches, timer policy or feature include sets. The descriptor
+ * table is indexed by stable LsmTabIndex identity and uses designated
+ * initialisers so adding fields cannot silently retarget existing policy.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -36,38 +35,52 @@ typedef struct {
     guint periodic_interval;
     gboolean periodic_whole_seconds;
     gboolean filesystem_interval;
+    gboolean process_foreground;
 } LsmPageDescriptor;
 
 static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
     [LSM_TAB_PERFORMANCE] = {
-        lsm_performance_build, lsm_performance_refresh, NULL, 0U, FALSE, FALSE
+        .build = lsm_performance_build,
+        .refresh = lsm_performance_refresh
     },
     [LSM_TAB_PROCESSES] = {
-        lsm_processes_build, NULL, NULL, 0U, FALSE, FALSE
+        .build = lsm_processes_build,
+        .process_foreground = TRUE
     },
     [LSM_TAB_APP_HISTORY] = {
-        lsm_history_build, lsm_history_refresh, NULL, 0U, FALSE, FALSE
+        .build = lsm_history_build,
+        .refresh = lsm_history_refresh
     },
     [LSM_TAB_STARTUP] = {
-        lsm_startup_build, lsm_startup_refresh, NULL, 0U, FALSE, FALSE
+        .build = lsm_startup_build,
+        .refresh = lsm_startup_refresh
     },
     [LSM_TAB_USERS] = {
-        lsm_users_build, lsm_users_refresh, lsm_users_update,
-        LSM_USER_UPDATE_INTERVAL_SECONDS, TRUE, FALSE
+        .build = lsm_users_build,
+        .refresh = lsm_users_refresh,
+        .periodic_update = lsm_users_update,
+        .periodic_interval = LSM_USER_UPDATE_INTERVAL_SECONDS,
+        .periodic_whole_seconds = TRUE
     },
     [LSM_TAB_DETAILS] = {
-        lsm_details_build, NULL, NULL, 0U, FALSE, FALSE
+        .build = lsm_details_build,
+        .process_foreground = TRUE
     },
     [LSM_TAB_SERVICES] = {
-        lsm_services_build, lsm_services_refresh, lsm_services_update,
-        LSM_SERVICE_UPDATE_INTERVAL_SECONDS, TRUE, FALSE
+        .build = lsm_services_build,
+        .refresh = lsm_services_refresh,
+        .periodic_update = lsm_services_update,
+        .periodic_interval = LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
+        .periodic_whole_seconds = TRUE
     },
     [LSM_TAB_FILESYSTEMS] = {
-        lsm_filesystems_build, lsm_filesystems_refresh, lsm_filesystems_update,
-        0U, FALSE, TRUE
+        .build = lsm_filesystems_build,
+        .refresh = lsm_filesystems_refresh,
+        .periodic_update = lsm_filesystems_update,
+        .filesystem_interval = TRUE
     },
     [LSM_TAB_OVERVIEW] = {
-        lsm_overview_build, NULL, NULL, 0U, FALSE, FALSE
+        .build = lsm_overview_build
     }
 };
 
@@ -96,6 +109,12 @@ void lsm_app_page_registry_refresh_all(LsmApp *app)
         if (descriptor && descriptor->refresh)
             descriptor->refresh(app);
     }
+}
+
+bool lsm_app_page_registry_process_foreground(LsmTabIndex page)
+{
+    const LsmPageDescriptor *descriptor = descriptor_for_page(page);
+    return descriptor && descriptor->process_foreground;
 }
 
 bool lsm_app_page_registry_active_periodic_policy(

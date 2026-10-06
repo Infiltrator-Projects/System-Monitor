@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_page_registry.h
- * @brief Central GTK page construction and refresh ownership registry.
+ * @brief Central GTK page construction, refresh and cadence ownership registry.
  *
  * The registry is the single composition point that maps top-level tab
- * identities to feature builders, manual refresh hooks and optional periodic
- * refresh callbacks. App runtime code therefore schedules pages generically
- * instead of depending on Services, Users and File Systems individually.
+ * identities to feature builders, manual refresh hooks and cadence classes.
+ * Runtime code therefore schedules pages and process sampling generically
+ * instead of depending on individual page modules.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -35,13 +35,18 @@ bool lsm_app_page_registry_build(LsmApp *app, LsmTabIndex page,
 /**
  * Run every page-level manual refresh hook once.
  *
- * This preserves the existing F5/application-wide refresh semantics while
- * keeping knowledge of feature-specific refresh functions in one composition
- * module rather than in the timer owner.
- *
  * @param [in,out] app Application whose registered page models are refreshed.
  */
 void lsm_app_page_registry_refresh_all(LsmApp *app);
+
+/**
+ * Report whether a page requires foreground process-sampling cadence.
+ *
+ * @param page Top-level page identity to classify.
+ * @return true for pages whose live process presentation needs foreground
+ *         cadence; false for every other page and invalid identities.
+ */
+bool lsm_app_page_registry_process_foreground(LsmTabIndex page);
 
 /**
  * Resolve the optional periodic-refresh policy for the active page.

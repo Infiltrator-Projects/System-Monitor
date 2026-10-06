@@ -392,6 +392,7 @@ typedef struct {
     GtkWidget *cpu_core_grid;
     LsmGraph **cpu_core_graphs;
     GtkWidget **cpu_core_labels;
+    unsigned cpu_core_graph_count;
     uint64_t recorded_sample_generation;
     uint64_t displayed_sample_generation;
 } LsmPerformanceState;

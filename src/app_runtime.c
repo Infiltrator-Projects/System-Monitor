@@ -4,8 +4,8 @@
  * @brief GTK-main-loop refresh cadence and timer ownership.
  *
  * This module owns when application refresh callbacks run. Feature-specific
- * page construction and refresh hooks are resolved through app_page_registry
- * so runtime cadence does not depend on individual slow-page modules.
+ * page construction, cadence classification and refresh hooks are resolved
+ * through app_page_registry so runtime cadence does not depend on page modules.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -16,9 +16,8 @@
 #include "app_page_registry.h"
 
 #include "common.h"
-#include "details_page.h"
 #include "performance.h"
-#include "processes_ui.h"
+#include "process_workspace.h"
 #include "refresh_policy.h"
 
 static guint process_refresh_interval(const LsmApp *app)
@@ -27,16 +26,11 @@ static guint process_refresh_interval(const LsmApp *app)
         ? 1000U : app->runtime.update_interval_ms;
 }
 
-static gboolean process_pages_active(const LsmApp *app)
-{
-    return app->runtime.active_tab == LSM_TAB_PROCESSES ||
-           app->runtime.active_tab == LSM_TAB_DETAILS;
-}
-
 static guint effective_process_refresh_interval(const LsmApp *app)
 {
     const guint foreground = process_refresh_interval(app);
-    if (process_pages_active(app) || app->process.recorder)
+    if (lsm_app_page_registry_process_foreground(
+            (LsmTabIndex)app->runtime.active_tab) || app->process.recorder)
         return foreground;
     return foreground < LSM_PROCESS_UPDATE_INTERVAL_MS
         ? LSM_PROCESS_UPDATE_INTERVAL_MS : foreground;

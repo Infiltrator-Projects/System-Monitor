@@ -10,6 +10,8 @@
 #ifndef INFILTRATOR_SYSTEM_MONITOR_PROCESSES_UI_H
 #define INFILTRATOR_SYSTEM_MONITOR_PROCESSES_UI_H
 
+#include "process_workspace.h"
+
 #include <gtk/gtk.h>
 
 typedef struct LsmApp LsmApp;
