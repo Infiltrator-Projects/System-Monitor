@@ -20,12 +20,14 @@
 #include "app_menu.h"
 #include "app_runtime.h"
 #include "app_shell.h"
+#include "app_shell_window.h"
 #include "details_page.h"
 #include "filesystems.h"
 #include "history.h"
 #include "overview.h"
 #include "performance.h"
 #include "process_export.h"
+#include "process_navigation.h"
 #include "process_workspace.h"
 #include "processes_ui.h"
 #include "services.h"
@@ -391,10 +393,9 @@ void lsm_app_page_registry_connect_window(LsmApp *app)
 {
     if (!app || !app->shell.window) return;
 
-    /* Register authoritative page-aware key policy before the legacy shell
-     * handler. GTK key-event emission stops at the first TRUE result, while
-     * unhandled keys continue into shell/window mechanics unchanged. */
+    /* Page-aware key policy has exactly one live owner. Window-manager
+     * mechanics are connected separately and contain no page knowledge. */
     g_signal_connect(app->shell.window, "key-press-event",
                      G_CALLBACK(registry_key_press), app);
-    lsm_app_shell_connect_window(app);
+    lsm_app_shell_window_connect(app);
 }
