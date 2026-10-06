@@ -12,11 +12,6 @@ System Monitor is a native C17/GTK 3 desktop system manager for Linux, with a na
 
 System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from GNOME System Monitor, Linux Mint System Monitor, Windows Task Manager or any other system-monitoring application. No other system monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority for this project.
 
-**Current source version:** 1.0.175 ([version file](support/VERSION))  
-**Shared foundation:** Common 1.19.35 pinned at `src/infiltratr-common`  
-**Platform:** Linux desktop; native Windows GUI preview  
-**Licence:** GPL-3.0-or-later
-
 ## Capabilities
 
 - CPU, memory, storage, network, GPU, NPU, temperature, pressure, battery and supported peripheral monitoring.
@@ -43,7 +38,7 @@ Development stays on `main`. Releases are produced from the exact tested commit;
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
-- [Hardware collection](docs/HARDWARE.md) — hardware rules, units and evidence.
+- [Hardware collection](docs/HARDWARE.md) — hardware rules, units and provenance.
 - [Contributing](CONTRIBUTING.md) — verification and repository discipline.
 - [Security](SECURITY.md) — security boundaries and reporting.
 
