@@ -19,40 +19,22 @@
 
 typedef struct LsmApp LsmApp;
 
-/**
- * Construct the technical Details tab and its advanced process table.
- *
- * @param [in,out] app Application that owns retained process state.
- * @param [in] container Empty GTK container receiving the process view.
- */
+/** Construct the technical Details tab and its advanced process table. */
 void lsm_details_build(LsmApp *app, GtkWidget *container);
 
-/**
- * Rebuild the visible technical process model from the newest retained snapshot.
- *
- * @param [in,out] app Application whose Details tree is presented.
- */
+/** Rebuild the visible technical process model from the retained snapshot. */
 void lsm_details_present_snapshot(LsmApp *app);
 
-/**
- * Save process-table visibility, order, widths, sort and view mode.
- *
- * @param [in] app Application whose current table layout is persisted.
- */
+/** Return optional backend scan fields required by visible Details columns. */
+unsigned lsm_details_process_scan_flags(const LsmApp *app);
+
+/** Save process-table visibility, order, widths, sort and view mode. */
 void lsm_details_save_layout(const LsmApp *app);
 
-/**
- * Present the process-column chooser from the View menu.
- *
- * @param [in,out] app Application whose visible columns may change.
- */
+/** Present the process-column chooser from the View menu. */
 void lsm_details_show_columns(LsmApp *app);
 
-/**
- * Release the Details page models' creator references.
- *
- * @param [in,out] app Application whose periodic work has already stopped.
- */
+/** Release the Details page models' creator references. */
 void lsm_details_destroy(LsmApp *app);
 
 #endif
