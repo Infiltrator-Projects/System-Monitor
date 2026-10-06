@@ -18,11 +18,32 @@
 
 typedef struct LsmApp LsmApp;
 
+/**
+ * Consume completed process work and request the next background scan.
+ * @param user_data Owning LsmApp passed by the GLib timer.
+ * @return G_SOURCE_CONTINUE while sampling remains scheduled, otherwise
+ *         G_SOURCE_REMOVE during shutdown.
+ */
 gboolean lsm_process_workspace_update(gpointer user_data);
+
+/**
+ * Consume a completed process snapshot without requesting another scan.
+ * @param app Application receiving the completed snapshot.
+ */
 void lsm_process_workspace_present_ready_snapshot(LsmApp *app);
 
-/* Stable application-facing names retained for existing callers. */
+/**
+ * Stable application-facing alias for periodic process workspace updates.
+ * @param user_data Owning LsmApp passed by the GLib timer.
+ * @return G_SOURCE_CONTINUE while sampling remains scheduled, otherwise
+ *         G_SOURCE_REMOVE during shutdown.
+ */
 gboolean lsm_processes_update(gpointer user_data);
+
+/**
+ * Stable application-facing alias for completed snapshot presentation.
+ * @param app Application receiving the completed snapshot.
+ */
 void lsm_processes_present_ready_snapshot(LsmApp *app);
 
 #endif
