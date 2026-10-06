@@ -12,9 +12,7 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#define LSM_PROCESS_WORKSPACE_NO_ALIASES
 #include "process_workspace.h"
-#undef LSM_PROCESS_WORKSPACE_NO_ALIASES
 
 #include "app_internal.h"
 #include "details_page.h"
@@ -142,6 +140,23 @@ void lsm_process_workspace_go_to_details(LsmApp *app)
     gtk_notebook_set_current_page(
         GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_DETAILS);
     lsm_details_present_snapshot(app);
+}
+
+/* Established application-facing names remain stable while the implementation
+ * ownership lives here rather than in either presentation module. */
+gboolean lsm_processes_update(gpointer user_data)
+{
+    return lsm_process_workspace_update(user_data);
+}
+
+void lsm_processes_present_ready_snapshot(LsmApp *app)
+{
+    lsm_process_workspace_present_ready_snapshot(app);
+}
+
+void lsm_processes_go_to_details(LsmApp *app)
+{
+    lsm_process_workspace_go_to_details(app);
 }
 
 gboolean lsm_process_heatmap_enabled(const LsmApp *app)
