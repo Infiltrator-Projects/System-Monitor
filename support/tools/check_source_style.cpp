@@ -149,16 +149,9 @@ static bool maintained_markdown_path(const char *path)
         "./CHANGELOG.md",
         "./CONTRIBUTING.md",
         "./SECURITY.md",
-        "./docs/README.md",
         "./docs/ARCHITECTURE.md",
-        "./docs/DESIGN.md",
-        "./docs/DECISIONS.md",
-        "./docs/ROADMAP.md",
         "./docs/VALIDATION.md",
-        "./docs/PORTABILITY.md",
         "./docs/HARDWARE.md",
-        "./docs/LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md",
-        "./docs/design/system-monitor-ui-vision.md",
         "./.github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
@@ -197,11 +190,7 @@ static void check_markdown_policy(void)
 {
     static const char *const required[] = {
         "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
-        "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
-        "docs/PORTABILITY.md", "docs/HARDWARE.md",
-        "docs/LINUX-MINT-SYSTEM-MONITOR-COVERAGE.md",
-        "docs/design/system-monitor-ui-vision.md",
+        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
         ".github/CODE_OF_CONDUCT.md"
     };
     check_markdown_tree(".");
@@ -783,8 +772,7 @@ static void check_licensing_contract(void)
 
     static const char *const markdown_header_files[] = {
         "README.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/ARCHITECTURE.md", "docs/PORTABILITY.md", "docs/HARDWARE.md",
-        "docs/design/system-monitor-ui-vision.md",
+        "docs/ARCHITECTURE.md", "docs/HARDWARE.md",
         ".github/CODE_OF_CONDUCT.md"
     };
     for (size_t index = 0U;
@@ -834,9 +822,7 @@ static void check_engineering_documentation(void)
 {
     static const char *const required_files[] = {
         "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/README.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md",
-        "docs/DECISIONS.md", "docs/ROADMAP.md", "docs/VALIDATION.md",
-        "docs/PORTABILITY.md", "docs/HARDWARE.md",
+        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
         ".github/CODE_OF_CONDUCT.md",
         "support/Doxyfile", "LICENSE", "support/packaging/copyright"
     };
@@ -853,20 +839,18 @@ static void check_engineering_documentation(void)
     if (readme) {
         check_unit_label_policy("README.md", readme);
         static const char *const markers[] = {
-            "## Engineering ethos",
-            "## Appearance",
+            "## Clean-sheet provenance",
             "## Capabilities",
-            "## Architecture",
             "## Build and test",
             "src/infiltratr-common",
             "## Release assets",
-            "## Repository policy",
+            "## Technical documentation",
             "docs/ARCHITECTURE.md",
-            "docs/PORTABILITY.md",
             "docs/HARDWARE.md",
+            "docs/VALIDATION.md",
             "CONTRIBUTING.md",
             "SECURITY.md",
-            "## Licence",
+            "## Licence and provenance",
             "GPL-3.0-or-later"
         };
         for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++)
@@ -979,7 +963,7 @@ static void check_shared_release_contract(void)
         require_text_marker("support/Doxyfile", doxyfile,
                             "INPUT                  = README.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
         require_text_marker("support/Doxyfile", doxyfile,
-                            "EXCLUDE                 = docs/README.md src/pci_names_data.c src/infiltratr-common");
+                            "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
         require_text_marker("support/Doxyfile", doxyfile,
                             "EXTRACT_LOCAL_CLASSES   = NO");
         require_text_marker("support/Doxyfile", doxyfile,
