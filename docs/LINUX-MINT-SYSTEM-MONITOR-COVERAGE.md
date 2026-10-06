@@ -1,29 +1,28 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Linux Mint System Monitor Capability Coverage and Ownership
+# Linux Mint System Monitor Independent Capability Audit
+
+## Provenance boundary
+
+System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from GNOME System Monitor, Linux Mint System Monitor, Windows Task Manager or another system-monitoring application. No other system monitor's source code, architecture or implementation was used as an implementation authority for System Monitor.
+
+This document is a **post-implementation capability audit**. It compares user-visible capabilities after System Monitor's own architecture and implementation already exist. It is not an implementation specification, design source, source-code reference, porting guide, derivation record or statement of ancestry.
+
+System Monitor implementation decisions come from project requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts. Where this audit identifies a capability gap worth addressing, any resulting System Monitor work must still be independently designed against those authorities.
 
 ## Purpose
 
-This document maps the relevant Linux Mint System Monitor capability baseline onto the Infiltrator software family. It is a behavioural coverage and ownership specification, not a one-for-one UI-cloning specification.
+This document checks the relevant user-visible capability baseline present in the Linux Mint 22.x system-monitoring environment against the Infiltrator software family and records where those responsibilities belong.
 
-The objective is to give each capability one clear home: an existing System Monitor surface, a stronger existing capability, a reusable Common primitive, or an explicitly optional future extension. Product ownership follows behaviour rather than naming similarity.
+The objective is to keep each capability in one clear product boundary: an existing System Monitor surface, a stronger existing System Monitor capability, a reusable Common primitive, or an explicitly optional future extension. Product ownership follows System Monitor's own architecture rather than another application's internal structure or naming.
 
 Monitoring, process inspection and control, resource telemetry and mounted-filesystem observation belong to **System Monitor**. Common may own reusable primitives, but it does not own System Monitor product policy.
 
-## Reference baseline
+## Audit baseline
 
-The reference application is GNOME System Monitor 45.0.2 as shipped in the Linux Mint 22.x GTK3 desktop generation.
+For user-visible coverage only, the audit checks the behaviour exposed by the GNOME System Monitor generation shipped with Linux Mint 22.x. The comparison concerns observable product capabilities, not source code or implementation technique.
 
-Reference source identity:
-
-- upstream repository: `GNOME/gnome-system-monitor`;
-- release tag: `45.0.2`;
-- tag object: `1887b54c4b1c1b183dd8a4c7465b3d015bdd01d2`;
-- release commit: `e74545dbdebd8e591c1679181c5ff3d53c53386e`;
-- release tree: `68f31f4d429a2f8fcbcff74e9378e81384ab7ebf`;
-- Mint package baseline: `gnome-system-monitor 45.0.2-1+wilma`.
-
-The comparison covers the application shell, process tables and actions, process properties, open files, memory maps, resource graphs, filesystems, cgroups/systemd integration, preferences and task-oriented help behaviour.
+The audit considers broad user tasks such as process inspection and actions, resource graphs, mounted-filesystem observation, preferences and task-oriented help. No upstream source repository, commit, tree, internal architecture or implementation is part of System Monitor's development provenance.
 
 ## Suite ownership
 
@@ -64,9 +63,9 @@ The comparison covers the application shell, process tables and actions, process
 
 The product model is deliberate: Performance answers “what is the resource doing?”, Processes/Details/Inspector answer “what is this workload doing?”, and File Systems answers “how are mounted filesystems consuming capacity?”.
 
-## Process coverage
+## Process capability audit
 
-System Monitor owns the equivalent of the reference application's active/all/my-process scopes, process search, process hierarchy and process actions.
+System Monitor independently implements active/all/my-process scopes, process search, process hierarchy and process actions through its own process model and native platform backends.
 
 The technical process model includes name, user, status, virtual/resident/shared/writable memory where available, CPU utilisation and time, start time, priority/nice information, PID/PPID, security context, command line, waiting channel, cgroup/unit/session/seat identity where exposed, disk read/write totals and rates, executable identity, thread count and additional native metrics supported by the current backend.
 
@@ -94,7 +93,7 @@ The whole monitor is not run permanently privileged.
 
 Virtual-memory mappings, threads and parent/child context are technical inspection functions and remain inside Process Inspector.
 
-## Performance coverage
+## Performance capability audit
 
 ### CPU
 
@@ -142,7 +141,7 @@ This keeps filesystem-capacity observation in the monitor while leaving driver s
 
 Sampling policy belongs to System Monitor. Slow collection work must not block the GTK main thread, hidden views should not cause unnecessary presentation work, and completed snapshots should preserve explicit availability rather than inventing zero values.
 
-Graph and presentation preferences are monitor-local. The application uses the suite-wide Infiltrator visual language and typography contracts rather than reproducing arbitrary per-resource styling from the reference application.
+Graph and presentation preferences are monitor-local. The application uses the suite-wide Infiltrator visual language and typography contracts rather than importing another monitor's presentation structure.
 
 ## State and identity
 
@@ -152,8 +151,10 @@ System Monitor owns its own window/page state, process-view state, graph setting
 
 Linux is the complete current desktop product scope. The native Windows GUI shares the platform-neutral presentation and snapshot contracts while using Windows-native collectors and rendering. Performance, Processes and Overview are live on Windows; other product pages remain explicit placeholders until their native backends are implemented.
 
-## Admission rule
+## Audit rule
 
-A reference capability is included when it materially strengthens the monitoring or diagnostic model and has a clear owner. A capability may be deliberately superseded when System Monitor already provides a stronger or more portable model. New work should integrate with existing measurements, navigation, actions and visual language rather than becoming an isolated feature island.
+A capability comparison item is relevant only when it materially tests System Monitor's monitoring or diagnostic completeness. A comparison may show that System Monitor already provides a stronger model, that a capability is outside product scope, or that an independently designed addition would be useful.
 
-Code and tests remain authoritative for executable behaviour. This document records the maintained ownership and capability-placement contract.
+The comparison itself never supplies implementation code, architecture or algorithms. Any accepted work begins again from System Monitor's own requirements and authoritative native/platform contracts.
+
+Code and tests remain authoritative for executable behaviour. This document records a post-implementation capability audit and ownership placement only; it is not evidence of derivation from another product.
