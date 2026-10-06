@@ -2,107 +2,101 @@
 
 # Architecture
 
-System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. The separation is a correctness boundary: presentation consumes completed state; collectors own the operating-system knowledge and retained baselines required to produce it.
+System Monitor separates presentation, platform-neutral state, native platform backends and reusable Common mechanisms. Presentation consumes completed state; collectors own operating-system knowledge and retained native state.
 
 ## Provenance
 
 System Monitor is an original clean-sheet implementation designed and written from the ground up for this project. Its application source was not forked, copied, translated, adapted, ported or derived from another system-monitoring application. No external monitor's source code, internal architecture, algorithms or implementation behaviour is an implementation authority.
 
-Implementation comes from System Monitor's product requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts.
+Implementation comes from System Monitor's own requirements, authoritative operating-system and hardware interfaces, documented standards and project-owned Common contracts.
 
 ## Structure
 
 ```text
-                    System Monitor semantics
-                            ↓
-          presentation contracts and view models
-                 ↙                      ↘
-        GTK renderer                 Win32 renderer
-             ↓                           ↓
-      Linux adapters              Windows adapters
-             ↓                           ↓
- native OS/kernel/driver APIs   native Windows APIs
+presentation: GTK 3 (Linux) / Win32 (Windows)
+                    ↓
+       presentation contracts and models
+                    ↓
+             platform contracts
+              ↙           ↘
+     Linux backends     Windows backends
+              ↓           ↓
+       native OS / kernel / driver APIs
 
-                   shared plain-C models
-                            ↑
-                    platform contracts
-
-                    Common 1.19.35
-                            ↓
-       reusable formatting / parsing / timing /
-            path / arithmetic / design primitives
+Common 1.19.35
+    ↓
+shared formatting, parsing, timing, path,
+arithmetic and design primitives
 ```
 
-Renderers own native widget creation, drawing, event delivery and accessibility integration. They do not own separate product labels, field order, unit policy or availability semantics for shared surfaces.
+Renderers own native widgets, drawing, events and accessibility. Shared product labels, field order, units and availability semantics belong above the renderer.
 
-Collectors publish platform-neutral monitor and process models. Linux paths, file descriptors, ioctls, D-Bus details and driver state stay below Linux contracts; Win32 handles and native Windows state stay below Windows contracts. A presentation component should not need to know which native interface supplied a metric.
+Linux paths, descriptors, ioctls, D-Bus details and driver state stay below Linux contracts. Win32 handles and Windows-native state stay below Windows contracts. Platform differences are represented by native implementations or unavailable data, not by silently changing the shared product contract.
 
-## Ownership
+Application-facing monitor and process contracts remain plain C. C and C++ are both valid implementation languages; use whichever gives the stronger result for correctness, clarity, performance, maintainability and control.
 
-Public monitor and process structures use explicit availability. Zero is never overloaded to mean unavailable when zero is a valid reading.
+## Ownership and representation
 
-Resource-owning subsystems use explicit initialise/create, update and destroy/shutdown paths. Native handles, paths, worker synchronization and retained counter baselines remain private to the owning backend. Device-oriented state is reconciled by stable identity so replacement or reordering cannot silently transfer history to a different device.
+Availability is separate from numeric value; zero is never overloaded to mean unavailable when zero is valid.
 
-Caller-owned buffers, returned allocations, borrowed data and subsystem-owned resources should be explicit at API boundaries.
+Resource-owning subsystems have explicit create/initialise, update and destroy/shutdown paths. Native handles, retained paths, worker synchronization and cumulative baselines remain private to the owning backend. Device history is reconciled by stable identity so replacement or reordering cannot inherit another device's state.
 
-## Collection and snapshot consistency
+External binary structures use explicit widths, interface-defined byte order and safe alignment. Potentially unaligned packet, netlink or device payloads are decoded or copied rather than cast directly to wider pointers. Allocation and cumulative arithmetic reject or saturate overflow according to the owning contract.
 
-GTK object ownership remains on the GTK main thread. Work that can block on procfs, NSS, D-Bus, device I/O or durable persistence is moved to bounded workers where practical. Workers exchange plain data or immutable request snapshots with the application rather than sharing GTK objects.
+## Collection and concurrency
 
-A completed native sample is published as one coherent snapshot. Monitor backends assign the completed-sample generation and monotonic completion timestamp only after the collection cycle finishes. Presentation may update at a different cadence, but an unchanged completed snapshot is not represented as a newly measured sample.
+GTK objects stay on the GTK main thread. Work that may block on procfs, NSS, D-Bus, device I/O or durable persistence runs off the UI thread where practical.
 
-Topology generations and stable identities distinguish replacement from ordinary refresh. A retained device identity is resolved against the current topology before navigation or history association.
+Workers exchange plain data or immutable request snapshots. A completed native collection cycle is published as one coherent snapshot with its generation and monotonic completion timestamp assigned only after collection finishes. Re-presenting an unchanged snapshot does not create a new measurement.
 
-Worker queues coalesce duplicate periodic requests. A slow sample must not create a catch-up loop. Asynchronous persistence is generation ordered so an older worker cannot overwrite newer state.
+Worker queues coalesce duplicate periodic requests. Slow work must not create a catch-up loop. Asynchronous persistence is generation ordered so older work cannot overwrite newer state.
 
-Shutdown either joins owned workers or uses explicit reference/lifetime rules. Bounded shutdown is preferred to indefinitely blocking the GUI on a native call that cannot be safely cancelled.
+Shutdown joins owned workers or uses explicit lifetime/reference rules. The GUI must not wait indefinitely on a native call that cannot be cancelled safely.
 
-## Startup and presentation work
+## Startup and presentation
 
-Startup is first-paint oriented. Only the shell and Performance surface required for the initial frame are constructed before the window is shown; other product pages are created on first use where practical.
+Startup is first-paint oriented. Only the shell and presentation required for the initial frame are constructed before the window is shown; other pages are created on first use where practical.
 
-Persistent non-visual models, such as application history, are independent of whether their GTK page has been opened. Slow page-specific periodic work runs only while its owning page is active when continuous background sampling is unnecessary.
+Persistent non-visual models are independent of whether their page has been opened. Slow page-specific periodic work runs only while its page is active when continuous background sampling is unnecessary.
 
-Performance sampling is independent of Performance presentation. Completed monitor generations feed retained history once; label formatting, detail-table work and style updates are limited to the views that need presentation. Overview likewise tracks monitor and process generations separately so one changing source does not force the unchanged half of the dashboard to redraw.
+Collection is independent of presentation. Completed generations feed retained history once; unchanged data does not force unrelated formatting, layout or redraw work.
 
 ## Failure model
 
-Optional telemetry fails independently. A failed read clears or withholds only the affected metric's availability unless the owning contract requires the whole inventory to be rejected.
+Optional telemetry fails independently. A failed read clears or withholds only the affected metric unless the owning contract requires the whole inventory to be rejected.
 
-Cumulative rates are valid only across the same stable identity and a valid positive monotonic interval. Startup, reset, rollback, replacement, missing samples or invalid elapsed time break the baseline; the next valid observation establishes a new baseline instead of generating a spike.
+Cumulative rates are valid only across the same stable identity and a positive monotonic interval. Startup, reset, rollback, replacement, missing samples or invalid elapsed time break the baseline. The next valid observation establishes a new baseline instead of producing a fabricated spike.
 
-Malformed external data is rejected or skipped at the narrowest practical boundary. Path construction, allocation growth and numeric conversion are checked. Bounded inventories are complete-or-preserved: overflow or incomplete topology discovery must not publish a plausible-looking prefix as a complete device set.
+Malformed external data is rejected at the narrowest practical boundary. Bounded inventories are complete-or-preserved: overflow or incomplete topology discovery does not publish a plausible-looking prefix as a complete inventory.
 
-Unsupported or inaccessible information remains unavailable rather than being guessed.
+Unsupported or inaccessible information remains unavailable rather than guessed.
 
 ## Native interfaces and dependencies
 
-System Monitor prefers direct native interfaces when they provide the strongest practical contract. External command output is not treated as an API when equivalent data can be obtained safely from procfs, sysfs, ioctls, D-Bus, Win32 or a documented in-process interface.
+Direct procfs, sysfs, ioctl, D-Bus, Win32, kernel, driver or documented in-process interfaces are preferred when they provide a stronger contract than external command output.
 
-Dependency minimisation is a means to stronger ownership, not a goal that justifies reimplementing mature platform subsystems. GTK/GLib/GIO remain the Linux desktop boundary. Optional vendor libraries remain optional and cannot be required for core startup.
+GTK/GLib/GIO are the Linux desktop boundary. Windows uses native Win32/GDI/common-controls and carries no GTK runtime dependency. Optional vendor libraries may be loaded in-process but cannot be required for core startup.
 
-Project-owned narrow ABI declarations are appropriate when the kernel contract is stable and only a small set of structures/constants is required. They must not become copied library internals.
+Project-owned declarations may cover a narrow stable native ABI when only a small documented structure/constant set is required. They do not justify copying library internals. Dependencies that provide substantial semantics remain dependencies unless an independently complete replacement is stronger.
+
+Platform-neutral code does not hard-code Linux native roots such as `/proc`, `/sys` or `/dev`; those belong to the implementing backend or test contract.
 
 ## Common
 
 `src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Common is first-party shared infrastructure, not ancestry from another monitoring product.
 
-Common owns generic reusable mechanisms when its contract is at least as strong as the best local implementation. System Monitor keeps product policy, Linux/Windows collection policy, hardware interpretation and presentation behaviour that are genuinely product-specific.
+Generic mechanisms move to Common when its contract is at least as strong as the local implementation. System Monitor keeps product-specific monitoring, hardware interpretation, platform policy and presentation behaviour local.
 
-If System Monitor develops a stronger implementation of a fundamentally generic mechanism, the intended direction is to improve Common, consume the stronger shared contract, then remove the duplicate local implementation. Specialised code is not weakened merely to increase reuse.
+## Product boundary
+
+Features are admitted because they strengthen System Monitor's own purpose, not to match another application's feature count. Prefer capabilities that connect existing measurements, navigation and actions over isolated feature islands. Another product is not a design source or implementation blueprint.
 
 ## Security boundary
 
-The installed Linux product is one GUI executable with no project-owned privileged daemon or helper. Local kernel, driver, D-Bus and configuration data is treated as untrusted external input that may disappear, be malformed, be unsupported or be inaccessible.
+The installed Linux product is one GUI executable with no project-owned privileged daemon or helper. Kernel, driver, D-Bus and configuration data is treated as untrusted external input that may disappear, be malformed, unsupported or inaccessible.
 
-Bluetooth HCI monitoring uses only the file capability required to bind the read-only monitor channel. The endpoint is acquired during bootstrap and process capability sets are cleared before normal GTK and monitoring workers start. Failure to drop those capabilities aborts startup. The monitor path does not issue HCI commands, resets or controller reconfiguration.
+Bluetooth HCI monitoring uses only the file capability required for its read-only monitor channel. The endpoint is acquired during bootstrap and process capability sets are cleared before normal GTK and monitoring work begins; failure to drop them aborts startup. The monitor path issues no HCI commands, resets or controller reconfiguration.
 
 Process-control operations use the native operating-system permission model. Optional privileged or vendor-specific telemetry degrades to unavailable instead of triggering implicit elevation.
 
-## Verification and release boundary
-
-Correctness is demonstrated at multiple levels: deterministic parser/accounting tests, lifecycle and worker tests, topology identity checks, hardware unit/discontinuity fixtures, runtime-stability checks, portability gates and package/release verification.
-
-Make owns the canonical executed verification suite. CMake proves the alternate build path. A release is publishable only from the exact `main` commit that passed the required Verify workflow. Published tags and release assets are immutable.
-
-Detailed evidence rules live in [Validation](VALIDATION.md); hardware-specific collection rules live in [Hardware collection](HARDWARE.md); platform/ABI constraints live in [Portability](PORTABILITY.md); durable rationale lives in [Decisions](DECISIONS.md).
+Hardware-specific collection rules live in [Hardware collection](HARDWARE.md). Verification and evidence requirements live in [Validation](VALIDATION.md).
