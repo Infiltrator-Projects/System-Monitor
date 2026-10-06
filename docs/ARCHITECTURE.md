@@ -21,7 +21,7 @@ GTK 3 (Linux) / Win32 (Windows)
           ↓       ↓
        native OS/kernel/driver APIs
 
-Common 1.19.35 → shared generic mechanisms
+Common → shared generic mechanisms
 ```
 
 Renderers own widgets, drawing, events and accessibility. Shared labels, units and availability semantics stay above renderer boundaries; native paths, handles and driver state stay below platform contracts. Application-facing monitor and process contracts remain plain C.
@@ -29,17 +29,14 @@ Renderers own widgets, drawing, events and accessibility. Shared labels, units a
 ## Runtime contracts
 
 - Availability is distinct from value; valid zero never means unavailable.
-- Retained device state and history use stable resource identity.
+- Retained state and history use stable resource identity.
 - External binary data uses explicit widths, defined byte order and alignment-safe decoding.
 - GTK objects stay on the GTK main thread; potentially blocking native work runs off it where practical.
-- Workers exchange plain data or immutable requests and publish only completed collection cycles.
-- Published snapshots carry a generation and monotonic completion time; re-presenting one is not a new measurement.
-- Duplicate periodic work coalesces and persisted state is generation ordered.
-- Shutdown owns worker lifetime and must not wait indefinitely on an uncancellable native call.
+- Workers publish completed collection cycles, not partial inventories.
+- Measurements use monotonic time; reset, replacement or invalid elapsed time breaks rate baselines.
+- Duplicate periodic work coalesces, and shutdown owns worker lifetime.
 - Optional telemetry fails independently unless its contract requires rejecting the whole inventory.
-- Rates require stable identity and a positive monotonic interval; reset, replacement or invalid elapsed time breaks the baseline.
-- Malformed external data is rejected at the narrowest practical boundary.
-- Bounded inventories are complete-or-preserved: incomplete discovery is not published as complete.
+- Malformed or incomplete external data is rejected rather than published as complete.
 
 Startup favours first paint. Persistent models do not depend on a page being opened, and page-specific slow work runs only while needed unless continuous sampling is part of the model.
 
@@ -53,6 +50,6 @@ Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or 
 
 ## Common
 
-`src/infiltratr-common` is pinned to one exact Infiltrator Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
+`src/infiltratr-common` is pinned to an exact Infiltrator Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
 
 Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../SECURITY.md).
