@@ -40,13 +40,6 @@ void lsm_processes_present_snapshot(LsmApp *app);
 gboolean lsm_processes_page_visible(const LsmApp *app);
 
 /**
- * Move the current friendly-page selection to the matching Details row.
- *
- * @param [in,out] app Application containing the selected representative PID.
- */
-void lsm_processes_go_to_details(LsmApp *app);
-
-/**
  * Release the grouped Processes model's creator reference.
  *
  * @param [in,out] app Application whose periodic work has already stopped.
