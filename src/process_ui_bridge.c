@@ -2,6 +2,10 @@
 /**
  * @file process_ui_bridge.c
  * @brief Private adapter for process UI state shared across presentations.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
  */
 #include "process_ui_bridge.h"
 
