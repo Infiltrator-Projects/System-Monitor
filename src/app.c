@@ -13,6 +13,7 @@
 #include "app.h"
 #include "app_internal.h"
 #include "app_menu.h"
+#include "app_page_registry.h"
 #include "app_runtime.h"
 #include "app_shell.h"
 
@@ -307,37 +308,7 @@ void lsm_app_ensure_page_built(LsmApp *app, LsmTabIndex page)
         return;
 
     GtkWidget *container = app->runtime.page_containers[page];
-    switch (page) {
-        case LSM_TAB_PERFORMANCE:
-            lsm_performance_build(app, container);
-            break;
-        case LSM_TAB_PROCESSES:
-            lsm_processes_build(app, container);
-            break;
-        case LSM_TAB_APP_HISTORY:
-            lsm_history_build(app, container);
-            break;
-        case LSM_TAB_STARTUP:
-            lsm_startup_build(app, container);
-            break;
-        case LSM_TAB_USERS:
-            lsm_users_build(app, container);
-            break;
-        case LSM_TAB_DETAILS:
-            lsm_details_build(app, container);
-            break;
-        case LSM_TAB_SERVICES:
-            lsm_services_build(app, container);
-            break;
-        case LSM_TAB_FILESYSTEMS:
-            lsm_filesystems_build(app, container);
-            break;
-        case LSM_TAB_OVERVIEW:
-            lsm_overview_build(app, container);
-            break;
-        case LSM_TAB_COUNT:
-            return;
-    }
+    if (!lsm_app_page_registry_build(app, page, container)) return;
 
     app->runtime.page_built[page] = TRUE;
     lsm_app_runtime_page_built(app, page);

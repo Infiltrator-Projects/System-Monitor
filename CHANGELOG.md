@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.173 - 2026-10-06
+
+- Centralise GTK top-level page construction, manual refresh ownership and active-page periodic refresh policy in one registry.
+- Replace three page-specific slow-refresh timers with one active-page timer, reducing cross-module cadence coupling and duplicate scheduler state.
+- Size the native Windows Performance hit-test inventory from every shared resource class so Bluetooth, battery and NPU expansion cannot outgrow a stale local capacity.
+
 ## 1.0.172 - 2026-10-06
 
 - Publish a concise, current documentation baseline for architecture, validation, roadmap and capability ownership.

@@ -4,6 +4,7 @@ main.c
 main_windows.c
 pgo_training.c
 app.c
+app_page_registry.c
 app_runtime.c
 app_menu.c
 app_shell.c

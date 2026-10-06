@@ -339,9 +339,7 @@ typedef struct {
 typedef struct {
     guint performance_timer;
     guint process_timer;
-    guint services_timer;
-    guint users_timer;
-    guint filesystem_timer;
+    guint periodic_page_timer;
     guint update_interval_ms;
     guint filesystem_update_interval_ms;
     InfiltratrThemeMode theme_mode;
