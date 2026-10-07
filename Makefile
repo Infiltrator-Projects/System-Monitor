@@ -28,7 +28,7 @@ FONT_STAMP := $(BUILD_DIR)/fonts/.verified
 STYLE_CHECKER := $(BUILD_DIR)/source-style-checker
 PORTABILITY_CHECKER := $(BUILD_DIR)/check-portability
 NATIVE_SAFETY_CHECKER := $(BUILD_DIR)/native-installer-safety
-NATIVE_INSTALLER_BUILDER := $(BUILD_DIR)/build_native_installer
+NATIVE_INSTALLER_BUILDER := $(BUILD_DIR)/build-native-installer
 NATIVE_INSTALLER := $(BUILD_DIR)/native-installer
 NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
@@ -501,6 +501,7 @@ analyzer-check: check-deps | $(BUILD_DIR)
 	else \
 		echo "Compiler has no -fanalyzer support; static-analyser gate skipped."; \
 	fi
+
 
 
 
