@@ -13,6 +13,7 @@ app_shell.c
 app_shell_window.c
 app_process_context.c
 app_presentation_context.c
+app_theme.c
 project_info.c
 preferences.c
 summary_bar.c
