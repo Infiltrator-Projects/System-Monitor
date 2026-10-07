@@ -28,7 +28,7 @@ FONT_STAMP := $(BUILD_DIR)/fonts/.verified
 STYLE_CHECKER := $(BUILD_DIR)/source-style-checker
 PORTABILITY_CHECKER := $(BUILD_DIR)/check-portability
 NATIVE_SAFETY_CHECKER := $(BUILD_DIR)/native-installer-safety
-NATIVE_INSTALLER_BUILDER := $(BUILD_DIR)/build-native-installer
+NATIVE_INSTALLER_BUILDER := $(BUILD_DIR)/build_native_installer
 NATIVE_INSTALLER := $(BUILD_DIR)/native-installer
 NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
@@ -307,10 +307,10 @@ build-check: check-deps strict-check portability-check \
 	ui-suite-smoke accelerator-suite-smoke
 
 $(BUILD_DIR)/gtk-typography-chrome: support/tests/gtk_typography_chrome.c \
-	src/app_shell.c $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	src/app_shell.c src/app_theme.c $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections \
-		support/tests/gtk_typography_chrome.c src/app_shell.c \
+		support/tests/gtk_typography_chrome.c src/app_shell.c src/app_theme.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -Wl,--gc-sections -lm -o $@
 
 core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
@@ -501,7 +501,6 @@ analyzer-check: check-deps | $(BUILD_DIR)
 	else \
 		echo "Compiler has no -fanalyzer support; static-analyser gate skipped."; \
 	fi
-
 
 
 
