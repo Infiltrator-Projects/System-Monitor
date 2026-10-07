@@ -5,26 +5,29 @@
  *
  * Keyboard routing is presentation policy, not page registration. Keeping it
  * here prevents the central page descriptor registry from accumulating menu,
- * export and process-action dependencies.
+ * export and process-action dependencies. Private application layout is reached
+ * only through app_presentation_context.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
 #include "app_keyboard.h"
-#include "app_internal.h"
 #include "app_menu.h"
 #include "app_page_registry.h"
+#include "app_presentation_context.h"
 #include "process_actions.h"
 #include "process_export.h"
 #include "process_navigation.h"
 
-static gboolean focus_allows_pause(const LsmApp *app, GtkWidget *focus)
+static gboolean focus_allows_pause(const LsmKeyboardControlView *view,
+                                   GtkWidget *focus)
 {
-    return !focus || focus == app->shell.notebook ||
-           focus == app->processes.processes_tree ||
-           focus == app->details.details_tree ||
-           focus == app->performance.performance_stack;
+    return view &&
+           (!focus || focus == view->notebook ||
+            focus == view->processes_tree ||
+            focus == view->details_tree ||
+            focus == view->performance_stack);
 }
 
 static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
@@ -32,7 +35,10 @@ static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
 {
     (void)widget;
     LsmApp *app = user_data;
-    if (!app) return FALSE;
+    LsmKeyboardControlView view;
+    if (!lsm_app_keyboard_control_view(app, &view) ||
+        !view.window || !view.notebook)
+        return FALSE;
 
     const gboolean control = (event->state & GDK_CONTROL_MASK) != 0;
     const gboolean shift = (event->state & GDK_SHIFT_MASK) != 0;
@@ -45,7 +51,7 @@ static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
     if (control && (event->keyval == GDK_KEY_f ||
                     event->keyval == GDK_KEY_F)) {
         const gint current = gtk_notebook_get_current_page(
-            GTK_NOTEBOOK(app->shell.notebook));
+            GTK_NOTEBOOK(view.notebook));
         GtkWidget *search = current >= 0 && current < LSM_TAB_COUNT
             ? lsm_app_page_registry_search_widget(
                   app, (LsmTabIndex)current)
@@ -63,12 +69,12 @@ static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
     if (control && (event->keyval == GDK_KEY_c ||
                     event->keyval == GDK_KEY_C)) {
         const gint current = gtk_notebook_get_current_page(
-            GTK_NOTEBOOK(app->shell.notebook));
-        GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
+            GTK_NOTEBOOK(view.notebook));
+        GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(view.window));
         if ((current == LSM_TAB_PROCESSES &&
-             focus == app->processes.processes_tree) ||
+             focus == view.processes_tree) ||
             (current == LSM_TAB_DETAILS &&
-             focus == app->details.details_tree)) {
+             focus == view.details_tree)) {
             lsm_process_export_copy_selected(app);
             return TRUE;
         }
@@ -78,26 +84,23 @@ static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
         const gint page_index = (gint)(event->keyval - GDK_KEY_1);
         if (page_index < LSM_TAB_COUNT) {
             gtk_notebook_set_current_page(
-                GTK_NOTEBOOK(app->shell.notebook), page_index);
+                GTK_NOTEBOOK(view.notebook), page_index);
             return TRUE;
         }
     }
 
-    GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(app->shell.window));
-    if (event->keyval == GDK_KEY_space && focus_allows_pause(app, focus)) {
-        if (app->shell.pause_menu_item)
+    GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(view.window));
+    if (event->keyval == GDK_KEY_space && focus_allows_pause(&view, focus)) {
+        if (view.pause_menu_item)
             gtk_check_menu_item_set_active(
-                GTK_CHECK_MENU_ITEM(app->shell.pause_menu_item),
-                !app->runtime.paused);
+                GTK_CHECK_MENU_ITEM(view.pause_menu_item), !view.paused);
         return TRUE;
     }
 
     const gint current = gtk_notebook_get_current_page(
-        GTK_NOTEBOOK(app->shell.notebook));
-    if ((current == LSM_TAB_PROCESSES &&
-         focus == app->processes.processes_tree) ||
-        (current == LSM_TAB_DETAILS &&
-         focus == app->details.details_tree)) {
+        GTK_NOTEBOOK(view.notebook));
+    if ((current == LSM_TAB_PROCESSES && focus == view.processes_tree) ||
+        (current == LSM_TAB_DETAILS && focus == view.details_tree)) {
         if (event->keyval == GDK_KEY_Return ||
             event->keyval == GDK_KEY_KP_Enter) {
             if (current == LSM_TAB_PROCESSES)
@@ -116,7 +119,8 @@ static gboolean keyboard_key_press(GtkWidget *widget, GdkEventKey *event,
 
 void lsm_app_keyboard_connect(LsmApp *app)
 {
-    if (!app || !app->shell.window) return;
-    g_signal_connect(app->shell.window, "key-press-event",
+    LsmKeyboardControlView view;
+    if (!lsm_app_keyboard_control_view(app, &view) || !view.window) return;
+    g_signal_connect(view.window, "key-press-event",
                      G_CALLBACK(keyboard_key_press), app);
 }
