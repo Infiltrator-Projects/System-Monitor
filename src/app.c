@@ -60,12 +60,6 @@ static void constrain_initial_window_geometry(LsmApp *app)
     gdk_monitor_get_workarea(monitor, &workarea);
     if (workarea.width <= 0 || workarea.height <= 0) return;
 
-    /*
-     * gtk_window_set_default_size() specifies the client allocation, while the
-     * window manager still needs room for server-side decorations. Treat a
-     * persisted size as a preference and reserve a small decoration margin so
-     * a previously large window cannot start underneath the panel/title bar.
-     */
     const gint width_margin = 32;
     const gint height_margin = 80;
     const gint maximum_width =
@@ -350,7 +344,6 @@ void lsm_app_free(LsmApp *app)
     free(app);
 }
 
-/* Application construction establishes ownership before starting timers. */
 void lsm_app_activate(GtkApplication *application, gpointer user_data)
 {
     LsmApp *app = user_data;
@@ -378,9 +371,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.compact_restore_maximized = FALSE;
     app->runtime.window_width = LSM_DEFAULT_WINDOW_WIDTH;
     app->runtime.window_height = LSM_DEFAULT_WINDOW_HEIGHT;
-    /* Keep Performance as the fast first-paint surface, but make the graphical
-     * Overview the default destination for a fresh profile. Persisted choices
-     * still win when preferences are loaded. */
     app->runtime.last_tab = LSM_TAB_OVERVIEW;
     app->runtime.active_tab = LSM_TAB_PERFORMANCE;
     lsm_copy_string(app->runtime.selected_performance_page,
@@ -420,8 +410,9 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     gtk_window_set_icon_name(GTK_WINDOW(app->shell.window), LSM_EXECUTABLE_NAME);
     gtk_window_set_titlebar(
         GTK_WINDOW(app->shell.window), lsm_app_shell_build_header(app));
-    lsm_app_shell_connect_window(app);
-    if (app->runtime.window_maximized) gtk_window_maximize(GTK_WINDOW(app->shell.window));
+    lsm_app_page_registry_connect_window(app);
+    if (app->runtime.window_maximized)
+        gtk_window_maximize(GTK_WINDOW(app->shell.window));
 
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(app->shell.window), main_box);
@@ -452,7 +443,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->shell.notebook = gtk_notebook_new();
     gtk_notebook_set_tab_pos(GTK_NOTEBOOK(app->shell.notebook), GTK_POS_TOP);
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->shell.notebook), FALSE);
-    lsm_app_shell_connect_notebook(app);
+    lsm_app_page_registry_connect_notebook(app);
     gtk_box_pack_start(GTK_BOX(workspace), app->shell.notebook, TRUE, TRUE, 0);
 
     for (gint page = 0; page < LSM_TAB_COUNT; page++) {
@@ -462,9 +453,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
                                  gtk_label_new(lsm_tab_label(page)));
     }
 
-    /* The first frame needs only the shell and Performance page. Everything
-     * else is created incrementally after the event loop has had a chance to
-     * paint the window. */
     lsm_app_ensure_page_built(app, LSM_TAB_PERFORMANCE);
     app->runtime.active_tab = LSM_TAB_PERFORMANCE;
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->shell.notebook),
@@ -473,11 +461,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.shell_shown = TRUE;
     lsm_app_shell_sync_navigation(app);
     g_object_set_data(G_OBJECT(app->shell.window), "lsm-app", app);
-    /*
-     * Register completed-process delivery only after the shell exists. If the
-     * initial worker scan already completed, the scanner immediately schedules
-     * that retained result into this now-valid main-context presentation path.
-     */
     lsm_process_scanner_set_ready_callback(
         app->process_scanner, process_snapshot_ready, app);
     gtk_window_set_keep_above(GTK_WINDOW(app->shell.window), app->runtime.always_on_top);
@@ -499,9 +482,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     lsm_performance_show_resource(
         app, (LsmPageType)LSM_TEST_PERFORMANCE_RESOURCE, 0U);
 #endif
-    /* Slow application metadata and non-visible notebook pages must never
-     * hold the first paint hostage. The process scanner and native monitor
-     * already work asynchronously; keep that rule at the composition layer. */
     start_application_catalog_load(app);
     if (app->runtime.initial_tab_after_paint != LSM_TAB_PERFORMANCE)
         app->runtime.initial_tab_restore_source =
@@ -511,7 +491,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     lsm_app_runtime_start(app);
 }
 
-/* Shutdown is idempotent because GTK and GApplication can both request it. */
 void lsm_app_shutdown(LsmApp *app)
 {
     if (!app || app->runtime.shutting_down) return;
@@ -528,8 +507,10 @@ void lsm_app_shutdown(LsmApp *app)
     }
     lsm_app_runtime_stop(app);
     lsm_monitor_destroy(&app->monitor);
-    if (app->startup.startup_search_timer) g_source_remove(app->startup.startup_search_timer);
-    if (app->services.services_search_timer) g_source_remove(app->services.services_search_timer);
+    if (app->startup.startup_search_timer)
+        g_source_remove(app->startup.startup_search_timer);
+    if (app->services.services_search_timer)
+        g_source_remove(app->services.services_search_timer);
     lsm_app_shell_cancel_pending(app);
     lsm_process_record_stop(app);
     lsm_services_destroy(app);
