@@ -7,7 +7,8 @@
  * parallel switches, timer policy or feature include sets. The descriptor
  * table is indexed by stable LsmTabIndex identity and uses designated
  * initialisers so adding fields cannot silently retarget existing policy.
- * Keyboard command routing is owned separately by app_keyboard.
+ * Keyboard command routing is owned separately by app_keyboard, while private
+ * application layout is reached only through app_presentation_context.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -17,8 +18,8 @@
 #include "app_page_registry.h"
 #undef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 
-#include "app_internal.h"
 #include "app_keyboard.h"
+#include "app_presentation_context.h"
 #include "app_runtime.h"
 #include "app_shell.h"
 #include "app_shell_window.h"
@@ -34,13 +35,11 @@
 
 typedef void (*LsmPageBuildFunction)(LsmApp *app, GtkWidget *container);
 typedef void (*LsmPageRefreshFunction)(LsmApp *app);
-typedef GtkWidget *(*LsmPageSearchFunction)(LsmApp *app);
 
 typedef struct {
     LsmPageBuildFunction build;
     LsmPageRefreshFunction refresh;
     LsmPageRefreshFunction enter;
-    LsmPageSearchFunction search;
     GSourceFunc periodic_update;
     guint periodic_interval;
     gboolean periodic_whole_seconds;
@@ -49,36 +48,6 @@ typedef struct {
     gboolean process_on_enter;
     gboolean enter_only_after_initial_build;
 } LsmPageDescriptor;
-
-static GtkWidget *processes_search(LsmApp *app)
-{
-    return app ? app->processes.processes_search : NULL;
-}
-
-static GtkWidget *details_search(LsmApp *app)
-{
-    return app ? app->details.details_search : NULL;
-}
-
-static GtkWidget *history_search(LsmApp *app)
-{
-    return app ? app->history.history_search : NULL;
-}
-
-static GtkWidget *filesystem_search(LsmApp *app)
-{
-    return app ? app->filesystem.filesystem_search : NULL;
-}
-
-static GtkWidget *startup_search(LsmApp *app)
-{
-    return app ? app->startup.startup_search : NULL;
-}
-
-static GtkWidget *services_search(LsmApp *app)
-{
-    return app ? app->services.services_search : NULL;
-}
 
 static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
     [LSM_TAB_PERFORMANCE] = {
@@ -89,7 +58,6 @@ static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
     [LSM_TAB_PROCESSES] = {
         .build = lsm_processes_build,
         .enter = lsm_processes_present_snapshot,
-        .search = processes_search,
         .process_foreground = TRUE,
         .process_on_enter = TRUE
     },
@@ -97,14 +65,12 @@ static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
         .build = lsm_history_build,
         .refresh = lsm_history_refresh,
         .enter = lsm_history_refresh,
-        .search = history_search,
         .enter_only_after_initial_build = TRUE
     },
     [LSM_TAB_STARTUP] = {
         .build = lsm_startup_build,
         .refresh = lsm_startup_refresh,
-        .enter = lsm_startup_refresh,
-        .search = startup_search
+        .enter = lsm_startup_refresh
     },
     [LSM_TAB_USERS] = {
         .build = lsm_users_build,
@@ -117,7 +83,6 @@ static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
     [LSM_TAB_DETAILS] = {
         .build = lsm_details_build,
         .enter = lsm_details_present_snapshot,
-        .search = details_search,
         .process_foreground = TRUE,
         .process_on_enter = TRUE
     },
@@ -125,7 +90,6 @@ static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
         .build = lsm_services_build,
         .refresh = lsm_services_refresh,
         .enter = lsm_services_refresh,
-        .search = services_search,
         .periodic_update = lsm_services_update,
         .periodic_interval = LSM_SERVICE_UPDATE_INTERVAL_SECONDS,
         .periodic_whole_seconds = TRUE
@@ -134,7 +98,6 @@ static const LsmPageDescriptor page_descriptors[LSM_TAB_COUNT] = {
         .build = lsm_filesystems_build,
         .refresh = lsm_filesystems_refresh,
         .enter = lsm_filesystems_refresh,
-        .search = filesystem_search,
         .periodic_update = lsm_filesystems_update,
         .filesystem_interval = TRUE
     },
@@ -188,9 +151,7 @@ void lsm_app_page_registry_enter(LsmApp *app, LsmTabIndex page,
 
 GtkWidget *lsm_app_page_registry_search_widget(LsmApp *app, LsmTabIndex page)
 {
-    const LsmPageDescriptor *descriptor = descriptor_for_page(page);
-    return app && descriptor && descriptor->search
-        ? descriptor->search(app) : NULL;
+    return lsm_app_page_registry_search_target(app, page);
 }
 
 bool lsm_app_page_registry_process_foreground(LsmTabIndex page)
@@ -204,16 +165,19 @@ bool lsm_app_page_registry_active_periodic_policy(
 {
     if (interval) *interval = 0U;
     if (whole_seconds) *whole_seconds = FALSE;
-    if (!app || !interval || !whole_seconds) return false;
+    LsmPageRegistryControlView view;
+    if (!interval || !whole_seconds ||
+        !lsm_app_page_registry_control_view(app, &view))
+        return false;
 
-    const LsmTabIndex page = (LsmTabIndex)app->runtime.active_tab;
+    const LsmTabIndex page = view.active_tab;
     const LsmPageDescriptor *descriptor = descriptor_for_page(page);
     if (!descriptor || !descriptor->periodic_update ||
-        !app->runtime.page_built[page])
+        !lsm_app_page_registry_page_built(app, page))
         return false;
 
     if (descriptor->filesystem_interval) {
-        *interval = app->runtime.filesystem_update_interval_ms;
+        *interval = view.filesystem_update_interval_ms;
         *whole_seconds = FALSE;
     } else {
         *interval = descriptor->periodic_interval;
@@ -225,40 +189,18 @@ bool lsm_app_page_registry_active_periodic_policy(
 gboolean lsm_app_page_registry_active_periodic_update(gpointer user_data)
 {
     LsmApp *app = user_data;
-    if (!app || app->runtime.shutting_down) return G_SOURCE_REMOVE;
+    LsmPageRegistryControlView view;
+    if (!lsm_app_page_registry_control_view(app, &view) ||
+        view.shutting_down)
+        return G_SOURCE_REMOVE;
 
-    const LsmTabIndex page = (LsmTabIndex)app->runtime.active_tab;
+    const LsmTabIndex page = view.active_tab;
     const LsmPageDescriptor *descriptor = descriptor_for_page(page);
     if (!descriptor || !descriptor->periodic_update ||
-        !app->runtime.page_built[page])
+        !lsm_app_page_registry_page_built(app, page))
         return G_SOURCE_REMOVE;
 
     return descriptor->periodic_update(app);
-}
-
-static void restore_page_scroll(LsmApp *app, guint page)
-{
-    if (!app || page >= LSM_TAB_COUNT ||
-        !app->runtime.page_scrollers[page])
-        return;
-    GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(
-        GTK_SCROLLED_WINDOW(app->runtime.page_scrollers[page]));
-    if (adjustment)
-        gtk_adjustment_set_value(adjustment, app->runtime.page_scroll[page]);
-}
-
-static void sync_overview_chrome(LsmApp *app)
-{
-    if (!app || !app->shell.window) return;
-    const gboolean integrated =
-        !app->runtime.compact_summary &&
-        app->runtime.active_tab == LSM_TAB_OVERVIEW;
-    GtkWidget *menu_bar = g_object_get_data(
-        G_OBJECT(app->shell.window), "lsm-main-menu-bar");
-    if (menu_bar) gtk_widget_set_visible(menu_bar, !integrated);
-    if (app->shell.summary_bar)
-        gtk_widget_set_visible(
-            app->shell.summary_bar, app->runtime.compact_summary);
 }
 
 static void on_registry_tab_switched(GtkNotebook *notebook, GtkWidget *page,
@@ -267,34 +209,37 @@ static void on_registry_tab_switched(GtkNotebook *notebook, GtkWidget *page,
     (void)notebook;
     (void)page;
     LsmApp *app = user_data;
-    if (!app || !app->runtime.shell_shown || page_number >= LSM_TAB_COUNT)
+    LsmPageRegistryControlView view;
+    if (!lsm_app_page_registry_control_view(app, &view) ||
+        !view.shell_shown || page_number >= LSM_TAB_COUNT)
         return;
 
-    lsm_app_shell_save_page_scroll(app, app->runtime.active_tab);
-    app->runtime.active_tab = (gint)page_number;
-    app->runtime.last_tab = (gint)page_number;
+    lsm_app_shell_save_page_scroll(app, (gint)view.active_tab);
+    const LsmTabIndex target = (LsmTabIndex)page_number;
+    const gboolean page_was_built =
+        lsm_app_page_registry_page_built(app, target);
+    lsm_app_page_registry_set_active(app, target);
     lsm_app_runtime_navigation_changed(app);
 
-    const gboolean page_was_built = app->runtime.page_built[page_number];
-    lsm_app_ensure_page_built(app, (LsmTabIndex)page_number);
-    lsm_app_page_registry_enter(
-        app, (LsmTabIndex)page_number, page_was_built);
+    lsm_app_page_registry_ensure_built(app, target);
+    lsm_app_page_registry_enter(app, target, page_was_built);
 
-    restore_page_scroll(app, page_number);
-    sync_overview_chrome(app);
+    lsm_app_page_registry_restore_scroll(app, target);
+    lsm_app_page_registry_sync_overview_chrome(app);
     lsm_app_shell_sync_navigation(app);
 }
 
 void lsm_app_page_registry_connect_notebook(LsmApp *app)
 {
-    if (!app || !app->shell.notebook) return;
-    g_signal_connect(app->shell.notebook, "switch-page",
+    GtkWidget *notebook = lsm_app_page_registry_notebook(app);
+    if (!notebook) return;
+    g_signal_connect(notebook, "switch-page",
                      G_CALLBACK(on_registry_tab_switched), app);
 }
 
 void lsm_app_page_registry_connect_window(LsmApp *app)
 {
-    if (!app || !app->shell.window) return;
+    if (!lsm_app_page_registry_window(app)) return;
 
     /* Page-aware keyboard commands and window-manager mechanics have separate
      * owners; page registration contains neither command nor WM policy. */
