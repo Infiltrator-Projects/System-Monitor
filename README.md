@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Current source version:** 1.0.177 ([version file](support/VERSION))
+**Current source version:** 1.0.178 ([version file](support/VERSION))
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
