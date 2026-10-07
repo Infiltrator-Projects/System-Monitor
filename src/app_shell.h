@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_shell.h
- * @brief Internal global-window, menu and navigation coordination API.
+ * @brief Internal global-window chrome and navigation coordination API.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -16,7 +16,8 @@
  * Apply the selected appearance mode.
  *
  * Follow-system mode keeps the host GTK palette authoritative. Day and Night
- * use the semantic palettes supplied by Infiltratr Common.
+ * use the semantic palettes supplied by Infiltratr Common. The implementation
+ * is isolated in app_theme.c rather than shell navigation code.
  *
  * @param [in,out] app Active application context.
  */
@@ -33,20 +34,6 @@ void lsm_app_shell_apply_theme(LsmApp *app);
  * @return GTK header bar owned by the window after installation.
  */
 GtkWidget *lsm_app_shell_build_header(LsmApp *app);
-
-/**
- * Connect top-level window state, keyboard and close handlers.
- *
- * @param [in,out] app Application whose toplevel window is already constructed.
- */
-void lsm_app_shell_connect_window(LsmApp *app);
-
-/**
- * Connect notebook navigation and on-demand refresh handling.
- *
- * @param [in,out] app Application whose notebook is already constructed.
- */
-void lsm_app_shell_connect_notebook(LsmApp *app);
 
 /**
  * Build the persistent graphical primary navigation rail.
@@ -83,7 +70,7 @@ void lsm_app_shell_apply_compact_summary(LsmApp *app);
 void lsm_app_shell_save_page_scroll(LsmApp *app, gint page);
 
 /**
- * Cancel deferred shell-only callbacks during shutdown.
+ * Cancel deferred shell-only callbacks during shutdown and release theme state.
  *
  * @param [in,out] app Application context being shut down.
  */
