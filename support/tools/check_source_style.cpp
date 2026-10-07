@@ -538,53 +538,91 @@ static void check_startup_page_boundary(const char *path, const char *text)
     }
 }
 
-static void check_composite_button_theme_policy(const char *path,
-                                                const char *text)
+static void check_theme_ownership_and_button_policy(const char *path,
+                                                    const char *text)
 {
-    if (strcmp(path, "src/app_shell.c") != 0) return;
+    if (strcmp(path, "src/app_shell.c") == 0) {
+        static const char *const forbidden_shell_theme_details[] = {
+            "gtk_css_provider_load_from_data",
+            "@define-color",
+            "infiltratr_theme_resolve",
+            "gtk-theme-name"
+        };
+        for (size_t index = 0U;
+             index < sizeof(forbidden_shell_theme_details) /
+                         sizeof(forbidden_shell_theme_details[0]);
+             index++) {
+            const char *found = strstr(text, forbidden_shell_theme_details[index]);
+            if (found)
+                report_error(
+                    "%s:%zu: theme implementation leaked back into shell navigation",
+                    path, line_number_at(text, found));
+        }
+        return;
+    }
+    if (strcmp(path, "src/app_theme.c") != 0) return;
 
-    static const char *const forbidden[] = {
-        "\"button label, button image, combobox button label, combobox button image {\"",
-        "\"button:hover label, button:hover image {\"",
-        "\"button:active label, button:active image,\"",
-        "\"button:checked label, button:checked image {\"",
-        "\"button:disabled label, button:disabled image {\""
+    static const char *const required_owner_markers[] = {
+        "lsm_app_shell_apply_theme",
+        "infiltratr_theme_resolve",
+        "gtk_css_provider_load_from_data"
     };
     for (size_t index = 0U;
-         index < sizeof(forbidden) / sizeof(forbidden[0]); index++) {
-        const char *found = strstr(text, forbidden[index]);
+         index < sizeof(required_owner_markers) /
+                     sizeof(required_owner_markers[0]); index++) {
+        if (!strstr(text, required_owner_markers[index]))
+            report_error("%s: theme owner is missing semantic marker %s",
+                         path, required_owner_markers[index]);
+    }
+
+    static const char *const forbidden_descendant_selectors[] = {
+        "button label, button image",
+        "button:hover label, button:hover image",
+        "button:active label, button:active image",
+        "button:checked label, button:checked image",
+        "button:disabled label, button:disabled image"
+    };
+    for (size_t index = 0U;
+         index < sizeof(forbidden_descendant_selectors) /
+                     sizeof(forbidden_descendant_selectors[0]); index++) {
+        const char *found = strstr(text, forbidden_descendant_selectors[index]);
         if (found)
             report_error(
                 "%s:%zu: button state selector must not recolour nested composite content",
                 path, line_number_at(text, found));
     }
 
-    static const char required[] =
-        "\"button:hover > label, button:hover > image { color: @lsm_button_foreground; }\"";
-    if (!strstr(text, required))
-        report_error(
-            "%s: composite-button hover policy is missing its direct-child selector",
-            path);
+    static const char *const required_direct_child_roles[] = {
+        "button:hover > label",
+        "button:hover > image"
+    };
+    for (size_t index = 0U;
+         index < sizeof(required_direct_child_roles) /
+                     sizeof(required_direct_child_roles[0]); index++) {
+        if (!strstr(text, required_direct_child_roles[index]))
+            report_error(
+                "%s: composite-button hover policy is missing semantic selector %s",
+                path, required_direct_child_roles[index]);
+    }
 }
-
 
 static void check_day_menu_theme_policy(const char *path, const char *text)
 {
-    if (strcmp(path, "src/app_shell.c") != 0) return;
+    if (strcmp(path, "src/app_theme.c") != 0) return;
 
-    static const char *const required[] = {
-        "\"menu menuitem label { color: #111418; }\"",
-        "\"menu menuitem:disabled label { color: #59636c; }\"",
-        "\"menu menuitem:hover label { color: #111418; }\"",
-        "\"popover.menu modelbutton:disabled,\"",
-        "\"menu separator { background-color: #c7cdd3; min-height: 1px; }\""
+    static const char *const required_roles[] = {
+        "menu menuitem label",
+        "menu menuitem:disabled label",
+        "menu menuitem:hover label",
+        "popover.menu modelbutton:disabled",
+        "menu separator"
     };
     for (size_t index = 0U;
-         index < sizeof(required) / sizeof(required[0]); index++) {
-        if (!strstr(text, required[index]))
+         index < sizeof(required_roles) / sizeof(required_roles[0]); index++) {
+        if (!strstr(text, required_roles[index]))
             report_error(
-                "%s: Day-mode menu contrast contract is missing required selector %s",
-                path, required[index]);
+                "%s: Day-mode menu contrast policy is missing semantic selector %s",
+                path, required_roles[index]);
     }
 }
 
@@ -674,7 +712,7 @@ static void check_source_file(const char *path)
     check_user_page_boundary(path, text);
     check_startup_page_boundary(path, text);
     check_process_platform_boundary(path, text);
-    check_composite_button_theme_policy(path, text);
+    check_theme_ownership_and_button_policy(path, text);
     check_day_menu_theme_policy(path, text);
 
     size_t line_number = 1U;
