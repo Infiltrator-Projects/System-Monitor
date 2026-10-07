@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.178 - 2026-10-07
+
+- Make the extracted page-registry, keyboard and window-mechanics owners the live application wiring and remove the duplicate legacy shell event path.
+- Isolate keyboard and page-registry access to private application layout behind a narrow presentation context.
+- Split GTK theme construction out of `app_shell.c` so navigation/window chrome and theme policy no longer share one change hotspot.
+
 ## 1.0.177 - 2026-10-07
 
 - Route main-loop cadence through a narrow runtime context instead of exposing the complete private application layout.
