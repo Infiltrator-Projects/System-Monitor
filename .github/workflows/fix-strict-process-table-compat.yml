@@ -101,8 +101,7 @@ jobs:
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
           git add Makefile CMakeLists.txt src/process_table_ui.c support/tests/compat/gtk/gtk.h support/tools/check_portability.c
-          git rm --cached --ignore-unmatch .github/workflows/fix-strict-process-table-compat.yml >/dev/null 2>&1 || true
-          git add -u .github/workflows/fix-strict-process-table-compat.yml
+          git add -u .github/workflows
           actual="$(git diff --cached --name-only | sort)"
           expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'CMakeLists.txt' 'Makefile' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' 'support/tools/check_portability.c' | sort)"
           if [ "$actual" != "$expected" ]; then
