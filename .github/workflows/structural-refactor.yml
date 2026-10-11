@@ -29,37 +29,27 @@ jobs:
 
           portability = Path('support/tools/check_portability.c')
           text = portability.read_text(encoding='utf-8')
-          old = '''        if (ends_with(sources.items[index], "_windows.c") ||
-            ends_with(sources.items[index], "_windows.cpp") ||
-            strstr(sources.items[index], "_windows_") != NULL)
-            continue;
-'''
-          new = '''        if (strncmp(sources.items[index], "windows_", 8U) == 0 ||
-            ends_with(sources.items[index], "_windows.c") ||
-            ends_with(sources.items[index], "_windows.cpp") ||
-            strstr(sources.items[index], "_windows_") != NULL)
-            continue;
-'''
-          if old not in text:
-              raise SystemExit('portability Windows-owner exclusion marker not found')
+          old = '        if (ends_with(sources.items[index], "_windows.c") ||\n'
+          new = ('        if (strncmp(sources.items[index], "windows_", 8U) == 0 ||\n'
+                 '            ends_with(sources.items[index], "_windows.c") ||\n')
+          if text.count(old) != 1:
+              raise SystemExit('portability Windows-owner exclusion marker not unique')
           portability.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           checker = Path('support/tools/check_source_style.cpp')
           text = checker.read_text(encoding='utf-8')
-          old = '''        require_text_marker(".github/workflows/ci.yml", ci,
-                            "gcc-multilib");
-'''
-          new = '''        require_text_marker(".github/workflows/ci.yml", ci,
-                            "gcc-multilib");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "support/source-groups/windows-product.txt");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "mapfile -t windows_sources");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "$windowsSources = Get-Content 'support/source-groups/windows-product.txt'");
-'''
-          if old not in text:
-              raise SystemExit('CI contract insertion marker not found')
+          old = ('        require_text_marker(".github/workflows/ci.yml", ci,\n'
+                 '                            "gcc-multilib");\n')
+          new = old + (
+              '        require_text_marker(".github/workflows/ci.yml", ci,\n'
+              '                            "support/source-groups/windows-product.txt");\n'
+              '        require_text_marker(".github/workflows/ci.yml", ci,\n'
+              '                            "mapfile -t windows_sources");\n'
+              '        require_text_marker(".github/workflows/ci.yml", ci,\n'
+              '                            "$windowsSources = Get-Content \'support/source-groups/windows-product.txt\'");\n'
+          )
+          if text.count(old) != 1:
+              raise SystemExit('CI contract insertion marker not unique')
           checker.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
           git diff --check
