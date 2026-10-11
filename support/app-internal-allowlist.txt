@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Deliberate direct consumers of the complete private LsmApp layout.
+# New consumers must use a narrow context/contract instead.
+app.c
+app_menu.c
+app_presentation_context.c
+app_process_context.c
+app_runtime_context.c
+app_shell.c
+app_shell_window.c
+app_theme.c
+details_layout.c
+details_page.c
+filesystems.c
+help.c
+history.c
+overview.c
+performance.c
+performance_pages_core.c
+performance_pages_devices.c
+performance_present_internal.h
+preferences.c
+preferences_dialog.c
+process_actions.c
+process_export.c
+process_file_users.c
+process_inspector.c
+process_log_plot.c
+process_navigation.c
+process_ui_bridge.c
+processes_ui.c
+services.c
+startup.c
+summary_bar_adapter.c
+system_snapshot.c
+task_launcher.c
+users.c

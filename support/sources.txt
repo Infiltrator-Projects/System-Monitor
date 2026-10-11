@@ -2,6 +2,8 @@
 # Application translation units; both C and C++ sources are valid here.
 main.c
 main_windows.c
+windows_theme.c
+windows_process_runtime.c
 pgo_training.c
 app.c
 app_page_registry.c

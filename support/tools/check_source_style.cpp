@@ -950,7 +950,7 @@ static void check_shared_release_contract(void)
     char *windows = read_file("src/main_windows.c", &size);
     if (windows) {
         require_text_marker(
-            "src/main_windows.c", windows, "infiltratr_theme_resolve");
+            "src/main_windows.c", windows, "lsm_windows_theme_resolve");
         require_text_marker(
             "src/main_windows.c", windows, "infiltratr_design_metrics");
         require_text_marker(
@@ -1056,11 +1056,81 @@ static void check_shared_release_contract(void)
     }
 }
 
+
+static void check_private_app_coupling(void)
+{
+    StringList allowed;
+    read_manifest("support/app-internal-allowlist.txt", "src", &allowed);
+
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator("src", error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        if (!iterator->is_regular_file(error)) continue;
+        const std::string name = iterator->path().filename().string();
+        if (!ends_with(name, ".c") && !ends_with(name, ".h")) continue;
+        if (name == "app_internal.h") continue;
+        size_t size = 0U;
+        char *contents = read_file(iterator->path().string().c_str(), &size);
+        (void)size;
+        if (!contents) continue;
+        if (strstr(contents, "#include \"app_internal.h\"") &&
+            !list_contains(&allowed, name.c_str()))
+            report_error("src/%s: direct app_internal.h access is not approved; use a narrow context bridge",
+                         name.c_str());
+        free(contents);
+    }
+    if (error)
+        report_error("src: unable to audit private application coupling: %s",
+                     error.message().c_str());
+
+    size_t size = 0U;
+    char *windows = read_file("src/main_windows.c", &size);
+    (void)size;
+    if (windows) {
+        static const char *const forbidden[] = {
+            "typedef struct {\n    COLORREF background",
+            "static bool resolve_theme(",
+            "static DWORD WINAPI process_worker_main(",
+            "static bool start_process_worker(",
+            "state->process_lock",
+            "state->process_event",
+            "state->process_thread"
+        };
+        for (size_t index = 0U;
+             index < sizeof(forbidden) / sizeof(forbidden[0]); index++)
+            if (strstr(windows, forbidden[index]))
+                report_error("src/main_windows.c: extracted Windows owner leaked back into shell: %s",
+                             forbidden[index]);
+        free(windows);
+    }
+}
+
+static void check_source_group_manifests(const StringList *sources)
+{
+    static const char *const manifests[] = {
+        "support/source-groups/hardware-monitor-linux.txt",
+        "support/source-groups/monitor-linux.txt",
+        "support/source-groups/process-linux.txt",
+        "support/source-groups/windows-product.txt"
+    };
+    for (size_t manifest = 0U;
+         manifest < sizeof(manifests) / sizeof(manifests[0]); manifest++) {
+        StringList group;
+        read_manifest(manifests[manifest], "src", &group);
+        for (const std::string &entry : group)
+            if (!list_contains(sources, entry.c_str()))
+                report_error("%s: %s is not registered in support/sources.txt",
+                             manifests[manifest], entry.c_str());
+    }
+}
+
 int main(void)
 {
     StringList sources;
     read_manifest("support/sources.txt", "src", &sources);
     check_source_manifest(&sources);
+    check_source_group_manifests(&sources);
+    check_private_app_coupling();
     check_root_layout();
     check_markdown_policy();
     check_engineering_documentation();
