@@ -14,6 +14,8 @@
 #ifndef INFILTRATOR_SYSTEM_MONITOR_HISTORY_PERSISTENCE_H
 #define INFILTRATOR_SYSTEM_MONITOR_HISTORY_PERSISTENCE_H
 
+#include "process_model.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
