@@ -271,6 +271,10 @@ jobs:
           version=$(tr -d '[:space:]' < support/VERSION)
           version_header=build-cmake/windows-version.h
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          mapfile -t windows_sources < <(
+            sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+              support/source-groups/windows-product.txt | sed 's#^#src/#'
+          )
           common_portable=( \
             src/infiltratr-common/src/core.c \
             src/infiltratr-common/src/arithmetic.c \
@@ -299,8 +303,7 @@ jobs:
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
-            src/main_windows.c src/presentation_contract.c src/performance_view.c \
-            src/overview_history.c src/monitor_backend_windows.c src/process_backend_windows.c \
+            "${windows_sources[@]}" \
             build-cmake/windows-fonts.o "${common_portable[@]}" \
             -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
@@ -475,14 +478,21 @@ jobs:
           & $windres '-Isrc' 'support/windows/system-monitor-fonts.rc' '-O' 'coff' '-o' 'build/windows-fonts.o'
           if ($LASTEXITCODE -ne 0) { throw "Windows font resource compilation failed." }
 
+          $windowsSources = Get-Content 'support/source-groups/windows-product.txt' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -and -not $_.StartsWith('#') } |
+            ForEach-Object { "src/$_" }
+          if (-not $windowsSources) { throw 'Windows product source group is empty.' }
+
           $arguments = @(
             '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
             '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
             '-Wstrict-prototypes', '-Wmissing-prototypes',
             '-Isrc', '-Isrc/infiltratr-common/include',
-            '-include', $versionHeader,
-            'src/main_windows.c', 'src/presentation_contract.c', 'src/performance_view.c',
-            'src/overview_history.c', 'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
+            '-include', $versionHeader
+          )
+          $arguments += $windowsSources
+          $arguments += @(
             'build/windows-fonts.o',
             'src/infiltratr-common/src/core.c',
             'src/infiltratr-common/src/arithmetic.c',
