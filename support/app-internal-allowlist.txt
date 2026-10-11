@@ -22,10 +22,8 @@ performance_present_internal.h
 preferences.c
 preferences_dialog.c
 process_actions.c
-process_export.c
 process_file_users.c
 process_inspector.c
-process_lifecycle.c
 process_log_plot.c
 process_navigation.c
 process_ui_bridge.c

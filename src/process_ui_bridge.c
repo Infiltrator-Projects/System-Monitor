@@ -10,10 +10,30 @@
 #include "process_ui_bridge.h"
 
 #include "app_internal.h"
+#include "processes_ui.h"
 
 gboolean lsm_process_heatmap_enabled(const LsmApp *app)
 {
     return app && app->details.process_heatmap;
+}
+
+void lsm_process_ui_snapshot_changed(LsmApp *app)
+{
+    if (!app) return;
+    app->processes.processes_model_dirty = TRUE;
+    app->details.details_model_dirty = TRUE;
+}
+
+void lsm_process_ui_application_catalog_changed(LsmApp *app)
+{
+    if (!app) return;
+    if (app->processes.process_identity_cache)
+        g_hash_table_remove_all(app->processes.process_identity_cache);
+    app->processes.processes_structure_valid = FALSE;
+    app->processes.processes_model_dirty = TRUE;
+    if (app->runtime.active_tab == LSM_TAB_PROCESSES &&
+        app->runtime.page_built[LSM_TAB_PROCESSES])
+        lsm_processes_present_snapshot(app);
 }
 
 void lsm_process_record_action_sync(LsmApp *app,
