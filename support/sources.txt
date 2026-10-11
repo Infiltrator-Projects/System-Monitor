@@ -49,6 +49,7 @@ performance_present_core.c
 performance_present_devices.c
 details_page.c
 details_layout.c
+process_lifecycle.c
 process_workspace.c
 process_actions.c
 process_navigation.c
