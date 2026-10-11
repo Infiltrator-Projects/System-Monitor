@@ -38,23 +38,46 @@ typedef struct {
     int64_t last_seen;
 } LsmHistoryPersistenceRecord;
 
-/** Create generation-ordering state shared by detached save requests. */
+/**
+ * Create generation-ordering state shared by detached save requests.
+ *
+ * @return Newly allocated coordinator, or NULL when allocation or lock
+ *         initialisation fails.
+ */
 struct LsmHistorySaveCoordinator *
 lsm_history_persistence_coordinator_create(void);
 
-/** Retain a coordinator for one immutable worker request. */
+/**
+ * Retain a coordinator for one immutable worker request.
+ *
+ * @param coordinator Coordinator to retain, or NULL.
+ */
 void lsm_history_persistence_coordinator_retain(
     struct LsmHistorySaveCoordinator *coordinator);
 
-/** Release one coordinator reference. */
+/**
+ * Release one coordinator reference.
+ *
+ * @param coordinator Coordinator to release, or NULL.
+ */
 void lsm_history_persistence_coordinator_release(
     struct LsmHistorySaveCoordinator *coordinator);
 
-/** Record the newest generation whose persistence has been scheduled. */
+/**
+ * Record the newest generation whose persistence has been scheduled.
+ *
+ * @param coordinator Coordinator owning generation ordering, or NULL.
+ * @param generation Monotonic model generation scheduled for persistence.
+ */
 void lsm_history_persistence_note_scheduled(
     struct LsmHistorySaveCoordinator *coordinator, unsigned generation);
 
-/** Return the newest generation durably published by this coordinator. */
+/**
+ * Return the newest generation durably published by this coordinator.
+ *
+ * @param coordinator Coordinator to inspect, or NULL.
+ * @return Latest durably written generation, or zero when unavailable.
+ */
 unsigned lsm_history_persistence_latest_written(
     const struct LsmHistorySaveCoordinator *coordinator);
 
@@ -63,6 +86,16 @@ unsigned lsm_history_persistence_latest_written(
  *
  * Strings are copied and normalised for the tab-separated on-disk contract;
  * callers may release or mutate their source records immediately after return.
+ *
+ * @param coordinator Shared generation-ordering state, or NULL when ordering
+ *        is not required.
+ * @param config_dir Configuration directory that must exist before publication.
+ * @param path Destination history file path.
+ * @param records Plain model records to copy; may be NULL when @p count is zero.
+ * @param count Number of elements in @p records.
+ * @param generation Model generation represented by this immutable request.
+ * @return Newly allocated immutable request, or NULL on invalid input or
+ *         allocation failure.
  */
 LsmHistorySaveRequest *lsm_history_persistence_request_create(
     struct LsmHistorySaveCoordinator *coordinator,
@@ -70,10 +103,19 @@ LsmHistorySaveRequest *lsm_history_persistence_request_create(
     const LsmHistoryPersistenceRecord *records, size_t count,
     unsigned generation);
 
-/** Release an immutable save request. NULL is accepted. */
+/**
+ * Release an immutable save request. NULL is accepted.
+ *
+ * @param request Request to release, or NULL.
+ */
 void lsm_history_persistence_request_free(LsmHistorySaveRequest *request);
 
-/** Return the generation captured by a save request. */
+/**
+ * Return the generation captured by a save request.
+ *
+ * @param request Immutable request to inspect, or NULL.
+ * @return Captured model generation, or zero when @p request is NULL.
+ */
 unsigned lsm_history_persistence_request_generation(
     const LsmHistorySaveRequest *request);
 
