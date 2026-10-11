@@ -240,6 +240,8 @@ bool lsm_windows_process_worker_take(
  * An uncancellable native scan does not retain presentation state: the worker
  * keeps only its own reference and destroys itself when that scan eventually
  * returns. NULL is accepted.
+ *
+ * @param worker Worker to stop and release, or NULL.
  */
 void lsm_windows_process_worker_destroy(LsmWindowsProcessWorker *worker);
 #endif
