@@ -1,1 +1,0 @@
-/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-native-installer-safety.dir/support/tests/native_installer_safety.c.o" -o lsm-native-installer-safety 

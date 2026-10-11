@@ -1,1 +1,0 @@
-/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-presentation-smoke.dir/support/tests/presentation_smoke.c.o" "CMakeFiles/lsm-presentation-smoke.dir/src/presentation_contract.c.o" "CMakeFiles/lsm-presentation-smoke.dir/src/performance_view.c.o" -o lsm-presentation-smoke  -lm infiltratr-common/libinfiltratr-common.a -lm -ldl 

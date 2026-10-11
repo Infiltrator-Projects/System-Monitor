@@ -1,1 +1,0 @@
-/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-core-suite-smoke.dir/support/tests/core_smoke.c.o" "CMakeFiles/lsm-core-suite-smoke.dir/src/project_info.c.o" -o lsm-core-suite-smoke  -lm infiltratr-common/libinfiltratr-common.a -lm -ldl 
