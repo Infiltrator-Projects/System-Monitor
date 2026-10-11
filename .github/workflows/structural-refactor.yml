@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Apply structural coupling refactor
+
+on:
+  push:
+    branches: [refactor/structural-coupling-2026-10-11]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !startsWith(github.event.head_commit.message, 'refactor: apply structural coupling guardrails') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Apply bounded refactor
+        run: |
+          set -euo pipefail
+          python3 support/tools/apply_structural_coupling_refactor.py
+          git diff --check
+
+      - name: Commit refactor
+        run: |
+          set -euo pipefail
+          git config user.name "System Monitor structural refactor"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "refactor: apply structural coupling guardrails"
+          git push origin HEAD:refactor/structural-coupling-2026-10-11
