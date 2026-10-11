@@ -12,7 +12,6 @@ app_theme.c
 details_layout.c
 details_page.c
 filesystems.c
-help.c
 history.c
 overview.c
 performance.c
@@ -32,6 +31,4 @@ processes_ui.c
 services.c
 startup.c
 summary_bar_adapter.c
-system_snapshot.c
-task_launcher.c
 users.c
