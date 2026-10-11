@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Clean top-three refactor branch
+
+on:
+  push:
+    branches:
+      - refactor/top3-coupling-2026-10-11
+    paths:
+      - .github/workflows/cleanup-top3-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Remove generated verification artefacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build-top3
+          rm -f .github/workflows/cleanup-top3-refactor.yml
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git commit -m 'chore: remove refactor verification artefacts'
+          git push origin HEAD:refactor/top3-coupling-2026-10-11
