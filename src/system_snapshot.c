@@ -11,7 +11,6 @@
 
 #include "system_snapshot.h"
 
-#include "app_presentation_context.h"
 #include "atomic_file.h"
 #include "common.h"
 #include "metric_format.h"
@@ -377,10 +376,8 @@ static void format_pressure_snapshot(const LsmPressureInfo *pressure,
 
 static bool write_snapshot(FILE *file, const void *user_data)
 {
-    const LsmApp *app = user_data;
-    LsmSystemSnapshotView view;
-    if (!lsm_app_system_snapshot_view(app, &view) || !view.monitor)
-        return false;
+    const LsmSystemSnapshotView *view = user_data;
+    if (!view || !view->monitor) return false;
 
     const time_t now = time(NULL);
     char generated[256] = "N/A";
@@ -396,7 +393,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     char os_name[256];
     read_os_name(os_name, sizeof(os_name));
 
-    const LsmMonitor *monitor = view.monitor;
+    const LsmMonitor *monitor = view->monitor;
     char memory_used[64], memory_total[64];
     char cpu_usage[32], cpu_user[32], cpu_kernel[32];
     char cpu_speed[32], memory_speed[32], slots[32];
@@ -474,20 +471,25 @@ static bool write_snapshot(FILE *file, const void *user_data)
     write_bluetooth(file, monitor);
     write_batteries(file, monitor);
     write_graphics(file, monitor);
-    write_processes(file, view.processes, view.process_count);
+    write_processes(file, view->processes, view->process_count);
     return ferror(file) == 0;
 }
 
-bool lsm_system_snapshot_write(const LsmApp *app, const char *path,
-                               char *error, size_t error_size)
+bool lsm_system_snapshot_write_view(const LsmSystemSnapshotView *view,
+                                    const char *path, char *error,
+                                    size_t error_size)
 {
     if (error && error_size > 0U) error[0] = '\0';
-    if (!app || !path || !*path) {
+    if (!view || !view->monitor) {
+        set_error(error, error_size, "No snapshot data is available.");
+        return false;
+    }
+    if (!path || !*path) {
         set_error(error, error_size, "No destination file was selected.");
         return false;
     }
     const int failure = lsm_atomic_file_write(
-        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_snapshot, app);
+        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_snapshot, view);
     if (failure == 0) return true;
     set_error(error, error_size, strerror(failure));
     return false;
