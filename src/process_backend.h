@@ -197,4 +197,51 @@ void lsm_process_error_message(char *buffer, size_t size);
  */
 void lsm_process_list_free(LsmProcessInfo *processes);
 
+#ifdef _WIN32
+/** Opaque Windows background process-sampling worker. */
+typedef struct LsmWindowsProcessWorker LsmWindowsProcessWorker;
+
+/**
+ * Start the native Windows process worker and queue its first baseline sample.
+ *
+ * The worker owns its backend and synchronization primitives. It may outlive
+ * the UI caller briefly when Windows cannot cancel an in-flight native query;
+ * reference counting keeps only the worker state alive in that case.
+ *
+ * @return Newly allocated worker, or NULL when startup fails.
+ */
+LsmWindowsProcessWorker *lsm_windows_process_worker_create(void);
+
+/**
+ * Queue or coalesce one background process snapshot request.
+ *
+ * @param worker Worker returned by lsm_windows_process_worker_create().
+ * @param scan_flags Bitwise OR of LSM_PROCESS_SCAN_* enrichment flags.
+ * @return false after shutdown or when the worker backend failed to initialise.
+ */
+bool lsm_windows_process_worker_request(
+    LsmWindowsProcessWorker *worker, unsigned scan_flags);
+
+/**
+ * Detach the newest completed process snapshot without blocking.
+ *
+ * @param worker Active worker.
+ * @param processes Receives caller-owned rows on success.
+ * @param count Receives the number of rows in @p processes.
+ * @return true only when a completed snapshot was available.
+ */
+bool lsm_windows_process_worker_take(
+    LsmWindowsProcessWorker *worker, LsmProcessInfo **processes,
+    size_t *count);
+
+/**
+ * Stop a Windows process worker and release the caller's ownership.
+ *
+ * An uncancellable native scan does not retain presentation state: the worker
+ * keeps only its own reference and destroys itself when that scan eventually
+ * returns. NULL is accepted.
+ */
+void lsm_windows_process_worker_destroy(LsmWindowsProcessWorker *worker);
+#endif
+
 #endif
