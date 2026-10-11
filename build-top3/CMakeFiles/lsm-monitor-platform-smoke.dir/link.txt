@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-monitor-platform-smoke.dir/support/tests/monitor_platform_smoke.c.o" "CMakeFiles/lsm-monitor-platform-smoke.dir/src/monitor.c.o" -o lsm-monitor-platform-smoke  infiltratr-common/libinfiltratr-common.a -lm -ldl 

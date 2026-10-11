@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-native-installer-builder.dir/support/tools/build_native_installer.c.o" -o lsm-native-installer-builder 

@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG "CMakeFiles/lsm-nvml-smoke.dir/support/tests/nvml_smoke.c.o" "CMakeFiles/lsm-nvml-smoke.dir/src/nvml.c.o" -o lsm-nvml-smoke  -lm -ldl infiltratr-common/libinfiltratr-common.a -lm -ldl 

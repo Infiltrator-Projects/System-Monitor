@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -O3 -DNDEBUG -shared -Wl,-soname,libnvidia-ml-test.so -o libnvidia-ml-test.so "CMakeFiles/lsm-mock-nvml.dir/support/tests/mock_nvml.c.o" 

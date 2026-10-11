@@ -8,6 +8,7 @@ app_page_registry.c
 app_runtime.c
 app_runtime_context.c
 app_menu.c
+process_log_plot.c
 app_keyboard.c
 app_shell.c
 app_shell_window.c
@@ -16,6 +17,7 @@ app_presentation_context.c
 app_theme.c
 project_info.c
 preferences.c
+preferences_dialog.c
 summary_bar.c
 summary_bar_adapter.c
 temporal_presentation.c
@@ -42,6 +44,7 @@ performance_present.c
 performance_present_core.c
 performance_present_devices.c
 details_page.c
+details_layout.c
 process_workspace.c
 process_actions.c
 process_navigation.c

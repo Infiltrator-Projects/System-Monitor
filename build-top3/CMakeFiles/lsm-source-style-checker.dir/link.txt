@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/lsm-source-style-checker.dir/support/tools/check_source_style.cpp.o" -o lsm-source-style-checker 

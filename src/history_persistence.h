@@ -44,8 +44,8 @@ typedef struct {
  * @return Newly allocated coordinator, or NULL when allocation or lock
  *         initialisation fails.
  */
-struct LsmHistorySaveCoordinator *
-lsm_history_persistence_coordinator_create(void);
+struct LsmHistorySaveCoordinator *lsm_history_persistence_coordinator_create(
+    void);
 
 /**
  * Retain a coordinator for one immutable worker request.
