@@ -1020,6 +1020,12 @@ static void check_shared_release_contract(void)
                             "cmake --build build-cmake --target system-monitor");
         require_text_marker(".github/workflows/ci.yml", ci,
                             "gcc-multilib");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "support/source-groups/windows-product.txt");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "mapfile -t windows_sources");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "$windowsSources = Get-Content 'support/source-groups/windows-product.txt'");
         if (strstr(ci, "ctest --test-dir"))
             report_error(
                 ".github/workflows/ci.yml: CTest must remain a targeted local "
