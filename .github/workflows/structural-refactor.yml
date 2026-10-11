@@ -29,6 +29,75 @@ jobs:
           sed -i '/structural-refactor.yml.*unlink/d' support/tools/apply_structural_coupling_refactor.py
           python3 support/tools/apply_structural_coupling_refactor.py
           rm -f support/.structural-refactor-trigger
+          python3 - <<'PY'
+          from pathlib import Path
+
+          metadata = (
+              " *\n"
+              " * @author Shannon Smith\n"
+              " * @copyright Copyright (c) 2000-2026 Shannon Smith\n"
+              " * @license GPL-3.0-or-later\n"
+          )
+          for name in (
+              "src/windows_theme.h", "src/windows_theme.c",
+              "src/windows_process_runtime.h", "src/windows_process_runtime.c",
+          ):
+              path = Path(name)
+              text = path.read_text(encoding="utf-8")
+              if "@author Shannon Smith" not in text:
+                  text = text.replace(" */\n", metadata + " */\n", 1)
+              path.write_text(text, encoding="utf-8")
+
+          theme = Path("src/windows_theme.h")
+          text = theme.read_text(encoding="utf-8")
+          replacements = {
+              "/** Validate the Common design ABI before native presentation consumes it. */":
+              "/**\n * Validate the Common design ABI before native presentation consumes it.\n * @param [in] design Common design metrics to validate.\n * @return true when the metrics satisfy the native presentation contract.\n */",
+              "/** Resolve the current theme mode into a native Win32 palette. */":
+              "/**\n * Resolve the current theme mode into a native Win32 palette.\n * @param [in,out] theme Theme state receiving the resolved palette.\n * @return true when the Common palette contract is supported.\n */",
+              "/** Load the persisted native theme preference and resolve its palette. */":
+              "/**\n * Load the persisted native theme preference and resolve its palette.\n * @param [in,out] theme Theme state receiving the persisted mode and palette.\n * @return true when the resulting Common palette contract is supported.\n */",
+              "/** Persist the selected native theme mode. */":
+              "/**\n * Persist the selected native theme mode.\n * @param [in] theme Theme state whose selected mode is saved.\n */",
+              "/** Return whether the effective theme should use dark native chrome. */":
+              "/**\n * Return whether the effective theme should use dark native chrome.\n * @param [in] theme Current native theme state.\n * @return true when dark native chrome should be used.\n */",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"missing theme documentation marker: {old}")
+              text = text.replace(old, new, 1)
+          theme.write_text(text, encoding="utf-8")
+
+          runtime = Path("src/windows_process_runtime.h")
+          text = runtime.read_text(encoding="utf-8")
+          replacements = {
+              "/** Start the native process worker if it is not already running. */":
+              "/**\n * Start the native process worker if it is not already running.\n * @param [in,out] runtime Process runtime to initialise.\n * @return true when a worker is available.\n */",
+              "/** Queue a process snapshot request without blocking the UI thread. */":
+              "/**\n * Queue a process snapshot request without blocking the UI thread.\n * @param [in,out] runtime Process runtime receiving the request.\n * @param [in] scan_flags Backend scan flags for the requested snapshot.\n */",
+              "/** Transfer ownership of a completed process snapshot to the caller. */":
+              "/**\n * Transfer ownership of a completed process snapshot to the caller.\n * @param [in,out] runtime Process runtime containing a completed snapshot.\n * @param [out] processes Receives the owned process array.\n * @param [out] count Receives the process count.\n * @return true when a completed snapshot was transferred.\n */",
+              "/** Stop the process worker; false means a native query could not be cancelled. */":
+              "/**\n * Stop the process worker and release normal-path synchronization state.\n * @param [in,out] runtime Process runtime to stop.\n * @return true when the worker stopped; false when a native query could not be cancelled.\n */",
+              "/** Return whether the runtime currently owns a live worker thread. */":
+              "/**\n * Return whether the runtime currently owns a live worker thread.\n * @param [in] runtime Process runtime to inspect.\n * @return true while a usable worker is owned.\n */",
+              "/** Return whether shutdown had to leave the worker storage alive until exit. */":
+              "/**\n * Return whether shutdown had to leave the worker storage alive until exit.\n * @param [in] runtime Process runtime to inspect.\n * @return true when cancellation failed and storage must survive until process exit.\n */",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"missing runtime documentation marker: {old}")
+              text = text.replace(old, new, 1)
+          runtime.write_text(text, encoding="utf-8")
+
+          checker = Path("support/tools/check_source_style.cpp")
+          text = checker.read_text(encoding="utf-8")
+          old = '"src/main_windows.c", windows, "infiltratr_theme_resolve");'
+          new = '"src/main_windows.c", windows, "lsm_windows_theme_resolve");'
+          if old not in text:
+              raise SystemExit("missing legacy Windows theme ownership marker")
+          checker.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           git diff --check
 
       - name: Validate coupling guardrails
