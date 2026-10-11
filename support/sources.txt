@@ -58,6 +58,7 @@ process_recorder.c
 process_scanner.c
 processes_ui.c
 process_export.c
+process_export_app.c
 application_catalog.c
 process_grouping.c
 process_model.c
