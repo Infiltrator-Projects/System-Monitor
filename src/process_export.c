@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file process_export.c
- * @brief Selection-aware clipboard and CSV presentation for process rows.
+ * @brief Data-only CSV serialization for selected process rows.
  *
- * This module reads the already collected snapshot through a narrow process
- * selection view. It does not depend on the private application layout, run
- * commands, rescan procfs, or change process state.
+ * The serializer consumes completed plain-C process data and immutable selection
+ * identity. Application storage, GTK widgets and dialog lifetime are adapted in
+ * process_export_app.c so this layer remains independently testable.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -15,16 +15,12 @@
 
 #include "process_export.h"
 
-#include "app_presentation_context.h"
-#include "app_process_context.h"
 #include "atomic_file.h"
 #include "common.h"
-#include "ui_helpers.h"
 
 #include <infiltratr/escape.h>
 #include <infiltratr/format.h>
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +30,7 @@ static void set_error(char *error, size_t size, const char *message)
     lsm_copy_string(error, size, message ? message : "Unknown error");
 }
 
-static bool process_selected(const LsmProcessSelectionView *view,
+static bool process_selected(const LsmProcessExportView *view,
                              const LsmProcessInfo *process)
 {
     if (!view || !process) return false;
@@ -50,7 +46,7 @@ static bool process_selected(const LsmProcessSelectionView *view,
     return false;
 }
 
-static size_t selected_count(const LsmProcessSelectionView *view)
+static size_t selected_count(const LsmProcessExportView *view)
 {
     if (!view || view->selected_pid <= 0) return 0U;
     size_t count = 0U;
@@ -58,35 +54,6 @@ static size_t selected_count(const LsmProcessSelectionView *view)
         if (process_selected(view, &view->processes[index]))
             count++;
     return count;
-}
-
-static bool csv_needs_formula_escape(const char *text)
-{
-    if (!text) return false;
-    const unsigned char *cursor = (const unsigned char *)text;
-    while (*cursor) {
-        if (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' ||
-            *cursor == '\n' || *cursor < 32U || *cursor == 127U) {
-            cursor++;
-            continue;
-        }
-        return *cursor == '=' || *cursor == '+' || *cursor == '-' ||
-               *cursor == '@';
-    }
-    return false;
-}
-
-static void append_spreadsheet_text(GString *destination, const char *text)
-{
-    if (!destination || !text) return;
-    if (csv_needs_formula_escape(text)) g_string_append(destination, "'");
-    for (const unsigned char *cursor = (const unsigned char *)text;
-         *cursor; cursor++) {
-        if (*cursor >= 32U && *cursor != 127U && *cursor != '\t')
-            g_string_append_printf(destination, "%c", (char)*cursor);
-        else
-            g_string_append(destination, " ");
-    }
 }
 
 static bool csv_field(FILE *file, const char *text)
@@ -173,7 +140,7 @@ static bool csv_row(FILE *file, const LsmProcessInfo *process)
 
 static bool write_process_export(FILE *file, const void *user_data)
 {
-    const LsmProcessSelectionView *view = user_data;
+    const LsmProcessExportView *view = user_data;
     fputs("Name,PID,Parent PID,User,Status,CPU (%),CPU time (ns),"
           "Memory (bytes),Threads,Read (bytes/s),Write (bytes/s),GPU (%),"
           "GPU engine,GPU memory (bytes),Read total (bytes),Write total (bytes),"
@@ -187,93 +154,23 @@ static bool write_process_export(FILE *file, const void *user_data)
     return ferror(file) == 0;
 }
 
-bool lsm_process_export_selected_csv(const LsmApp *app, const char *path,
-                                     char *error, size_t error_size)
+bool lsm_process_export_write_view(const LsmProcessExportView *view,
+                                   const char *path, char *error,
+                                   size_t error_size)
 {
     if (error && error_size > 0U) error[0] = '\0';
-    LsmProcessSelectionView view;
-    if (!lsm_app_process_selection_view(app, &view) || !path || !*path) {
+    if (!view || !path || !*path) {
         set_error(error, error_size, "No destination file was selected.");
         return false;
     }
-    if (selected_count(&view) == 0U) {
+    if (selected_count(view) == 0U) {
         set_error(error, error_size,
                   "Select a process or application group first.");
         return false;
     }
     const int failure = lsm_atomic_file_write(
-        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_process_export, &view);
+        path, LSM_ATOMIC_FILE_USER_DOCUMENT, write_process_export, view);
     if (failure == 0) return true;
     set_error(error, error_size, strerror(failure));
     return false;
-}
-
-void lsm_process_export_copy_selected(const LsmApp *app)
-{
-    LsmProcessSelectionView view;
-    if (!lsm_app_process_selection_view(app, &view) ||
-        selected_count(&view) == 0U)
-        return;
-    GString *text = g_string_new(
-        "Name\tPID\tUser\tCPU\tMemory\tGPU\tGPU engine\tCommand\n");
-    for (size_t index = 0U; index < view.process_count; index++) {
-        const LsmProcessInfo *process = &view.processes[index];
-        if (!process_selected(&view, process)) continue;
-        char memory[64], gpu[32];
-        lsm_format_bytes(process->rss_bytes, memory, sizeof(memory));
-        if (process->gpu_available)
-            (void)snprintf(gpu, sizeof(gpu), "%.1f%%", process->gpu_percent);
-        else
-            (void)snprintf(gpu, sizeof(gpu), "N/A");
-        append_spreadsheet_text(text, process->name);
-        g_string_append_printf(text, "\t%llu\t",
-                               (unsigned long long)process->pid);
-        append_spreadsheet_text(text, process->user);
-        g_string_append_printf(text, "\t%.1f%%\t%s\t%s\t",
-                               process->cpu_percent, memory, gpu);
-        append_spreadsheet_text(
-            text, process->gpu_engine[0] ? process->gpu_engine : "N/A");
-        g_string_append(text, "\t");
-        append_spreadsheet_text(text, process->command);
-        g_string_append(text, "\n");
-    }
-    GtkClipboard *clipboard = gtk_clipboard_get(
-        gdk_atom_intern_static_string("CLIPBOARD"));
-    gtk_clipboard_set_text(clipboard, text->str, -1);
-    g_string_free(text, TRUE);
-}
-
-void lsm_process_export_selected_dialog(LsmApp *app)
-{
-    LsmProcessSelectionView view;
-    GtkWidget *window = lsm_app_presentation_window(app);
-    GtkWindow *parent = window ? GTK_WINDOW(window) : NULL;
-    if (!lsm_app_process_selection_view(app, &view) ||
-        selected_count(&view) == 0U) {
-        if (app)
-            lsm_ui_show_error(parent, "Nothing selected",
-                "Select a process or application group in Processes or Details first.");
-        return;
-    }
-    GtkWidget *chooser = gtk_file_chooser_dialog_new(
-        "Export selected process rows", parent,
-        GTK_FILE_CHOOSER_ACTION_SAVE, "Cancel", GTK_RESPONSE_CANCEL,
-        "Export", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser),
-                                      "selected-processes.csv");
-    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser),
-                                                    TRUE);
-    GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "CSV table");
-    gtk_file_filter_add_pattern(filter, "*.csv");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
-    if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
-        char *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
-        char error[256];
-        if (path && !lsm_process_export_selected_csv(app, path, error,
-                                                      sizeof(error)))
-            lsm_ui_show_error(parent, "Export failed", "%s", error);
-        g_free(path);
-    }
-    gtk_widget_destroy(chooser);
 }

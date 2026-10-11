@@ -9,7 +9,6 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
-#include "app_internal.h"
 #include "process_export.h"
 
 #ifdef NDEBUG
@@ -24,8 +23,6 @@
 
 int main(void)
 {
-    LsmApp app;
-    memset(&app, 0, sizeof(app));
     LsmProcessInfo processes[3];
     memset(processes, 0, sizeof(processes));
     processes[0].pid = 10;
@@ -47,15 +44,18 @@ int main(void)
     processes[2].pid = 12;
     processes[2].instance_id = 102U;
     strcpy(processes[2].name, "not selected");
-    app.process.process_snapshot = processes;
-    app.process.process_snapshot_count = 3U;
-    app.process.selected_pid = 10;
-    app.process.selected_instance_id = 100U;
+
     LsmProcessId group[] = {10, 11};
     LsmProcessInstanceId group_instances[] = {100U, 101U};
-    app.process.selected_group_pids = group;
-    app.process.selected_group_instance_ids = group_instances;
-    app.process.selected_group_count = 2U;
+    LsmProcessExportView view = {
+        .processes = processes,
+        .process_count = 3U,
+        .selected_pid = 10,
+        .selected_instance_id = 100U,
+        .selected_group_pids = group,
+        .selected_group_instance_ids = group_instances,
+        .selected_group_count = 2U
+    };
 
     char path[] = "/tmp/lsm-process-export-XXXXXX";
     const int descriptor = mkstemp(path);
@@ -63,7 +63,7 @@ int main(void)
     close(descriptor);
     unlink(path);
     char error[256];
-    assert(lsm_process_export_selected_csv(&app, path, error, sizeof(error)));
+    assert(lsm_process_export_write_view(&view, path, error, sizeof(error)));
     struct stat status;
     assert(stat(path, &status) == 0);
     assert((status.st_mode & 0777) == 0600);
@@ -84,7 +84,7 @@ int main(void)
 
     unlink(path);
     group_instances[1] = 999U;
-    assert(lsm_process_export_selected_csv(&app, path, error, sizeof(error)));
+    assert(lsm_process_export_write_view(&view, path, error, sizeof(error)));
     file = fopen(path, "r");
     assert(file);
     const size_t stale_length = fread(
