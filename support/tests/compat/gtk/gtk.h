@@ -320,6 +320,8 @@ gpointer g_object_get_data(gpointer object, const gchar *key);
 void g_object_get(gpointer object, const gchar *first_property_name, ...);
 void g_object_set(gpointer object, const gchar *first_property_name, ...);
 void g_object_set_data(gpointer object, const gchar *key, gpointer data);
+void g_object_set_data_full(gpointer object, const gchar *key, gpointer data,
+                            GDestroyNotify destroy);
 gpointer g_object_ref(gpointer object);
 void g_object_unref(gpointer object);
 #define g_clear_object(object_ptr) do { \

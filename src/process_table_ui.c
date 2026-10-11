@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define LSM_PROCESS_TABLE_PRESENTATION_KEY "lsm-process-table-presentation"
 #define LSM_PROCESS_TABLE_COLUMN_KEY "lsm-process-table-column"
