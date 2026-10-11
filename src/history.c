@@ -4,14 +4,15 @@
  * @brief Persistent cumulative application resource history.
  *
  * App History groups short-lived process instances by user and executable
- * identity.  Delta accounting is protected by PID start time so PID reuse
- * cannot transfer counters between unrelated programs.  The history is stored
- * as a compact tab-separated file in the user's configuration directory.
+ * identity. Delta accounting is protected by PID start time so PID reuse
+ * cannot transfer counters between unrelated programs. Durable serialization
+ * and save ordering are owned by history_persistence.c; this module owns the
+ * retained accounting model, loading/merge policy and GTK presentation.
  * Retained inactive identities are bounded by recency so long-running
  * installations do not grow the persistence file without limit. Identities
  * represented by the current process snapshot are protected from eviction.
  *
- * Linux does not expose portable per-process network byte counters.  This page
+ * Linux does not expose portable per-process network byte counters. This page
  * therefore records the reliable cross-kernel values: CPU time, active time,
  * disk reads/writes and peak resident memory.
  *
@@ -21,21 +22,18 @@
  */
 #include "history.h"
 #include "app_internal.h"
-#include "atomic_file.h"
 #include "common.h"
+#include "history_persistence.h"
 #include "temporal_presentation.h"
 #include "numeric_io.h"
 #include "refresh_policy.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/core.h>
-#include <infiltratr/format.h>
 
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,42 +70,6 @@ typedef struct {
     uint64_t write_bytes;
     unsigned generation;
 } LsmHistorySample;
-
-typedef struct {
-    char *key;
-    char *name;
-    char *user;
-    char *identity;
-    double cpu_seconds;
-    double active_seconds;
-    uint64_t read_bytes;
-    uint64_t write_bytes;
-    uint64_t peak_rss_bytes;
-    int64_t first_seen;
-    int64_t last_seen;
-} LsmHistoryPersistEntry;
-
-/* Persistence workers receive immutable snapshots and may finish out of order.
- * The generation watermark prevents an older request from overwriting a newer
- * scheduled state, while write_mutex serialises the final durable publication.
- * Reference counting lets detached GTask work outlive the initiating callback
- * without retaining the whole application object. */
-struct LsmHistorySaveCoordinator {
-    pthread_mutex_t write_mutex;
-    atomic_uint references;
-    atomic_uint latest_scheduled_generation;
-    atomic_uint latest_written_generation;
-};
-
-typedef struct {
-    char config_dir[LSM_PATH_LEN];
-    char path[LSM_PATH_LEN];
-    LsmHistoryPersistEntry *entries;
-    char *strings;
-    size_t count;
-    guint generation;
-    LsmHistorySaveCoordinator *coordinator;
-} LsmHistorySaveRequest;
 
 typedef struct {
     guint generation;
@@ -287,7 +249,6 @@ static gboolean history_trim_to_limit(LsmApp *app,
     return changed;
 }
 
-
 static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
                               GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
@@ -354,204 +315,51 @@ static void history_mark_dirty(LsmApp *app)
     app->history.history_dirty = TRUE;
 }
 
-static void history_coordinator_release(LsmHistorySaveCoordinator *coordinator)
-{
-    if (!coordinator ||
-        atomic_fetch_sub_explicit(&coordinator->references, 1U,
-                                  memory_order_acq_rel) != 1U)
-        return;
-    (void)pthread_mutex_destroy(&coordinator->write_mutex);
-    g_free(coordinator);
-}
-
-static LsmHistorySaveCoordinator *history_coordinator_create(void)
-{
-    LsmHistorySaveCoordinator *coordinator =
-        g_new0(LsmHistorySaveCoordinator, 1U);
-    if (pthread_mutex_init(&coordinator->write_mutex, NULL) != 0) {
-        g_free(coordinator);
-        return NULL;
-    }
-    atomic_init(&coordinator->references, 1U);
-    atomic_init(&coordinator->latest_scheduled_generation, 0U);
-    atomic_init(&coordinator->latest_written_generation, 0U);
-    return coordinator;
-}
-
-static void history_coordinator_retain(LsmHistorySaveCoordinator *coordinator)
-{
-    if (coordinator)
-        (void)atomic_fetch_add_explicit(&coordinator->references, 1U,
-                                        memory_order_relaxed);
-}
-
 static void history_save_request_free(gpointer data)
 {
-    LsmHistorySaveRequest *request = data;
-    if (!request) return;
-    free(request->strings);
-    free(request->entries);
-    history_coordinator_release(request->coordinator);
-    free(request);
+    lsm_history_persistence_request_free(data);
 }
 
 static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
 {
     if (!app || !app->history.app_history) return NULL;
-    LsmHistorySaveRequest *request = calloc(1U, sizeof(*request));
-    if (!request) return NULL;
-    lsm_copy_string(request->config_dir, sizeof(request->config_dir), app->paths.config_dir);
-    lsm_copy_string(request->path, sizeof(request->path), app->history.history_path);
-    request->generation = app->history.history_mutation_generation;
-    request->count = app->history.history_entry_count;
 
-    size_t string_bytes = 0U;
+    const size_t capacity = app->history.history_entry_count;
+    LsmHistoryPersistenceRecord *records = capacity > 0U
+        ? calloc(capacity, sizeof(*records)) : NULL;
+    if (capacity > 0U && !records) return NULL;
+
+    size_t count = 0U;
     GHashTableIter iterator;
     gpointer key = NULL;
     gpointer value = NULL;
     g_hash_table_iter_init(&iterator, app->history.app_history);
-    while (g_hash_table_iter_next(&iterator, &key, &value)) {
-        (void)key;
-        const LsmHistoryEntry *entry = value;
-        const char *fields[] = {
-            entry->key, entry->name, entry->user, entry->identity
-        };
-        for (size_t field = 0U; field < LSM_ARRAY_LENGTH(fields); field++) {
-            const size_t length = strlen(fields[field] ? fields[field] : "") + 1U;
-            if (!lsm_size_add_checked(string_bytes, length, &string_bytes)) {
-                history_save_request_free(request);
-                return NULL;
-            }
-        }
-    }
-
-    if (request->count > 0U) {
-        request->entries = calloc(request->count, sizeof(*request->entries));
-        if (!request->entries) {
-            history_save_request_free(request);
-            return NULL;
-        }
-    }
-    if (string_bytes > 0U) {
-        request->strings = malloc(string_bytes);
-        if (!request->strings) {
-            history_save_request_free(request);
-            return NULL;
-        }
-    }
-
-    char *cursor = request->strings;
-    size_t index = 0U;
-    g_hash_table_iter_init(&iterator, app->history.app_history);
-    while (index < request->count &&
+    while (count < capacity &&
            g_hash_table_iter_next(&iterator, &key, &value)) {
         (void)key;
         const LsmHistoryEntry *entry = value;
-        LsmHistoryPersistEntry *copy = &request->entries[index++];
-
-#define COPY_HISTORY_STRING(member) \
-        do { \
-            const char *source = entry->member ? entry->member : ""; \
-            const size_t length = strlen(source) + 1U; \
-            copy->member = cursor; \
-            memcpy(cursor, source, length); \
-            for (size_t byte = 0U; byte + 1U < length; byte++) \
-                if (cursor[byte] == '\t' || cursor[byte] == '\r' || \
-                    cursor[byte] == '\n') cursor[byte] = ' '; \
-            cursor += length; \
-        } while (0)
-        COPY_HISTORY_STRING(key);
-        COPY_HISTORY_STRING(name);
-        COPY_HISTORY_STRING(user);
-        COPY_HISTORY_STRING(identity);
-#undef COPY_HISTORY_STRING
-
-        copy->cpu_seconds = entry->cpu_seconds;
-        copy->active_seconds = entry->active_seconds;
-        copy->read_bytes = entry->read_bytes;
-        copy->write_bytes = entry->write_bytes;
-        copy->peak_rss_bytes = entry->peak_rss_bytes;
-        copy->first_seen = entry->first_seen;
-        copy->last_seen = entry->last_seen;
+        records[count++] = (LsmHistoryPersistenceRecord) {
+            .key = entry->key,
+            .name = entry->name,
+            .user = entry->user,
+            .identity = entry->identity,
+            .cpu_seconds = entry->cpu_seconds,
+            .active_seconds = entry->active_seconds,
+            .read_bytes = entry->read_bytes,
+            .write_bytes = entry->write_bytes,
+            .peak_rss_bytes = entry->peak_rss_bytes,
+            .first_seen = entry->first_seen,
+            .last_seen = entry->last_seen
+        };
     }
-    request->count = index;
-    request->coordinator = app->history.history_save_coordinator;
-    history_coordinator_retain(request->coordinator);
+
+    LsmHistorySaveRequest *request =
+        lsm_history_persistence_request_create(
+            app->history.history_save_coordinator,
+            app->paths.config_dir, app->history.history_path,
+            records, count, app->history.history_mutation_generation);
+    free(records);
     return request;
-}
-
-static int history_write_request(LsmHistorySaveRequest *request,
-                                 gboolean *written)
-{
-    if (written) *written = FALSE;
-    if (!request) return EINVAL;
-    if (request->coordinator &&
-        (request->generation < atomic_load_explicit(
-            &request->coordinator->latest_scheduled_generation,
-            memory_order_acquire) ||
-         request->generation <= atomic_load_explicit(
-            &request->coordinator->latest_written_generation,
-            memory_order_acquire)))
-        return 0;
-    const int mkdir_failure =
-        lsm_mkdir_parents(request->config_dir, 0700U);
-    if (mkdir_failure != 0) return mkdir_failure;
-
-    GString *output = g_string_new("# System-Monitor App History v1\n");
-    for (size_t index = 0U; index < request->count; index++) {
-        const LsmHistoryPersistEntry *entry = &request->entries[index];
-        char cpu_seconds[64];
-        char active_seconds[64];
-        if (!infiltratr_format_fixed_ascii(
-                entry->cpu_seconds, 6U, cpu_seconds, sizeof(cpu_seconds)) ||
-            !infiltratr_format_fixed_ascii(
-                entry->active_seconds, 6U, active_seconds,
-                sizeof(active_seconds))) {
-            g_string_free(output, TRUE);
-            return ERANGE;
-        }
-        g_string_append_printf(output,
-            "%s\t%s\t%s\t%s\t%s\t%s\t%llu\t%llu\t%llu\t%lld\t%lld\n",
-            entry->key, entry->name, entry->user, entry->identity,
-            cpu_seconds, active_seconds,
-            (unsigned long long)entry->read_bytes,
-            (unsigned long long)entry->write_bytes,
-            (unsigned long long)entry->peak_rss_bytes,
-            (long long)entry->first_seen, (long long)entry->last_seen);
-    }
-
-    int failure = 0;
-    if (request->coordinator) {
-        (void)pthread_mutex_lock(&request->coordinator->write_mutex);
-        const unsigned latest = atomic_load_explicit(
-            &request->coordinator->latest_scheduled_generation,
-            memory_order_acquire);
-        const unsigned latest_written = atomic_load_explicit(
-            &request->coordinator->latest_written_generation,
-            memory_order_acquire);
-        /* A shutdown flush may race an already-running periodic save for the
-         * same immutable generation. Whichever reaches the publication mutex
-         * first performs the durable write; the other observes that generation
-         * as already persisted instead of fsyncing the identical file again. */
-        if (request->generation < latest ||
-            request->generation <= latest_written) {
-            (void)pthread_mutex_unlock(&request->coordinator->write_mutex);
-            g_string_free(output, TRUE);
-            return 0;
-        }
-    }
-
-    failure = lsm_atomic_file_write_bytes(
-        request->path, LSM_ATOMIC_FILE_PRIVATE, output->str, output->len);
-    if (failure == 0 && request->coordinator)
-        atomic_store_explicit(
-            &request->coordinator->latest_written_generation,
-            request->generation, memory_order_release);
-    if (written && failure == 0) *written = TRUE;
-    if (request->coordinator)
-        (void)pthread_mutex_unlock(&request->coordinator->write_mutex);
-    g_string_free(output, TRUE);
-    return failure;
 }
 
 static gboolean history_load_record(LsmApp *app, char *line)
@@ -855,8 +663,12 @@ static void history_save_worker(GTask *task, gpointer source_object,
     (void)cancellable;
     LsmHistorySaveRequest *request = task_data;
     LsmHistorySaveResult *result = g_new0(LsmHistorySaveResult, 1U);
-    result->generation = request ? request->generation : 0U;
-    result->failure = history_write_request(request, &result->written);
+    result->generation =
+        lsm_history_persistence_request_generation(request);
+    bool written = false;
+    result->failure =
+        lsm_history_persistence_request_write(request, &written);
+    result->written = written ? TRUE : FALSE;
     g_task_return_pointer(task, result, g_free);
 }
 
@@ -914,20 +726,21 @@ static int history_save_checked_sync(LsmApp *app)
         return 0;
     LsmHistorySaveRequest *request = history_save_request_create(app);
     if (!request) return ENOMEM;
-    if (request->coordinator)
-        atomic_store_explicit(
-            &request->coordinator->latest_scheduled_generation,
-            request->generation, memory_order_release);
-    gboolean written = FALSE;
-    const int failure = history_write_request(request, &written);
+
+    const unsigned generation =
+        lsm_history_persistence_request_generation(request);
+    lsm_history_persistence_note_scheduled(
+        app->history.history_save_coordinator, generation);
+
+    bool written = false;
+    const int failure =
+        lsm_history_persistence_request_write(request, &written);
     const gboolean persisted =
         failure == 0 &&
         (written ||
-         (request->coordinator &&
-          atomic_load_explicit(
-              &request->coordinator->latest_written_generation,
-              memory_order_acquire) >= request->generation));
-    history_save_request_free(request);
+         lsm_history_persistence_latest_written(
+             app->history.history_save_coordinator) >= generation);
+    lsm_history_persistence_request_free(request);
     if (persisted) {
         app->history.history_dirty = FALSE;
         app->history.history_save_error_reported = FALSE;
@@ -966,11 +779,11 @@ void lsm_history_save(LsmApp *app)
         history_report_save_failure(app, ENOMEM);
         return;
     }
-    if (request->coordinator)
-        atomic_store_explicit(
-            &request->coordinator->latest_scheduled_generation,
-            request->generation, memory_order_release);
-    app->history.history_save_generation = request->generation;
+    const unsigned generation =
+        lsm_history_persistence_request_generation(request);
+    lsm_history_persistence_note_scheduled(
+        app->history.history_save_coordinator, generation);
+    app->history.history_save_generation = generation;
     app->history.history_save_pending = TRUE;
 
     GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
@@ -986,7 +799,7 @@ static gboolean history_save_timer(gpointer user_data)
     return G_SOURCE_CONTINUE;
 }
 
-/* Persistent accounting is application state, not page state.  Initialise it
+/* Persistent accounting is application state, not page state. Initialise it
  * independently of the lazily constructed GTK tab so process samples collected
  * before the user first opens App History are still accounted and persisted. */
 static gboolean history_model_initialise(LsmApp *app)
@@ -1002,7 +815,8 @@ static gboolean history_model_initialise(LsmApp *app)
             g_free, history_sample_free);
     }
     if (!app->history.history_save_coordinator)
-        app->history.history_save_coordinator = history_coordinator_create();
+        app->history.history_save_coordinator =
+            lsm_history_persistence_coordinator_create();
 
     if (app->shell.window)
         g_object_set_data(G_OBJECT(app->shell.window),
@@ -1398,7 +1212,8 @@ void lsm_history_destroy(LsmApp *app)
         g_hash_table_destroy(app->history.app_history_samples);
     if (app->history.history_store)
         g_object_unref(app->history.history_store);
-    history_coordinator_release(app->history.history_save_coordinator);
+    lsm_history_persistence_coordinator_release(
+        app->history.history_save_coordinator);
     app->history.history_save_coordinator = NULL;
     app->history.app_history = NULL;
     app->history.app_history_samples = NULL;
@@ -1435,7 +1250,8 @@ void lsm_history_test_dispose(LsmApp *app)
         g_hash_table_destroy(app->history.app_history);
     if (app->history.app_history_samples)
         g_hash_table_destroy(app->history.app_history_samples);
-    history_coordinator_release(app->history.history_save_coordinator);
+    lsm_history_persistence_coordinator_release(
+        app->history.history_save_coordinator);
     app->history.history_save_coordinator = NULL;
     app->history.app_history = NULL;
     app->history.app_history_samples = NULL;
