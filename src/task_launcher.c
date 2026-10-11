@@ -11,6 +11,7 @@
 #include "common.h"
 
 #include "app_presentation_context.h"
+#include "monitor_types.h"
 #include "ui_helpers.h"
 
 #include <gtk/gtk.h>
