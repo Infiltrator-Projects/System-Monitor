@@ -11,22 +11,25 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ !startsWith(github.event.head_commit.message, 'refactor: apply structural coupling guardrails') }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
+    timeout-minutes: 10
     steps:
       - name: Check out branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: false
 
       - name: Apply bounded refactor
+        shell: bash
         run: |
           set -euo pipefail
           python3 support/tools/apply_structural_coupling_refactor.py
+          rm -f support/.structural-refactor-trigger
           git diff --check
 
       - name: Commit refactor
+        shell: bash
         run: |
           set -euo pipefail
           git config user.name "System Monitor structural refactor"
