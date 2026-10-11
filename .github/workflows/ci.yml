@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   # v7 starts a clean concurrency epoch after a superseded self-hosted Verify
@@ -66,21 +66,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-
-      # COUPLING_REFACTOR_ONCE_BEGIN
-      - name: Apply bounded coupling refactor
-        if: github.event.head_commit.message == 'chore: arm bounded coupling refactor'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 support/tools/apply_coupling_refactor.py
-          git diff --check
-          git config user.name 'Shannon Smith'
-          git config user.email 'infiltratr@yandex.com'
-          git add -A
-          git commit -m 'refactor: complete top coupling cleanup'
-          git push origin HEAD:main
-      # COUPLING_REFACTOR_ONCE_END
 
       - name: Reject destructive repository automation
         shell: bash
