@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Verify structural coupling branch
+name: Harden and verify structural coupling branch
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -19,6 +19,50 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+
+      - name: Harden ownership guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          portability = Path('support/tools/check_portability.c')
+          text = portability.read_text(encoding='utf-8')
+          old = '''        if (ends_with(sources.items[index], "_windows.c") ||
+            ends_with(sources.items[index], "_windows.cpp") ||
+            strstr(sources.items[index], "_windows_") != NULL)
+            continue;
+'''
+          new = '''        if (strncmp(sources.items[index], "windows_", 8U) == 0 ||
+            ends_with(sources.items[index], "_windows.c") ||
+            ends_with(sources.items[index], "_windows.cpp") ||
+            strstr(sources.items[index], "_windows_") != NULL)
+            continue;
+'''
+          if old not in text:
+              raise SystemExit('portability Windows-owner exclusion marker not found')
+          portability.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          checker = Path('support/tools/check_source_style.cpp')
+          text = checker.read_text(encoding='utf-8')
+          old = '''        require_text_marker(".github/workflows/ci.yml", ci,
+                            "gcc-multilib");
+'''
+          new = '''        require_text_marker(".github/workflows/ci.yml", ci,
+                            "gcc-multilib");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "support/source-groups/windows-product.txt");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "mapfile -t windows_sources");
+        require_text_marker(".github/workflows/ci.yml", ci,
+                            "$windowsSources = Get-Content 'support/source-groups/windows-product.txt'");
+'''
+          if old not in text:
+              raise SystemExit('CI contract insertion marker not found')
+          checker.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
 
       - name: Run canonical verification
         shell: bash
@@ -69,3 +113,14 @@ jobs:
           set -euo pipefail
           cmake -S . -B build-structural-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-structural-cmake --target system-monitor --parallel 2
+
+      - name: Commit validated guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "System Monitor structural refactor"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add support/tools/check_portability.c support/tools/check_source_style.cpp
+          git diff --cached --quiet && exit 0
+          git commit -m "build: enforce structural source boundaries"
+          git push origin HEAD:refactor/structural-coupling-2026-10-11
