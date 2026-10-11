@@ -14,6 +14,7 @@
 #include "app_presentation_context.h"
 
 #include "app_internal.h"
+#include "system_snapshot.h"
 
 #include <string.h>
 

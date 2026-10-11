@@ -24,6 +24,7 @@ summary_bar.c
 summary_bar_adapter.c
 temporal_presentation.c
 system_snapshot.c
+system_snapshot_app.c
 help.c
 filesystems.c
 filesystem_inventory.c
