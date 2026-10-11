@@ -350,7 +350,8 @@ int main(int argc, char **argv)
 
     for (size_t index = 0U; index < sources.count; index++) {
         if (ends_with(sources.items[index], "_windows.c") ||
-            ends_with(sources.items[index], "_windows.cpp"))
+            ends_with(sources.items[index], "_windows.cpp") ||
+            strstr(sources.items[index], "_windows_") != NULL)
             continue;
 
         char source_path[LSM_PORTABILITY_PATH_LEN];

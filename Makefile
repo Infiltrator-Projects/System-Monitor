@@ -534,7 +534,7 @@ backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 history-retention-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 $(STRICT_WARNINGS) \
-		support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \
+		support/tests/history_retention_smoke.c src/history.c src/history_persistence.c src/temporal_presentation.c \
 		  src/ui_helpers.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
@@ -639,7 +639,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./$(BUILD_DIR)/process-sanitized
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \
+		support/tests/history_retention_smoke.c src/history.c src/history_persistence.c src/temporal_presentation.c \
 		src/ui_helpers.c $(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/history-retention-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \

@@ -392,6 +392,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/ui_helpers.c)
     add_executable(lsm-history-retention-smoke
         support/tests/history_retention_smoke.c src/history.c
+        src/history_persistence.c
         src/temporal_presentation.c src/ui_helpers.c)
     target_compile_definitions(lsm-history-retention-smoke PRIVATE
         LSM_HISTORY_TEST_API)
