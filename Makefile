@@ -42,7 +42,7 @@ BUILD_INFO := $(BUILD_DIR)/BUILD-INFO
 LSM_PLATFORM ?= linux
 ALL_SOURCE_NAMES := $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' support/sources.txt)
 PLATFORM_BACKEND_NAMES := monitor_backend_$(LSM_PLATFORM).c process_backend_$(LSM_PLATFORM).c service_backend_$(LSM_PLATFORM).c user_backend_$(LSM_PLATFORM).c startup_backend_$(LSM_PLATFORM).c
-SOURCE_NAMES := $(filter-out main_windows.c monitor_backend_%.c process_backend_%.c service_backend_%.c user_backend_%.c startup_backend_%.c,$(ALL_SOURCE_NAMES)) \
+SOURCE_NAMES := $(filter-out main_windows.c windows_%.c monitor_backend_%.c process_backend_%.c service_backend_%.c user_backend_%.c startup_backend_%.c,$(ALL_SOURCE_NAMES)) \
 	$(PLATFORM_BACKEND_NAMES)
 SOURCES := $(addprefix src/,$(SOURCE_NAMES))
 C_SOURCES := $(filter %.c,$(SOURCES))
@@ -52,26 +52,11 @@ CXX_OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(CXX_SOURCES))
 OBJECTS := $(C_OBJECTS) $(CXX_OBJECTS)
 APP_LINKER := $(if $(strip $(CXX_SOURCES)),$(CXX),$(CC))
 
-HARDWARE_MONITOR_SOURCES := \
-	src/monitor_hardware.c src/monitor_bluetooth.c \
-	src/hardware_topology.c src/intel_gpu.c \
-	src/npu_telemetry.c \
-	src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c \
-	src/linux_capability.c src/logitech_hidpp.c \
-	src/logitech_hidpp_protocol.c  src/memory_hardware.c \
-	src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c \
-	src/system_sources.c src/pci_names.c src/pci_names_data.c
-MONITOR_CORE_SOURCES := src/monitor.c
-# Exactly one operating-system implementation satisfies monitor_platform.h.
-MONITOR_PLATFORM_SOURCES := \
-	src/monitor_backend_linux.c src/refresh_policy.c src/monitor_cpu_memory.c \
-	src/cpu_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c \
-	src/monitor_storage_network.c src/disk_accounting.c src/wifi_metadata.c \
-	$(HARDWARE_MONITOR_SOURCES)
-MONITOR_SOURCES := $(MONITOR_CORE_SOURCES) $(MONITOR_PLATFORM_SOURCES)
-PROCESS_CORE_SOURCES := src/process_model.c
-PROCESS_PLATFORM_SOURCES := src/process_backend_linux.c src/process_gpu.c
-PROCESS_SOURCES := $(PROCESS_CORE_SOURCES) $(PROCESS_PLATFORM_SOURCES)
+SOURCE_GROUP_DIR := support/source-groups
+SOURCE_GROUP_READ = $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' $(1))
+HARDWARE_MONITOR_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/hardware-monitor-linux.txt))
+MONITOR_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/monitor-linux.txt))
+PROCESS_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/process-linux.txt))
 
 BASE_WARNINGS := -Wall -Wextra -Wpedantic
 STRICT_WARNINGS := $(BASE_WARNINGS) -Werror -Wshadow -Wformat=2 -Wundef \

@@ -28,6 +28,8 @@ Renderers own widgets, drawing, events and accessibility. Shared labels, units a
 
 Private application storage remains owned by the composition root. Coordinators that do not own that storage consume narrow views through dedicated runtime, process and presentation context bridges rather than including the complete `LsmApp` layout. Top-level page activation, keyboard commands, window-manager mechanics and theme projection have separate presentation owners so a change in one policy does not require the others to know its private state.
 
+Coupling boundaries are mechanically enforced. `support/app-internal-allowlist.txt` is the closed set of implementation files permitted to include `app_internal.h`; new coordinators must use a narrow context bridge. Native Windows theme projection and process-worker lifetime are separate owners from the Win32 shell. Shared source groups under `support/source-groups/` are consumed by Make, CMake and CI so test and cross-build membership has one authority instead of parallel hand-maintained lists.
+
 ## Runtime contracts
 
 - Availability is distinct from value; valid zero never means unavailable.

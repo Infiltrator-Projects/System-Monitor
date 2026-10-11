@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+main_windows.c
+windows_theme.c
+windows_process_runtime.c
+presentation_contract.c
+performance_view.c
+overview_history.c
+monitor_backend_windows.c
+process_backend_windows.c

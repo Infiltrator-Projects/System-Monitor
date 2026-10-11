@@ -349,7 +349,8 @@ int main(int argc, char **argv)
     }
 
     for (size_t index = 0U; index < sources.count; index++) {
-        if (ends_with(sources.items[index], "_windows.c") ||
+        if (strncmp(sources.items[index], "windows_", 8U) == 0 ||
+            ends_with(sources.items[index], "_windows.c") ||
             ends_with(sources.items[index], "_windows.cpp") ||
             strstr(sources.items[index], "_windows_") != NULL)
             continue;

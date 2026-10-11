@@ -67,6 +67,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/sources.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/source-groups/hardware-monitor-linux.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/source-groups/monitor-linux.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/source-groups/process-linux.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/source-groups/windows-product.txt"
     "${INFILTRATR_COMMON_DIR}/VERSION")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION" LSM_PROJECT_VERSION)
 string(STRIP "${LSM_PROJECT_VERSION}" LSM_PROJECT_VERSION)
@@ -154,7 +158,7 @@ list(TRANSFORM LSM_SOURCE_NAMES PREPEND "src/")
 # operating-system providers merely because they coexist in the source tree.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LSM_PLATFORM_NAME "linux")
-    list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX "src/main_windows\\.c$")
+    list(FILTER LSM_SOURCE_NAMES EXCLUDE REGEX "src/(main_windows|windows_.*)\\.c$")
 else()
     message(FATAL_ERROR
         "No native monitor/process/service backend is implemented for ${CMAKE_SYSTEM_NAME}")
@@ -168,37 +172,19 @@ list(APPEND LSM_SOURCE_NAMES
     "src/user_backend_${LSM_PLATFORM_NAME}.c"
     "src/startup_backend_${LSM_PLATFORM_NAME}.c")
 
-set(LSM_MONITOR_CORE_SOURCES
-    src/monitor.c)
+function(lsm_read_source_group variable manifest)
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/${manifest}" group_entries)
+    list(FILTER group_entries EXCLUDE REGEX "^[ 	]*(#|$)")
+    list(TRANSFORM group_entries PREPEND "src/")
+    set(${variable} "${group_entries}" PARENT_SCOPE)
+endfunction()
 
-# Exactly one native monitor backend implements monitor_platform.h.  The Linux
-# build selects the implementation below; another OS can provide its own source
-# list without changing the public monitor lifecycle or presentation modules.
-set(LSM_HARDWARE_MONITOR_SOURCES
-    src/monitor_hardware.c src/monitor_bluetooth.c
-    src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
-    src/monitor_battery.c src/bluetooth_battery.c src/bluetooth_traffic.c
-    src/linux_capability.c src/logitech_hidpp.c
-    src/logitech_hidpp_protocol.c  src/memory_hardware.c
-    src/smbios_memory.c src/nvml.c src/mountinfo.c src/storage_metadata.c
-    src/system_sources.c
-    src/pci_names.c src/pci_names_data.c)
-
-set(LSM_MONITOR_PLATFORM_SOURCES
-    src/monitor_backend_linux.c src/refresh_policy.c src/monitor_cpu_memory.c
-    src/cpu_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c
-    src/monitor_storage_network.c
-    src/disk_accounting.c src/wifi_metadata.c
-    ${LSM_HARDWARE_MONITOR_SOURCES})
-
-set(LSM_PROCESS_CORE_SOURCES
-    src/process_model.c)
-
-set(LSM_PROCESS_PLATFORM_SOURCES
-    src/process_backend_linux.c src/process_gpu.c)
-
-set(LSM_MONITOR_BACKEND_SOURCES
-    ${LSM_MONITOR_CORE_SOURCES} ${LSM_MONITOR_PLATFORM_SOURCES})
+lsm_read_source_group(LSM_HARDWARE_MONITOR_SOURCES
+    support/source-groups/hardware-monitor-linux.txt)
+lsm_read_source_group(LSM_MONITOR_BACKEND_SOURCES
+    support/source-groups/monitor-linux.txt)
+lsm_read_source_group(LSM_PROCESS_SOURCES
+    support/source-groups/process-linux.txt)
 
 # Common owns its complete internal source/dependency graph. Consumers
 # link the authoritative target instead of reproducing that membership.
@@ -310,8 +296,7 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         src/performance_view.c)
 
     add_executable(lsm-backend-smoke support/tests/backend_smoke.c
-        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
-        ${LSM_PROCESS_PLATFORM_SOURCES})
+        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_SOURCES})
     target_compile_definitions(lsm-backend-smoke PRIVATE _DEFAULT_SOURCE)
     target_link_options(lsm-backend-smoke PRIVATE
         -Wl,--wrap=pthread_timedjoin_np,--wrap=pthread_detach,--wrap=lsm_sources_destroy,--wrap=lsm_sources_read_network_counters)
@@ -403,14 +388,12 @@ if(LSM_BUILD_DEVELOPER_TOOLS)
         LSM_TEMPORAL_PRESENTATION_TEST_API)
     add_executable(lsm-async-workers-smoke
         support/tests/async_workers_smoke.c src/process_scanner.c
-        src/process_recorder.c ${LSM_PROCESS_CORE_SOURCES}
-        ${LSM_PROCESS_PLATFORM_SOURCES})
+        src/process_recorder.c ${LSM_PROCESS_SOURCES})
     target_link_libraries(lsm-async-workers-smoke PRIVATE PkgConfig::GTK3)
     add_executable(lsm-process-scan-benchmark support/tests/process_scan_benchmark.c
-        ${LSM_PROCESS_CORE_SOURCES} ${LSM_PROCESS_PLATFORM_SOURCES})
+        ${LSM_PROCESS_SOURCES})
     add_executable(lsm-runtime-stability-smoke support/tests/runtime_stability_smoke.c
-        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_CORE_SOURCES}
-        ${LSM_PROCESS_PLATFORM_SOURCES})
+        ${LSM_MONITOR_BACKEND_SOURCES} ${LSM_PROCESS_SOURCES})
 
     set(LSM_DEVELOPER_SMOKE_TARGETS
         lsm-core-suite-smoke
