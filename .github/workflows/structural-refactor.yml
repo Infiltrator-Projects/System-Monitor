@@ -24,6 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sed -i 's/"state->process_backend",/"state->process_backend = ",/' support/tools/apply_structural_coupling_refactor.py
           python3 support/tools/apply_structural_coupling_refactor.py
           rm -f support/.structural-refactor-trigger
           git diff --check
