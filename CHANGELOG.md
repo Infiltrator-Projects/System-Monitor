@@ -2,6 +2,7 @@
 
 ## 1.0.178 - 2026-10-07
 
+- Extract Technical Details layout persistence, the Preferences GTK editor and process-log plotting into dedicated owners to reduce change ripple through page/menu code.
 - Make the extracted page-registry, keyboard and window-mechanics owners the live application wiring and remove the duplicate legacy shell event path.
 - Isolate keyboard and page-registry access to private application layout behind a narrow presentation context.
 - Split GTK theme construction out of `app_shell.c` so navigation/window chrome and theme policy no longer share one change hotspot.
