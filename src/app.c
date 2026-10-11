@@ -27,6 +27,7 @@
 #include "presentation_contract.h"
 #include "preferences.h"
 #include "process_lifecycle.h"
+#include "processes_ui.h"
 #include "services.h"
 #include "startup.h"
 #include "summary_bar.h"
