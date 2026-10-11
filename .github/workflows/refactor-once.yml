@@ -10,9 +10,35 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'chore: apply coupling refactor patch'
-    runs-on: ubuntu-latest
+    if: github.event.head_commit.message == 'chore: retry coupling refactor patch'
+    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
+    timeout-minutes: 10
+    env:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
+      - name: Ensure Git is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null 2>&1; then
+            git --version
+            exit 0
+          fi
+          git_root="$RUNNER_TEMP/system-monitor-refactor-git"
+          package_dir="$RUNNER_TEMP/system-monitor-refactor-git-package"
+          rm -rf "$git_root" "$package_dir"
+          mkdir -p "$git_root" "$package_dir"
+          (
+            cd "$package_dir"
+            apt-get download git
+            package="$(find . -maxdepth 1 -type f -name 'git_*.deb' -print -quit)"
+            test -n "$package"
+            dpkg-deb -x "$package" "$git_root"
+          )
+          test -x "$git_root/usr/bin/git"
+          echo "$git_root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$git_root/usr/lib/git-core" >> "$GITHUB_ENV"
+
       - name: Check out exact triggering head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,7 +60,6 @@ jobs:
 
           main_path = Path('src/main_windows.c')
           main = main_path.read_text()
-
           old_state = '''    bool process_backend_attempted;\n    LsmProcessBackend *process_backend; /* Owned exclusively by process_thread. */\n    HANDLE process_thread;\n    HANDLE process_event;\n    CRITICAL_SECTION process_lock;\n    bool process_lock_initialised;\n    bool process_worker_abandoned;\n    bool process_stop_requested;\n    bool process_request_pending;\n    unsigned process_requested_flags;\n    LsmProcessInfo *process_completed;\n    size_t process_completed_count;\n    bool process_completed_ready;\n'''
           new_state = '''    bool process_backend_attempted;\n    LsmWindowsProcessWorker *process_worker;\n'''
           main = replace_exact(main, old_state, new_state, label='Windows UI process state')
@@ -149,13 +174,6 @@ jobs:
 
           make_path = Path('Makefile')
           make = make_path.read_text()
-          make = replace_exact(
-              make,
-              'support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \\\n',
-              'support/tests/history_retention_smoke.c src/history.c src/history_persistence.c \\\n'
-              '\t\tsrc/temporal_presentation.c ',
-              expected=0,
-              label='placeholder') if False else make
           old_history = 'support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \\\n'
           count = make.count(old_history)
           if count != 2:
