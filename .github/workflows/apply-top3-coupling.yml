@@ -1,0 +1,398 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Apply top-three coupling refactor
+
+on:
+  push:
+    branches:
+      - refactor/top3-coupling-2026-10-11
+    paths:
+      - .github/workflows/apply-top3-coupling.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: [self-hosted, Linux, X64, linux-native]
+    steps:
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply bounded ownership extractions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def fail(message: str) -> None:
+              raise SystemExit(message)
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  fail(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          def find_function_span(text: str, signature: str) -> tuple[int, int]:
+              pos = text.find(signature)
+              if pos < 0:
+                  fail(f"function not found: {signature}")
+              start = text.rfind('\n', 0, pos) + 1
+              brace = text.find('{', pos)
+              if brace < 0:
+                  fail(f"opening brace not found: {signature}")
+              depth = 0
+              i = brace
+              state = 'code'
+              while i < len(text):
+                  ch = text[i]
+                  nxt = text[i + 1] if i + 1 < len(text) else ''
+                  if state == 'code':
+                      if ch == '/' and nxt == '/':
+                          state = 'line'
+                          i += 2
+                          continue
+                      if ch == '/' and nxt == '*':
+                          state = 'block'
+                          i += 2
+                          continue
+                      if ch == '"':
+                          state = 'string'
+                          i += 1
+                          continue
+                      if ch == "'":
+                          state = 'char'
+                          i += 1
+                          continue
+                      if ch == '{':
+                          depth += 1
+                      elif ch == '}':
+                          depth -= 1
+                          if depth == 0:
+                              end = i + 1
+                              while end < len(text) and text[end] in ' \t':
+                                  end += 1
+                              if end < len(text) and text[end] == '\n':
+                                  end += 1
+                              return start, end
+                  elif state == 'line':
+                      if ch == '\n':
+                          state = 'code'
+                  elif state == 'block':
+                      if ch == '*' and nxt == '/':
+                          state = 'code'
+                          i += 2
+                          continue
+                  elif state in ('string', 'char'):
+                      if ch == '\\':
+                          i += 2
+                          continue
+                      if (state == 'string' and ch == '"') or (state == 'char' and ch == "'"):
+                          state = 'code'
+                  i += 1
+              fail(f"unterminated function: {signature}")
+
+          def extract_function(text: str, signature: str) -> tuple[str, str]:
+              start, end = find_function_span(text, signature)
+              return text[:start] + text[end:], text[start:end]
+
+          # 1. Preferences: persistence remains in preferences.c; GTK editing gets
+          # its own presentation owner. This removes the storage/UI change hotspot.
+          preferences_path = Path('src/preferences.c')
+          preferences = preferences_path.read_text()
+          marker = 'static void attach_preference('
+          split = preferences.find(marker)
+          if split < 0:
+              fail('preferences dialog boundary not found')
+          dialog_body = preferences[split:]
+          if 'void lsm_preferences_show(' not in dialog_body:
+              fail('preferences dialog owner does not contain lsm_preferences_show')
+          preferences = preferences[:split].rstrip() + '\n'
+          preferences = preferences.replace(
+              '@brief Small, forward-compatible preferences store and GTK editor.',
+              '@brief Small, forward-compatible preferences persistence store.')
+          preferences_path.write_text(preferences)
+
+          Path('src/preferences_dialog.c').write_text('''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file preferences_dialog.c
+ * @brief GTK editor for System Monitor preferences.
+ *
+ * Persistence parsing and durable writes remain owned by preferences.c. This
+ * module owns only user interaction and projection of accepted values back into
+ * application state.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "preferences.h"
+
+#include "app_internal.h"
+#include "app_runtime.h"
+#include "details_page.h"
+#include "filesystems.h"
+#include "performance.h"
+#include "processes_ui.h"
+#include "ui_helpers.h"
+
+#include <infiltratr/design.h>
+
+''' + dialog_body)
+
+          # 2. Menu: process-log parsing/worker/graph lifetime gets a dedicated
+          # owner; app_menu.c returns to menu construction and action dispatch.
+          menu_path = Path('src/app_menu.c')
+          menu = menu_path.read_text()
+          start_marker = 'static void graph_window_destroy('
+          end_marker = 'static void on_about('
+          start = menu.find(start_marker)
+          end = menu.find(end_marker)
+          if start < 0 or end < 0 or end <= start:
+              fail('process log plot block boundary not found')
+          plot_body = menu[start:end]
+          if 'static void on_plot_log(' not in plot_body:
+              fail('process log block lacks on_plot_log')
+          plot_body = replace_once(
+              plot_body,
+              'static void on_plot_log(',
+              'void lsm_process_log_plot_show(',
+              'process log exported callback')
+          menu = menu[:start] + menu[end:]
+          menu = replace_once(
+              menu,
+              '#include "process_file_users.h"\n',
+              '#include "process_file_users.h"\n#include "process_log_plot.h"\n',
+              'app_menu process log include')
+          menu = replace_once(
+              menu,
+              'G_CALLBACK(on_plot_log)',
+              'G_CALLBACK(lsm_process_log_plot_show)',
+              'app_menu process log callback')
+          menu_path.write_text(menu)
+
+          Path('src/process_log_plot.h').write_text('''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file process_log_plot.h
+ * @brief Process-recording log plotting presentation action.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
+#define INFILTRATOR_SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
+
+#include <gtk/gtk.h>
+
+/**
+ * Open a recorded-process CSV and asynchronously build its CPU/memory graph.
+ *
+ * @param item Activating menu item; may be NULL for programmatic invocation.
+ * @param user_data LsmApp owning the parent window and shutdown state.
+ */
+void lsm_process_log_plot_show(GtkMenuItem *item, gpointer user_data);
+
+#endif
+''')
+          Path('src/process_log_plot.c').write_text('''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file process_log_plot.c
+ * @brief Asynchronous recorded-process CSV parsing and graph presentation.
+ *
+ * The menu layer dispatches this action but does not own file parsing, worker
+ * lifetime or graph-window construction.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "process_log_plot.h"
+
+#include "app_internal.h"
+#include "common.h"
+#include "graph.h"
+#include "ui_helpers.h"
+
+#include <errno.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+''' + plot_body)
+
+          # 3. Details: move column layout persistence and migration policy out of
+          # the already-large table/page presentation owner.
+          details_path = Path('src/details_page.c')
+          details = details_path.read_text()
+          details = replace_once(
+              details,
+              '#include "details_page.h"\n',
+              '#include "details_page.h"\n#include "details_layout.h"\n',
+              'details layout include')
+          details = re.sub(r'\bcolumn_specs\b', 'lsm_details_column_specs', details)
+          details = replace_once(
+              details,
+              'static const LsmProcessTableColumnSpec lsm_details_column_specs[PROC_N_COLUMNS] = {',
+              'const LsmProcessTableColumnSpec lsm_details_column_specs[PROC_N_COLUMNS] = {',
+              'details column schema ownership')
+          scope_block = '''enum {
+    PROCESS_SCOPE_ALL = 0,
+    PROCESS_SCOPE_ACTIVE,
+    PROCESS_SCOPE_MINE
+};
+
+'''
+          details = replace_once(details, scope_block, '', 'details process scope enum')
+
+          extracted = []
+          for signature in (
+              'void lsm_details_save_layout(',
+              'static gboolean layout_boolean(',
+              'static int layout_integer(',
+              'static void process_columns_load(',
+          ):
+              details, function = extract_function(details, signature)
+              extracted.append(function)
+          layout_body = '\n'.join(extracted)
+          layout_body = replace_once(
+              layout_body,
+              'static void process_columns_load(',
+              'void lsm_details_layout_load(',
+              'details layout exported load')
+          if 'process_columns_load(app);' not in details:
+              fail('details layout load call not found')
+          details = details.replace(
+              'process_columns_load(app);', 'lsm_details_layout_load(app);')
+          details_path.write_text(details)
+
+          Path('src/details_layout.h').write_text('''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file details_layout.h
+ * @brief Technical Details column schema and durable layout persistence.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#ifndef INFILTRATOR_SYSTEM_MONITOR_DETAILS_LAYOUT_H
+#define INFILTRATOR_SYSTEM_MONITOR_DETAILS_LAYOUT_H
+
+#include "app.h"
+#include "process_table_ui.h"
+
+typedef enum {
+    PROCESS_SCOPE_ALL = 0,
+    PROCESS_SCOPE_ACTIVE,
+    PROCESS_SCOPE_MINE
+} LsmProcessScope;
+
+/** Shared immutable Technical Details column schema. */
+extern const LsmProcessTableColumnSpec lsm_details_column_specs[];
+
+/**
+ * Load, migrate and apply the persisted Technical Details table layout.
+ *
+ * @param app Application owning the Details table and layout path.
+ */
+void lsm_details_layout_load(LsmApp *app);
+
+#endif
+''')
+          Path('src/details_layout.c').write_text('''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file details_layout.c
+ * @brief Technical Details column-layout persistence and migration owner.
+ *
+ * Table construction/filtering remains in details_page.c; this module owns the
+ * durable layout format, migration rules, sort state and column geometry.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
+ */
+#include "details_layout.h"
+
+#include "details_page.h"
+#include "app_internal.h"
+#include "atomic_file.h"
+#include "common.h"
+
+#include <infiltratr/config.h>
+
+#include <errno.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+''' + layout_body)
+
+          # Register the new translation units for both Make and CMake.
+          sources_path = Path('support/sources.txt')
+          sources = sources_path.read_text()
+          sources = replace_once(
+              sources, 'preferences.c\n',
+              'preferences.c\npreferences_dialog.c\n',
+              'source manifest preferences dialog')
+          sources = replace_once(
+              sources, 'app_menu.c\n',
+              'app_menu.c\nprocess_log_plot.c\n',
+              'source manifest process log plot')
+          sources = replace_once(
+              sources, 'details_page.c\n',
+              'details_page.c\ndetails_layout.c\n',
+              'source manifest details layout')
+          sources_path.write_text(sources)
+
+          # Record the ownership change in the current unreleased source version.
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text()
+          changelog = replace_once(
+              changelog,
+              '## 1.0.178 - 2026-10-07\n\n',
+              '## 1.0.178 - 2026-10-07\n\n'
+              '- Extract Technical Details layout persistence, the Preferences GTK editor and process-log plotting into dedicated owners to reduce change ripple through page/menu code.\n',
+              'changelog top coupling note')
+          changelog_path.write_text(changelog)
+
+          # Repair the pre-existing style-gate failure on the current main head:
+          # keep the documented function name on the declaration line expected by
+          # the source-style audit.
+          history_header = Path('src/history_persistence.h')
+          history_text = history_header.read_text()
+          history_text = replace_once(
+              history_text,
+              'struct LsmHistorySaveCoordinator *\nlsm_history_persistence_coordinator_create(void);',
+              'struct LsmHistorySaveCoordinator *lsm_history_persistence_coordinator_create(\n    void);',
+              'history persistence documented declaration')
+          history_header.write_text(history_text)
+          PY
+
+          git diff --check
+
+      - name: Verify refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-top3 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-top3 --target system-monitor --parallel 2
+          make style-check
+
+      - name: Commit verified refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-top3-coupling.yml
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git commit -m 'refactor: isolate top coupling hotspots'
+          git push origin HEAD:refactor/top3-coupling-2026-10-11
