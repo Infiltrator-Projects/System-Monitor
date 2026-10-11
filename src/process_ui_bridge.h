@@ -22,6 +22,22 @@ typedef struct LsmApp LsmApp;
 gboolean lsm_process_heatmap_enabled(const LsmApp *app);
 
 /**
+ * Mark both process presentations dirty after a new completed snapshot.
+ * @param app Application owning process presentation state.
+ */
+void lsm_process_ui_snapshot_changed(LsmApp *app);
+
+/**
+ * Invalidate grouped-process identity state after catalogue replacement.
+ *
+ * The visible Processes page is refreshed immediately when it is active;
+ * otherwise invalidation is retained until its next presentation pass.
+ *
+ * @param app Application owning grouped process presentation state.
+ */
+void lsm_process_ui_application_catalog_changed(LsmApp *app);
+
+/**
  * Synchronise the shared process-record action sensitivity.
  * @param app Application owning the record menu action.
  * @param ordinary_selection TRUE when one ordinary process is selected.
