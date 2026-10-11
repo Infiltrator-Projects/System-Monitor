@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/** Native process worker ownership, synchronization and completed-snapshot state. */
 typedef struct {
     LsmProcessBackend *process_backend;
     HANDLE process_thread;
