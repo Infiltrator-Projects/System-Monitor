@@ -22,6 +22,7 @@
 #include "overview_history.h"
 #include "performance_selection.h"
 #include "presentation_contract.h"
+#include "services_state.h"
 
 #include <infiltratr/design.h>
 
@@ -541,24 +542,6 @@ typedef struct {
     gboolean startup_refresh_again;
     gboolean startup_action_pending;
 } LsmStartupState;
-
-/** Services page state and asynchronous systemd requests. */
-typedef struct {
-    GtkWidget *services_tree;
-    GtkListStore *services_store;
-    GtkWidget *services_search;
-    GtkWidget *service_start_button;
-    GtkWidget *service_stop_button;
-    GtkWidget *service_restart_button;
-    GtkWidget *service_enable_button;
-    GtkWidget *service_count_label;
-    gboolean services_available;
-    gboolean services_refresh_pending;
-    guint services_search_timer;
-    GCancellable *services_refresh_cancellable;
-    GCancellable *services_action_cancellable;
-    guint services_action_pending;
-} LsmServicesState;
 
 /** Users and Sessions page state and asynchronous logind requests. */
 typedef struct {
