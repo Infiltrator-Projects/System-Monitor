@@ -6,6 +6,7 @@ app_menu.c
 app_presentation_context.c
 app_process_context.c
 app_runtime_context.c
+app_services_context.c
 app_shell.c
 app_shell_window.c
 app_theme.c
@@ -28,7 +29,6 @@ process_log_plot.c
 process_navigation.c
 process_ui_bridge.c
 processes_ui.c
-services.c
 startup.c
 summary_bar_adapter.c
 users.c
