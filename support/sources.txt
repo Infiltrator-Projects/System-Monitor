@@ -59,6 +59,7 @@ process_file_users.c
 process_table_ui.c
 process_inspection.c
 history.c
+history_persistence.c
 startup.c
 startup_backend_linux.c
 services.c
