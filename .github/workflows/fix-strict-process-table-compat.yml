@@ -21,33 +21,33 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Patch compatibility declarations
+      - name: Patch verification boundaries
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_once(path, old, new):
+          def replace_exact(path, old, new, expected=1):
               text = Path(path).read_text()
               count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one match, found {count}")
-              Path(path).write_text(text.replace(old, new, 1))
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} matches, found {count}")
+              Path(path).write_text(text.replace(old, new))
 
-          replace_once(
+          replace_exact(
               "src/process_table_ui.c",
               "#include <stdio.h>\n",
               "#include <stdio.h>\n#include <stdlib.h>\n",
           )
-          replace_once(
+          replace_exact(
               "support/tests/compat/gtk/gtk.h",
               "void g_object_set_data(gpointer object, const gchar *key, gpointer data);\n",
               "void g_object_set_data(gpointer object, const gchar *key, gpointer data);\n"
               "void g_object_set_data_full(gpointer object, const gchar *key, gpointer data,\n"
               "                            GDestroyNotify destroy);\n",
           )
-          replace_once(
+          replace_exact(
               "support/tools/check_portability.c",
               "        if (ends_with(sources.items[index], \"_windows.c\") ||\n"
               "            ends_with(sources.items[index], \"_windows.cpp\"))\n"
@@ -56,6 +56,22 @@ jobs:
               "            ends_with(sources.items[index], \"_windows.cpp\") ||\n"
               "            strstr(sources.items[index], \"_windows_\") != NULL)\n"
               "            continue;\n",
+          )
+          replace_exact(
+              "Makefile",
+              "support/tests/history_retention_smoke.c src/history.c src/temporal_presentation.c \\\\\n",
+              "support/tests/history_retention_smoke.c src/history.c src/history_persistence.c src/temporal_presentation.c \\\\\n",
+              expected=2,
+          )
+          replace_exact(
+              "CMakeLists.txt",
+              "    add_executable(lsm-history-retention-smoke\n"
+              "        support/tests/history_retention_smoke.c src/history.c\n"
+              "        src/temporal_presentation.c src/ui_helpers.c)\n",
+              "    add_executable(lsm-history-retention-smoke\n"
+              "        support/tests/history_retention_smoke.c src/history.c\n"
+              "        src/history_persistence.c\n"
+              "        src/temporal_presentation.c src/ui_helpers.c)\n",
           )
           PY
           git diff --check
@@ -67,22 +83,31 @@ jobs:
           ulimit -s 65536
           REQUIRE_I386=1 make check
 
+      - name: Verify CMake retention target
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-cmake-retention -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake-retention --target lsm-history-retention-smoke --parallel 2
+          ./build-cmake-retention/lsm-history-retention-smoke
+
       - name: Commit verified compatibility fix
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/fix-strict-process-table-compat.yml
+          rm -rf build-cmake-retention
           git diff --check
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
-          git add src/process_table_ui.c support/tests/compat/gtk/gtk.h support/tools/check_portability.c
+          git add Makefile CMakeLists.txt src/process_table_ui.c support/tests/compat/gtk/gtk.h support/tools/check_portability.c
           git rm --cached --ignore-unmatch .github/workflows/fix-strict-process-table-compat.yml >/dev/null 2>&1 || true
           git add -u .github/workflows/fix-strict-process-table-compat.yml
           actual="$(git diff --cached --name-only | sort)"
-          expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' 'support/tools/check_portability.c' | sort)"
+          expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'CMakeLists.txt' 'Makefile' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' 'support/tools/check_portability.c' | sort)"
           if [ "$actual" != "$expected" ]; then
             printf 'Unexpected staged files:\n%s\n' "$actual" >&2
             exit 1
           fi
-          git commit -m 'fix: complete portability verification boundaries'
+          git commit -m 'fix: complete verification dependency boundaries'
           git push origin HEAD:fix/strict-process-table-compat
