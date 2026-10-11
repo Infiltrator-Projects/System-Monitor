@@ -12,7 +12,7 @@
  * @license GPL-3.0-or-later
  */
 #include "help.h"
-#include "app_internal.h"
+#include "app_presentation_context.h"
 
 #include "ui_helpers.h"
 
@@ -231,24 +231,28 @@ static void help_destroy(GtkWidget *widget, gpointer user_data)
 {
     (void)widget;
     HelpWindow *help = user_data;
-    help->app->shell.help_window = NULL;
+    lsm_app_help_set_window(help->app, NULL);
     g_free(help);
 }
 
 void lsm_help_show(LsmApp *app)
 {
-    if (!app) return;
-    if (app->shell.help_window) {
-        gtk_window_present(GTK_WINDOW(app->shell.help_window));
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (!parent) return;
+
+    GtkWidget *existing = lsm_app_help_window(app);
+    if (existing) {
+        gtk_window_present(GTK_WINDOW(existing));
         return;
     }
+
     HelpWindow *help = g_new0(HelpWindow, 1U);
     help->app = app;
     help->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    app->shell.help_window = help->window;
+    lsm_app_help_set_window(app, help->window);
     gtk_window_set_title(GTK_WINDOW(help->window), "System Monitor Help");
     lsm_ui_set_workarea_default_size(GTK_WINDOW(help->window), 880, 680);
-    gtk_window_set_transient_for(GTK_WINDOW(help->window), GTK_WINDOW(app->shell.window));
+    gtk_window_set_transient_for(GTK_WINDOW(help->window), GTK_WINDOW(parent));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(help->window), TRUE);
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_container_set_border_width(GTK_CONTAINER(outer), 12);
