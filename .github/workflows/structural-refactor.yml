@@ -12,7 +12,7 @@ permissions:
 jobs:
   apply:
     runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -25,9 +25,45 @@ jobs:
         run: |
           set -euo pipefail
           sed -i 's/"state->process_backend",/"state->process_backend = ",/' support/tools/apply_structural_coupling_refactor.py
+          sed -i 's/^    refactor_ci()$/    # CI is updated separately through the workflow-authorized GitHub connection./' support/tools/apply_structural_coupling_refactor.py
+          sed -i '/structural-refactor.yml.*unlink/d' support/tools/apply_structural_coupling_refactor.py
           python3 support/tools/apply_structural_coupling_refactor.py
           rm -f support/.structural-refactor-trigger
           git diff --check
+
+      - name: Validate coupling guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            -Wcast-qual -Wswitch-enum -Wnull-dereference \
+            support/tools/check_source_style.cpp -o "$RUNNER_TEMP/system-monitor-style-check"
+          "$RUNNER_TEMP/system-monitor-style-check"
+
+      - name: Validate native Windows owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < support/VERSION)
+          version_header="$RUNNER_TEMP/system-monitor-version.h"
+          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          x86_64-w64-mingw32-gcc \
+            -std=c17 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
+            -Wstrict-prototypes -Wmissing-prototypes \
+            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
+            -fsyntax-only \
+            src/main_windows.c src/windows_theme.c src/windows_process_runtime.c \
+            src/presentation_contract.c src/performance_view.c src/overview_history.c \
+            src/monitor_backend_windows.c src/process_backend_windows.c
+
+      - name: Validate source-group build configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$RUNNER_TEMP/system-monitor-structural-cmake" \
+            -DLSM_BUILD_DEVELOPER_TOOLS=OFF -DCMAKE_BUILD_TYPE=Release >/dev/null
+          make -n build-all >/dev/null
 
       - name: Commit refactor
         shell: bash
