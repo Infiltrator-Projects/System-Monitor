@@ -17,9 +17,8 @@
 #include "atomic_file.h"
 #include "app_internal.h"
 #include "common.h"
-#include "temporal_presentation.h"
-#include "process_backend.h"
 #include "process_inspector.h"
+#include "process_table_ui.h"
 #include "ui_helpers.h"
 
 #include <infiltratr/config.h>
@@ -33,64 +32,43 @@
 #include <string.h>
 #include <time.h>
 
-typedef enum {
-    CELL_TEXT,
-    CELL_INTEGER,
-    CELL_PERCENT,
-    CELL_BYTES,
-    CELL_RATE,
-    CELL_PRIORITY,
-    CELL_TIME,
-    CELL_DURATION
-} ProcessCellFormat;
-
-typedef struct {
-    int column;
-    const char *key;
-    const char *title;
-    ProcessCellFormat format;
-    gboolean default_visible;
-    gboolean expand;
-    int minimum_width;
-} ProcessColumnSpec;
-
-static const ProcessColumnSpec column_specs[PROC_N_COLUMNS] = {
-    {PROC_COL_NAME,             "name",       "Name",              CELL_TEXT,     TRUE,  TRUE,  170},
-    {PROC_COL_PID,              "pid",        "PID",               CELL_INTEGER,  TRUE,  FALSE, 70},
-    {PROC_COL_PPID,             "ppid",       "Parent PID",        CELL_INTEGER,  FALSE, FALSE, 85},
-    {PROC_COL_USER,             "user",       "User",              CELL_TEXT,     TRUE,  FALSE, 95},
-    {PROC_COL_STATE,            "status",     "Status",            CELL_TEXT,     TRUE,  FALSE, 90},
-    {PROC_COL_CPU,              "cpu",        "CPU",               CELL_PERCENT,  TRUE,  FALSE, 70},
-    {PROC_COL_CPU_TIME,         "cpu_time",   "CPU time",          CELL_DURATION, FALSE, FALSE, 95},
-    {PROC_COL_MEMORY,           "memory",     "Memory %",          CELL_PERCENT,  TRUE,  FALSE, 80},
-    {PROC_COL_RSS,              "rss",        "Resident memory",   CELL_BYTES,    TRUE,  FALSE, 110},
-    {PROC_COL_VIRTUAL_MEMORY,   "virtual",    "Virtual memory",    CELL_BYTES,    FALSE, FALSE, 110},
-    {PROC_COL_WRITABLE_MEMORY,  "writable",   "Writable memory",   CELL_BYTES,    FALSE, FALSE, 115},
-    {PROC_COL_SHARED_MEMORY,    "shared",     "Shared memory",     CELL_BYTES,    FALSE, FALSE, 110},
-    {PROC_COL_THREADS,          "threads",    "Threads",           CELL_INTEGER,  FALSE, FALSE, 70},
-    {PROC_COL_READ_RATE,        "read_rate",  "Read/s",            CELL_RATE,     TRUE,  FALSE, 90},
-    {PROC_COL_WRITE_RATE,       "write_rate", "Write/s",           CELL_RATE,     TRUE,  FALSE, 90},
-    {PROC_COL_GPU,              "gpu",        "GPU",               CELL_PERCENT,  TRUE,  FALSE, 70},
-    {PROC_COL_GPU_ENGINE,       "gpu_engine", "GPU engine",        CELL_TEXT,     FALSE, FALSE, 105},
-    {PROC_COL_GPU_MEMORY,       "gpu_memory", "GPU memory",        CELL_BYTES,    FALSE, FALSE, 105},
-    {PROC_COL_READ_TOTAL,       "read_total", "Read total",        CELL_BYTES,    FALSE, FALSE, 95},
-    {PROC_COL_WRITE_TOTAL,      "write_total","Written total",     CELL_BYTES,    FALSE, FALSE, 105},
-    {PROC_COL_HANDLE_COUNT,     "handles",    "Handles",           CELL_INTEGER,  FALSE, FALSE, 105},
-    {PROC_COL_CONTEXT_SWITCHES, "contexts",   "Context switches",  CELL_INTEGER,  FALSE, FALSE, 110},
-    {PROC_COL_PAGE_FAULTS,      "faults",     "Page faults",       CELL_INTEGER,  FALSE, FALSE, 90},
-    {PROC_COL_PRIORITY,         "priority",   "Priority",          CELL_PRIORITY, FALSE, FALSE, 105},
-    {PROC_COL_NICE,             "nice",       "Nice",              CELL_INTEGER,  FALSE, FALSE, 65},
-    {PROC_COL_SECURITY_CONTEXT, "security",   "Security context",  CELL_TEXT,     FALSE, TRUE,  180},
-    {PROC_COL_WCHAN,            "wchan",      "Waiting channel",   CELL_TEXT,     FALSE, TRUE,  145},
-    {PROC_COL_CGROUP,           "cgroup",     "Control group",     CELL_TEXT,     FALSE, TRUE,  220},
-    {PROC_COL_UNIT,             "unit",       "Unit",              CELL_TEXT,     FALSE, TRUE,  170},
-    {PROC_COL_SESSION,          "session",    "Session",           CELL_TEXT,     FALSE, FALSE, 85},
-    {PROC_COL_SEAT,             "seat",       "Seat",              CELL_TEXT,     FALSE, FALSE, 85},
-    {PROC_COL_OWNER,            "owner",      "Owner",             CELL_TEXT,     FALSE, FALSE, 105},
-    {PROC_COL_START_TIME,       "started",    "Start time",        CELL_TIME,     FALSE, FALSE, 145},
-    {PROC_COL_ELAPSED,          "elapsed",    "Elapsed",           CELL_DURATION, FALSE, FALSE, 100},
-    {PROC_COL_EXECUTABLE,       "executable", "Executable",        CELL_TEXT,     FALSE, TRUE,  260},
-    {PROC_COL_COMMAND,          "command",    "Command",            CELL_TEXT,     FALSE, TRUE,  280}
+static const LsmProcessTableColumnSpec column_specs[PROC_N_COLUMNS] = {
+    {PROC_COL_NAME,             "name",       "Name",              LSM_PROCESS_TABLE_TEXT,         TRUE,  TRUE,  170, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_PID,              "pid",        "PID",               LSM_PROCESS_TABLE_UINT64,       TRUE,  FALSE, 70,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_PPID,             "ppid",       "Parent PID",        LSM_PROCESS_TABLE_UINT64,       FALSE, FALSE, 85,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_USER,             "user",       "User",              LSM_PROCESS_TABLE_TEXT,         TRUE,  FALSE, 95,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_STATE,            "status",     "Status",            LSM_PROCESS_TABLE_TEXT,         TRUE,  FALSE, 90,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_CPU,              "cpu",        "CPU",               LSM_PROCESS_TABLE_CPU_PERCENT,  TRUE,  FALSE, 70,  LSM_PROCESS_TABLE_HEAT_PERCENT},
+    {PROC_COL_CPU_TIME,         "cpu_time",   "CPU time",          LSM_PROCESS_TABLE_DURATION,     FALSE, FALSE, 95,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_MEMORY,           "memory",     "Memory %",          LSM_PROCESS_TABLE_PERCENT,      TRUE,  FALSE, 80,  LSM_PROCESS_TABLE_HEAT_PERCENT},
+    {PROC_COL_RSS,              "rss",        "Resident memory",   LSM_PROCESS_TABLE_BYTES,        TRUE,  FALSE, 110, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_VIRTUAL_MEMORY,   "virtual",    "Virtual memory",    LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 110, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_WRITABLE_MEMORY,  "writable",   "Writable memory",   LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 115, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_SHARED_MEMORY,    "shared",     "Shared memory",     LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 110, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_THREADS,          "threads",    "Threads",           LSM_PROCESS_TABLE_UNSIGNED,     FALSE, FALSE, 70,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_READ_RATE,        "read_rate",  "Read/s",            LSM_PROCESS_TABLE_RATE,         TRUE,  FALSE, 90,  LSM_PROCESS_TABLE_HEAT_RATE},
+    {PROC_COL_WRITE_RATE,       "write_rate", "Write/s",           LSM_PROCESS_TABLE_RATE,         TRUE,  FALSE, 90,  LSM_PROCESS_TABLE_HEAT_RATE},
+    {PROC_COL_GPU,              "gpu",        "GPU",               LSM_PROCESS_TABLE_PERCENT,      TRUE,  FALSE, 70,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_GPU_ENGINE,       "gpu_engine", "GPU engine",        LSM_PROCESS_TABLE_TEXT,         FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_GPU_MEMORY,       "gpu_memory", "GPU memory",        LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_READ_TOTAL,       "read_total", "Read total",        LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 95,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_WRITE_TOTAL,      "write_total","Written total",     LSM_PROCESS_TABLE_BYTES,        FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_HANDLE_COUNT,     "handles",    "Handles",           LSM_PROCESS_TABLE_HANDLE_COUNT, FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_CONTEXT_SWITCHES, "contexts",   "Context switches",  LSM_PROCESS_TABLE_UINT64,       FALSE, FALSE, 110, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_PAGE_FAULTS,      "faults",     "Page faults",       LSM_PROCESS_TABLE_UINT64,       FALSE, FALSE, 90,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_PRIORITY,         "priority",   "Priority",          LSM_PROCESS_TABLE_PRIORITY,     FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_NICE,             "nice",       "Nice",              LSM_PROCESS_TABLE_SIGNED,       FALSE, FALSE, 65,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_SECURITY_CONTEXT, "security",   "Security context",  LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  180, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_WCHAN,            "wchan",      "Waiting channel",   LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  145, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_CGROUP,           "cgroup",     "Control group",     LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  220, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_UNIT,             "unit",       "Unit",              LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  170, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_SESSION,          "session",    "Session",           LSM_PROCESS_TABLE_TEXT,         FALSE, FALSE, 85,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_SEAT,             "seat",       "Seat",              LSM_PROCESS_TABLE_TEXT,         FALSE, FALSE, 85,  LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_OWNER,            "owner",      "Owner",             LSM_PROCESS_TABLE_TEXT,         FALSE, FALSE, 105, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_START_TIME,       "started",    "Start time",        LSM_PROCESS_TABLE_TIME,         FALSE, FALSE, 145, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_ELAPSED,          "elapsed",    "Elapsed",           LSM_PROCESS_TABLE_ELAPSED,      FALSE, FALSE, 100, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_EXECUTABLE,       "executable", "Executable",        LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  260, LSM_PROCESS_TABLE_HEAT_NONE},
+    {PROC_COL_COMMAND,          "command",    "Command",            LSM_PROCESS_TABLE_TEXT,         FALSE, TRUE,  280, LSM_PROCESS_TABLE_HEAT_NONE}
 };
 
 typedef struct {
@@ -109,6 +87,18 @@ enum {
     PROCESS_SCOPE_ACTIVE,
     PROCESS_SCOPE_MINE
 };
+
+static void sync_process_table_presentation(LsmApp *app)
+{
+    if (!app || !app->details.details_tree) return;
+    const LsmProcessTablePresentation presentation = {
+        .cpu_percent_per_core = app->runtime.process_cpu_per_core,
+        .logical_cores = app->monitor.cpu.logical_cores,
+        .heatmap = app->details.process_heatmap
+    };
+    lsm_process_table_set_presentation(
+        app->details.details_tree, &presentation);
+}
 
 static gboolean process_directly_visible(const LsmApp *app,
                                          const LsmProcessInfo *process)
@@ -146,164 +136,6 @@ static gboolean process_directly_visible(const LsmApp *app,
         }
     }
     return visible;
-}
-
-static void apply_resource_heatmap(LsmApp *app, GtkCellRenderer *renderer,
-                                   int column, double value)
-{
-    if (!app->details.process_heatmap || value <= 0.0 ||
-        (column != PROC_COL_CPU && column != PROC_COL_MEMORY &&
-         column != PROC_COL_READ_RATE && column != PROC_COL_WRITE_RATE)) {
-        g_object_set(renderer, "cell-background-set", FALSE, NULL);
-        return;
-    }
-
-    double intensity;
-    if (column == PROC_COL_CPU || column == PROC_COL_MEMORY)
-        intensity = fmin(value / 100.0, 1.0);
-    else
-        intensity = fmin(log10(value + 1.0) / 9.0, 1.0);
-
-    GdkRGBA colour = {0.96, 0.48, 0.10, 0.08 + 0.30 * intensity};
-    g_object_set(renderer,
-                 "cell-background-rgba", &colour,
-                 "cell-background-set", TRUE,
-                 NULL);
-}
-
-static void process_cell_data(GtkTreeViewColumn *view_column,
-                              GtkCellRenderer *renderer,
-                              GtkTreeModel *model, GtkTreeIter *iter,
-                              gpointer user_data)
-{
-    (void)view_column;
-    LsmApp *app = user_data;
-    int column = GPOINTER_TO_INT(
-        g_object_get_data(G_OBJECT(renderer), "lsm-column"));
-    char text[256] = "";
-    double heat_value = 0.0;
-
-    switch (column_specs[column].format) {
-        case CELL_TEXT: {
-            gchar *value = NULL;
-            gtk_tree_model_get(model, iter, column, &value, -1);
-            lsm_copy_string(text, sizeof(text), value ? value : "");
-            g_free(value);
-            break;
-        }
-        case CELL_INTEGER: {
-            if (column == PROC_COL_NICE) {
-                gint value = 0;
-                gtk_tree_model_get(model, iter, column, &value, -1);
-                snprintf(text, sizeof(text), "%d", value);
-            } else if (column == PROC_COL_PID || column == PROC_COL_PPID ||
-                       column == PROC_COL_CONTEXT_SWITCHES ||
-                       column == PROC_COL_PAGE_FAULTS) {
-                guint64 value = 0;
-                gtk_tree_model_get(model, iter, column, &value, -1);
-                snprintf(text, sizeof(text), "%llu",
-                         (unsigned long long)value);
-            } else {
-                guint value = 0;
-                gtk_tree_model_get(model, iter, column, &value, -1);
-                if (column == PROC_COL_HANDLE_COUNT && value == UINT_MAX)
-                    snprintf(text, sizeof(text), "N/A");
-                else
-                    snprintf(text, sizeof(text), "%u", value);
-            }
-            break;
-        }
-        case CELL_PERCENT: {
-            double value = 0.0;
-            gtk_tree_model_get(model, iter, column, &value, -1);
-            if (!isfinite(value)) {
-                snprintf(text, sizeof(text), "N/A");
-                break;
-            }
-            if (column == PROC_COL_CPU && app->runtime.process_cpu_per_core) {
-                const unsigned cores = app->monitor.cpu.logical_cores ?
-                    app->monitor.cpu.logical_cores : 1U;
-                value *= (double)cores;
-            }
-            snprintf(text, sizeof(text), "%.1f%%", value);
-            heat_value = value;
-            break;
-        }
-        case CELL_BYTES: {
-            guint64 value = 0;
-            gtk_tree_model_get(model, iter, column, &value, -1);
-            if (value == UINT64_MAX)
-                snprintf(text, sizeof(text), "N/A");
-            else
-                lsm_format_bytes(value, text, sizeof(text));
-            break;
-        }
-        case CELL_RATE: {
-            double value = 0.0;
-            gtk_tree_model_get(model, iter, column, &value, -1);
-            if (!isfinite(value)) {
-                snprintf(text, sizeof(text), "N/A");
-                break;
-            }
-            lsm_format_rate(value, text, sizeof(text));
-            heat_value = value;
-            break;
-        }
-        case CELL_PRIORITY: {
-            gint value = 0;
-            gtk_tree_model_get(model, iter, column, &value, -1);
-            lsm_copy_string(
-                text, sizeof(text),
-                lsm_process_priority_name((LsmProcessPriority)value));
-            break;
-        }
-        case CELL_TIME: {
-            gint64 epoch = 0;
-            gtk_tree_model_get(model, iter, column, &epoch, -1);
-            if (epoch <= 0 ||
-                !lsm_temporal_format_epoch_seconds(
-                    epoch, true, false, true, text, sizeof(text)))
-                snprintf(text, sizeof(text), "N/A");
-            break;
-        }
-        case CELL_DURATION: {
-            guint64 seconds = 0;
-            gtk_tree_model_get(model, iter, column, &seconds, -1);
-            if (column == PROC_COL_ELAPSED)
-                (void)lsm_temporal_format_elapsed_seconds(
-                    seconds, text, sizeof(text));
-            else
-                (void)lsm_temporal_format_duration_seconds(
-                    seconds, text, sizeof(text));
-            break;
-        }
-    }
-
-    g_object_set(renderer, "text", text, NULL);
-    apply_resource_heatmap(app, renderer, column, heat_value);
-}
-
-static GtkTreeViewColumn *add_process_column(LsmApp *app,
-                                             const ProcessColumnSpec *spec)
-{
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    g_object_set_data(G_OBJECT(renderer), "lsm-column",
-                      GINT_TO_POINTER(spec->column));
-    g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
-    if (spec->format != CELL_TEXT)
-        g_object_set(renderer, "xalign", 1.0, NULL);
-
-    GtkTreeViewColumn *column = gtk_tree_view_column_new();
-    gtk_tree_view_column_set_title(column, spec->title);
-    gtk_tree_view_column_pack_start(column, renderer, TRUE);
-    gtk_tree_view_column_set_cell_data_func(
-        column, renderer, process_cell_data, app, NULL);
-    gtk_tree_view_column_set_sort_column_id(column, spec->column);
-    gtk_tree_view_column_set_resizable(column, TRUE);
-    gtk_tree_view_column_set_expand(column, spec->expand);
-    gtk_tree_view_column_set_min_width(column, spec->minimum_width);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(app->details.details_tree), column);
-    return column;
 }
 
 void lsm_details_save_layout(const LsmApp *app)
@@ -589,6 +421,7 @@ void lsm_details_show_columns(LsmApp *app)
                     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[i])));
         app->details.process_heatmap =
             gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(heatmap));
+        sync_process_table_presentation(app);
         lsm_details_save_layout(app);
         gtk_widget_queue_draw(app->details.details_tree);
         (void)lsm_process_workspace_update(app);
@@ -911,8 +744,9 @@ static void rebuild_details_model(LsmApp *app)
 
 void lsm_details_present_snapshot(LsmApp *app)
 {
-    if (!app || !app->details.details_model_dirty ||
-        !app->details.details_store)
+    if (!app) return;
+    sync_process_table_presentation(app);
+    if (!app->details.details_model_dirty || !app->details.details_store)
         return;
     const uint64_t signature = process_structure_signature(app);
     if (!app->details.details_structure_valid ||
@@ -1107,9 +941,11 @@ void lsm_details_build(LsmApp *app, GtkWidget *container)
         GTK_TREE_VIEW(app->details.details_tree), TRUE);
 
     for (int i = 0; i < PROC_N_COLUMNS; i++)
-        app->details.details_columns[i] = add_process_column(
-            app, &column_specs[i]);
+        app->details.details_columns[i] =
+            lsm_process_table_append_process_column(
+                app->details.details_tree, &column_specs[i]);
     process_columns_load(app);
+    sync_process_table_presentation(app);
     gtk_combo_box_set_active(
         GTK_COMBO_BOX(app->details.details_scope_combo),
         app->details.details_scope);
