@@ -20,6 +20,7 @@
 #include "overview.h"
 #include "process_actions.h"
 #include "process_scanner.h"
+#include "process_ui_bridge.h"
 #include "processes_ui.h"
 
 static unsigned process_scan_flags(const LsmApp *app)
@@ -91,6 +92,7 @@ static gboolean consume_completed_process_snapshot(LsmApp *app)
     append_record_if_needed(app, processes, count);
     lsm_app_history_ingest(app, processes, count);
     lsm_app_process_publish_snapshot(app, processes, count);
+    lsm_process_ui_snapshot_changed(app);
     lsm_overview_refresh(app);
 
     if (runtime.active_tab == LSM_TAB_PROCESSES && runtime.processes_built)
