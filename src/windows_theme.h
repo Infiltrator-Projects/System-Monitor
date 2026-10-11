@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 
+/** Native Win32 colours projected from the shared Infiltratr theme palette. */
 typedef struct {
     COLORREF background;
     COLORREF panel;
@@ -44,6 +45,7 @@ typedef struct {
     COLORREF card_hover;
 } LsmWindowsPalette;
 
+/** Win32 theme mode, validated Common design metrics and resolved palette. */
 typedef struct {
     InfiltratrThemeMode mode;
     const InfiltratrDesignMetrics *design;
