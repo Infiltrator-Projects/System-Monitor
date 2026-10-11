@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fix strict process-table compatibility
+
+on:
+  push:
+    branches:
+      - fix/strict-process-table-compat
+    paths:
+      - .github/workflows/fix-strict-process-table-compat.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: [self-hosted, Linux, X64, linux-native]
+    steps:
+      - name: Check out source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Patch compatibility declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              text = Path(path).read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              Path(path).write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/process_table_ui.c",
+              "#include <stdio.h>\n",
+              "#include <stdio.h>\n#include <stdlib.h>\n",
+          )
+          replace_once(
+              "support/tests/compat/gtk/gtk.h",
+              "void g_object_set_data(gpointer object, const gchar *key, gpointer data);\n",
+              "void g_object_set_data(gpointer object, const gchar *key, gpointer data);\n"
+              "void g_object_set_data_full(gpointer object, const gchar *key, gpointer data,\n"
+              "                            GDestroyNotify destroy);\n",
+          )
+          PY
+          git diff --check
+
+      - name: Run canonical verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -s 65536
+          REQUIRE_I386=1 make check
+
+      - name: Commit verified compatibility fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-strict-process-table-compat.yml
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add src/process_table_ui.c support/tests/compat/gtk/gtk.h
+          git rm --cached --ignore-unmatch .github/workflows/fix-strict-process-table-compat.yml >/dev/null 2>&1 || true
+          git add -u .github/workflows/fix-strict-process-table-compat.yml
+          actual="$(git diff --cached --name-only | sort)"
+          expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' | sort)"
+          if [ "$actual" != "$expected" ]; then
+            printf 'Unexpected staged files:\n%s\n' "$actual" >&2
+            exit 1
+          fi
+          git commit -m 'fix: complete strict process-table compatibility'
+          git push origin HEAD:fix/strict-process-table-compat
