@@ -4,9 +4,9 @@
  * @brief Narrow private-state bridge for presentation-facing coordinators.
  *
  * Presentation modules need small, stable views of application-owned state,
- * not the complete private LsmApp layout. This contract keeps coordinators,
- * leaf dialogs and diagnostic exporters independent of unrelated subsystem
- * storage while leaving ownership in the application composition root.
+ * not the complete private LsmApp layout. This contract keeps coordinators and
+ * leaf dialogs independent of unrelated subsystem storage while leaving
+ * ownership in the application composition root.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -17,11 +17,11 @@
 
 #include "app.h"
 #include "app_config.h"
-#include "monitor_types.h"
 
 #include <glib.h>
 #include <stdbool.h>
-#include <stddef.h>
+
+typedef struct LsmSystemSnapshotView LsmSystemSnapshotView;
 
 /** Widget/runtime facts permitted to the top-level keyboard command router. */
 typedef struct {
@@ -41,13 +41,6 @@ typedef struct {
     gboolean shutting_down;
     gboolean shell_shown;
 } LsmPageRegistryControlView;
-
-/** Retained plain-C data permitted to the diagnostic snapshot exporter. */
-typedef struct {
-    const LsmMonitor *monitor;
-    const LsmProcessInfo *processes;
-    size_t process_count;
-} LsmSystemSnapshotView;
 
 /**
  * Copy keyboard-routing state out of the private application object.
