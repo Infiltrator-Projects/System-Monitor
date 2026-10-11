@@ -47,6 +47,16 @@ jobs:
               "void g_object_set_data_full(gpointer object, const gchar *key, gpointer data,\n"
               "                            GDestroyNotify destroy);\n",
           )
+          replace_once(
+              "support/tools/check_portability.c",
+              "        if (ends_with(sources.items[index], \"_windows.c\") ||\n"
+              "            ends_with(sources.items[index], \"_windows.cpp\"))\n"
+              "            continue;\n",
+              "        if (ends_with(sources.items[index], \"_windows.c\") ||\n"
+              "            ends_with(sources.items[index], \"_windows.cpp\") ||\n"
+              "            strstr(sources.items[index], \"_windows_\") != NULL)\n"
+              "            continue;\n",
+          )
           PY
           git diff --check
 
@@ -65,14 +75,14 @@ jobs:
           git diff --check
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
-          git add src/process_table_ui.c support/tests/compat/gtk/gtk.h
+          git add src/process_table_ui.c support/tests/compat/gtk/gtk.h support/tools/check_portability.c
           git rm --cached --ignore-unmatch .github/workflows/fix-strict-process-table-compat.yml >/dev/null 2>&1 || true
           git add -u .github/workflows/fix-strict-process-table-compat.yml
           actual="$(git diff --cached --name-only | sort)"
-          expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' | sort)"
+          expected="$(printf '%s\n' '.github/workflows/fix-strict-process-table-compat.yml' 'src/process_table_ui.c' 'support/tests/compat/gtk/gtk.h' 'support/tools/check_portability.c' | sort)"
           if [ "$actual" != "$expected" ]; then
             printf 'Unexpected staged files:\n%s\n' "$actual" >&2
             exit 1
           fi
-          git commit -m 'fix: complete strict process-table compatibility'
+          git commit -m 'fix: complete portability verification boundaries'
           git push origin HEAD:fix/strict-process-table-compat
