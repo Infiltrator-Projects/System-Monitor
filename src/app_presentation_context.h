@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_presentation_context.h
- * @brief Narrow private-state bridge for keyboard and page-registry policy.
+ * @brief Narrow private-state bridge for presentation-facing coordinators.
  *
- * Presentation coordinators need a small set of widgets and runtime facts, not
- * the complete private LsmApp layout. This contract keeps those coordinators
- * independent of unrelated subsystem storage while leaving ownership in the
- * application composition root.
+ * Presentation modules need small, stable views of application-owned state,
+ * not the complete private LsmApp layout. This contract keeps coordinators,
+ * leaf dialogs and diagnostic exporters independent of unrelated subsystem
+ * storage while leaving ownership in the application composition root.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -17,9 +17,11 @@
 
 #include "app.h"
 #include "app_config.h"
+#include "monitor_types.h"
 
 #include <glib.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 /** Widget/runtime facts permitted to the top-level keyboard command router. */
 typedef struct {
@@ -40,6 +42,13 @@ typedef struct {
     gboolean shell_shown;
 } LsmPageRegistryControlView;
 
+/** Retained plain-C data permitted to the diagnostic snapshot exporter. */
+typedef struct {
+    const LsmMonitor *monitor;
+    const LsmProcessInfo *processes;
+    size_t process_count;
+} LsmSystemSnapshotView;
+
 /**
  * Copy keyboard-routing state out of the private application object.
  * @param app Application owning the presentation state.
@@ -57,6 +66,36 @@ bool lsm_app_keyboard_control_view(const LsmApp *app,
  */
 bool lsm_app_page_registry_control_view(const LsmApp *app,
                                         LsmPageRegistryControlView *view);
+
+/**
+ * Return the main presentation window without exposing the shell layout.
+ * @param app Application owning the shell.
+ * @return Main window widget, or NULL when unavailable.
+ */
+GtkWidget *lsm_app_presentation_window(const LsmApp *app);
+
+/**
+ * Return the currently open Help window, if any.
+ * @param app Application owning Help-window lifetime.
+ * @return Help window widget, or NULL when no Help window is open.
+ */
+GtkWidget *lsm_app_help_window(const LsmApp *app);
+
+/**
+ * Update the application-owned Help-window reference.
+ * @param app Application owning Help-window lifetime.
+ * @param window Current Help window, or NULL after destruction.
+ */
+void lsm_app_help_set_window(LsmApp *app, GtkWidget *window);
+
+/**
+ * Copy the completed monitor and process data needed by snapshot export.
+ * @param app Application owning the retained completed snapshots.
+ * @param view Destination for the narrow diagnostic-export view.
+ * @return true when both arguments are valid; otherwise false.
+ */
+bool lsm_app_system_snapshot_view(const LsmApp *app,
+                                  LsmSystemSnapshotView *view);
 
 /**
  * Query whether one top-level page has been constructed.

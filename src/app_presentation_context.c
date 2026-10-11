@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_presentation_context.c
- * @brief Private LsmApp accessors for presentation coordination policy.
+ * @brief Private LsmApp accessors for presentation-facing policy.
  *
- * This file is the deliberate bridge between top-level presentation policy and
- * the complete private application layout. Keyboard and page-registry modules
- * consume narrow views instead of reaching through unrelated subsystem state.
+ * This file is the deliberate bridge between presentation-facing code and the
+ * complete private application layout. Coordinators and leaf modules consume
+ * narrow views instead of reaching through unrelated subsystem state.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -44,6 +44,33 @@ bool lsm_app_page_registry_control_view(const LsmApp *app,
         app->runtime.filesystem_update_interval_ms;
     view->shutting_down = app->runtime.shutting_down;
     view->shell_shown = app->runtime.shell_shown;
+    return true;
+}
+
+GtkWidget *lsm_app_presentation_window(const LsmApp *app)
+{
+    return app ? app->shell.window : NULL;
+}
+
+GtkWidget *lsm_app_help_window(const LsmApp *app)
+{
+    return app ? app->shell.help_window : NULL;
+}
+
+void lsm_app_help_set_window(LsmApp *app, GtkWidget *window)
+{
+    if (!app) return;
+    app->shell.help_window = window;
+}
+
+bool lsm_app_system_snapshot_view(const LsmApp *app,
+                                  LsmSystemSnapshotView *view)
+{
+    if (!app || !view) return false;
+
+    view->monitor = &app->monitor;
+    view->processes = app->process.process_snapshot;
+    view->process_count = app->process.process_snapshot_count;
     return true;
 }
 
@@ -87,7 +114,7 @@ GtkWidget *lsm_app_page_registry_notebook(const LsmApp *app)
 
 GtkWidget *lsm_app_page_registry_window(const LsmApp *app)
 {
-    return app ? app->shell.window : NULL;
+    return lsm_app_presentation_window(app);
 }
 
 void lsm_app_page_registry_set_active(LsmApp *app, LsmTabIndex page)

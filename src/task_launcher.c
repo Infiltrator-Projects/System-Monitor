@@ -10,16 +10,18 @@
 #include "task_launcher.h"
 #include "common.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
 #include "ui_helpers.h"
 
 #include <gtk/gtk.h>
 
 void lsm_task_launcher_show(LsmApp *app)
 {
-    if (!app || !app->shell.window) return;
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (!parent) return;
+
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
-        "Run new task", GTK_WINDOW(app->shell.window),
+        "Run new task", GTK_WINDOW(parent),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "Cancel", GTK_RESPONSE_CANCEL, "Run", GTK_RESPONSE_ACCEPT, NULL);
     lsm_ui_set_workarea_default_size(GTK_WINDOW(dialog), 560, 190);
@@ -47,7 +49,7 @@ void lsm_task_launcher_show(LsmApp *app)
         if (!command || !*command ||
             !g_shell_parse_argv(command, &argument_count, &arguments, &error) ||
             argument_count <= 0 || !arguments || !arguments[0]) {
-            lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+            lsm_ui_show_error(GTK_WINDOW(parent),
                 "Unable to run the task", "%s",
                 error ? error->message :
                 "Enter the name of a program to run.");
@@ -58,9 +60,10 @@ void lsm_task_launcher_show(LsmApp *app)
             if (!g_spawn_async(
                     working_directory, arguments, NULL, G_SPAWN_SEARCH_PATH,
                     NULL, NULL, NULL, &error)) {
-            lsm_ui_show_error(GTK_WINDOW(app->shell.window),
-                "Unable to run the task", "%s",
-                error ? error->message : "The program could not be started.");
+                lsm_ui_show_error(GTK_WINDOW(parent),
+                    "Unable to run the task", "%s",
+                    error ? error->message :
+                    "The program could not be started.");
             }
         }
         if (error) g_error_free(error);
