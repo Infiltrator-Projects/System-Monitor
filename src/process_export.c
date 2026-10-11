@@ -60,7 +60,7 @@ static size_t selected_count(const LsmProcessSelectionView *view)
     return count;
 }
 
-static csv_needs_formula_escape(const char *text)
+static bool csv_needs_formula_escape(const char *text)
 {
     if (!text) return false;
     const unsigned char *cursor = (const unsigned char *)text;
