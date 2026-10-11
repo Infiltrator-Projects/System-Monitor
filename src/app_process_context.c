@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file app_process_context.c
- * @brief Private LsmApp accessors used by the shared process workspace.
+ * @brief Private LsmApp accessors used by the shared process domain.
  *
- * This file is deliberately the only bridge between process-domain
- * coordination and the complete private application layout. The process
- * workspace therefore cannot reach unrelated shell, Details or Processes
- * widget state directly.
+ * This file is deliberately the bridge between process-domain coordination and
+ * the complete private application layout. Sampling, lifecycle and export code
+ * consume narrow views instead of reaching through unrelated application state.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -29,12 +28,68 @@ bool lsm_app_process_runtime_view(const LsmApp *app,
     view->shutting_down = app->runtime.shutting_down;
     view->processes_built = app->runtime.page_built[LSM_TAB_PROCESSES];
     view->details_built = app->runtime.page_built[LSM_TAB_DETAILS];
+    view->application_catalog_loading = app->runtime.application_catalog_loading;
+    view->application_catalog_ready = app->process.application_catalog != NULL;
+    return true;
+}
+
+bool lsm_app_process_selection_view(const LsmApp *app,
+                                    LsmProcessSelectionView *view)
+{
+    if (!app || !view) return false;
+    view->processes = app->process.process_snapshot;
+    view->process_count = app->process.process_snapshot_count;
+    view->selected_pid = app->process.selected_pid;
+    view->selected_instance_id = app->process.selected_instance_id;
+    view->selected_group_pids = app->process.selected_group_pids;
+    view->selected_group_instance_ids = app->process.selected_group_instance_ids;
+    view->selected_group_count = app->process.selected_group_count;
     return true;
 }
 
 LsmProcessScanner *lsm_app_process_scanner(LsmApp *app)
 {
     return app ? app->process_scanner : NULL;
+}
+
+void lsm_app_process_set_scanner(LsmApp *app, LsmProcessScanner *scanner)
+{
+    if (!app) return;
+    app->process_scanner = scanner;
+}
+
+void lsm_app_process_set_catalog_loading(LsmApp *app, gboolean loading)
+{
+    if (!app) return;
+    app->runtime.application_catalog_loading = loading;
+}
+
+LsmApplicationCatalog *lsm_app_process_replace_catalog(
+    LsmApp *app, LsmApplicationCatalog *catalog)
+{
+    if (!app) return catalog;
+    LsmApplicationCatalog *previous = app->process.application_catalog;
+    app->process.application_catalog = catalog;
+    return previous;
+}
+
+LsmProcessInfo *lsm_app_process_take_snapshot(LsmApp *app, size_t *count)
+{
+    if (count) *count = 0U;
+    if (!app) return NULL;
+    LsmProcessInfo *processes = app->process.process_snapshot;
+    if (count) *count = app->process.process_snapshot_count;
+    app->process.process_snapshot = NULL;
+    app->process.process_snapshot_count = 0U;
+    return processes;
+}
+
+GPtrArray *lsm_app_process_take_filters(LsmApp *app)
+{
+    if (!app) return NULL;
+    GPtrArray *filters = app->process.filters;
+    app->process.filters = NULL;
+    return filters;
 }
 
 bool lsm_app_process_recording_target(const LsmApp *app,
@@ -69,7 +124,4 @@ void lsm_app_process_publish_snapshot(LsmApp *app,
     app->process.process_snapshot_generation++;
     if (app->process.process_snapshot_generation == 0U)
         app->process.process_snapshot_generation = 1U;
-
-    app->processes.processes_model_dirty = TRUE;
-    app->details.details_model_dirty = TRUE;
 }
