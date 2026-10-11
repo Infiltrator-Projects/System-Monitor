@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Apply structural coupling refactor
+name: Verify structural coupling branch
 
 on:
   push:
@@ -7,140 +7,65 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  verify:
     runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - name: Check out branch
+      - name: Check out branch and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          submodules: false
+          submodules: recursive
 
-      - name: Apply bounded refactor
+      - name: Run canonical verification
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's/"state->process_backend",/"state->process_backend = ",/' support/tools/apply_structural_coupling_refactor.py
-          sed -i 's/^    refactor_ci()$/    # CI is updated separately through the workflow-authorized GitHub connection./' support/tools/apply_structural_coupling_refactor.py
-          sed -i '/structural-refactor.yml.*unlink/d' support/tools/apply_structural_coupling_refactor.py
-          python3 support/tools/apply_structural_coupling_refactor.py
-          rm -f support/.structural-refactor-trigger
-          python3 - <<'PY'
-          from pathlib import Path
+          ulimit -s 65536
+          make -j2 check
 
-          metadata = (
-              " *\n"
-              " * @author Shannon Smith\n"
-              " * @copyright Copyright (c) 2000-2026 Shannon Smith\n"
-              " * @license GPL-3.0-or-later\n"
-          )
-          for name in (
-              "src/windows_theme.h", "src/windows_theme.c",
-              "src/windows_process_runtime.h", "src/windows_process_runtime.c",
-          ):
-              path = Path(name)
-              text = path.read_text(encoding="utf-8")
-              if "@author Shannon Smith" not in text:
-                  text = text.replace(" */\n", metadata + " */\n", 1)
-              path.write_text(text, encoding="utf-8")
-
-          theme = Path("src/windows_theme.h")
-          text = theme.read_text(encoding="utf-8")
-          replacements = {
-              "/** Validate the Common design ABI before native presentation consumes it. */":
-              "/**\n * Validate the Common design ABI before native presentation consumes it.\n * @param [in] design Common design metrics to validate.\n * @return true when the metrics satisfy the native presentation contract.\n */",
-              "/** Resolve the current theme mode into a native Win32 palette. */":
-              "/**\n * Resolve the current theme mode into a native Win32 palette.\n * @param [in,out] theme Theme state receiving the resolved palette.\n * @return true when the Common palette contract is supported.\n */",
-              "/** Load the persisted native theme preference and resolve its palette. */":
-              "/**\n * Load the persisted native theme preference and resolve its palette.\n * @param [in,out] theme Theme state receiving the persisted mode and palette.\n * @return true when the resulting Common palette contract is supported.\n */",
-              "/** Persist the selected native theme mode. */":
-              "/**\n * Persist the selected native theme mode.\n * @param [in] theme Theme state whose selected mode is saved.\n */",
-              "/** Return whether the effective theme should use dark native chrome. */":
-              "/**\n * Return whether the effective theme should use dark native chrome.\n * @param [in] theme Current native theme state.\n * @return true when dark native chrome should be used.\n */",
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f"missing theme documentation marker: {old}")
-              text = text.replace(old, new, 1)
-          theme.write_text(text, encoding="utf-8")
-
-          runtime = Path("src/windows_process_runtime.h")
-          text = runtime.read_text(encoding="utf-8")
-          replacements = {
-              "/** Start the native process worker if it is not already running. */":
-              "/**\n * Start the native process worker if it is not already running.\n * @param [in,out] runtime Process runtime to initialise.\n * @return true when a worker is available.\n */",
-              "/** Queue a process snapshot request without blocking the UI thread. */":
-              "/**\n * Queue a process snapshot request without blocking the UI thread.\n * @param [in,out] runtime Process runtime receiving the request.\n * @param [in] scan_flags Backend scan flags for the requested snapshot.\n */",
-              "/** Transfer ownership of a completed process snapshot to the caller. */":
-              "/**\n * Transfer ownership of a completed process snapshot to the caller.\n * @param [in,out] runtime Process runtime containing a completed snapshot.\n * @param [out] processes Receives the owned process array.\n * @param [out] count Receives the process count.\n * @return true when a completed snapshot was transferred.\n */",
-              "/** Stop the process worker; false means a native query could not be cancelled. */":
-              "/**\n * Stop the process worker and release normal-path synchronization state.\n * @param [in,out] runtime Process runtime to stop.\n * @return true when the worker stopped; false when a native query could not be cancelled.\n */",
-              "/** Return whether the runtime currently owns a live worker thread. */":
-              "/**\n * Return whether the runtime currently owns a live worker thread.\n * @param [in] runtime Process runtime to inspect.\n * @return true while a usable worker is owned.\n */",
-              "/** Return whether shutdown had to leave the worker storage alive until exit. */":
-              "/**\n * Return whether shutdown had to leave the worker storage alive until exit.\n * @param [in] runtime Process runtime to inspect.\n * @return true when cancellation failed and storage must survive until process exit.\n */",
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f"missing runtime documentation marker: {old}")
-              text = text.replace(old, new, 1)
-          runtime.write_text(text, encoding="utf-8")
-
-          checker = Path("support/tools/check_source_style.cpp")
-          text = checker.read_text(encoding="utf-8")
-          old = '"src/main_windows.c", windows, "infiltratr_theme_resolve");'
-          new = '"src/main_windows.c", windows, "lsm_windows_theme_resolve");'
-          if old not in text:
-              raise SystemExit("missing legacy Windows theme ownership marker")
-          checker.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-          git diff --check
-
-      - name: Validate coupling guardrails
-        shell: bash
-        run: |
-          set -euo pipefail
-          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
-            -Wcast-qual -Wswitch-enum -Wnull-dereference \
-            support/tools/check_source_style.cpp -o "$RUNNER_TEMP/system-monitor-style-check"
-          "$RUNNER_TEMP/system-monitor-style-check"
-
-      - name: Validate native Windows owners
+      - name: Cross-compile Windows product from canonical group
         shell: bash
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
-          version_header="$RUNNER_TEMP/system-monitor-version.h"
+          mkdir -p build-structural
+          version_header=build-structural/windows-version.h
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          mapfile -t windows_sources < <(
+            sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+              support/source-groups/windows-product.txt | sed 's#^#src/#'
+          )
+          common_portable=(
+            src/infiltratr-common/src/core.c
+            src/infiltratr-common/src/arithmetic.c
+            src/infiltratr-common/src/config.c
+            src/infiltratr-common/src/i18n.c
+            src/infiltratr-common/src/token.c
+            src/infiltratr-common/src/timing.c
+            src/infiltratr-common/src/temporal.c
+            src/infiltratr-common/src/format.c
+            src/infiltratr-common/src/quantity.c
+            src/infiltratr-common/src/graphics.c
+            src/infiltratr-common/src/escape.c
+            src/infiltratr-common/src/design.c
+          )
           x86_64-w64-mingw32-gcc \
-            -std=c17 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
+            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
-            -fsyntax-only \
-            src/main_windows.c src/windows_theme.c src/windows_process_runtime.c \
-            src/presentation_contract.c src/performance_view.c src/overview_history.c \
-            src/monitor_backend_windows.c src/process_backend_windows.c
+            "${windows_sources[@]}" "${common_portable[@]}" \
+            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof \
+            -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
+            -static-libgcc -mwindows -o build-structural/system-monitor-windows.exe
 
-      - name: Validate source-group build configuration
+      - name: Build with CMake
         shell: bash
         run: |
           set -euo pipefail
-          cmake -S . -B "$RUNNER_TEMP/system-monitor-structural-cmake" \
-            -DLSM_BUILD_DEVELOPER_TOOLS=OFF -DCMAKE_BUILD_TYPE=Release >/dev/null
-          make -n build-all >/dev/null
-
-      - name: Commit refactor
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "System Monitor structural refactor"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet && exit 0
-          git commit -m "refactor: apply structural coupling guardrails"
-          git push origin HEAD:refactor/structural-coupling-2026-10-11
+          cmake -S . -B build-structural-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-structural-cmake --target system-monitor --parallel 2
