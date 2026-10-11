@@ -152,12 +152,14 @@ LsmHistorySaveRequest *lsm_history_persistence_request_create(
 
     LsmHistorySaveRequest *request = calloc(1U, sizeof(*request));
     if (!request) return NULL;
-    if (!lsm_copy_string(request->config_dir, sizeof(request->config_dir),
-                         config_dir) ||
-        !lsm_copy_string(request->path, sizeof(request->path), path)) {
+    if (strlen(config_dir) >= sizeof(request->config_dir) ||
+        strlen(path) >= sizeof(request->path)) {
         free(request);
         return NULL;
     }
+    lsm_copy_string(
+        request->config_dir, sizeof(request->config_dir), config_dir);
+    lsm_copy_string(request->path, sizeof(request->path), path);
     request->generation = generation;
     request->count = count;
     request->coordinator = coordinator;
