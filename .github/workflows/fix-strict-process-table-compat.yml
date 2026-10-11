@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   fix:
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
     steps:
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
