@@ -17,7 +17,6 @@
 #include "app_runtime.h"
 #include "app_shell.h"
 
-#include "application_catalog.h"
 #include "common.h"
 #include "details_page.h"
 #include "filesystems.h"
@@ -27,10 +26,7 @@
 #include "performance.h"
 #include "presentation_contract.h"
 #include "preferences.h"
-#include "process_backend.h"
-#include "process_scanner.h"
-#include "process_inspector.h"
-#include "processes_ui.h"
+#include "process_lifecycle.h"
 #include "services.h"
 #include "startup.h"
 #include "summary_bar.h"
@@ -237,63 +233,6 @@ static bool app_paths_initialise(LsmApp *app)
                       app->paths.config_dir, "preferences.conf");
 }
 
-static void application_catalog_result_free(gpointer data)
-{
-    lsm_application_catalog_destroy(data);
-}
-
-static void application_catalog_worker(GTask *task, gpointer source_object,
-                                       gpointer task_data,
-                                       GCancellable *cancellable)
-{
-    (void)source_object;
-    (void)task_data;
-    (void)cancellable;
-    LsmApplicationCatalog *catalog = lsm_application_catalog_create();
-    g_task_return_pointer(task, catalog, application_catalog_result_free);
-}
-
-static void application_catalog_complete(GObject *source_object,
-                                         GAsyncResult *async_result,
-                                         gpointer user_data)
-{
-    (void)user_data;
-    LsmApplicationCatalog *catalog =
-        g_task_propagate_pointer(G_TASK(async_result), NULL);
-    LsmApp *app = source_object
-        ? g_object_get_data(source_object, "lsm-app") : NULL;
-    if (!app || app->runtime.shutting_down) {
-        lsm_application_catalog_destroy(catalog);
-        return;
-    }
-
-    app->runtime.application_catalog_loading = FALSE;
-    if (!catalog) return;
-    lsm_application_catalog_destroy(app->process.application_catalog);
-    app->process.application_catalog = catalog;
-    if (app->processes.process_identity_cache)
-        g_hash_table_remove_all(app->processes.process_identity_cache);
-    app->processes.processes_structure_valid = FALSE;
-    app->processes.processes_model_dirty = TRUE;
-    if (app->runtime.active_tab == LSM_TAB_PROCESSES &&
-        app->runtime.page_built[LSM_TAB_PROCESSES])
-        lsm_processes_present_snapshot(app);
-}
-
-static void start_application_catalog_load(LsmApp *app)
-{
-    if (!app || !app->shell.window || app->runtime.shutting_down ||
-        app->runtime.application_catalog_loading ||
-        app->process.application_catalog)
-        return;
-
-    app->runtime.application_catalog_loading = TRUE;
-    GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
-                             application_catalog_complete, NULL);
-    g_task_run_in_thread(task, application_catalog_worker);
-    g_object_unref(task);
-}
-
 void lsm_app_ensure_page_built(LsmApp *app, LsmTabIndex page)
 {
     if (!app || page < 0 || page >= LSM_TAB_COUNT ||
@@ -324,14 +263,6 @@ static gboolean restore_initial_tab_after_first_paint(gpointer user_data)
         target != LSM_TAB_PERFORMANCE)
         gtk_notebook_set_current_page(GTK_NOTEBOOK(app->shell.notebook), target);
     return G_SOURCE_REMOVE;
-}
-
-static void process_snapshot_ready(void *user_data)
-{
-    LsmApp *app = user_data;
-    if (!app || app->runtime.shutting_down || app->runtime.paused)
-        return;
-    lsm_processes_present_ready_snapshot(app);
 }
 
 LsmApp *lsm_app_create(void)
@@ -383,8 +314,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
         fputs("Unable to initialise the monitoring backend\n", stderr);
         return;
     }
-    app->process_scanner = lsm_process_scanner_create();
-    if (!app->process_scanner) {
+    if (!lsm_process_lifecycle_init(app)) {
         fputs("Unable to start process scanner\n", stderr);
         lsm_monitor_destroy(&app->monitor);
         return;
@@ -399,7 +329,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.compact_layout =
         app->runtime.window_width < LSM_COMPACT_LAYOUT_THRESHOLD;
     app->runtime.initial_tab_after_paint = app->runtime.last_tab;
-    lsm_process_filters_load(app);
     lsm_app_shell_apply_theme(app);
 
     app->shell.window = gtk_application_window_new(application);
@@ -461,8 +390,7 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     app->runtime.shell_shown = TRUE;
     lsm_app_shell_sync_navigation(app);
     g_object_set_data(G_OBJECT(app->shell.window), "lsm-app", app);
-    lsm_process_scanner_set_ready_callback(
-        app->process_scanner, process_snapshot_ready, app);
+    lsm_process_lifecycle_start(app);
     gtk_window_set_keep_above(GTK_WINDOW(app->shell.window), app->runtime.always_on_top);
     lsm_app_shell_apply_compact_summary(app);
 #ifdef LSM_TEST_PERFORMANCE
@@ -482,7 +410,6 @@ void lsm_app_activate(GtkApplication *application, gpointer user_data)
     lsm_performance_show_resource(
         app, (LsmPageType)LSM_TEST_PERFORMANCE_RESOURCE, 0U);
 #endif
-    start_application_catalog_load(app);
     if (app->runtime.initial_tab_after_paint != LSM_TAB_PERFORMANCE)
         app->runtime.initial_tab_restore_source =
             g_idle_add(restore_initial_tab_after_first_paint, app);
@@ -512,23 +439,14 @@ void lsm_app_shutdown(LsmApp *app)
     if (app->services.services_search_timer)
         g_source_remove(app->services.services_search_timer);
     lsm_app_shell_cancel_pending(app);
-    lsm_process_record_stop(app);
+    lsm_process_lifecycle_destroy(app);
     lsm_services_destroy(app);
     lsm_users_destroy(app);
     lsm_startup_destroy(app);
     lsm_processes_destroy(app);
     lsm_details_destroy(app);
-    lsm_process_scanner_destroy(app->process_scanner);
-    app->process_scanner = NULL;
-    lsm_process_list_free(app->process.process_snapshot);
-    app->process.process_snapshot = NULL;
-    app->process.process_snapshot_count = 0;
-    lsm_application_catalog_destroy(app->process.application_catalog);
-    app->process.application_catalog = NULL;
-    lsm_process_group_selection_clear(app);
     lsm_history_destroy(app);
     lsm_filesystems_destroy(app);
     lsm_overview_destroy(app);
     lsm_performance_destroy(app);
-    if (app->process.filters) g_ptr_array_free(app->process.filters, TRUE);
 }
