@@ -11,7 +11,7 @@
 
 #include "system_snapshot.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
 #include "atomic_file.h"
 #include "common.h"
 #include "metric_format.h"
@@ -330,14 +330,16 @@ static void write_graphics(FILE *file, const LsmMonitor *monitor)
     }
 }
 
-static void write_processes(FILE *file, const LsmApp *app)
+static void write_processes(FILE *file, const LsmProcessInfo *processes,
+                            size_t process_count)
 {
+    if (!processes) process_count = 0U;
     fprintf(file,
         "\nProcesses (%zu)\n"
         "  PID\tName\tUser\tCPU\tRAM\tGPU\tGPU engine\tCommand\n",
-        app->process.process_snapshot_count);
-    for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
-        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+        process_count);
+    for (size_t index = 0U; index < process_count; index++) {
+        const LsmProcessInfo *process = &processes[index];
         char ram[64];
         lsm_format_bytes(process->rss_bytes, ram, sizeof(ram));
         fprintf(file, "  %llu\t",
@@ -376,6 +378,10 @@ static void format_pressure_snapshot(const LsmPressureInfo *pressure,
 static bool write_snapshot(FILE *file, const void *user_data)
 {
     const LsmApp *app = user_data;
+    LsmSystemSnapshotView view;
+    if (!lsm_app_system_snapshot_view(app, &view) || !view.monitor)
+        return false;
+
     const time_t now = time(NULL);
     char generated[256] = "N/A";
     if (now != (time_t)-1)
@@ -390,7 +396,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     char os_name[256];
     read_os_name(os_name, sizeof(os_name));
 
-    const LsmMonitor *monitor = &app->monitor;
+    const LsmMonitor *monitor = view.monitor;
     char memory_used[64], memory_total[64];
     char cpu_usage[32], cpu_user[32], cpu_kernel[32];
     char cpu_speed[32], memory_speed[32], slots[32];
@@ -468,7 +474,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     write_bluetooth(file, monitor);
     write_batteries(file, monitor);
     write_graphics(file, monitor);
-    write_processes(file, app);
+    write_processes(file, view.processes, view.process_count);
     return ferror(file) == 0;
 }
 
