@@ -79,9 +79,6 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="infiltrator-system-monitor_${version}_amd64.deb"
-          installer="infiltrator-system-monitor-${version}-native-installer.run"
-          windows_app="system-monitor-${version}-windows.exe"
 
           test "$(cat release/RELEASE_SOURCE_SHA)" = "$EXPECTED_SHA"
           test "$(cat release/RELEASE_VERSION)" = "$version"
@@ -90,20 +87,46 @@ jobs:
             sha256sum -c RELEASE_SHA256SUMS.txt
           )
 
-          test -f "release/$deb"
-          test -f "release/$installer"
-          test -f "release/$windows_app"
+          mapfile -t assets < <(
+            awk 'NF == 2 { name=$2; sub(/^\*/, "", name); print name }' \
+              release/RELEASE_SHA256SUMS.txt
+          )
+          test "${#assets[@]}" -eq 3
+          test "$(printf '%s\n' "${assets[@]}" | sort -u | wc -l)" -eq 3
+
+          deb=
+          installer=
+          windows_app=
+          for asset in "${assets[@]}"; do
+            [[ "$asset" != */* ]]
+            test -f "release/$asset"
+            case "$asset" in
+              *.deb)
+                test -z "$deb"
+                deb="$asset"
+                ;;
+              *.run)
+                test -z "$installer"
+                installer="$asset"
+                ;;
+              *.exe)
+                test -z "$windows_app"
+                windows_app="$asset"
+                ;;
+              *)
+                printf 'Unexpected sealed release asset: %s\n' "$asset" >&2
+                exit 1
+                ;;
+            esac
+          done
+          test -n "$deb"
+          test -n "$installer"
+          test -n "$windows_app"
+
           test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           chmod +x "release/$installer"
           "release/$installer" --help >/dev/null
-
-          expected_manifest=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_app" | sort)
-          actual_manifest=$(awk '{print $2}' release/RELEASE_SHA256SUMS.txt | sed 's#^\*##' | sort)
-          if [[ "$actual_manifest" != "$expected_manifest" ]]; then
-            echo 'Sealed release manifest has an unexpected asset set.' >&2
-            exit 1
-          fi
 
       - name: Publish or resume exact immutable release
         env:
@@ -117,12 +140,18 @@ jobs:
 
           version=$(tr -d '[:space:]' < support/VERSION)
           tag="v${version}"
-          deb="infiltrator-system-monitor_${version}_amd64.deb"
-          installer="infiltrator-system-monitor-${version}-native-installer.run"
-          windows_app="system-monitor-${version}-windows.exe"
-          deb_path="release/$deb"
-          installer_path="release/$installer"
-          windows_path="release/$windows_app"
+
+          mapfile -t assets < <(
+            awk 'NF == 2 { name=$2; sub(/^\*/, "", name); print name }' \
+              release/RELEASE_SHA256SUMS.txt
+          )
+          test "${#assets[@]}" -eq 3
+          asset_paths=()
+          for asset in "${assets[@]}"; do
+            test -f "release/$asset"
+            asset_paths+=("release/$asset")
+          done
+          expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
 
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             tag_commit=$(git rev-list -n 1 "$tag")
@@ -136,7 +165,6 @@ jobs:
             git push origin "$tag"
           fi
 
-          expected_assets=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_app" | sort)
           if gh release view "$tag" >/dev/null 2>&1; then
             published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
             if [[ "$published_assets" != "$expected_assets" ]]; then
@@ -146,16 +174,19 @@ jobs:
             tmp=$(mktemp -d)
             trap 'rm -rf "$tmp"' EXIT
             gh release download "$tag" --dir "$tmp"
-            cmp -s "$deb_path" "$tmp/$deb" || { echo 'Published Debian asset differs from the qualified artifact.' >&2; exit 1; }
-            cmp -s "$installer_path" "$tmp/$installer" || { echo 'Published native installer differs from the qualified artifact.' >&2; exit 1; }
-            cmp -s "$windows_path" "$tmp/$windows_app" || { echo 'Published Windows GUI differs from the qualified artifact.' >&2; exit 1; }
+            for asset in "${assets[@]}"; do
+              cmp -s "release/$asset" "$tmp/$asset" || {
+                printf 'Published asset %s differs from the qualified artifact.\n' "$asset" >&2
+                exit 1
+              }
+            done
             echo "Exact immutable release $tag already exists; verified qualified bytes."
           else
             notes=$(git log -1 --format=%b "$head_commit")
             if [[ -z "$notes" ]]; then
               notes="Verified System Monitor ${version} release."
             fi
-            gh release create "$tag" "$deb_path" "$installer_path" "$windows_path" \
+            gh release create "$tag" "${asset_paths[@]}" \
               --verify-tag \
               --target "$head_commit" \
               --title "System Monitor $version" \
