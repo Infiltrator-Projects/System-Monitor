@@ -13,7 +13,7 @@
  */
 #include "process_file_users.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
 #include "process_inspection.h"
 #include "process_table_ui.h"
 #include "ui_helpers.h"
@@ -140,8 +140,11 @@ static void file_users_complete(GObject *source_object,
 void lsm_process_file_users_show(LsmApp *app)
 {
     if (!app) return;
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (!parent) return;
+
     GtkWidget *chooser = gtk_file_chooser_dialog_new(
-        "Find processes using a file", GTK_WINDOW(app->shell.window),
+        "Find processes using a file", GTK_WINDOW(parent),
         GTK_FILE_CHOOSER_ACTION_OPEN,
         "Cancel", GTK_RESPONSE_CANCEL,
         "Search", GTK_RESPONSE_ACCEPT,
@@ -157,7 +160,7 @@ void lsm_process_file_users_show(LsmApp *app)
 
     FileUsersRequest *request = g_new0(FileUsersRequest, 1U);
     request->path = path;
-    GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
+    GTask *task = g_task_new(G_OBJECT(parent), NULL,
                              file_users_complete, NULL);
     g_task_set_task_data(task, request, file_users_request_free);
     g_task_run_in_thread(task, file_users_worker);
