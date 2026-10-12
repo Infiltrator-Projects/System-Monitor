@@ -267,7 +267,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 100
     steps:
       - name: Check out exact published commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -322,18 +322,18 @@ jobs:
             echo "Immediate APT dispatch unavailable; waiting for central repository publication."
           fi
 
-          for attempt in $(seq 1 120); do
+          for attempt in $(seq 1 180); do
             if curl -fsS --retry 2 --retry-delay 1 "$catalogue?release=$RELEASE_SHA&attempt=$attempt" \
               | jq -e --arg id "$APP_ID" --arg version "$VERSION" \
                 '.[] | select(.id == $id and .version == $version)' >/dev/null; then
               echo "APT repository advertises $APP_ID $VERSION."
               exit 0
             fi
-            echo "Waiting for APT publication of $APP_ID $VERSION ($attempt/120)..."
-            sleep 10
+            echo "Waiting for APT publication of $APP_ID $VERSION ($attempt/180)..."
+            sleep 30
           done
 
-          echo "::error::Central APT repository did not advertise $APP_ID $VERSION within 20 minutes."
+          echo "::error::Central APT repository did not advertise $APP_ID $VERSION within 90 minutes."
           exit 1
 
   retention:
