@@ -17,6 +17,7 @@
 
 #include "app.h"
 #include "app_config.h"
+#include "summary_bar_view.h"
 
 #include <glib.h>
 #include <stdbool.h>
@@ -42,6 +43,13 @@ typedef struct {
     gboolean shell_shown;
 } LsmPageRegistryControlView;
 
+/** Compact Summary widgets plus the retained monitor facts they present. */
+typedef struct {
+    LsmSummaryBarView view;
+    const LsmMonitor *monitor;
+    bool network_use_bits;
+} LsmSummaryBarContext;
+
 /**
  * Copy keyboard-routing state out of the private application object.
  * @param app Application owning the presentation state.
@@ -59,6 +67,31 @@ bool lsm_app_keyboard_control_view(const LsmApp *app,
  */
 bool lsm_app_page_registry_control_view(const LsmApp *app,
                                         LsmPageRegistryControlView *view);
+
+/**
+ * Copy Compact Summary widgets and retained monitor facts out of LsmApp.
+ * @param app Application owning summary presentation state.
+ * @param context Destination for the narrow summary context.
+ * @return true when both arguments are valid; otherwise false.
+ */
+bool lsm_app_summary_bar_context(const LsmApp *app,
+                                 LsmSummaryBarContext *context);
+
+/**
+ * Store the Compact Summary renderer widgets in application-owned shell state.
+ * @param app Application owning summary presentation state.
+ * @param view Constructed summary renderer view to retain.
+ */
+void lsm_app_summary_bar_store_view(LsmApp *app,
+                                    const LsmSummaryBarView *view);
+
+/**
+ * Set sensitivity of the application-owned process recording action.
+ * @param app Application owning process presentation controls.
+ * @param sensitive TRUE when the record action should accept input.
+ */
+void lsm_app_process_record_action_set_sensitive(LsmApp *app,
+                                                 gboolean sensitive);
 
 /**
  * Return the main presentation window without exposing the shell layout.

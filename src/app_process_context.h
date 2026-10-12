@@ -71,6 +71,37 @@ bool lsm_app_process_selection_view(const LsmApp *app,
                                     LsmProcessSelectionView *view);
 
 /**
+ * Return whether process heat-map presentation is enabled.
+ * @param app Application owning process presentation preferences.
+ * @return TRUE when heat-map presentation is enabled; otherwise FALSE.
+ */
+gboolean lsm_app_process_heatmap_enabled(const LsmApp *app);
+
+/**
+ * Mark process-backed presentation models dirty after snapshot publication.
+ * @param app Application owning process presentation state.
+ */
+void lsm_app_process_ui_snapshot_changed(LsmApp *app);
+
+/**
+ * Invalidate process identity presentation after catalog replacement.
+ * @param app Application owning process presentation state.
+ * @return true when the visible Processes page should be presented now.
+ */
+bool lsm_app_process_ui_catalog_changed(LsmApp *app);
+
+/**
+ * Resolve whether the process recording action should be enabled.
+ * @param app Application owning recorder state.
+ * @param ordinary_selection TRUE for an ordinary process-row selection.
+ * @param grouped_selection TRUE when the selection represents a process group.
+ * @return TRUE when recording may be started or an existing recording stopped.
+ */
+gboolean lsm_app_process_record_action_sensitive(
+    const LsmApp *app, gboolean ordinary_selection,
+    gboolean grouped_selection);
+
+/**
  * Return the application's process scanner without exposing LsmApp layout.
  * @param app Application owning the scanner.
  * @return Scanner pointer, or NULL when app is NULL.

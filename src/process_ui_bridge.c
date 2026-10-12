@@ -9,30 +9,23 @@
  */
 #include "process_ui_bridge.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
+#include "app_process_context.h"
 #include "processes_ui.h"
 
 gboolean lsm_process_heatmap_enabled(const LsmApp *app)
 {
-    return app && app->details.process_heatmap;
+    return lsm_app_process_heatmap_enabled(app);
 }
 
 void lsm_process_ui_snapshot_changed(LsmApp *app)
 {
-    if (!app) return;
-    app->processes.processes_model_dirty = TRUE;
-    app->details.details_model_dirty = TRUE;
+    lsm_app_process_ui_snapshot_changed(app);
 }
 
 void lsm_process_ui_application_catalog_changed(LsmApp *app)
 {
-    if (!app) return;
-    if (app->processes.process_identity_cache)
-        g_hash_table_remove_all(app->processes.process_identity_cache);
-    app->processes.processes_structure_valid = FALSE;
-    app->processes.processes_model_dirty = TRUE;
-    if (app->runtime.active_tab == LSM_TAB_PROCESSES &&
-        app->runtime.page_built[LSM_TAB_PROCESSES])
+    if (lsm_app_process_ui_catalog_changed(app))
         lsm_processes_present_snapshot(app);
 }
 
@@ -40,9 +33,7 @@ void lsm_process_record_action_sync(LsmApp *app,
                                     gboolean ordinary_selection,
                                     gboolean grouped_selection)
 {
-    if (!app || !app->details.process_record_menu_item) return;
-    const gboolean sensitive =
-        (ordinary_selection && !grouped_selection) ||
-        app->process.recorder != NULL;
-    gtk_widget_set_sensitive(app->details.process_record_menu_item, sensitive);
+    const gboolean sensitive = lsm_app_process_record_action_sensitive(
+        app, ordinary_selection, grouped_selection);
+    lsm_app_process_record_action_set_sensitive(app, sensitive);
 }

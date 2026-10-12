@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Current source version:** 1.0.178 ([version file](support/VERSION))
+**Current source version:** 1.0.179 ([version file](support/VERSION))
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -31,11 +31,11 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the authoritative verification suite. Installation is owned by the Debian package or native installer; direct `make install` is disabled.
+Run `make check` for the authoritative verification suite. Installation is owned by the Debian package or native installer; direct `make install` is disabled. Main-branch changes also run a dedicated ThreadSanitizer workflow over the asynchronous process-worker path.
 
 ## Releases
 
-Development stays on `main`. System Monitor 1.0.178 is the current tested release baseline. Releases are produced from the exact tested commit; published tags and assets are immutable.
+Development stays on `main`. System Monitor 1.0.179 is the current tested release baseline. Releases are produced from the exact tested commit; published tags and assets are immutable.
 
 ## Release assets
 
