@@ -22,9 +22,7 @@ performance_present_internal.h
 preferences.c
 preferences_dialog.c
 process_actions.c
-process_file_users.c
 process_inspector.c
-process_log_plot.c
 processes_ui.c
 startup.c
 users.c
