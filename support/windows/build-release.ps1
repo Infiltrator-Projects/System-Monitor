@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $true)][object[]]$Arguments,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Arguments,
         [Parameter(Mandatory = $true)][string]$FailureMessage
     )
 
