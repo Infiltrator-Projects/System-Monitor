@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.183 - 2026-10-13
+
+- Route exact-file process-owner search through the existing presentation-window contract instead of exposing the complete private `LsmApp` layout.
+- Route process-log plotting through the presentation and runtime context contracts for window and shutdown state.
+- Remove `process_file_users.c` and `process_log_plot.c` from the private application-state allowlist, reducing approved direct consumers from 27 to 25.
+
 ## 1.0.182 - 2026-10-12
 
 - Make `support/VERSION` the sole release-intent signal instead of coupling publication to a specially spelled commit subject.
