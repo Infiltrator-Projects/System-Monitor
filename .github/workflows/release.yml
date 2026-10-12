@@ -19,7 +19,8 @@ concurrency:
 # SHA, version and checksums are the release contract. This workflow never
 # rebuilds product binaries and never reparses release identity from a second
 # source checkout. Superseded verified runs and already-published versions are
-# successful no-ops rather than spurious release failures.
+# successful no-ops rather than spurious release failures. Keep this contract
+# implementation-light so qualification and publication cannot drift together.
 # Central APT publication remains owned independently by Infiltrator-Repository.
 
 jobs:
