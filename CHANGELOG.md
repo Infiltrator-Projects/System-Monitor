@@ -2,8 +2,8 @@
 
 ## 1.0.179 - 2026-10-12
 
-- Route Compact Summary and process UI state through existing narrow application context owners instead of direct `LsmApp` layout access.
-- Remove `summary_bar_adapter.c` and `process_ui_bridge.c` from the private application-state allowlist, reducing approved direct consumers from 30 to 28.
+- Route Compact Summary, process UI state and Processes-to-Details navigation through existing narrow application context owners instead of direct `LsmApp` layout access.
+- Remove `summary_bar_adapter.c`, `process_ui_bridge.c` and `process_navigation.c` from the private application-state allowlist, reducing approved direct consumers from 30 to 27.
 - Add a dedicated ThreadSanitizer workflow for the asynchronous process worker ownership and publication path.
 - Force process-scan completion callbacks through a real GLib main-loop turn instead of allowing inline worker-thread dispatch, and retain a regression test that verifies the callback executes on the main-loop thread.
 
