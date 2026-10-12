@@ -84,6 +84,13 @@ void lsm_app_process_record_action_set_sensitive(LsmApp *app,
     gtk_widget_set_sensitive(app->details.process_record_menu_item, sensitive);
 }
 
+void lsm_app_details_invalidate(LsmApp *app)
+{
+    if (!app) return;
+    app->details.details_structure_valid = FALSE;
+    app->details.details_model_dirty = TRUE;
+}
+
 GtkWidget *lsm_app_presentation_window(const LsmApp *app)
 {
     return app ? app->shell.window : NULL;
