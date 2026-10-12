@@ -9,21 +9,30 @@
  */
 #include "process_navigation.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
+#include "app_process_context.h"
 #include "details_page.h"
 
 void lsm_processes_go_to_details(LsmApp *app)
 {
-    if (!app || app->process.selected_pid <= 0 || !app->shell.notebook)
+    if (!app) return;
+
+    LsmProcessSelectionView selection;
+    if (!lsm_app_process_selection_view(app, &selection) ||
+        selection.selected_pid == 0U)
         return;
 
-    lsm_app_ensure_page_built(app, LSM_TAB_DETAILS);
-    if (!app->details.details_search) return;
+    GtkWidget *notebook = lsm_app_page_registry_notebook(app);
+    if (!notebook) return;
 
-    gtk_entry_set_text(GTK_ENTRY(app->details.details_search), "");
-    app->details.details_structure_valid = FALSE;
-    app->details.details_model_dirty = TRUE;
+    lsm_app_page_registry_ensure_built(app, LSM_TAB_DETAILS);
+    GtkWidget *search = lsm_app_page_registry_search_target(
+        app, LSM_TAB_DETAILS);
+    if (!search) return;
+
+    gtk_entry_set_text(GTK_ENTRY(search), "");
+    lsm_app_details_invalidate(app);
     gtk_notebook_set_current_page(
-        GTK_NOTEBOOK(app->shell.notebook), LSM_TAB_DETAILS);
+        GTK_NOTEBOOK(notebook), LSM_TAB_DETAILS);
     lsm_details_present_snapshot(app);
 }
