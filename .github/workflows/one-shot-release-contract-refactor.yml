@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot release contract refactor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-release-contract-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refactor durable release contract and advance version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          checker_path = Path('support/tools/check_source_style.cpp')
+          checker = checker_path.read_text()
+          start_marker = '    char *release = read_file(".github/workflows/release.yml", &size);'
+          end_marker = '\n}\n\n\nstatic void check_private_app_coupling'
+          start = checker.index(start_marker)
+          end = checker.index(end_marker, start)
+          replacement = r'''    char *release = read_file(".github/workflows/release.yml", &size);
+              if (release) {
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "actions/download-artifact@v4");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "name: system-monitor-release-assets");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "RELEASE_SOURCE_SHA");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "RELEASE_VERSION");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "RELEASE_SHA256SUMS.txt");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "github.event.workflow_run.head_sha");
+                  require_text_marker(".github/workflows/release.yml", release,
+                                      "published releases are immutable");
+                  if (strstr(release, "actions/checkout@") ||
+                      strstr(release, "make -j2 release") ||
+                      strstr(release, "REQUIRE_I386=1 make check") ||
+                      strstr(release, "ctest --test-dir"))
+                      report_error(
+                          ".github/workflows/release.yml: publication must consume the "
+                          "sealed Verify bundle without a second checkout or rebuild");
+                  free(release);
+              }
+          '''
+          checker = checker[:start] + replacement + checker[end:]
+          checker_path.write_text(checker)
+
+          Path('support/VERSION').write_text('1.0.184\n')
+
+          readme_path = Path('README.md')
+          readme = readme_path.read_text().replace('1.0.183', '1.0.184')
+          readme_path.write_text(readme)
+
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text()
+          heading = '# Changelog\n\n'
+          entry = '''## 1.0.184 - 2026-10-13
+
+          - Make Publish release consume the sealed Verify bundle as its release contract without a second source checkout or product rebuild.
+          - Replace release-workflow implementation-string auditing with durable sealed-bundle, source-identity and no-rebuild contract checks.
+          - Treat superseded verified commits and already-published versions as clean no-ops while preserving immutable release asset verification.
+
+          '''
+          if not changelog.startswith(heading):
+              raise SystemExit('unexpected changelog header')
+          changelog_path.write_text(heading + entry + changelog[len(heading):])
+          PY
+
+          git rm .github/workflows/one-shot-release-contract-refactor.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add support/tools/check_source_style.cpp support/VERSION README.md CHANGELOG.md
+          git diff --cached --check
+          git commit -m "Decouple release contract verification"
+          git push origin HEAD:main
