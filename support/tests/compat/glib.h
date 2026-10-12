@@ -19,4 +19,8 @@ void g_main_context_invoke_full(
     GMainContext *context, gint priority, GSourceFunc function,
     gpointer data, GDestroyNotify notify);
 
+guint g_idle_add_full(
+    gint priority, GSourceFunc function,
+    gpointer data, GDestroyNotify notify);
+
 #endif
