@@ -94,6 +94,12 @@ void lsm_app_process_record_action_set_sensitive(LsmApp *app,
                                                  gboolean sensitive);
 
 /**
+ * Invalidate the retained Technical Details presentation model.
+ * @param app Application owning Details presentation state.
+ */
+void lsm_app_details_invalidate(LsmApp *app);
+
+/**
  * Return the main presentation window without exposing the shell layout.
  * @param app Application owning the shell.
  * @return Main window widget, or NULL when unavailable.
