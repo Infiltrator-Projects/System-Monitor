@@ -17,6 +17,9 @@ concurrency:
 # Verify is the sole producer and qualifier of release binaries.
 # make -j2 release is intentionally executed only by Verify's linux-release
 # producer job; this publisher never rebuilds release binaries.
+# Qualified Linux artifacts conventionally use these names before sealing:
+# infiltrator-system-monitor_${version}_amd64.deb
+# infiltrator-system-monitor-${version}-native-installer.run
 # This workflow only proves that the successful Verify run belongs to the exact
 # current main Release commit, verifies its sealed artifact manifest, and
 # publishes those exact bytes. Published releases are immutable.
