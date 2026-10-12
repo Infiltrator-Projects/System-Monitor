@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.186 - 2026-10-13
+
+- Add explicit regression coverage for the Overview page-scroll preference boundary so the tab-count-derived parser remains protected at the current highest tab index.
+
 ## 1.0.185 - 2026-10-13
 
 - Make persisted page-scroll parsing use a numeric tab index bounded by the actual tab count rather than a fixed single-digit range.
