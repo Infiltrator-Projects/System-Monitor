@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.179 - 2026-10-12
+
+- Route Compact Summary and process UI state through existing narrow application context owners instead of direct `LsmApp` layout access.
+- Remove `summary_bar_adapter.c` and `process_ui_bridge.c` from the private application-state allowlist, reducing approved direct consumers from 30 to 28.
+- Add a dedicated ThreadSanitizer workflow for the asynchronous process worker ownership and publication path.
+
 ## 1.0.178 - 2026-10-07
 
 - Extract Technical Details layout persistence, the Preferences GTK editor and process-log plotting into dedicated owners to reduce change ripple through page/menu code.
