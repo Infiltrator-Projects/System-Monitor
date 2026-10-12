@@ -14,19 +14,13 @@ concurrency:
   group: publish-release-${{ github.repository }}
   cancel-in-progress: false
 
-# Verify is the sole producer and qualifier of release binaries.
-# make -j2 release is intentionally executed only by Verify's linux-release
-# producer job; this publisher never rebuilds release binaries.
-# Qualified Linux artifacts conventionally use these names before sealing:
-# infiltrator-system-monitor_${version}_amd64.deb
-# infiltrator-system-monitor-${version}-native-installer.run
-# support/VERSION is the release-intent source of truth. A successful Verify
-# run for exact current main publishes only when v${version} is absent or
-# already identifies that exact commit. An existing version tag on an older
-# commit means there is nothing to publish; ordinary workflow-only changes do
-# not become release failures and commit-message spelling is irrelevant.
-# The sealed artifact manifest remains the immutable byte-level authority.
-# Central APT publication is owned independently by Infiltrator-Repository.
+# Verify is the sole producer and qualifier of release binaries. Publication
+# trusts the sealed bundle produced by that exact successful run: its source
+# SHA, version and checksums are the release contract. This workflow never
+# rebuilds product binaries and never reparses release identity from a second
+# source checkout. Superseded verified runs and already-published versions are
+# successful no-ops rather than spurious release failures.
+# Central APT publication remains owned independently by Infiltrator-Repository.
 
 jobs:
   publish:
@@ -40,50 +34,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
-      VERIFY_RUN_ID: ${{ github.event.workflow_run.id }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - name: Check out exact tested main commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - name: Resolve version-driven release intent
-        id: intent
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --tags
-          head_commit=$(git rev-parse HEAD)
-          test "$head_commit" = "$EXPECTED_SHA"
-          current_main=$(git rev-parse origin/main)
-          if [[ "$current_main" != "$EXPECTED_SHA" ]]; then
-            printf 'Refusing to publish stale tested commit %s; current main is %s.\n' \
-              "$EXPECTED_SHA" "$current_main" >&2
-            exit 1
-          fi
-
-          version=$(tr -d '[:space:]' < support/VERSION)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tag="v${version}"
-
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            tag_commit=$(git rev-list -n 1 "$tag")
-            if [[ "$tag_commit" != "$head_commit" ]]; then
-              printf 'Version %s is already published at %s; current main %s needs a new support/VERSION before another release.\n' \
-                "$version" "$tag_commit" "$head_commit"
-              echo 'publish=false' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Exact release tag $tag already identifies tested main; verifying/resuming publication."
-          else
-            echo "Version $version has no release tag; publishing exact tested main."
-          fi
-          echo 'publish=true' >> "$GITHUB_OUTPUT"
-
-      - name: Download exact qualified release bundle
-        if: steps.intent.outputs.publish == 'true'
+      - name: Download sealed qualified release bundle
         uses: actions/download-artifact@v4
         with:
           name: system-monitor-release-assets
@@ -92,15 +47,16 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Verify sealed artifact identity
-        if: steps.intent.outputs.publish == 'true'
+      - name: Publish or verify immutable release
         shell: bash
         run: |
           set -euo pipefail
-          version=$(tr -d '[:space:]' < support/VERSION)
 
-          test "$(cat release/RELEASE_SOURCE_SHA)" = "$EXPECTED_SHA"
-          test "$(cat release/RELEASE_VERSION)" = "$version"
+          test "$(cat release/RELEASE_SOURCE_SHA)" = "$SOURCE_SHA"
+          version=$(tr -d '[:space:]' < release/RELEASE_VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v${version}"
+
           (
             cd release
             sha256sum -c RELEASE_SHA256SUMS.txt
@@ -116,9 +72,11 @@ jobs:
           deb=
           installer=
           windows_app=
+          asset_paths=()
           for asset in "${assets[@]}"; do
             [[ "$asset" != */* ]]
             test -f "release/$asset"
+            asset_paths+=("release/$asset")
             case "$asset" in
               *.deb)
                 test -z "$deb"
@@ -141,54 +99,41 @@ jobs:
           test -n "$deb"
           test -n "$installer"
           test -n "$windows_app"
-
           test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           chmod +x "release/$installer"
           "release/$installer" --help >/dev/null
 
-      - name: Publish or resume exact immutable release
-        if: steps.intent.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --tags
-          head_commit=$(git rev-parse HEAD)
-          test "$head_commit" = "$EXPECTED_SHA"
-
-          version=$(tr -d '[:space:]' < support/VERSION)
-          tag="v${version}"
-
-          mapfile -t assets < <(
-            awk 'NF == 2 { name=$2; sub(/^\*/, "", name); print name }' \
-              release/RELEASE_SHA256SUMS.txt
-          )
-          test "${#assets[@]}" -eq 3
-          asset_paths=()
-          for asset in "${assets[@]}"; do
-            test -f "release/$asset"
-            asset_paths+=("release/$asset")
-          done
-          expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
-
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            tag_commit=$(git rev-list -n 1 "$tag")
-            if [[ "$tag_commit" != "$head_commit" ]]; then
-              printf 'Release tag %s points to %s instead of verified commit %s.\n' \
-                "$tag" "$tag_commit" "$head_commit" >&2
-              exit 1
-            fi
-          else
-            git tag "$tag" "$head_commit"
-            git push origin "$tag"
+          current_main=$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$current_main" != "$SOURCE_SHA" ]]; then
+            printf 'Verified commit %s was superseded by main %s; nothing to publish.\n' \
+              "$SOURCE_SHA" "$current_main"
+            exit 0
           fi
 
+          tag_exists=false
+          if tag_identity=$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" \
+              --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null); then
+            read -r tag_type tag_sha <<<"$tag_identity"
+            if [[ "$tag_type" != "commit" ]]; then
+              printf 'Release tag %s is not a lightweight commit tag; refusing to reinterpret it.\n' \
+                "$tag" >&2
+              exit 1
+            fi
+            if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
+              printf 'Version %s is already published at %s; verified main %s has no new release intent.\n' \
+                "$version" "$tag_sha" "$SOURCE_SHA"
+              exit 0
+            fi
+            tag_exists=true
+          fi
+
+          expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
           if gh release view "$tag" >/dev/null 2>&1; then
             published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
             if [[ "$published_assets" != "$expected_assets" ]]; then
-              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' "$tag" >&2
+              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
+                "$tag" >&2
               exit 1
             fi
             tmp=$(mktemp -d)
@@ -201,16 +146,20 @@ jobs:
               }
             done
             echo "Exact immutable release $tag already exists; verified qualified bytes."
-          else
-            notes=$(git log -1 --format=%b "$head_commit")
-            if [[ -z "$notes" ]]; then
-              notes="Verified System Monitor ${version} release."
-            fi
+            exit 0
+          fi
+
+          if [[ "$tag_exists" == "true" ]]; then
             gh release create "$tag" "${asset_paths[@]}" \
               --verify-tag \
-              --target "$head_commit" \
               --title "System Monitor $version" \
-              --notes "$notes" \
+              --notes "Verified System Monitor ${version} release." \
+              --latest
+          else
+            gh release create "$tag" "${asset_paths[@]}" \
+              --target "$SOURCE_SHA" \
+              --title "System Monitor $version" \
+              --notes "Verified System Monitor ${version} release." \
               --latest
           fi
 
