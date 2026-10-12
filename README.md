@@ -39,7 +39,7 @@ Development stays on `main`. System Monitor 1.0.178 is the current tested releas
 
 ## Release assets
 
-A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision.
+A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision. Windows verification and release packaging share the canonical `support/source-groups/windows-product.txt` source manifest so the published executable cannot drift onto a separate source list.
 
 ## Technical documentation
 
