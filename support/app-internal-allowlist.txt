@@ -25,7 +25,6 @@ process_actions.c
 process_file_users.c
 process_inspector.c
 process_log_plot.c
-process_navigation.c
 processes_ui.c
 startup.c
 users.c
