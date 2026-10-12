@@ -3,9 +3,9 @@
  * @file summary_bar_adapter.c
  * @brief LsmApp adapter for the narrow Compact Summary renderer contract.
  *
- * This is intentionally the only Compact Summary translation unit allowed to
- * know the complete application layout. The renderer in summary_bar.c accepts
- * only its own widget state plus the monitor snapshot it needs to present.
+ * The adapter consumes only the presentation context exposed by the
+ * application bridge. The renderer in summary_bar.c remains independent of
+ * the complete private application layout.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -14,18 +14,7 @@
 #include "summary_bar.h"
 #include "summary_bar_view.h"
 
-#include "app_internal.h"
-
-static void summary_view_from_app(const LsmApp *app, LsmSummaryBarView *view)
-{
-    if (!app || !view) return;
-    view->frame = app->shell.summary_bar;
-    view->values[LSM_SUMMARY_CPU] = app->shell.summary_cpu;
-    view->values[LSM_SUMMARY_MEMORY] = app->shell.summary_memory;
-    view->values[LSM_SUMMARY_DISK] = app->shell.summary_disk;
-    view->values[LSM_SUMMARY_NETWORK] = app->shell.summary_network;
-    view->values[LSM_SUMMARY_GPU] = app->shell.summary_gpu;
-}
+#include "app_presentation_context.h"
 
 GtkWidget *lsm_summary_bar_build(LsmApp *app)
 {
@@ -35,24 +24,21 @@ GtkWidget *lsm_summary_bar_build(LsmApp *app)
     GtkWidget *frame = lsm_summary_bar_view_build(&view);
     if (!frame) return NULL;
 
-    app->shell.summary_bar = view.frame;
-    app->shell.summary_cpu = view.values[LSM_SUMMARY_CPU];
-    app->shell.summary_memory = view.values[LSM_SUMMARY_MEMORY];
-    app->shell.summary_disk = view.values[LSM_SUMMARY_DISK];
-    app->shell.summary_network = view.values[LSM_SUMMARY_NETWORK];
-    app->shell.summary_gpu = view.values[LSM_SUMMARY_GPU];
+    lsm_app_summary_bar_store_view(app, &view);
 
-    lsm_summary_bar_view_update(
-        &view, &app->monitor, app->runtime.network_use_bits);
+    LsmSummaryBarContext context;
+    if (lsm_app_summary_bar_context(app, &context))
+        lsm_summary_bar_view_update(
+            &context.view, context.monitor, context.network_use_bits);
     return frame;
 }
 
 void lsm_summary_bar_update(LsmApp *app)
 {
-    if (!app || !app->shell.summary_bar) return;
+    LsmSummaryBarContext context;
+    if (!lsm_app_summary_bar_context(app, &context) || !context.view.frame)
+        return;
 
-    LsmSummaryBarView view;
-    summary_view_from_app(app, &view);
     lsm_summary_bar_view_update(
-        &view, &app->monitor, app->runtime.network_use_bits);
+        &context.view, context.monitor, context.network_use_bits);
 }
