@@ -47,6 +47,38 @@ bool lsm_app_process_selection_view(const LsmApp *app,
     return true;
 }
 
+gboolean lsm_app_process_heatmap_enabled(const LsmApp *app)
+{
+    return app && app->details.process_heatmap;
+}
+
+void lsm_app_process_ui_snapshot_changed(LsmApp *app)
+{
+    if (!app) return;
+    app->processes.processes_model_dirty = TRUE;
+    app->details.details_model_dirty = TRUE;
+}
+
+bool lsm_app_process_ui_catalog_changed(LsmApp *app)
+{
+    if (!app) return false;
+    if (app->processes.process_identity_cache)
+        g_hash_table_remove_all(app->processes.process_identity_cache);
+    app->processes.processes_structure_valid = FALSE;
+    app->processes.processes_model_dirty = TRUE;
+    return app->runtime.active_tab == LSM_TAB_PROCESSES &&
+           app->runtime.page_built[LSM_TAB_PROCESSES];
+}
+
+gboolean lsm_app_process_record_action_sensitive(
+    const LsmApp *app, gboolean ordinary_selection,
+    gboolean grouped_selection)
+{
+    if (!app) return FALSE;
+    return (ordinary_selection && !grouped_selection) ||
+           app->process.recorder != NULL;
+}
+
 LsmProcessScanner *lsm_app_process_scanner(LsmApp *app)
 {
     return app ? app->process_scanner : NULL;
