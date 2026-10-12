@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.182 - 2026-10-12
+
+- Make `support/VERSION` the sole release-intent signal instead of coupling publication to a specially spelled commit subject.
+- Treat an already-published version on an older commit as a clean no-op for workflow-only follow-up changes while retaining exact-current-main, sealed-manifest and immutable-asset verification for real releases.
+- Carry forward the simplified single-producer release path: Verify builds and qualifies the binaries once, while Publish release only verifies and publishes those exact bytes; central APT publication remains independently owned by Infiltrator-Repository.
+
+## 1.0.181 - 2026-10-12
+
+- Publish only the exact release binaries produced and qualified by Verify; the release publisher no longer rebuilds product artifacts or owns central APT orchestration.
+- Seal the three release assets with source SHA, version and SHA-256 identity so resumed publication can prove it is publishing the exact qualified bytes.
+
 ## 1.0.180 - 2026-10-12
 
 - Make central APT release verification tolerate the hourly publisher when immediate dispatch credentials are unavailable, polling every 30 seconds for up to 90 minutes instead of failing after 20 minutes.

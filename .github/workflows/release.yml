@@ -20,9 +20,12 @@ concurrency:
 # Qualified Linux artifacts conventionally use these names before sealing:
 # infiltrator-system-monitor_${version}_amd64.deb
 # infiltrator-system-monitor-${version}-native-installer.run
-# This workflow only proves that the successful Verify run belongs to the exact
-# current main Release commit, verifies its sealed artifact manifest, and
-# publishes those exact bytes. Published releases are immutable.
+# support/VERSION is the release-intent source of truth. A successful Verify
+# run for exact current main publishes only when v${version} is absent or
+# already identifies that exact commit. An existing version tag on an older
+# commit means there is nothing to publish; ordinary workflow-only changes do
+# not become release failures and commit-message spelling is irrelevant.
+# The sealed artifact manifest remains the immutable byte-level authority.
 # Central APT publication is owned independently by Infiltrator-Repository.
 
 jobs:
@@ -30,8 +33,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
+      github.event.workflow_run.head_branch == 'main'
     permissions:
       actions: read
       contents: write
@@ -47,7 +49,8 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Verify exact current main and Release commit
+      - name: Resolve version-driven release intent
+        id: intent
         shell: bash
         run: |
           set -euo pipefail
@@ -60,15 +63,27 @@ jobs:
               "$EXPECTED_SHA" "$current_main" >&2
             exit 1
           fi
+
           version=$(tr -d '[:space:]' < support/VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          subject=$(git log -1 --format=%s "$head_commit")
-          if [[ "$subject" != "Release ${version}" && "$subject" != "Release ${version}:"* ]]; then
-            printf 'Release commit subject must begin with Release %s.\n' "$version" >&2
-            exit 1
+          tag="v${version}"
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_commit=$(git rev-list -n 1 "$tag")
+            if [[ "$tag_commit" != "$head_commit" ]]; then
+              printf 'Version %s is already published at %s; current main %s needs a new support/VERSION before another release.\n' \
+                "$version" "$tag_commit" "$head_commit"
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Exact release tag $tag already identifies tested main; verifying/resuming publication."
+          else
+            echo "Version $version has no release tag; publishing exact tested main."
           fi
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
 
       - name: Download exact qualified release bundle
+        if: steps.intent.outputs.publish == 'true'
         uses: actions/download-artifact@v4
         with:
           name: system-monitor-release-assets
@@ -78,6 +93,7 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Verify sealed artifact identity
+        if: steps.intent.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -132,6 +148,7 @@ jobs:
           "release/$installer" --help >/dev/null
 
       - name: Publish or resume exact immutable release
+        if: steps.intent.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
