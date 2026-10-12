@@ -162,9 +162,14 @@ void lsm_summary_performance_view(const LsmMonitor *monitor,
                 sizeof(view->values[LSM_SUMMARY_NETWORK]),
                 "%s (%s)", rate, percent);
         } else {
+            /*
+             * rate is a 64-byte source object.  Bound the Common copy by that
+             * source capacity as well as the larger summary destination so an
+             * optimizer cannot legally read beyond rate while searching for
+             * its terminator.
+             */
             infiltratr_copy_string(
-                view->values[LSM_SUMMARY_NETWORK],
-                sizeof(view->values[LSM_SUMMARY_NETWORK]), rate);
+                view->values[LSM_SUMMARY_NETWORK], sizeof(rate), rate);
         }
     }
 

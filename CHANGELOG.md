@@ -6,6 +6,7 @@
 - Remove `summary_bar_adapter.c`, `process_ui_bridge.c` and `process_navigation.c` from the private application-state allowlist, reducing approved direct consumers from 30 to 27.
 - Add a dedicated ThreadSanitizer workflow for the asynchronous process worker ownership and publication path.
 - Force process-scan completion callbacks through a real GLib main-loop turn instead of allowing inline worker-thread dispatch, and retain a regression test that verifies the callback executes on the main-loop thread.
+- Bound Compact Summary network-rate copies by the formatted source buffer as well as the larger destination, eliminating an aggressive-PGO `-Wstringop-overread` and its underlying over-read possibility.
 
 ## 1.0.178 - 2026-10-07
 
