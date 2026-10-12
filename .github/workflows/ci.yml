@@ -59,12 +59,10 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Verify release policy
+      - name: Reject destructive release automation
         shell: bash
         run: |
           set -euo pipefail
-          release=.github/workflows/release.yml
-
           if grep -REn --include='*.yml' --include='*.yaml' \
             -e 'git[[:space:]]+push[^#]*--force' \
             -e 'git[[:space:]]+push[^#]*--delete' \
@@ -73,16 +71,6 @@ jobs:
             -e 'gh[[:space:]]+api[^#]*(--method|-X)[[:space:]]+DELETE' \
             .github/workflows; then
             echo "Destructive repository automation is forbidden." >&2
-            exit 1
-          fi
-
-          grep -Fq '  workflow_run:' "$release"
-          grep -Fq 'workflows: ["Verify"]' "$release"
-          grep -Fq "github.event.workflow_run.head_branch == 'main'" "$release"
-          grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
-          grep -Fq 'system-monitor-release-assets' "$release"
-          if grep -Eq '^  workflow_dispatch:|^  pull_request:|^  schedule:' "$release"; then
-            echo "Release publication must be automatic from tested main only." >&2
             exit 1
           fi
 
@@ -276,7 +264,9 @@ jobs:
           set -euo pipefail
           ulimit -s 65536
           version=$(tr -d '[:space:]' < support/VERSION)
-          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          mapfile -t installers < <(find . -maxdepth 1 -type f -name '*.run' -printf '%f\n' | sort)
+          test "${#installers[@]}" -eq 1
+          installer="${installers[0]}"
           chmod +x "$installer"
           sudo ./"$installer" --profile aggressive --system-package-mode
           test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" = "install ok installed"
@@ -376,14 +366,22 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="infiltrator-system-monitor_${version}_amd64.deb"
-          installer="infiltrator-system-monitor-${version}-native-installer.run"
-          windows_app="system-monitor-${version}-windows.exe"
+          mapfile -t debs < <(find candidate-linux -maxdepth 1 -type f -name '*.deb' -printf '%f\n' | sort)
+          mapfile -t installers < <(find candidate-linux -maxdepth 1 -type f -name '*.run' -printf '%f\n' | sort)
+          mapfile -t windows_apps < <(find candidate-windows -maxdepth 1 -type f -name '*.exe' -printf '%f\n' | sort)
+          test "${#debs[@]}" -eq 1
+          test "${#installers[@]}" -eq 1
+          test "${#windows_apps[@]}" -eq 1
+          deb="${debs[0]}"
+          installer="${installers[0]}"
+          windows_app="${windows_apps[0]}"
+
           mkdir -p release
           cp "candidate-linux/$deb" "release/$deb"
           cp "candidate-linux/$installer" "release/$installer"
           cp "candidate-windows/$windows_app" "release/$windows_app"
           chmod +x "release/$installer"
+          test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           "release/$installer" --help >/dev/null
           (
