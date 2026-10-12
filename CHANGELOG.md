@@ -29,7 +29,7 @@
 
 - Make Publish release consume the sealed Verify bundle as its release contract without a second source checkout or product rebuild.
 - Replace release-workflow implementation-string auditing with durable sealed-bundle, source-identity and no-rebuild contract checks.
-- Treat superseded verified runs and already-published versions as clean no-ops while preserving immutable release asset verification.
+- Treat superseded verified commits and already-published versions as clean no-ops while preserving immutable release asset verification.
 
 ## 1.0.183 - 2026-10-13
 
