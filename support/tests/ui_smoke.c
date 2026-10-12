@@ -223,6 +223,7 @@ int main(void)
     saved->runtime.last_tab = LSM_TAB_DETAILS;
     saved->runtime.page_scroll[LSM_TAB_PROCESSES] = 123.5;
     saved->runtime.page_scroll[LSM_TAB_DETAILS] = 456.25;
+    saved->runtime.page_scroll[LSM_TAB_OVERVIEW] = 789.75;
     strcpy(saved->runtime.selected_performance_page, "disk-nvme0n1");
     lsm_preferences_save(saved);
     struct stat status;
@@ -250,6 +251,7 @@ int main(void)
     assert(loaded->runtime.last_tab == LSM_TAB_DETAILS);
     assert(fabs(loaded->runtime.page_scroll[LSM_TAB_PROCESSES] - 123.5) < 0.001);
     assert(fabs(loaded->runtime.page_scroll[LSM_TAB_DETAILS] - 456.25) < 0.001);
+    assert(fabs(loaded->runtime.page_scroll[LSM_TAB_OVERVIEW] - 789.75) < 0.001);
     assert(strcmp(loaded->runtime.selected_performance_page, "disk-nvme0n1") == 0);
 
     FILE *file = fopen(saved->paths.preferences_path, "w");
