@@ -7,22 +7,18 @@ on:
     types: [completed]
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
   group: publish-release-${{ github.repository }}
   cancel-in-progress: false
 
-# This workflow owns one thing: publishing an immutable GitHub release from an
-# exact, successful Verify run on the current main Release commit.
-#
-# Central APT publication is intentionally owned by Infiltrator-Repository.
-# That repository polls application releases every five minutes and verifies its
-# own signed repository deployment. Cross-repository propagation must not turn
-# an already-valid application release red or make it depend on an optional PAT.
-#
-# Release-history retention is also not part of publication correctness. Keep
-# published releases immutable and preserve their source tags.
+# Verify is the sole producer and qualifier of release binaries.
+# This workflow only proves that the successful Verify run belongs to the exact
+# current main Release commit, verifies its sealed artifact manifest, and
+# publishes those exact bytes. Published releases are immutable.
+# Central APT publication is owned independently by Infiltrator-Repository.
 
 jobs:
   publish:
@@ -32,34 +28,19 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Release ')
     permissions:
+      actions: read
       contents: write
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
       EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+      VERIFY_RUN_ID: ${{ github.event.workflow_run.id }}
     steps:
       - name: Check out exact tested main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-          submodules: recursive
-
-      - name: Set reproducible release timestamp
-        shell: bash
-        run: |
-          set -euo pipefail
-          epoch=$(git show -s --format=%ct "$EXPECTED_SHA")
-          [[ "$epoch" =~ ^[0-9]+$ ]]
-          printf 'SOURCE_DATE_EPOCH=%s\n' "$epoch" >> "$GITHUB_ENV"
-
-      - name: Install build dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-mingw-w64-x86-64 git libgtk-3-dev pkg-config
 
       - name: Verify exact current main and Release commit
         shell: bash
@@ -82,115 +63,45 @@ jobs:
             exit 1
           fi
 
-      - name: Build release packages
-        run: |
-          set -euo pipefail
-          make -j2 release
-          version=$(tr -d '[:space:]' < support/VERSION)
-          windows_app="system-monitor-${version}-windows.exe"
-          version_header=build/windows-version.h
-          mkdir -p build
-          printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
-          mapfile -t windows_sources < <(
-            sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
-              support/source-groups/windows-product.txt | sed 's#^#src/#'
-          )
-          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
-            support/tools/prepare_windows_typography.cpp \
-            -o build/prepare-windows-typography
-          build/prepare-windows-typography \
-            src/infiltratr-common/cmake/InfiltratrTypographyAssets.cmake \
-            build/windows-fonts
-          x86_64-w64-mingw32-windres -Isrc \
-            support/windows/system-monitor-fonts.rc -O coff \
-            -o build/windows-fonts.o
-          common_portable=( \
-            src/infiltratr-common/src/core.c \
-            src/infiltratr-common/src/arithmetic.c \
-            src/infiltratr-common/src/config.c \
-            src/infiltratr-common/src/i18n.c \
-            src/infiltratr-common/src/token.c \
-            src/infiltratr-common/src/timing.c \
-            src/infiltratr-common/src/temporal.c \
-            src/infiltratr-common/src/format.c \
-            src/infiltratr-common/src/quantity.c \
-            src/infiltratr-common/src/graphics.c \
-            src/infiltratr-common/src/escape.c \
-            src/infiltratr-common/src/design.c \
-          )
-          x86_64-w64-mingw32-gcc \
-            -std=c17 -O2 -D_WIN32_WINNT=0x0601 -DUNICODE -D_UNICODE \
-            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
-            -Wstrict-prototypes -Wmissing-prototypes \
-            -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
-            "${windows_sources[@]}" \
-            build/windows-fonts.o "${common_portable[@]}" \
-            -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
-            -static-libgcc -mwindows \
-            -o "$windows_app"
-          strings "$windows_app" > build/windows-strings.txt
-          grep -Fq "$version" build/windows-strings.txt
-          pe_info=$(x86_64-w64-mingw32-objdump -p "$windows_app")
-          grep -Eq 'Subsystem[[:space:]]+00000002.*Windows GUI' <<<"$pe_info"
-          if grep -E 'DLL Name:' <<<"$pe_info" | grep -Evi \
-              'KERNEL32\.dll|msvcrt\.dll|USER32\.dll|GDI32\.dll|COMCTL32\.dll|ADVAPI32\.dll|PSAPI\.DLL|IPHLPAPI\.DLL|WS2_32\.dll|PDH\.DLL|POWRPROF\.dll|DXGI\.dll|SETUPAPI\.dll|DWMAPI\.dll|api-ms-win-|ntdll\.dll'; then
-            echo "Windows GUI has an unexpected non-system runtime dependency." >&2
-            exit 1
-          fi
+      - name: Download exact qualified release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: system-monitor-release-assets
+          path: release
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Verify Debian compatibility contract
+      - name: Verify sealed artifact identity
         shell: bash
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
           deb="infiltrator-system-monitor_${version}_amd64.deb"
-          test -f "$deb"
-          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
-          dependencies=$(dpkg-deb -f "$deb" Depends)
-          grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
-          if grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"; then
-            printf 'Avoidable runtime dependency reappeared: %s\n' "$dependencies" >&2
-            exit 1
-          fi
+          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          windows_app="system-monitor-${version}-windows.exe"
 
-          expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
-          actual_members=$(ar t "$deb")
-          if [[ "$actual_members" != "$expected_members" ]]; then
-            printf 'Debian archive members are not the compatibility-safe XZ set.\n' >&2
-            printf 'Found:\n%s\n' "$actual_members" >&2
-            exit 1
-          fi
+          test "$(cat release/RELEASE_SOURCE_SHA)" = "$EXPECTED_SHA"
+          test "$(cat release/RELEASE_VERSION)" = "$version"
+          (
+            cd release
+            sha256sum -c RELEASE_SHA256SUMS.txt
+          )
 
-          contents=$(dpkg-deb --contents "$deb")
-          if grep -q '1970-01-01' <<<"$contents"; then
-            printf 'Debian package contains Unix-epoch timestamps.\n' >&2
-            exit 1
-          fi
+          test -f "release/$deb"
+          test -f "release/$installer"
+          test -f "release/$windows_app"
+          test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
+          test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
+          chmod +x "release/$installer"
+          "release/$installer" --help >/dev/null
 
-          tmp=$(mktemp -d)
-          trap 'rm -rf "$tmp"' EXIT
-          dpkg-deb -x "$deb" "$tmp/root"
-          dpkg-deb -e "$deb" "$tmp/control"
-          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
-          if grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"; then
-            printf 'Debian maintainer script regained an external setup helper.\n' >&2
+          expected_manifest=$(printf '%s\n%s\n%s\n' "$deb" "$installer" "$windows_app" | sort)
+          actual_manifest=$(awk '{print $2}' release/RELEASE_SHA256SUMS.txt | sed 's#^\*##' | sort)
+          if [[ "$actual_manifest" != "$expected_manifest" ]]; then
+            echo 'Sealed release manifest has an unexpected asset set.' >&2
             exit 1
           fi
-          font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
-          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            test -f "$font_root/$face"
-            cmp "build/fonts/$face" "$font_root/$face"
-          done
-          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
-          gzip -t "$changelog"
-          first_line=$(gzip -cd "$changelog" | sed -n '1p')
-          expected_line="infiltrator-system-monitor (${version}) unstable; urgency=medium"
-          if [[ "$first_line" != "$expected_line" ]]; then
-            printf 'Installed changelog is not valid Debian changelog syntax.\n' >&2
-            exit 1
-          fi
-          gzip -cd "$changelog" > "$tmp/debian-changelog"
-          dpkg-parsechangelog -l"$tmp/debian-changelog" >/dev/null
 
       - name: Publish or resume exact immutable release
         env:
@@ -203,16 +114,13 @@ jobs:
           test "$head_commit" = "$EXPECTED_SHA"
 
           version=$(tr -d '[:space:]' < support/VERSION)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v${version}"
           deb="infiltrator-system-monitor_${version}_amd64.deb"
           installer="infiltrator-system-monitor-${version}-native-installer.run"
           windows_app="system-monitor-${version}-windows.exe"
-          test -f "$deb"
-          test -x "$installer"
-          test -f "$windows_app"
-          test "$(dpkg-deb -f "$deb" Version)" = "$version"
-          ./"$installer" --help >/dev/null
+          deb_path="release/$deb"
+          installer_path="release/$installer"
+          windows_path="release/$windows_app"
 
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             tag_commit=$(git rev-list -n 1 "$tag")
@@ -221,7 +129,6 @@ jobs:
                 "$tag" "$tag_commit" "$head_commit" >&2
               exit 1
             fi
-            printf 'Resuming exact existing tag %s at %s.\n' "$tag" "$head_commit"
           else
             git tag "$tag" "$head_commit"
             git push origin "$tag"
@@ -231,32 +138,22 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
             if [[ "$published_assets" != "$expected_assets" ]]; then
-              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
-                "$tag" >&2
+              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' "$tag" >&2
               exit 1
             fi
             tmp=$(mktemp -d)
             trap 'rm -rf "$tmp"' EXIT
             gh release download "$tag" --dir "$tmp"
-            cmp -s "$deb" "$tmp/$deb" || {
-              printf 'Published Debian asset differs from the verified rebuild.\n' >&2
-              exit 1
-            }
-            cmp -s "$installer" "$tmp/$installer" || {
-              printf 'Published native installer differs from the verified rebuild.\n' >&2
-              exit 1
-            }
-            cmp -s "$windows_app" "$tmp/$windows_app" || {
-              printf 'Published Windows GUI differs from the verified rebuild.\n' >&2
-              exit 1
-            }
-            printf 'Resuming exact existing immutable release %s.\n' "$tag"
+            cmp -s "$deb_path" "$tmp/$deb" || { echo 'Published Debian asset differs from the qualified artifact.' >&2; exit 1; }
+            cmp -s "$installer_path" "$tmp/$installer" || { echo 'Published native installer differs from the qualified artifact.' >&2; exit 1; }
+            cmp -s "$windows_path" "$tmp/$windows_app" || { echo 'Published Windows GUI differs from the qualified artifact.' >&2; exit 1; }
+            echo "Exact immutable release $tag already exists; verified qualified bytes."
           else
             notes=$(git log -1 --format=%b "$head_commit")
             if [[ -z "$notes" ]]; then
               notes="Verified System Monitor ${version} release."
             fi
-            gh release create "$tag" "$deb" "$installer" "$windows_app" \
+            gh release create "$tag" "$deb_path" "$installer_path" "$windows_path" \
               --verify-tag \
               --target "$head_commit" \
               --title "System Monitor $version" \
@@ -265,7 +162,4 @@ jobs:
           fi
 
           published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
-          if [[ "$published_assets" != "$expected_assets" ]]; then
-            printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
-            exit 1
-          fi
+          test "$published_assets" = "$expected_assets"
