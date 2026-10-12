@@ -80,6 +80,10 @@ jobs:
           version_header=build/windows-version.h
           mkdir -p build
           printf '#define LSM_VERSION "%s"\n' "$version" > "$version_header"
+          mapfile -t windows_sources < <(
+            sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
+              support/source-groups/windows-product.txt | sed 's#^#src/#'
+          )
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             support/tools/prepare_windows_typography.cpp \
             -o build/prepare-windows-typography
@@ -108,8 +112,7 @@ jobs:
             -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wundef \
             -Wstrict-prototypes -Wmissing-prototypes \
             -Isrc -Isrc/infiltratr-common/include -include "$version_header" \
-            src/main_windows.c src/presentation_contract.c src/performance_view.c \
-            src/overview_history.c src/monitor_backend_windows.c src/process_backend_windows.c \
+            "${windows_sources[@]}" \
             build/windows-fonts.o "${common_portable[@]}" \
             -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lpdh -lpowrprof -ldxgi -ldxguid -lsetupapi -luuid -lcomctl32 -lgdi32 -ldwmapi \
             -static-libgcc -mwindows \
