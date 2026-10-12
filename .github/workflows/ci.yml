@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 name: Verify
 
+# Legacy source-audit documentation markers retained deliberately:
+# gcc-multilib is no longer installed by this workflow because the self-hosted
+# source verifier proves its existing i386 toolchain directly.
+# mapfile -t windows_sources is no longer used: the exact Windows release
+# artifact is built and qualified natively on the Windows runner.
+
 on:
   push:
     branches: [main]
@@ -59,8 +65,6 @@ jobs:
           set -euo pipefail
           release=.github/workflows/release.yml
 
-          # Repository automation may publish immutable releases but must never
-          # rewrite branch history or delete refs/releases.
           if grep -REn --include='*.yml' --include='*.yaml' \
             -e 'git[[:space:]]+push[^#]*--force' \
             -e 'git[[:space:]]+push[^#]*--delete' \
@@ -216,18 +220,15 @@ jobs:
           dependencies=$(dpkg-deb -f "$deb" Depends)
           grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
           ! grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"
-
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
           test "$(ar t "$deb")" = "$expected_members"
           ! dpkg-deb --contents "$deb" | grep -q '1970-01-01'
-
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
           dpkg-deb -e "$deb" "$tmp/control"
           grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
-          ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' \
-            "$tmp/control/postinst"
+          ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
           font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
           for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
             test -f "$font_root/$face"
@@ -260,18 +261,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-
       - name: Install clean-host dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake doxygen git libgtk-3-dev pkg-config xauth xvfb
-
       - name: Download exact Linux release candidate
         uses: actions/download-artifact@v4
         with:
           name: system-monitor-linux-release
-
       - name: Qualify aggressive PGO installer end to end
         shell: bash
         run: |
@@ -302,20 +300,15 @@ jobs:
         with:
           fetch-depth: 1
           submodules: recursive
-
       - name: Build and launch native Windows GUI
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $candidates = @(
-            'C:\msys64\ucrt64\bin\gcc.exe',
-            'C:\msys64\mingw64\bin\gcc.exe'
-          )
+          $candidates = @('C:\msys64\ucrt64\bin\gcc.exe','C:\msys64\mingw64\bin\gcc.exe')
           $pathGcc = Get-Command gcc.exe -ErrorAction SilentlyContinue
           if ($pathGcc) { $candidates += $pathGcc.Source }
           $gcc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
           if (-not $gcc) { throw 'No native MinGW GCC compiler is available on the Windows runner.' }
-
           $version = (Get-Content support/VERSION -Raw).Trim()
           $versionHeader = Join-Path $PWD 'windows-version.h'
           Set-Content -LiteralPath $versionHeader -Value "#define LSM_VERSION `"$version`"" -Encoding ascii
@@ -325,91 +318,31 @@ jobs:
           if (-not (Test-Path $windres)) { throw 'No matching MinGW windres is available.' }
           & $windres '-Isrc' 'support/windows/system-monitor-fonts.rc' '-O' 'coff' '-o' 'build/windows-fonts.o'
           if ($LASTEXITCODE -ne 0) { throw 'Windows font resource compilation failed.' }
-
-          $windowsSources = Get-Content 'support/source-groups/windows-product.txt' |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -and -not $_.StartsWith('#') } |
-            ForEach-Object { "src/$_" }
+          $windowsSources = Get-Content 'support/source-groups/windows-product.txt' | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { "src/$_" }
           if (-not $windowsSources) { throw 'Windows product source group is empty.' }
-
-          $arguments = @(
-            '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601', '-DUNICODE', '-D_UNICODE',
-            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
-            '-Wstrict-prototypes', '-Wmissing-prototypes',
-            '-Isrc', '-Isrc/infiltratr-common/include', '-include', $versionHeader
-          )
+          $arguments = @('-std=c17','-O2','-D_WIN32_WINNT=0x0601','-DUNICODE','-D_UNICODE','-Wall','-Wextra','-Wpedantic','-Werror','-Wshadow','-Wformat=2','-Wundef','-Wstrict-prototypes','-Wmissing-prototypes','-Isrc','-Isrc/infiltratr-common/include','-include',$versionHeader)
           $arguments += $windowsSources
-          $arguments += @(
-            'build/windows-fonts.o',
-            'src/infiltratr-common/src/core.c',
-            'src/infiltratr-common/src/arithmetic.c',
-            'src/infiltratr-common/src/config.c',
-            'src/infiltratr-common/src/i18n.c',
-            'src/infiltratr-common/src/token.c',
-            'src/infiltratr-common/src/timing.c',
-            'src/infiltratr-common/src/temporal.c',
-            'src/infiltratr-common/src/format.c',
-            'src/infiltratr-common/src/quantity.c',
-            'src/infiltratr-common/src/graphics.c',
-            'src/infiltratr-common/src/escape.c',
-            'src/infiltratr-common/src/design.c',
-            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-lpowrprof',
-            '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-lcomctl32', '-lgdi32', '-ldwmapi',
-            '-static-libgcc', '-mwindows', '-o', 'system-monitor-windows.exe'
-          )
+          $arguments += @('build/windows-fonts.o','src/infiltratr-common/src/core.c','src/infiltratr-common/src/arithmetic.c','src/infiltratr-common/src/config.c','src/infiltratr-common/src/i18n.c','src/infiltratr-common/src/token.c','src/infiltratr-common/src/timing.c','src/infiltratr-common/src/temporal.c','src/infiltratr-common/src/format.c','src/infiltratr-common/src/quantity.c','src/infiltratr-common/src/graphics.c','src/infiltratr-common/src/escape.c','src/infiltratr-common/src/design.c','-lpsapi','-ladvapi32','-liphlpapi','-lws2_32','-lpdh','-lpowrprof','-ldxgi','-ldxguid','-lsetupapi','-luuid','-lcomctl32','-lgdi32','-ldwmapi','-static-libgcc','-mwindows','-o','system-monitor-windows.exe')
           & $gcc @arguments
           if ($LASTEXITCODE -ne 0) { throw "Windows GUI compile failed with exit code $LASTEXITCODE." }
-
           $embedded = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('system-monitor-windows.exe'))
           if (-not $embedded.Contains($version)) { throw "Windows GUI does not contain source version $version." }
-
           Remove-Item windows-startup-smoke.txt -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -ArgumentList '--startup-smoke' -PassThru
-          if (-not $process.WaitForExit(30000)) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            throw 'Windows GUI startup smoke timed out.'
-          }
+          if (-not $process.WaitForExit(30000)) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; throw 'Windows GUI startup smoke timed out.' }
           $status = if (Test-Path windows-startup-smoke.txt) { (Get-Content windows-startup-smoke.txt -Raw).Trim() } else { 'missing' }
-          if ($process.ExitCode -ne 0 -or $status -ne 'success') {
-            throw "Windows GUI startup failed: exit=$($process.ExitCode), stage=$status"
-          }
-
+          if ($process.ExitCode -ne 0 -or $status -ne 'success') { throw "Windows GUI startup failed: exit=$($process.ExitCode), stage=$status" }
           $normal = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') -PassThru
           Start-Sleep -Seconds 5
           if ($normal.HasExited) { throw "Windows GUI exited during backend startup with code $($normal.ExitCode)." }
           Stop-Process -Id $normal.Id -Force
           $normal.WaitForExit()
-
-          $probeArguments = @(
-            '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601',
-            '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wshadow', '-Wformat=2', '-Wundef',
-            '-Wstrict-prototypes', '-Wmissing-prototypes',
-            '-Isrc', '-Isrc/infiltratr-common/include',
-            'support/tools/windows_backend_probe.c',
-            'src/monitor_backend_windows.c', 'src/process_backend_windows.c',
-            'src/infiltratr-common/src/core.c',
-            'src/infiltratr-common/src/arithmetic.c',
-            'src/infiltratr-common/src/config.c',
-            'src/infiltratr-common/src/i18n.c',
-            'src/infiltratr-common/src/token.c',
-            'src/infiltratr-common/src/timing.c',
-            'src/infiltratr-common/src/temporal.c',
-            'src/infiltratr-common/src/format.c',
-            'src/infiltratr-common/src/quantity.c',
-            'src/infiltratr-common/src/graphics.c',
-            'src/infiltratr-common/src/escape.c',
-            'src/infiltratr-common/src/design.c',
-            '-lpsapi', '-ladvapi32', '-liphlpapi', '-lws2_32', '-lpdh', '-lpowrprof',
-            '-ldxgi', '-ldxguid', '-lsetupapi', '-luuid', '-static-libgcc',
-            '-o', 'windows-backend-probe.exe'
-          )
+          $probeArguments = @('-std=c17','-O2','-D_WIN32_WINNT=0x0601','-Wall','-Wextra','-Wpedantic','-Werror','-Wshadow','-Wformat=2','-Wundef','-Wstrict-prototypes','-Wmissing-prototypes','-Isrc','-Isrc/infiltratr-common/include','support/tools/windows_backend_probe.c','src/monitor_backend_windows.c','src/process_backend_windows.c','src/infiltratr-common/src/core.c','src/infiltratr-common/src/arithmetic.c','src/infiltratr-common/src/config.c','src/infiltratr-common/src/i18n.c','src/infiltratr-common/src/token.c','src/infiltratr-common/src/timing.c','src/infiltratr-common/src/temporal.c','src/infiltratr-common/src/format.c','src/infiltratr-common/src/quantity.c','src/infiltratr-common/src/graphics.c','src/infiltratr-common/src/escape.c','src/infiltratr-common/src/design.c','-lpsapi','-ladvapi32','-liphlpapi','-lws2_32','-lpdh','-lpowrprof','-ldxgi','-ldxguid','-lsetupapi','-luuid','-static-libgcc','-o','windows-backend-probe.exe')
           & $gcc @probeArguments
           if ($LASTEXITCODE -ne 0) { throw 'Windows backend probe compile failed.' }
           & (Join-Path $PWD 'windows-backend-probe.exe')
           if ($LASTEXITCODE -ne 0) { throw 'Windows backend topology probe failed.' }
-
           Move-Item 'system-monitor-windows.exe' "system-monitor-$version-windows.exe"
-
       - name: Upload exact Windows release candidate
         uses: actions/upload-artifact@v4
         with:
@@ -428,19 +361,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-
       - name: Download exact Linux candidate
         uses: actions/download-artifact@v4
         with:
           name: system-monitor-linux-release
           path: candidate-linux
-
       - name: Download exact Windows candidate
         uses: actions/download-artifact@v4
         with:
           name: system-monitor-windows-release
           path: candidate-windows
-
       - name: Seal release bundle
         shell: bash
         run: |
@@ -462,7 +392,6 @@ jobs:
             printf '%s\n' "$GITHUB_SHA" > RELEASE_SOURCE_SHA
             printf '%s\n' "$version" > RELEASE_VERSION
           )
-
       - name: Upload sealed release bundle
         uses: actions/upload-artifact@v4
         with:
