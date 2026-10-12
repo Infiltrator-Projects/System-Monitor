@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.188 - 2026-10-13
+
+- Make the parent repository gitlink the single Infiltratr Common revision authority for both Make and CMake, removing duplicate tag, version and commit pins and the source-archive network fallback.
+- Centralise metrics, storage, process and accelerator test source membership so ordinary, sanitizer and coverage builds cannot drift independently.
+- Remove the self-hosted CI Git package bootstrap and validate the runner toolchain contract before checkout instead.
+- Make `support/VERSION` the only maintained source-version value by removing duplicate current-version strings from README and CI.
+
 ## 1.0.187 - 2026-10-13
 
 - Remove the unused duplicate CMake smoke-test and developer-tool graph so `make check` is the single regression and quality-test authority while CMake owns only the Linux application build.
@@ -22,7 +29,7 @@
 
 - Make Publish release consume the sealed Verify bundle as its release contract without a second source checkout or product rebuild.
 - Replace release-workflow implementation-string auditing with durable sealed-bundle, source-identity and no-rebuild contract checks.
-- Treat superseded verified commits and already-published versions as clean no-ops while preserving immutable release asset verification.
+- Treat superseded verified runs and already-published versions as clean no-ops while preserving immutable release asset verification.
 
 ## 1.0.183 - 2026-10-13
 

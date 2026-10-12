@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Current source version:** 1.0.187 ([version file](support/VERSION))
+**Release identity:** [`support/VERSION`](support/VERSION)
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -35,7 +35,7 @@ Run `make check` for the authoritative verification suite. CMake intentionally o
 
 ## Releases
 
-Development stays on `main`. System Monitor 1.0.187 is the current tested release baseline. Releases are produced from the exact tested commit; `support/VERSION` is the release-intent source of truth, and published tags and assets are immutable.
+Development stays on `main`. `support/VERSION` is the sole release-intent source of truth. Releases are produced from the exact tested commit, and published tags and assets are immutable. The latest published release is the repository's GitHub **Latest** release rather than a second version value maintained in this document.
 
 ## Release assets
 

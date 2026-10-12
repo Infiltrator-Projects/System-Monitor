@@ -21,31 +21,21 @@ jobs:
     env:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
-      - name: Ensure Git is available
+      - name: Verify self-hosted runner contract
         shell: bash
         run: |
           set -euo pipefail
-          if command -v git >/dev/null 2>&1; then
-            git --version
-            exit 0
-          fi
-          command -v apt-get >/dev/null
-          command -v dpkg-deb >/dev/null
-          git_root="$RUNNER_TEMP/system-monitor-git"
-          package_dir="$RUNNER_TEMP/system-monitor-git-package"
-          rm -rf "$git_root" "$package_dir"
-          mkdir -p "$git_root" "$package_dir"
-          (
-            cd "$package_dir"
-            apt-get download git
-            package="$(find . -maxdepth 1 -type f -name 'git_*.deb' -print -quit)"
-            test -n "$package"
-            dpkg-deb -x "$package" "$git_root"
-          )
-          test -x "$git_root/usr/bin/git"
-          test -x "$git_root/usr/lib/git-core/git-submodule"
-          echo "$git_root/usr/bin" >> "$GITHUB_PATH"
-          echo "GIT_EXEC_PATH=$git_root/usr/lib/git-core" >> "$GITHUB_ENV"
+          for command_name in cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "Self-hosted runner is missing $command_name." >&2
+              exit 1
+            }
+          done
+          pkg-config --exists gtk+-3.0
+          probe="$(mktemp --suffix=.c)"
+          trap 'rm -f "$probe" "$RUNNER_TEMP/system-monitor-m32-probe"' EXIT
+          printf 'int main(void){return 0;}\n' > "$probe"
+          gcc -m32 "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe"
 
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,16 +58,12 @@ jobs:
             exit 1
           fi
 
-      - name: Validate source version and immutable release identity
+      - name: Validate release identity
         shell: bash
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          readme_version=$(sed -nE \
-            's/^\*\*Current source version:\*\* ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' \
-            README.md)
-          test "$readme_version" = "$version"
 
           if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
             tag_commit=$(git rev-list -n 1 "v${version}")
@@ -89,21 +75,6 @@ jobs:
               exit 1
             fi
           fi
-
-      - name: Verify self-hosted build dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          for command_name in cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
-            command -v "$command_name" >/dev/null 2>&1 || {
-              echo "Self-hosted runner is missing $command_name." >&2
-              exit 1
-            }
-          done
-          pkg-config --exists gtk+-3.0
-          probe="$(mktemp --suffix=.c)"
-          printf 'int main(void){return 0;}\n' > "$probe"
-          gcc -m32 "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe"
 
       - name: Verify CMake application build
         run: |

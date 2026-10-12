@@ -6,16 +6,9 @@ cmake_minimum_required(VERSION 3.20)
 set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
-# Make still owns source-archive fallback retrieval and validates these three
-# compatibility values. CMake application builds themselves trust the parent
-# repository gitlink below rather than these duplicated fallback labels.
-set(INFILTRATR_COMMON_TAG "v1.19.35")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.35")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f")
-
-# The parent repository's gitlink is the Common revision authority. A release
-# source archive carries that exact Common tree, so archive builds do not need
-# Git or a second application-build pin in this file.
+# The parent repository gitlink is the sole Common revision authority in a Git
+# checkout. Complete source archives carry that exact Common tree, so archive
+# builds need neither Git nor a second application-owned pin.
 set(LSM_GIT_CHECKOUT FALSE)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
     set(LSM_GIT_CHECKOUT TRUE)

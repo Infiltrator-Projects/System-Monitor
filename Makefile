@@ -16,10 +16,7 @@ BUILD_PROFILE ?= generic
 
 BUILD_DIR := build
 INFILTRATR_COMMON_DIR := src/infiltratr-common
-INFILTRATR_COMMON_URL := https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
-INFILTRATR_COMMON_TAG := v1.19.35
-INFILTRATR_COMMON_COMMIT := 7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f
-INFILTRATR_COMMON_VERSION := 1.19.35
+INFILTRATR_COMMON_VERSION = $(shell tr -d '[:space:]' < "$(INFILTRATR_COMMON_DIR)/VERSION" 2>/dev/null)
 INFILTRATR_COMMON_BUILD_DIR := $(abspath $(BUILD_DIR)/infiltratr-common-build)
 INFILTRATR_COMMON_ARCHIVE := $(INFILTRATR_COMMON_BUILD_DIR)/libinfiltratr-common.a
 COVERAGE_DIR := $(BUILD_DIR)/coverage
@@ -57,6 +54,23 @@ SOURCE_GROUP_READ = $(shell sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$$/d' $
 HARDWARE_MONITOR_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/hardware-monitor-linux.txt))
 MONITOR_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/monitor-linux.txt))
 PROCESS_SOURCES := $(addprefix src/,$(call SOURCE_GROUP_READ,$(SOURCE_GROUP_DIR)/process-linux.txt))
+
+# Subsystem test source ownership is declared once and reused by the ordinary,
+# sanitizer and coverage builds. Adding or removing one tested implementation
+# module therefore cannot silently leave one verification mode behind.
+METRICS_TEST_SOURCES := \
+	src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c \
+	src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c \
+	src/overview_history.c src/gpu_metrics.c src/performance_selection.c \
+	src/thermal_policy.c
+STORAGE_TEST_SOURCES := \
+	src/mountinfo.c src/storage_metadata.c src/filesystem_inventory.c \
+	src/pci_names.c src/pci_names_data.c src/smbios_memory.c src/system_sources.c
+PROCESS_TEST_SOURCES := \
+	src/process_model.c src/process_grouping.c src/process_gpu.c \
+	src/process_inspection.c src/process_backend_linux.c
+ACCELERATOR_TEST_SOURCES := \
+	src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
 
 BASE_WARNINGS := -Wall -Wextra -Wpedantic
 STRICT_WARNINGS := $(BASE_WARNINGS) -Werror -Wshadow -Wformat=2 -Wundef \
@@ -155,45 +169,40 @@ build-all: $(TARGET)
 common-bootstrap: common-check
 	@:
 
-# Make drives releases, so reject any shared-source pin drift in CMake.
+# The parent gitlink is the sole Common revision authority in a Git checkout.
+# Complete source archives already carry that exact Common tree and therefore
+# never fetch a second copy or depend on repository metadata that is not there.
 common-check:
-	@cmake_tag=$$(sed -n 's/^set(INFILTRATR_COMMON_TAG "\(.*\)")$$/\1/p' CMakeLists.txt); \
-		cmake_version=$$(sed -n 's/^set(INFILTRATR_COMMON_EXPECTED_VERSION "\(.*\)")$$/\1/p' CMakeLists.txt); \
-		cmake_commit=$$(sed -n 's/^set(INFILTRATR_COMMON_EXPECTED_COMMIT "\(.*\)")$$/\1/p' CMakeLists.txt); \
-		if test "$$cmake_tag" != "$(INFILTRATR_COMMON_TAG)" || \
-		   test "$$cmake_version" != "$(INFILTRATR_COMMON_VERSION)" || \
-		   test "$$cmake_commit" != "$(INFILTRATR_COMMON_COMMIT)"; then \
-			echo "CMake Infiltratr Common metadata is not synchronized with Makefile." >&2; \
-			exit 1; \
-		fi
-	@if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
+	@if test -e .git; then \
 		command -v git >/dev/null 2>&1 || { \
-			echo "git is required to retrieve the pinned shared source." >&2; \
+			echo "git is required to verify the pinned Infiltratr Common submodule." >&2; \
 			exit 1; \
 		}; \
-		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
-		else \
-			mkdir -p "$(dir $(INFILTRATR_COMMON_DIR))"; \
-			git clone "$(INFILTRATR_COMMON_URL)" "$(INFILTRATR_COMMON_DIR)"; \
-			git -C "$(INFILTRATR_COMMON_DIR)" checkout --detach \
-				"$(INFILTRATR_COMMON_COMMIT)"; \
-		fi; \
-	fi
-	@test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
-		echo "Unable to retrieve Infiltratr Common $(INFILTRATR_COMMON_VERSION)." >&2; \
-		exit 1; \
-	}
-	@test "$$(tr -d '[:space:]' < "$(INFILTRATR_COMMON_DIR)/VERSION")" = \
-		"$(INFILTRATR_COMMON_VERSION)" || { \
-		echo "Infiltratr Common $(INFILTRATR_COMMON_VERSION) is required." >&2; \
-		exit 1; \
-	}
-	@actual_commit=$$(git -C "$(INFILTRATR_COMMON_DIR)" rev-parse HEAD 2>/dev/null || true); \
-		if test -n "$$actual_commit" && test "$$actual_commit" != "$(INFILTRATR_COMMON_COMMIT)"; then \
-			echo "Infiltratr Common must be pinned to $(INFILTRATR_COMMON_COMMIT)." >&2; \
+		expected_commit=$$(git rev-parse HEAD:"$(INFILTRATR_COMMON_DIR)" 2>/dev/null) || { \
+			echo "Unable to read the Infiltratr Common gitlink from the parent repository." >&2; \
 			exit 1; \
-		fi
+		}; \
+		if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
+			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
+		fi; \
+		test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
+			echo "Unable to initialise the pinned Infiltratr Common submodule." >&2; \
+			exit 1; \
+		}; \
+		actual_commit=$$(git -C "$(INFILTRATR_COMMON_DIR)" rev-parse HEAD 2>/dev/null) || { \
+			echo "Unable to read the checked-out Infiltratr Common revision." >&2; \
+			exit 1; \
+		}; \
+		if test "$$actual_commit" != "$$expected_commit"; then \
+			echo "Infiltratr Common is not at the parent repository gitlink $$expected_commit; found $$actual_commit." >&2; \
+			exit 1; \
+		fi; \
+	else \
+		test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
+			echo "src/infiltratr-common is missing; use a complete System Monitor source archive." >&2; \
+			exit 1; \
+		}; \
+	fi
 check-deps: common-check
 	@for source in $(PLATFORM_BACKEND_NAMES); do \
 		test -f "src/$$source" || { \
@@ -321,25 +330,19 @@ peripheral-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 metrics-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/metrics_smoke.c src/cpu_accounting.c src/disk_accounting.c \
-		src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c \
-		src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c \
-		src/thermal_policy.c \
+		support/tests/metrics_smoke.c $(METRICS_TEST_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/metrics-suite-smoke
 	./$(BUILD_DIR)/metrics-suite-smoke
 
 storage-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/storage_smoke.c src/mountinfo.c src/storage_metadata.c \
-		src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c \
-		src/smbios_memory.c src/system_sources.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
-		-o $(BUILD_DIR)/storage-suite-smoke
+		support/tests/storage_smoke.c $(STORAGE_TEST_SOURCES) \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/storage-suite-smoke
 	./$(BUILD_DIR)/storage-suite-smoke
 
 process-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/process_smoke.c src/process_model.c src/process_grouping.c \
-		src/process_gpu.c src/process_inspection.c src/process_backend_linux.c \
+		support/tests/process_smoke.c $(PROCESS_TEST_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-suite-smoke
 	./$(BUILD_DIR)/process-suite-smoke
 
@@ -352,8 +355,8 @@ ui-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 accelerator-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
-		support/tests/accelerator_smoke.c src/hardware_topology.c src/intel_gpu.c \
-		src/npu_telemetry.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
+		support/tests/accelerator_smoke.c $(ACCELERATOR_TEST_SOURCES) \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm \
 		-o $(BUILD_DIR)/accelerator-suite-smoke
 	./$(BUILD_DIR)/accelerator-suite-smoke
 
@@ -600,25 +603,19 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		./$(BUILD_DIR)/runtime-stability-sanitized
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/metrics_smoke.c src/cpu_accounting.c src/disk_accounting.c \
-		src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c \
-		src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c \
-		src/thermal_policy.c \
+		support/tests/metrics_smoke.c $(METRICS_TEST_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/metrics-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./$(BUILD_DIR)/metrics-sanitized
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/storage_smoke.c src/mountinfo.c src/storage_metadata.c \
-		src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c \
-		src/smbios_memory.c src/system_sources.c $(INFILTRATR_COMMON_ARCHIVE) -lm \
-		-o $(BUILD_DIR)/storage-sanitized
+		support/tests/storage_smoke.c $(STORAGE_TEST_SOURCES) \
+		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/storage-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./$(BUILD_DIR)/storage-sanitized
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 -O1 -g \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		support/tests/process_smoke.c src/process_model.c src/process_grouping.c \
-		src/process_gpu.c src/process_inspection.c src/process_backend_linux.c \
+		support/tests/process_smoke.c $(PROCESS_TEST_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-sanitized
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./$(BUILD_DIR)/process-sanitized
@@ -745,10 +742,10 @@ process-export-smoke: | $(BUILD_DIR)
 # Instrument deterministic accounting, parsing, selection, formatting and
 # cadence modules. The consolidated subsystem runners exercise the same case
 # bodies while four executables replace seventeen one-case coverage programs.
-COVERAGE_METRICS_SOURCES := src/cpu_accounting.c src/disk_accounting.c src/memory_accounting.c src/pressure.c src/cpu_direct.c src/refresh_policy.c src/sample_history.c src/overview_history.c src/gpu_metrics.c src/performance_selection.c src/thermal_policy.c
-COVERAGE_STORAGE_SOURCES := src/mountinfo.c src/storage_metadata.c src/filesystem_inventory.c src/pci_names.c src/pci_names_data.c src/smbios_memory.c src/system_sources.c
-COVERAGE_PROCESS_SOURCES := src/process_model.c src/process_grouping.c src/process_gpu.c src/process_inspection.c src/process_backend_linux.c
-COVERAGE_ACCELERATOR_SOURCES := src/hardware_topology.c src/intel_gpu.c src/npu_telemetry.c
+COVERAGE_METRICS_SOURCES := $(METRICS_TEST_SOURCES)
+COVERAGE_STORAGE_SOURCES := $(STORAGE_TEST_SOURCES)
+COVERAGE_PROCESS_SOURCES := $(PROCESS_TEST_SOURCES)
+COVERAGE_ACCELERATOR_SOURCES := $(ACCELERATOR_TEST_SOURCES)
 COVERAGE_ALL_SOURCES := $(COVERAGE_METRICS_SOURCES) $(COVERAGE_STORAGE_SOURCES) $(COVERAGE_PROCESS_SOURCES) $(COVERAGE_ACCELERATOR_SOURCES)
 COVERAGE_METRICS_OBJECTS := $(patsubst src/%.c,$(COVERAGE_DIR)/%.o,$(COVERAGE_METRICS_SOURCES))
 COVERAGE_STORAGE_OBJECTS := $(patsubst src/%.c,$(COVERAGE_DIR)/%.o,$(COVERAGE_STORAGE_SOURCES))
