@@ -48,6 +48,42 @@ bool lsm_app_page_registry_control_view(const LsmApp *app,
     return true;
 }
 
+bool lsm_app_summary_bar_context(const LsmApp *app,
+                                 LsmSummaryBarContext *context)
+{
+    if (!app || !context) return false;
+
+    context->view.frame = app->shell.summary_bar;
+    context->view.values[LSM_SUMMARY_CPU] = app->shell.summary_cpu;
+    context->view.values[LSM_SUMMARY_MEMORY] = app->shell.summary_memory;
+    context->view.values[LSM_SUMMARY_DISK] = app->shell.summary_disk;
+    context->view.values[LSM_SUMMARY_NETWORK] = app->shell.summary_network;
+    context->view.values[LSM_SUMMARY_GPU] = app->shell.summary_gpu;
+    context->monitor = &app->monitor;
+    context->network_use_bits = app->runtime.network_use_bits;
+    return true;
+}
+
+void lsm_app_summary_bar_store_view(LsmApp *app,
+                                    const LsmSummaryBarView *view)
+{
+    if (!app || !view) return;
+
+    app->shell.summary_bar = view->frame;
+    app->shell.summary_cpu = view->values[LSM_SUMMARY_CPU];
+    app->shell.summary_memory = view->values[LSM_SUMMARY_MEMORY];
+    app->shell.summary_disk = view->values[LSM_SUMMARY_DISK];
+    app->shell.summary_network = view->values[LSM_SUMMARY_NETWORK];
+    app->shell.summary_gpu = view->values[LSM_SUMMARY_GPU];
+}
+
+void lsm_app_process_record_action_set_sensitive(LsmApp *app,
+                                                 gboolean sensitive)
+{
+    if (!app || !app->details.process_record_menu_item) return;
+    gtk_widget_set_sensitive(app->details.process_record_menu_item, sensitive);
+}
+
 GtkWidget *lsm_app_presentation_window(const LsmApp *app)
 {
     return app ? app->shell.window : NULL;
