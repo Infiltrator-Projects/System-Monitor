@@ -6,6 +6,7 @@
 - Move native Windows release compilation and qualification out of workflow YAML into `support/windows/build-release.ps1`, centralising compiler warnings, link libraries, Common construction, source membership and backend probes.
 - Replace brittle source-audit checks for obsolete CI spelling with semantic build and release ownership checks, eliminating legacy marker comments that existed only to satisfy the checker.
 - Make CMake verify Infiltratr Common against the parent repository gitlink instead of using its own pin for application-build correctness, preventing a stale configured submodule from being accepted.
+- Harden Technical Details layout persistence by validating saved column order as a complete permutation, deriving width bounds from column metadata and centralising identity-order reset logic.
 
 ## 1.0.186 - 2026-10-13
 

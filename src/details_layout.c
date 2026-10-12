@@ -26,6 +26,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define LSM_DETAILS_LAYOUT_VERSION 5
+#define LSM_DETAILS_LAYOUT_MAX_WIDTH 2000
+
+static void layout_identity_order(gint order[PROC_N_COLUMNS])
+{
+    for (int index = 0; index < PROC_N_COLUMNS; index++) order[index] = index;
+}
+
+static bool layout_order_is_permutation(const gint order[PROC_N_COLUMNS])
+{
+    bool seen[PROC_N_COLUMNS] = {false};
+    for (int index = 0; index < PROC_N_COLUMNS; index++) {
+        const gint position = order[index];
+        if (position < 0 || position >= PROC_N_COLUMNS || seen[position])
+            return false;
+        seen[position] = true;
+    }
+    return true;
+}
+
 void lsm_details_save_layout(const LsmApp *app)
 {
     if (!app || !app->details.details_tree || !app->details.details_sort_model ||
@@ -33,7 +53,7 @@ void lsm_details_save_layout(const LsmApp *app)
         return;
 
     gint order[PROC_N_COLUMNS];
-    for (int index = 0; index < PROC_N_COLUMNS; index++) order[index] = index;
+    layout_identity_order(order);
     GList *columns = gtk_tree_view_get_columns(
         GTK_TREE_VIEW(app->details.details_tree));
     gint position = 0;
@@ -49,7 +69,8 @@ void lsm_details_save_layout(const LsmApp *app)
 
     GString *text = g_string_new(NULL);
     g_string_append_printf(text,
-        "layout_version=5\ntree=%d\nscope=%d\nheatmap=%d\n",
+        "layout_version=%d\ntree=%d\nscope=%d\nheatmap=%d\n",
+        LSM_DETAILS_LAYOUT_VERSION,
         app->details.details_tree_mode ? 1 : 0,
         app->details.details_scope,
         app->details.process_heatmap ? 1 : 0);
@@ -111,8 +132,8 @@ void lsm_details_layout_load(LsmApp *app)
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         visible[i] = lsm_details_column_specs[i].default_visible;
         widths[i] = lsm_details_column_specs[i].minimum_width;
-        order[i] = i;
     }
+    layout_identity_order(order);
 
     char *content = NULL;
     size_t content_length = 0U;
@@ -162,7 +183,8 @@ void lsm_details_layout_load(LsmApp *app)
                     }
                     if (strcmp(key, width_key) == 0) {
                         widths[i] = layout_integer(
-                            value, 40, 2000, widths[i]);
+                            value, lsm_details_column_specs[i].minimum_width,
+                            LSM_DETAILS_LAYOUT_MAX_WIDTH, widths[i]);
                         break;
                     }
                     if (strcmp(key, order_key) == 0) {
@@ -186,16 +208,19 @@ void lsm_details_layout_load(LsmApp *app)
             sort_column += 3;
         else if (sort_column >= previous_memory_column)
             sort_column += 1;
-        for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
+        layout_identity_order(order);
     }
     if (layout_version < 4) {
         if (sort_column >= PROC_COL_GPU_ENGINE) sort_column++;
-        for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
+        layout_identity_order(order);
     }
-    if (layout_version < 5) {
+    if (layout_version < LSM_DETAILS_LAYOUT_VERSION) {
         sort_column = -1;
-        for (int i = 0; i < PROC_N_COLUMNS; i++) order[i] = i;
+        layout_identity_order(order);
     }
+    if (!layout_order_is_permutation(order))
+        layout_identity_order(order);
+
     for (int i = 0; i < PROC_N_COLUMNS; i++) {
         gtk_tree_view_column_set_visible(
             app->details.details_columns[i], visible[i]);
