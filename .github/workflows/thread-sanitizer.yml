@@ -35,7 +35,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export TSAN_OPTIONS='halt_on_error=1:second_deadlock_stack=1'
+          # Ubuntu's prebuilt GLib is not TSan-instrumented and uses internal
+          # synchronisation that TSan cannot fully observe. Ignore interceptor
+          # accesses originating inside non-instrumented modules while keeping
+          # System Monitor and Common fully instrumented; application-owned
+          # races therefore remain reportable.
+          export TSAN_OPTIONS='halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1'
           make ENABLE_LTO=0 CFLAGS='-O1 -g' \
             CC='gcc -fsanitize=thread -fno-omit-frame-pointer' \
             async-workers-smoke
