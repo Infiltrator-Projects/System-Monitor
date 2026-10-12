@@ -6,7 +6,9 @@
  * The worker is deliberately self-owned after start. Shutdown sets a stop flag
  * and releases the application reference without joining. If procfs or NSS is
  * pathological, the operating system can still terminate the process cleanly
- * while the detached worker retains all state it may still touch.
+ * while the detached worker retains all state it may still touch. Completion
+ * callbacks are queued as idle work so presentation code always executes from
+ * the GLib main loop rather than inline on the scanner thread.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -87,8 +89,11 @@ static void scanner_ready_dispatch_destroy(gpointer user_data)
 
 static void scanner_queue_ready_dispatch(LsmProcessScanner *scanner)
 {
-    g_main_context_invoke_full(
-        NULL, G_PRIORITY_DEFAULT, scanner_ready_dispatch, scanner,
+    /* g_main_context_invoke_full() may execute immediately in the calling
+     * thread when it can acquire the context. A process-ready callback can
+     * enter GTK presentation code, so force a real main-loop turn instead. */
+    (void)g_idle_add_full(
+        G_PRIORITY_DEFAULT, scanner_ready_dispatch, scanner,
         scanner_ready_dispatch_destroy);
 }
 

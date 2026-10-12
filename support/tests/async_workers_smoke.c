@@ -14,6 +14,9 @@
 #include <glib.h>
 
 #include <errno.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +25,12 @@
 
 #define WORKER_POLL_ATTEMPTS 400U
 #define WORKER_POLL_NS 25000000L
+
+typedef struct {
+    atomic_uint notifications;
+    atomic_bool wrong_thread;
+    pthread_t expected_thread;
+} ScannerReadyState;
 
 static void short_pause(void)
 {
@@ -34,16 +43,22 @@ static void short_pause(void)
 
 static void scanner_ready(void *user_data)
 {
-    unsigned *notifications = user_data;
-    if (notifications) (*notifications)++;
+    ScannerReadyState *state = user_data;
+    if (!state) return;
+    if (!pthread_equal(pthread_self(), state->expected_thread))
+        atomic_store_explicit(&state->wrong_thread, true, memory_order_release);
+    (void)atomic_fetch_add_explicit(
+        &state->notifications, 1U, memory_order_release);
 }
 
-static int wait_for_ready(unsigned *notifications)
+static int wait_for_ready(const ScannerReadyState *state)
 {
     for (unsigned attempt = 0U; attempt < WORKER_POLL_ATTEMPTS; attempt++) {
         while (g_main_context_iteration(NULL, FALSE)) {
         }
-        if (notifications && *notifications > 0U) return 0;
+        if (state &&
+            atomic_load_explicit(&state->notifications, memory_order_acquire) > 0U)
+            return 0;
         short_pause();
     }
     return ETIMEDOUT;
@@ -86,9 +101,13 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    unsigned ready_notifications = 0U;
+    ScannerReadyState ready_state = {
+        .expected_thread = pthread_self()
+    };
+    atomic_init(&ready_state.notifications, 0U);
+    atomic_init(&ready_state.wrong_thread, false);
     lsm_process_scanner_set_ready_callback(
-        scanner, scanner_ready, &ready_notifications);
+        scanner, scanner_ready, &ready_state);
 
     if (!lsm_process_scanner_request(scanner, LSM_PROCESS_SCAN_NONE)) {
         fputs("Unable to request base process scan.\n", stderr);
@@ -96,8 +115,14 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    if (wait_for_ready(&ready_notifications) != 0) {
+    if (wait_for_ready(&ready_state) != 0) {
         fputs("Detached process scan did not notify completion.\n", stderr);
+        lsm_process_scanner_destroy(scanner);
+        return EXIT_FAILURE;
+    }
+    if (atomic_load_explicit(&ready_state.wrong_thread, memory_order_acquire)) {
+        fputs("Detached process scan notified outside the main-loop thread.\n",
+              stderr);
         lsm_process_scanner_destroy(scanner);
         return EXIT_FAILURE;
     }
