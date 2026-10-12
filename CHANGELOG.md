@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.180 - 2026-10-12
+
+- Make central APT release verification tolerate the hourly publisher when immediate dispatch credentials are unavailable, polling every 30 seconds for up to 90 minutes instead of failing after 20 minutes.
+
 ## 1.0.179 - 2026-10-12
 
 - Route Compact Summary, process UI state and Processes-to-Details navigation through existing narrow application context owners instead of direct `LsmApp` layout access.
