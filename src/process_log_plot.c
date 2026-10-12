@@ -12,7 +12,8 @@
  */
 #include "process_log_plot.h"
 
-#include "app_internal.h"
+#include "app_presentation_context.h"
+#include "app_runtime_context.h"
 #include "common.h"
 #include "graph.h"
 #include "ui_helpers.h"
@@ -109,12 +110,20 @@ static void process_log_plot_complete(GObject *source_object,
         g_task_propagate_pointer(G_TASK(async_result), NULL);
     LsmApp *app = source_object
         ? g_object_get_data(source_object, "lsm-app") : NULL;
-    if (!result || !app || app->runtime.shutting_down) {
+    LsmRuntimeControlView runtime;
+    if (!result || !app ||
+        !lsm_app_runtime_control_view(app, &runtime) || runtime.shutting_down) {
+        process_log_plot_result_free(result);
+        return;
+    }
+
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (!parent) {
         process_log_plot_result_free(result);
         return;
     }
     if (result->error_message) {
-        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
+        lsm_ui_show_error(GTK_WINDOW(parent),
                           "Unable to plot process log", "%s",
                           result->error_message);
         process_log_plot_result_free(result);
@@ -132,7 +141,7 @@ static void process_log_plot_complete(GObject *source_object,
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), LSM_PROGRAM_NAME " Process Log");
     lsm_ui_set_workarea_default_size(GTK_WINDOW(window), 820, 500);
-    gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(app->shell.window));
+    gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(parent));
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_container_set_border_width(GTK_CONTAINER(box), 12);
     GtkWidget *label = gtk_label_new(result->filename);
@@ -159,8 +168,12 @@ void lsm_process_log_plot_show(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     LsmApp *app = user_data;
+    if (!app) return;
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (!parent) return;
+
     GtkWidget *chooser = gtk_file_chooser_dialog_new("Plot process log",
-        GTK_WINDOW(app->shell.window), GTK_FILE_CHOOSER_ACTION_OPEN,
+        GTK_WINDOW(parent), GTK_FILE_CHOOSER_ACTION_OPEN,
         "Cancel", GTK_RESPONSE_CANCEL, "Open", GTK_RESPONSE_ACCEPT, NULL);
     char log_dir[LSM_PATH_LEN];
     char home[LSM_PATH_LEN];
@@ -182,10 +195,9 @@ void lsm_process_log_plot_show(GtkMenuItem *item, gpointer user_data)
 
     ProcessLogPlotRequest *request = g_new0(ProcessLogPlotRequest, 1U);
     request->filename = filename;
-    GTask *task = g_task_new(G_OBJECT(app->shell.window), NULL,
+    GTask *task = g_task_new(G_OBJECT(parent), NULL,
                              process_log_plot_complete, NULL);
     g_task_set_task_data(task, request, process_log_plot_request_free);
     g_task_run_in_thread(task, process_log_plot_worker);
     g_object_unref(task);
 }
-
