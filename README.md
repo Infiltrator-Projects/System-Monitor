@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Current source version:** 1.0.186 ([version file](support/VERSION))
+**Current source version:** 1.0.187 ([version file](support/VERSION))
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -31,15 +31,15 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the authoritative verification suite. Installation is owned by the Debian package or native installer; direct `make install` is disabled. Main-branch changes also run a dedicated ThreadSanitizer workflow over the asynchronous process-worker path.
+Run `make check` for the authoritative verification suite. CMake intentionally owns only the Linux application build rather than duplicating the regression graph. Installation is owned by the Debian package or native installer; direct `make install` is disabled. Main-branch changes also run a dedicated ThreadSanitizer workflow over the asynchronous process-worker path.
 
 ## Releases
 
-Development stays on `main`. System Monitor 1.0.186 is the current tested release baseline. Releases are produced from the exact tested commit; `support/VERSION` is the release-intent source of truth, and published tags and assets are immutable.
+Development stays on `main`. System Monitor 1.0.187 is the current tested release baseline. Releases are produced from the exact tested commit; `support/VERSION` is the release-intent source of truth, and published tags and assets are immutable.
 
 ## Release assets
 
-A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision. Windows verification and release packaging share the canonical `support/source-groups/windows-product.txt` source manifest so the published executable cannot drift onto a separate source list.
+A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision. Windows verification and release packaging use `support/windows/build-release.ps1`, which consumes the canonical `support/source-groups/windows-product.txt` source manifest so compiler policy, source membership and the published executable cannot drift into separate workflow definitions.
 
 ## Technical documentation
 

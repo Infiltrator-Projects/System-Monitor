@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file check_source_style.cpp
- * @brief Mechanical source, manifest and documentation consistency audit.
+ * @brief Mechanical source, architecture and repository consistency audit.
  *
- * This developer-only audit uses C++17 where RAII containers and filesystem
- * traversal remove fixed path buffers and manual list ownership. The installed
- * System Monitor application remains C17 and does not link the C++ runtime.
+ * The checker validates durable contracts rather than workflow implementation
+ * spelling. It deliberately avoids duplicating the project's build or test
+ * graph: Make owns regression execution, CMake owns the Linux application
+ * build, and the Windows release script owns the native Windows build recipe.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -16,15 +17,14 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <new>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
+
 #define LSM_SPDX_C "// SPDX-License-Identifier: GPL-3.0-or-later\n"
 #define LSM_SPDX_HASH "# SPDX-License-Identifier: GPL-3.0-or-later\n"
 #define LSM_SPDX_MARKDOWN \
@@ -51,13 +51,13 @@ static void report_error(const char *format, ...)
     fputc('\n', stderr);
 }
 
-static bool regular_file(const char *path)
+static bool regular_file(const std::filesystem::path &path)
 {
     std::error_code error;
     return std::filesystem::is_regular_file(path, error);
 }
 
-static bool directory_path(const char *path)
+static bool directory_path(const std::filesystem::path &path)
 {
     std::error_code error;
     return std::filesystem::is_directory(path, error);
@@ -69,215 +69,214 @@ static bool ends_with(std::string_view text, std::string_view suffix)
            text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-static bool list_contains(const StringList *list, const char *item)
+static bool read_text(const std::filesystem::path &path, std::string *text)
 {
-    return std::find(list->begin(), list->end(), item) != list->end();
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return false;
+    text->assign(std::istreambuf_iterator<char>(file),
+                 std::istreambuf_iterator<char>());
+    return file.good() || file.eof();
 }
 
-static bool list_add(StringList *list, const char *item)
+static std::string trim(std::string value)
 {
-    try {
-        list->emplace_back(item);
-        return true;
-    } catch (const std::bad_alloc &) {
-        return false;
-    }
+    const size_t first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return {};
+    const size_t last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1U);
 }
 
-static void read_manifest(const char *manifest_name, const char *base,
-                          StringList *entries)
+static bool list_contains(const StringList &list, const std::string &value)
 {
+    return std::find(list.begin(), list.end(), value) != list.end();
+}
+
+static StringList read_manifest(const char *manifest_name, const char *base)
+{
+    StringList entries;
     std::ifstream file(manifest_name);
     if (!file) {
         report_error("%s: unable to open", manifest_name);
-        return;
+        return entries;
     }
 
     std::string line;
     while (std::getline(file, line)) {
-        const size_t first = line.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos || line[first] == '#') continue;
-        const size_t last = line.find_last_not_of(" \t\r\n");
-        const std::string entry = line.substr(first, last - first + 1U);
-        if (list_contains(entries, entry.c_str())) {
+        const std::string entry = trim(line);
+        if (entry.empty() || entry[0] == '#') continue;
+        if (list_contains(entries, entry)) {
             report_error("%s: duplicate entry %s", manifest_name, entry.c_str());
             continue;
         }
-        if (!list_add(entries, entry.c_str())) {
-            report_error("%s: out of memory", manifest_name);
-            break;
-        }
-        std::error_code error;
-        const std::filesystem::path path =
-            std::filesystem::path(base) / entry;
-        if (!std::filesystem::is_regular_file(path, error))
+        entries.push_back(entry);
+        if (!regular_file(std::filesystem::path(base) / entry))
             report_error("%s: missing file %s", manifest_name, entry.c_str());
     }
+    return entries;
 }
 
-static void check_source_manifest(const StringList *listed)
+static size_t line_number_at(std::string_view text, size_t position)
 {
-    std::error_code error;
-    for (std::filesystem::directory_iterator iterator("src", error), end;
-         !error && iterator != end; iterator.increment(error)) {
-        if (!iterator->is_regular_file(error)) continue;
-        const std::string name = iterator->path().filename().string();
-        if (!ends_with(name, ".c") && !ends_with(name, ".cpp")) continue;
-        if (!list_contains(listed, name.c_str()))
-            report_error("support/sources.txt: unlisted application source %s",
-                         name.c_str());
-    }
-    if (error)
-        report_error("src: unable to enumerate: %s", error.message().c_str());
+    return 1U + static_cast<size_t>(
+        std::count(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(position),
+                   '\n'));
+}
 
-    for (const std::string &entry : *listed) {
-        const std::filesystem::path path = std::filesystem::path("src") / entry;
-        if (!std::filesystem::is_regular_file(path, error)) {
-            error.clear();
+static void require_marker(const char *path, const std::string &text,
+                           std::string_view marker)
+{
+    if (text.find(marker) == std::string::npos)
+        report_error("%s: missing required contract marker: %s", path,
+                     std::string(marker).c_str());
+}
+
+static void forbid_marker(const char *path, const std::string &text,
+                          std::string_view marker, const char *reason)
+{
+    const size_t position = text.find(marker);
+    if (position != std::string::npos)
+        report_error("%s:%zu: %s", path, line_number_at(text, position), reason);
+}
+
+static void require_prefix(const char *path, const char *prefix)
+{
+    std::string text;
+    if (!read_text(path, &text)) {
+        report_error("%s: unable to read", path);
+        return;
+    }
+    if (text.compare(0U, strlen(prefix), prefix) != 0)
+        report_error("%s: missing exact SPDX header", path);
+}
+
+static bool path_has_compat_component(const std::string &path)
+{
+    return path.find("/compat/") != std::string::npos ||
+           path.rfind("compat/", 0U) == 0U;
+}
+
+static bool inside_block_comment(std::string_view text, size_t position)
+{
+    const size_t open = text.rfind("/*", position);
+    const size_t close = text.rfind("*/", position);
+    return open != std::string::npos &&
+           (close == std::string::npos || open > close);
+}
+
+static bool range_contains(std::string_view text, size_t start, size_t end,
+                           std::string_view needle)
+{
+    if (start > end || end > text.size()) return false;
+    return text.substr(start, end - start).find(needle) != std::string::npos;
+}
+
+static bool declaration_returns_void(std::string_view declaration)
+{
+    const size_t first = declaration.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return false;
+    return declaration.substr(first, 4U) == "void" &&
+           declaration.size() > first + 4U &&
+           (declaration[first + 4U] == ' ' || declaration[first + 4U] == '\t' ||
+            declaration[first + 4U] == '\r' || declaration[first + 4U] == '\n');
+}
+
+static void check_public_header_documentation(const std::string &path,
+                                              const std::string &text)
+{
+    if (!ends_with(path, ".h")) return;
+
+    size_t cursor = 0U;
+    while ((cursor = text.find("lsm_", cursor)) != std::string::npos) {
+        if (inside_block_comment(text, cursor)) {
+            cursor += 4U;
             continue;
         }
-        if (!ends_with(entry, ".c") && !ends_with(entry, ".cpp"))
-            report_error("support/sources.txt: unexpected application source %s",
-                         entry.c_str());
-    }
-}
-
-static bool maintained_markdown_path(const char *path)
-{
-    static const char *const maintained[] = {
-        "./README.md",
-        "./CHANGELOG.md",
-        "./CONTRIBUTING.md",
-        "./SECURITY.md",
-        "./docs/ARCHITECTURE.md",
-        "./docs/VALIDATION.md",
-        "./docs/HARDWARE.md",
-        "./.github/CODE_OF_CONDUCT.md"
-    };
-    for (size_t index = 0U;
-         index < sizeof(maintained) / sizeof(maintained[0]); index++)
-        if (strcmp(path, maintained[index]) == 0) return true;
-    return false;
-}
-
-static void check_markdown_tree(const char *directory_path_value)
-{
-    std::error_code error;
-    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
-         !error && iterator != end; iterator.increment(error)) {
-        const std::string name = iterator->path().filename().string();
-        if (name == ".git" || name == "build" || name.rfind("build-", 0U) == 0U)
-            continue;
-
-        std::string path = iterator->path().generic_string();
-        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
-        if (path == "./src/infiltratr-common") continue;
-        if (iterator->is_directory(error)) {
-            check_markdown_tree(path.c_str());
-        } else if (ends_with(name, ".md") &&
-                   !maintained_markdown_path(path.c_str())) {
-            report_error("%s: unapproved maintained Markdown file; update the "
-                         "documentation allowlist deliberately", path.c_str());
+        if (cursor > 0U) {
+            const char previous = text[cursor - 1U];
+            if ((previous >= 'A' && previous <= 'Z') ||
+                (previous >= 'a' && previous <= 'z') ||
+                (previous >= '0' && previous <= '9') || previous == '_') {
+                cursor += 4U;
+                continue;
+            }
         }
-        error.clear();
+
+        const size_t semicolon = text.find(';', cursor);
+        const size_t open_parenthesis = text.find('(', cursor);
+        const size_t brace = text.find('{', cursor);
+        if (semicolon == std::string::npos ||
+            open_parenthesis == std::string::npos ||
+            open_parenthesis > semicolon ||
+            (brace != std::string::npos && brace < semicolon)) {
+            cursor += 4U;
+            continue;
+        }
+
+        const size_t line_start = text.rfind('\n', cursor);
+        const size_t declaration_start =
+            line_start == std::string::npos ? 0U : line_start + 1U;
+        const size_t comment_close = text.rfind("*/", declaration_start);
+        size_t documentation = std::string::npos;
+        if (comment_close != std::string::npos)
+            documentation = text.rfind("/**", comment_close);
+
+        bool attached = documentation != std::string::npos;
+        if (attached) {
+            const size_t between_start = comment_close + 2U;
+            for (size_t index = between_start; index < declaration_start; index++) {
+                const char value = text[index];
+                if (value != ' ' && value != '\t' && value != '\r' && value != '\n') {
+                    attached = false;
+                    break;
+                }
+            }
+        }
+        if (!attached) {
+            report_error("%s:%zu: public lsm_ declaration lacks a Doxygen comment",
+                         path.c_str(), line_number_at(text, declaration_start));
+            cursor = semicolon + 1U;
+            continue;
+        }
+
+        size_t close_parenthesis = open_parenthesis;
+        unsigned nesting = 0U;
+        while (close_parenthesis < semicolon) {
+            if (text[close_parenthesis] == '(') nesting++;
+            else if (text[close_parenthesis] == ')') {
+                if (nesting == 0U) break;
+                nesting--;
+                if (nesting == 0U) break;
+            }
+            close_parenthesis++;
+        }
+        if (close_parenthesis >= semicolon) {
+            report_error("%s:%zu: malformed public function declaration",
+                         path.c_str(), line_number_at(text, declaration_start));
+            cursor = semicolon + 1U;
+            continue;
+        }
+
+        std::string arguments = trim(text.substr(
+            open_parenthesis + 1U,
+            close_parenthesis - open_parenthesis - 1U));
+        const bool has_parameters = !arguments.empty() && arguments != "void";
+        if (has_parameters &&
+            !range_contains(text, documentation, comment_close, "@param"))
+            report_error("%s:%zu: parameterised public API lacks @param contracts",
+                         path.c_str(), line_number_at(text, declaration_start));
+
+        const std::string declaration = text.substr(
+            comment_close + 2U, cursor - (comment_close + 2U));
+        if (!declaration_returns_void(declaration) &&
+            !range_contains(text, documentation, comment_close, "@return"))
+            report_error("%s:%zu: value-returning public API lacks @return semantics",
+                         path.c_str(), line_number_at(text, declaration_start));
+
+        cursor = semicolon + 1U;
     }
-    if (error)
-        report_error("%s: unable to enumerate: %s", directory_path_value,
-                     error.message().c_str());
 }
 
-static void check_markdown_policy(void)
-{
-    static const char *const required[] = {
-        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md"
-    };
-    check_markdown_tree(".");
-    for (size_t index = 0U;
-         index < sizeof(required) / sizeof(required[0]); index++)
-        if (!regular_file(required[index]))
-            report_error("%s: required maintained documentation is missing",
-                         required[index]);
-}
-
-static void check_root_layout(void)
-{
-    static const char *const retired_root_entries[] = {
-        ".clang-format", ".editorconfig", "Doxyfile",
-        "NATIVE_INSTALLER_EDITION", "VERSION",
-        "data", "icons", "install.sh", "packaging", "shared",
-        "sources.txt", "tests", "tools"
-    };
-    for (size_t index = 0U;
-         index < sizeof(retired_root_entries) /
-                     sizeof(retired_root_entries[0]);
-         index++) {
-        const char *entry = retired_root_entries[index];
-        if (regular_file(entry) || directory_path(entry))
-            report_error("%s: internal project material must remain under "
-                         "src/ or support/", entry);
-    }
-}
-
-static char *read_file(const char *path, size_t *size_out)
-{
-    FILE *file = fopen(path, "rb");
-    if (!file) return NULL;
-    if (fseek(file, 0, SEEK_END) != 0) {
-        fclose(file);
-        return NULL;
-    }
-    const long length = ftell(file);
-    if (length < 0 || fseek(file, 0, SEEK_SET) != 0) {
-        fclose(file);
-        return NULL;
-    }
-    char *contents = static_cast<char *>(malloc((size_t)length + 1U));
-    if (!contents) {
-        fclose(file);
-        return NULL;
-    }
-    const size_t read_length = fread(contents, 1U, (size_t)length, file);
-    fclose(file);
-    if (read_length != (size_t)length) {
-        free(contents);
-        return NULL;
-    }
-    contents[read_length] = '\0';
-    if (size_out) *size_out = read_length;
-    return contents;
-}
-
-static bool path_has_compat_component(const char *path)
-{
-    return strstr(path, "/compat/") != NULL ||
-           strncmp(path, "compat/", 7U) == 0;
-}
-
-static bool inside_block_comment(const char *text, const char *position)
-{
-    const char *last_open = NULL;
-    const char *last_close = NULL;
-    for (const char *cursor = text; cursor < position && *cursor; cursor++) {
-        if (cursor[0] == '/' && cursor[1] == '*') last_open = cursor;
-        if (cursor[0] == '*' && cursor[1] == '/') last_close = cursor;
-    }
-    return last_open && (!last_close || last_open > last_close);
-}
-
-static size_t line_number_at(const char *text, const char *position)
-{
-    size_t line = 1U;
-    for (const char *cursor = text; cursor < position; cursor++)
-        if (*cursor == '\n') line++;
-    return line;
-}
-
-/* The product deliberately uses traditional KB/MB/GB/TB labels with
- * 1024-based arithmetic. Keep the rejected spellings assembled as character
- * arrays so this policy checker does not contain the very labels it forbids. */
-static void check_unit_label_policy(const char *path, const char *text)
+static void check_unit_label_policy(const char *path, const std::string &text)
 {
     static const char forbidden[][4] = {
         {'K', 'i', 'B', '\0'}, {'M', 'i', 'B', '\0'},
@@ -286,835 +285,194 @@ static void check_unit_label_policy(const char *path, const char *text)
         {'M', 'i', 'b', '\0'}, {'G', 'i', 'b', '\0'},
         {'T', 'i', 'b', '\0'}, {'P', 'i', 'b', '\0'}
     };
-    for (size_t index = 0U; index < sizeof(forbidden) / sizeof(forbidden[0]);
-         index++) {
-        const char *found = strstr(text, forbidden[index]);
-        if (found)
+    for (const auto &label : forbidden) {
+        const size_t position = text.find(label);
+        if (position != std::string::npos)
             report_error("%s:%zu: forbidden unit label", path,
-                         line_number_at(text, found));
+                         line_number_at(text, position));
     }
 }
 
-static bool range_contains(const char *start, const char *end,
-                           const char *needle)
-{
-    const size_t needle_length = strlen(needle);
-    if (needle_length == 0U) return true;
-    for (const char *cursor = start; cursor + needle_length <= end; cursor++) {
-        if (memcmp(cursor, needle, needle_length) == 0) return true;
-    }
-    return false;
-}
-
-static bool declaration_returns_void(const char *declaration_start,
-                                     const char *function_name)
-{
-    while (declaration_start < function_name &&
-           (*declaration_start == ' ' || *declaration_start == '\t' ||
-            *declaration_start == '\r' || *declaration_start == '\n'))
-        declaration_start++;
-    if ((size_t)(function_name - declaration_start) < 4U ||
-        strncmp(declaration_start, "void", 4U) != 0)
-        return false;
-    declaration_start += 4;
-    while (declaration_start < function_name &&
-           (*declaration_start == ' ' || *declaration_start == '\t' ||
-            *declaration_start == '\r' || *declaration_start == '\n'))
-        declaration_start++;
-    return declaration_start == function_name;
-}
-
-static void check_public_header_documentation(const char *path, const char *text)
-{
-    if (!ends_with(path, ".h")) return;
-
-    const char *cursor = text;
-    while ((cursor = strstr(cursor, "lsm_")) != NULL) {
-        if (inside_block_comment(text, cursor)) {
-            cursor += 4;
-            continue;
-        }
-        if (cursor > text &&
-            ((cursor[-1] >= 'A' && cursor[-1] <= 'Z') ||
-             (cursor[-1] >= 'a' && cursor[-1] <= 'z') ||
-             (cursor[-1] >= '0' && cursor[-1] <= '9') || cursor[-1] == '_')) {
-            cursor += 4;
-            continue;
-        }
-
-        const char *semicolon = strchr(cursor, ';');
-        const char *brace = strchr(cursor, '{');
-        const char *open_parenthesis = strchr(cursor, '(');
-        if (!semicolon || !open_parenthesis || open_parenthesis > semicolon ||
-            (brace && brace < semicolon)) {
-            cursor += 4;
-            continue;
-        }
-
-        const char *line_start = cursor;
-        while (line_start > text && line_start[-1] != '\n') line_start--;
-        const char *comment_close = NULL;
-        for (const char *scan = text; scan + 1 < line_start; scan++)
-            if (scan[0] == '*' && scan[1] == '/') comment_close = scan;
-        const char *documentation = NULL;
-        if (comment_close) {
-            for (const char *scan = text; scan + 2 < comment_close; scan++)
-                if (scan[0] == '/' && scan[1] == '*' && scan[2] == '*')
-                    documentation = scan;
-        }
-        bool attached = documentation != NULL;
-        if (attached) {
-            for (const char *scan = comment_close + 2; scan < line_start; scan++) {
-                if (*scan != ' ' && *scan != '\t' && *scan != '\r' && *scan != '\n') {
-                    attached = false;
-                    break;
-                }
-            }
-        }
-        if (!attached) {
-            report_error("%s:%zu: public lsm_ declaration lacks a Doxygen comment",
-                         path, line_number_at(text, line_start));
-            cursor = semicolon + 1;
-            continue;
-        }
-
-        const char *close_parenthesis = open_parenthesis;
-        unsigned nesting = 0U;
-        while (close_parenthesis < semicolon) {
-            if (*close_parenthesis == '(') nesting++;
-            else if (*close_parenthesis == ')' && --nesting == 0U) break;
-            close_parenthesis++;
-        }
-        if (close_parenthesis >= semicolon) {
-            report_error("%s:%zu: malformed public function declaration",
-                         path, line_number_at(text, line_start));
-            cursor = semicolon + 1;
-            continue;
-        }
-
-        const char *argument = open_parenthesis + 1;
-        while (argument < close_parenthesis &&
-               (*argument == ' ' || *argument == '\t' ||
-                *argument == '\r' || *argument == '\n'))
-            argument++;
-        const char *argument_end = close_parenthesis;
-        while (argument_end > argument &&
-               (argument_end[-1] == ' ' || argument_end[-1] == '\t' ||
-                argument_end[-1] == '\r' || argument_end[-1] == '\n'))
-            argument_end--;
-        const bool has_parameters = argument < argument_end &&
-            !((size_t)(argument_end - argument) == 4U &&
-              memcmp(argument, "void", 4U) == 0);
-        if (has_parameters &&
-            !range_contains(documentation, comment_close, "@param"))
-            report_error("%s:%zu: parameterised public API lacks @param contracts",
-                         path, line_number_at(text, line_start));
-
-        const char *declaration_start = comment_close + 2;
-        if (!declaration_returns_void(declaration_start, cursor) &&
-            !range_contains(documentation, comment_close, "@return"))
-            report_error("%s:%zu: value-returning public API lacks @return semantics",
-                         path, line_number_at(text, line_start));
-
-        cursor = semicolon + 1;
-    }
-}
-
-static void check_platform_path_boundary(const char *path, const char *text)
+static void check_source_boundaries(const std::string &path,
+                                    const std::string &text)
 {
     const bool performance_presentation =
-        strcmp(path, "src/performance_present.c") == 0 ||
-        strcmp(path, "src/performance_present_core.c") == 0 ||
-        strcmp(path, "src/performance_present_devices.c") == 0;
-    if (strcmp(path, "src/performance.c") != 0 &&
-        !performance_presentation &&
-        strcmp(path, "src/monitor_types.h") != 0)
-        return;
-
-    static const char *const linux_paths[] = {
-        "\"/proc/", "\"/sys/", "\"/dev/"
-    };
-    for (size_t index = 0U;
-         index < sizeof(linux_paths) / sizeof(linux_paths[0]); index++) {
-        const char *found = strstr(text, linux_paths[index]);
-        if (found)
-            report_error("%s:%zu: Linux path literal crosses the platform boundary",
-                         path, line_number_at(text, found));
+        path == "src/performance_present.c" ||
+        path == "src/performance_present_core.c" ||
+        path == "src/performance_present_devices.c";
+    if (path == "src/performance.c" || performance_presentation ||
+        path == "src/monitor_types.h") {
+        for (const char *marker : {"\"/proc/", "\"/sys/", "\"/dev/"})
+            forbid_marker(path.c_str(), text, marker,
+                          "Linux path literal crosses the platform boundary");
     }
-
     if (performance_presentation) {
-        static const char *const collector_markers[] = {
-            "wifi_metadata.h", "lsm_wifi_metadata_refresh(",
-            "ioctl(", "socket(", "g_dbus_connection_call"
-        };
-        for (size_t index = 0U;
-             index < sizeof(collector_markers) / sizeof(collector_markers[0]);
-             index++) {
-            const char *found = strstr(text, collector_markers[index]);
-            if (found)
-                report_error(
-                    "%s:%zu: hardware collection crosses into snapshot presentation",
-                    path, line_number_at(text, found));
-        }
+        for (const char *marker : {"wifi_metadata.h", "lsm_wifi_metadata_refresh(",
+                                   "ioctl(", "socket(", "g_dbus_connection_call"})
+            forbid_marker(path.c_str(), text, marker,
+                          "hardware collection crosses into snapshot presentation");
     }
 
-    if (strcmp(path, "src/monitor_types.h") == 0) {
-        static const char *const private_state_markers[] = {
-            "previous_", "device_syspath", "hidraw_path",
-            "intel_native_backend", "engine_busy_initialized", "is_bluez",
-            "char card[64]", "platform_identity[LSM_PATH_LEN]"
-        };
-        for (size_t index = 0U;
-             index < sizeof(private_state_markers) /
-                         sizeof(private_state_markers[0]);
-             index++) {
-            const char *found = strstr(text, private_state_markers[index]);
-            if (found)
-                report_error(
-                    "%s:%zu: native collector state leaked into public snapshot",
-                    path, line_number_at(text, found));
-        }
+    if (path == "src/services.c") {
+        for (const char *marker : {"org.freedesktop.systemd1", "g_bus_get_sync",
+                                   "g_dbus_connection_call", "GVariant"})
+            forbid_marker(path.c_str(), text, marker,
+                          "native service-manager detail crosses the backend boundary");
+    }
+    if (path == "src/users.c") {
+        for (const char *marker : {"org.freedesktop.login1", "g_bus_get_sync",
+                                   "g_dbus_connection_call", "GVariant",
+                                   "getpwuid(", "uid_t"})
+            forbid_marker(path.c_str(), text, marker,
+                          "native user/session detail crosses the backend boundary");
+    }
+    if (path == "src/startup.c") {
+        for (const char *marker : {"GKeyFile", "g_get_user_config_dir",
+                                   "XDG_CONFIG_DIRS", "/etc/xdg",
+                                   "g_mkdir_with_parents", "LSM_ATOMIC_FILE_"})
+            forbid_marker(path.c_str(), text, marker,
+                          "native startup detail crosses the backend boundary");
+    }
+
+    static const char *const process_contracts[] = {
+        "src/process_model.h", "src/process_backend.h", "src/monitor_types.h",
+        "src/app.h", "src/process_inspector.h", "src/process_file_users.h",
+        "src/process_table_ui.h", "src/process_inspection.h"
+    };
+    bool process_contract = false;
+    for (const char *candidate : process_contracts)
+        if (path == candidate) process_contract = true;
+    if (process_contract) {
+        for (const char *marker : {
+                 "pid_t", "uid_t", "LsmUserId", "user_id", "start_ticks",
+                 "fd_count", "LSM_PROCESS_SCAN_FD_COUNT", "<signal.h>",
+                 "<sys/types.h>", "SIGTERM", "SIGSTOP", "SIGCONT",
+                 "setpriority(", "sched_setaffinity(", "sched_getaffinity(",
+                 "kill(", "getuid("})
+            forbid_marker(path.c_str(), text, marker,
+                          "native process primitive crosses the process HAL boundary");
+    }
+
+    if (path == "src/app_shell.c") {
+        for (const char *marker : {"gtk_css_provider_load_from_data", "@define-color",
+                                   "infiltratr_theme_resolve", "gtk-theme-name"})
+            forbid_marker(path.c_str(), text, marker,
+                          "theme implementation leaked into shell navigation");
+    }
+    if (path == "src/app_theme.c") {
+        require_marker(path.c_str(), text, "lsm_app_shell_apply_theme");
+        require_marker(path.c_str(), text, "infiltratr_theme_resolve");
+        require_marker(path.c_str(), text, "gtk_css_provider_load_from_data");
+        require_marker(path.c_str(), text, "button:hover > label");
+        require_marker(path.c_str(), text, "button:hover > image");
+        require_marker(path.c_str(), text, "menu menuitem:disabled label");
+        for (const char *marker : {
+                 "button label, button image",
+                 "button:hover label, button:hover image",
+                 "button:active label, button:active image",
+                 "button:checked label, button:checked image",
+                 "button:disabled label, button:disabled image"})
+            forbid_marker(path.c_str(), text, marker,
+                          "button selector recolours nested composite content");
     }
 }
 
-static void check_service_page_boundary(const char *path, const char *text)
+static void check_source_file(const std::filesystem::path &filesystem_path)
 {
-    if (strcmp(path, "src/services.c") != 0) return;
-    static const char *const native_markers[] = {
-        "org.freedesktop.systemd1",
-        "g_dbus_connection_call",
-        "g_bus_get_sync",
-        "GVariant"
-    };
-    for (size_t index = 0U;
-         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
-        const char *found = strstr(text, native_markers[index]);
-        if (found)
-            report_error(
-                "%s:%zu: native service-manager detail crosses the backend boundary",
-                path, line_number_at(text, found));
-    }
-}
-
-static void check_user_page_boundary(const char *path, const char *text)
-{
-    if (strcmp(path, "src/users.c") != 0) return;
-    static const char *const native_markers[] = {
-        "org.freedesktop.login1",
-        "g_dbus_connection_call",
-        "g_bus_get_sync",
-        "GVariant",
-        "getpwuid(",
-        "uid_t"
-    };
-    for (size_t index = 0U;
-         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
-        const char *found = strstr(text, native_markers[index]);
-        if (found)
-            report_error(
-                "%s:%zu: native user/session detail crosses the backend boundary",
-                path, line_number_at(text, found));
-    }
-}
-
-static void check_startup_page_boundary(const char *path, const char *text)
-{
-    if (strcmp(path, "src/startup.c") != 0) return;
-    static const char *const native_markers[] = {
-        "GKeyFile",
-        "g_get_user_config_dir",
-        "XDG_CONFIG_DIRS",
-        "/etc/xdg",
-        "g_mkdir_with_parents",
-        "LSM_ATOMIC_FILE_"
-    };
-    for (size_t index = 0U;
-         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
-        const char *found = strstr(text, native_markers[index]);
-        if (found)
-            report_error(
-                "%s:%zu: native startup detail crosses the backend boundary",
-                path, line_number_at(text, found));
-    }
-}
-
-static void check_theme_ownership_and_button_policy(const char *path,
-                                                    const char *text)
-{
-    if (strcmp(path, "src/app_shell.c") == 0) {
-        static const char *const forbidden_shell_theme_details[] = {
-            "gtk_css_provider_load_from_data",
-            "@define-color",
-            "infiltratr_theme_resolve",
-            "gtk-theme-name"
-        };
-        for (size_t index = 0U;
-             index < sizeof(forbidden_shell_theme_details) /
-                         sizeof(forbidden_shell_theme_details[0]);
-             index++) {
-            const char *found = strstr(text, forbidden_shell_theme_details[index]);
-            if (found)
-                report_error(
-                    "%s:%zu: theme implementation leaked back into shell navigation",
-                    path, line_number_at(text, found));
-        }
-        return;
-    }
-    if (strcmp(path, "src/app_theme.c") != 0) return;
-
-    static const char *const required_owner_markers[] = {
-        "lsm_app_shell_apply_theme",
-        "infiltratr_theme_resolve",
-        "gtk_css_provider_load_from_data"
-    };
-    for (size_t index = 0U;
-         index < sizeof(required_owner_markers) /
-                     sizeof(required_owner_markers[0]); index++) {
-        if (!strstr(text, required_owner_markers[index]))
-            report_error("%s: theme owner is missing semantic marker %s",
-                         path, required_owner_markers[index]);
-    }
-
-    static const char *const forbidden_descendant_selectors[] = {
-        "button label, button image",
-        "button:hover label, button:hover image",
-        "button:active label, button:active image",
-        "button:checked label, button:checked image",
-        "button:disabled label, button:disabled image"
-    };
-    for (size_t index = 0U;
-         index < sizeof(forbidden_descendant_selectors) /
-                     sizeof(forbidden_descendant_selectors[0]); index++) {
-        const char *found = strstr(text, forbidden_descendant_selectors[index]);
-        if (found)
-            report_error(
-                "%s:%zu: button state selector must not recolour nested composite content",
-                path, line_number_at(text, found));
-    }
-
-    static const char *const required_direct_child_roles[] = {
-        "button:hover > label",
-        "button:hover > image"
-    };
-    for (size_t index = 0U;
-         index < sizeof(required_direct_child_roles) /
-                     sizeof(required_direct_child_roles[0]); index++) {
-        if (!strstr(text, required_direct_child_roles[index]))
-            report_error(
-                "%s: composite-button hover policy is missing semantic selector %s",
-                path, required_direct_child_roles[index]);
-    }
-}
-
-static void check_day_menu_theme_policy(const char *path, const char *text)
-{
-    if (strcmp(path, "src/app_theme.c") != 0) return;
-
-    static const char *const required_roles[] = {
-        "menu menuitem label",
-        "menu menuitem:disabled label",
-        "menu menuitem:hover label",
-        "popover.menu modelbutton:disabled",
-        "menu separator"
-    };
-    for (size_t index = 0U;
-         index < sizeof(required_roles) / sizeof(required_roles[0]); index++) {
-        if (!strstr(text, required_roles[index]))
-            report_error(
-                "%s: Day-mode menu contrast policy is missing semantic selector %s",
-                path, required_roles[index]);
-    }
-}
-
-static void check_process_platform_boundary(const char *path, const char *text)
-{
-    static const char *const contract_files[] = {
-        "src/process_model.h",
-        "src/process_backend.h",
-        "src/monitor_types.h",
-        "src/app.h",
-        "src/process_inspector.h",
-        "src/process_file_users.h",
-        "src/process_table_ui.h",
-        "src/process_inspection.h"
-    };
-    bool checked = false;
-    for (size_t index = 0U;
-         index < sizeof(contract_files) / sizeof(contract_files[0]); index++) {
-        if (strcmp(path, contract_files[index]) == 0) {
-            checked = true;
-            break;
-        }
-    }
-    if (!checked) return;
-
-    static const char *const native_markers[] = {
-        "pid_t", "uid_t", "LsmUserId", "user_id", "start_ticks",
-        "fd_count", "LSM_PROCESS_SCAN_FD_COUNT",
-        "<signal.h>", "<sys/types.h>", "SIGTERM", "SIGSTOP", "SIGCONT",
-        "setpriority(", "sched_setaffinity(", "sched_getaffinity(",
-        "kill(", "getuid("
-    };
-    for (size_t index = 0U;
-         index < sizeof(native_markers) / sizeof(native_markers[0]); index++) {
-        const char *found = strstr(text, native_markers[index]);
-        if (found)
-            report_error(
-                "%s:%zu: native process primitive crosses the process HAL boundary",
-                path, line_number_at(text, found));
-    }
-}
-
-static void check_source_file(const char *path)
-{
-    size_t size = 0U;
-    char *text = read_file(path, &size);
-    if (!text) {
-        report_error("%s: unable to read", path);
+    const std::string path = filesystem_path.generic_string();
+    std::string text;
+    if (!read_text(filesystem_path, &text)) {
+        report_error("%s: unable to read", path.c_str());
         return;
     }
 
-    if (strncmp(text, LSM_SPDX_C, strlen(LSM_SPDX_C)) != 0)
-        report_error("%s: first line must be %s", path,
-                     "// SPDX-License-Identifier: GPL-3.0-or-later");
-    static const char stale_repository[] =
-        "github.com/" "The-Infiltratr";
-    if (strstr(text, stale_repository))
-        report_error("%s: stale project repository identity", path);
+    if (text.compare(0U, strlen(LSM_SPDX_C), LSM_SPDX_C) != 0)
+        report_error("%s: first line must be the GPL-3.0-or-later SPDX header",
+                     path.c_str());
+
+    static const char stale_repository[] = "github.com/" "The-Infiltratr";
+    forbid_marker(path.c_str(), text, stale_repository,
+                  "stale project repository identity");
 
     if (!path_has_compat_component(path)) {
-        static const char *const markers[] = {
-            "@file", "@brief", "@author", "@copyright"
-        };
-        const char *header_end = text;
-        unsigned lines = 0U;
-        while (*header_end && lines < 24U) {
-            if (*header_end++ == '\n') lines++;
-        }
-        const size_t header_length = (size_t)(header_end - text);
-        for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++) {
-            const char *found = strstr(text, markers[index]);
-            if (!found || (size_t)(found - text) >= header_length)
-                report_error("%s: missing %s in file header", path, markers[index]);
-        }
-        const char *license = strstr(text, LSM_DOXYGEN_LICENSE);
-        if (!license || (size_t)(license - text) >= header_length)
-            report_error("%s: missing %s in file header", path,
-                         LSM_DOXYGEN_LICENSE);
-    }
-
-    if (!path_has_compat_component(path))
-        check_public_header_documentation(path, text);
-
-    check_unit_label_policy(path, text);
-    check_platform_path_boundary(path, text);
-    check_service_page_boundary(path, text);
-    check_user_page_boundary(path, text);
-    check_startup_page_boundary(path, text);
-    check_process_platform_boundary(path, text);
-    check_theme_ownership_and_button_policy(path, text);
-    check_day_menu_theme_policy(path, text);
-
-    size_t line_number = 1U;
-    const char *line_start = text;
-    for (size_t index = 0U; index <= size; index++) {
-        if (index < size && text[index] != '\n') continue;
-        const char *line_end = text + index;
-        for (const char *cursor = line_start; cursor < line_end; cursor++) {
-            if (*cursor == '\t') {
-                report_error("%s:%zu: tab character", path, line_number);
-                break;
+        const size_t header_end = [&text]() {
+            size_t position = 0U;
+            unsigned lines = 0U;
+            while (position < text.size() && lines < 24U) {
+                if (text[position++] == '\n') lines++;
             }
-        }
-        if (line_end > line_start &&
-            (line_end[-1] == ' ' || line_end[-1] == '\t' || line_end[-1] == '\r'))
-            report_error("%s:%zu: trailing whitespace", path, line_number);
-        line_start = line_end + 1;
-        line_number++;
+            return position;
+        }();
+        const std::string header = text.substr(0U, header_end);
+        for (const char *marker : {"@file", "@brief", "@author", "@copyright",
+                                   LSM_DOXYGEN_LICENSE})
+            if (header.find(marker) == std::string::npos)
+                report_error("%s: missing %s in file header", path.c_str(), marker);
+        check_public_header_documentation(path, text);
     }
-    if (size == 0U || text[size - 1U] != '\n')
-        report_error("%s: missing final newline", path);
-    free(text);
+
+    size_t line = 1U;
+    size_t start = 0U;
+    while (start <= text.size()) {
+        const size_t end = text.find('\n', start);
+        const size_t finish = end == std::string::npos ? text.size() : end;
+        const std::string_view view(text.data() + start, finish - start);
+        if (view.find('\t') != std::string_view::npos)
+            report_error("%s:%zu: tab character", path.c_str(), line);
+        if (!view.empty() && (view.back() == ' ' || view.back() == '\r'))
+            report_error("%s:%zu: trailing whitespace", path.c_str(), line);
+        if (end == std::string::npos) break;
+        start = end + 1U;
+        line++;
+    }
+    if (text.empty() || text.back() != '\n')
+        report_error("%s: missing final newline", path.c_str());
+
+    check_unit_label_policy(path.c_str(), text);
+    check_source_boundaries(path, text);
 }
 
-static void scan_source_tree(const char *directory_path_value)
+static void scan_source_tree(const char *root)
 {
     std::error_code error;
-    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
-         !error && iterator != end; iterator.increment(error)) {
-        std::string path = iterator->path().generic_string();
-        if (path == "src/infiltratr-common" ||
-            path == "./src/infiltratr-common")
-            continue;
-        if (iterator->is_directory(error)) {
-            scan_source_tree(path.c_str());
-        } else if (ends_with(path, ".c") || ends_with(path, ".cpp") ||
-                   ends_with(path, ".h")) {
-            check_source_file(path.c_str());
+    std::filesystem::recursive_directory_iterator iterator(
+        root, std::filesystem::directory_options::skip_permission_denied, error);
+    const std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::filesystem::path path = iterator->path();
+        const std::string generic = path.generic_string();
+        if (iterator->is_directory(error) &&
+            (generic == "src/infiltratr-common" ||
+             generic.find("/src/infiltratr-common") != std::string::npos)) {
+            iterator.disable_recursion_pending();
+        } else if (iterator->is_regular_file(error) &&
+                   (ends_with(generic, ".c") || ends_with(generic, ".cpp") ||
+                    ends_with(generic, ".h"))) {
+            check_source_file(path);
         }
-        error.clear();
+        iterator.increment(error);
     }
     if (error)
-        report_error("%s: unable to enumerate: %s", directory_path_value,
-                     error.message().c_str());
+        report_error("%s: unable to enumerate: %s", root, error.message().c_str());
 }
 
-static void require_text_marker(const char *path, const char *text,
-                                const char *marker)
+static void check_source_manifest(const StringList &sources)
 {
-    if (!strstr(text, marker))
-        report_error("%s: missing required documentation marker: %s", path, marker);
-}
-
-static void require_file_prefix(const char *path, const char *prefix)
-{
-    size_t size = 0U;
-    char *text = read_file(path, &size);
-    (void)size;
-    if (!text) {
-        report_error("%s: unable to read licensing header", path);
-        return;
-    }
-    if (strncmp(text, prefix, strlen(prefix)) != 0)
-        report_error("%s: missing exact SPDX header", path);
-    free(text);
-}
-
-static void require_file_marker(const char *path, const char *marker)
-{
-    size_t size = 0U;
-    char *text = read_file(path, &size);
-    (void)size;
-    if (!text) {
-        report_error("%s: unable to read licensing declaration", path);
-        return;
-    }
-    require_text_marker(path, text, marker);
-    free(text);
-}
-
-static void check_licensing_contract(void)
-{
-    static const char *const hash_header_files[] = {
-        ".gitmodules", "CMakeLists.txt", "support/Doxyfile", "Makefile",
-        "src/.clang-format", "support/sources.txt",
-        "src/infiltratr-common/Makefile",
-        ".github/ISSUE_TEMPLATE/bug_report.yml",
-        ".github/ISSUE_TEMPLATE/feature_request.yml",
-        ".github/ISSUE_TEMPLATE/config.yml"
-    };
-    for (size_t index = 0U;
-         index < sizeof(hash_header_files) / sizeof(hash_header_files[0]);
-         index++)
-        require_file_prefix(hash_header_files[index], LSM_SPDX_HASH);
-
-    static const char *const markdown_header_files[] = {
-        "README.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/ARCHITECTURE.md", "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md"
-    };
-    for (size_t index = 0U;
-         index < sizeof(markdown_header_files) /
-                     sizeof(markdown_header_files[0]); index++)
-        require_file_prefix(markdown_header_files[index], LSM_SPDX_MARKDOWN);
-
-    require_file_prefix(
-        "support/installer/bootstrap.sh",
-        "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
-
-    static const char *const required_legal_files[] = {
-        "LICENSE", "src/infiltratr-common/LICENSE",
-        "support/resources/icons/system-monitor.png.license",
-        "support/packaging/copyright"
-    };
-    for (size_t index = 0U;
-         index < sizeof(required_legal_files) / sizeof(required_legal_files[0]);
-         index++)
-        if (!regular_file(required_legal_files[index]))
-            report_error("%s: required licensing file is missing",
-                         required_legal_files[index]);
-
-    require_file_marker("LICENSE", "GNU GENERAL PUBLIC LICENSE");
-    require_file_marker("LICENSE", "Version 3, 29 June 2007");
-    require_file_marker("src/infiltratr-common/LICENSE",
-                        "GNU GENERAL PUBLIC LICENSE");
-    require_file_marker("README.md", "GPL-3.0-or-later");
-    require_file_marker("support/resources/icons/system-monitor.png.license",
-                        "SPDX-FileCopyrightText: 2000-2026 Shannon Smith");
-    require_file_marker("support/resources/icons/system-monitor.png.license",
-                        "SPDX-License-Identifier: GPL-3.0-or-later");
-    if (!regular_file("support/resources/fonts/mb-corpo-fonts.tar.xz"))
-        report_error("support/resources/fonts/mb-corpo-fonts.tar.xz: required bundled typography archive is missing");
-    require_file_marker("support/packaging/copyright", "License: GPL-3+");
-    require_file_marker("src/project_info.c",
-                        ".license_id = \"GPL-3.0-or-later\"");
-    require_file_marker(
-        "src/project_info.c",
-        "https://github.com/Infiltrator-Projects/System-Monitor");
-    require_file_marker(
-        "support/tools/build_deb_package.c",
-        "https://github.com/Infiltrator-Projects/System-Monitor");
-}
-
-static void check_engineering_documentation(void)
-{
-    static const char *const required_files[] = {
-        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md",
-        "support/Doxyfile", "LICENSE", "support/packaging/copyright"
-    };
-    for (size_t index = 0U; index < sizeof(required_files) / sizeof(required_files[0]);
-         index++) {
-        if (!regular_file(required_files[index]))
-            report_error("%s: required engineering documentation is missing",
-                         required_files[index]);
-    }
-
-    size_t size = 0U;
-    char *readme = read_file("README.md", &size);
-    (void)size;
-    if (readme) {
-        check_unit_label_policy("README.md", readme);
-        static const char *const markers[] = {
-            "## Clean-sheet provenance",
-            "## Capabilities",
-            "## Build and test",
-            "src/infiltratr-common",
-            "## Release assets",
-            "## Technical documentation",
-            "docs/ARCHITECTURE.md",
-            "docs/HARDWARE.md",
-            "docs/VALIDATION.md",
-            "CONTRIBUTING.md",
-            "SECURITY.md",
-            "## Licence and provenance",
-            "GPL-3.0-or-later"
-        };
-        for (size_t index = 0U; index < sizeof(markers) / sizeof(markers[0]); index++)
-            require_text_marker("README.md", readme, markers[index]);
-        free(readme);
-    }
-}
-
-static void check_shell_boundary_tree(const char *directory_path_value)
-{
-    std::error_code error;
-    for (std::filesystem::directory_iterator iterator(directory_path_value, error), end;
-         !error && iterator != end; iterator.increment(error)) {
-        const std::string name = iterator->path().filename().string();
-        if (name == ".git" || name == "build" || name == "build-cmake")
-            continue;
-        std::string path = iterator->path().generic_string();
-        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
-        if (path == "./src/infiltratr-common") continue;
-        if (iterator->is_directory(error)) {
-            check_shell_boundary_tree(path.c_str());
-        } else if (ends_with(path, ".sh") &&
-                   path != "./support/installer/bootstrap.sh") {
-            report_error("%s: unexpected shell source; reusable project logic "
-                         "must remain native C/C++", path.c_str());
-        }
-        error.clear();
-    }
-}
-
-static void check_shell_boundary(void)
-{
-    static const char bootstrap_path[] = "support/installer/bootstrap.sh";
-    if (!regular_file(bootstrap_path)) {
-        report_error("%s: missing pre-compilation bootstrap", bootstrap_path);
-        return;
-    }
-    size_t size = 0U;
-    char *text = read_file(bootstrap_path, &size);
-    if (!text) {
-        report_error("%s: unable to read", bootstrap_path);
-        return;
-    }
-    if (size > 4096U)
-        report_error("%s: bootstrap exceeds the 4096-byte shell boundary",
-                     bootstrap_path);
-    if (!strstr(text, "support/tools/native_installer.c") ||
-        !strstr(text, "exec \"$builder\""))
-        report_error("%s: must compile and hand off to the C native installer",
-                     bootstrap_path);
-    free(text);
-    check_shell_boundary_tree(".");
-}
-
-static void check_shared_release_contract(void)
-{
-    size_t size = 0U;
-
-    char *windows = read_file("src/main_windows.c", &size);
-    if (windows) {
-        require_text_marker(
-            "src/main_windows.c", windows, "lsm_windows_theme_resolve");
-        require_text_marker(
-            "src/main_windows.c", windows, "infiltratr_design_metrics");
-        require_text_marker(
-            "src/main_windows.c", windows, "lsm_summary_performance_view");
-        if (strstr(windows, "windows_day_palette") ||
-            strstr(windows, "windows_night_palette"))
-            report_error(
-                "src/main_windows.c: Common Day/Night palettes must not be mirrored locally");
-        if (strstr(windows, "CP_ACP"))
-            report_error(
-                "src/main_windows.c: invalid UTF-8 must not be silently reinterpreted as ACP");
-        if (strstr(windows, "#define LSM_WINDOWS_SCREEN_PADDING") ||
-            strstr(windows, "#define LSM_WINDOWS_CARD_RADIUS") ||
-            strstr(windows, "#define LSM_WINDOWS_CONTROL_SPACING"))
-            report_error(
-                "src/main_windows.c: shared design metrics must come from Common");
-        free(windows);
-    }
-    char *makefile = read_file("Makefile", &size);
-    (void)size;
-    if (makefile) {
-        require_text_marker("Makefile", makefile,
-                            "release:\n\t$(MAKE) deb\n\t$(MAKE) native-installer");
-        require_text_marker("Makefile", makefile,
-                            "common-library: common-check");
-        if (strstr(makefile, "INFILTRATR_COMMON_SOURCES"))
-            report_error("Makefile: Common private source membership must remain Common-owned");
-        free(makefile);
-    }
-
-    char *cmake = read_file("CMakeLists.txt", &size);
-    if (cmake) {
-        require_text_marker("CMakeLists.txt", cmake,
-                            "InfiltratrCommon::Common");
-        require_text_marker("CMakeLists.txt", cmake,
-                            "LSM_MISSING_SMOKE_SOURCES");
-        require_text_marker("CMakeLists.txt", cmake,
-                            "add_test(NAME ${test_target}");
-        require_text_marker("CMakeLists.txt", cmake,
-                            "add_subdirectory(\"${INFILTRATR_COMMON_DIR}\"");
-        if (strstr(cmake, "${INFILTRATR_COMMON_DIR}/src/"))
-            report_error("CMakeLists.txt: Common private source membership must remain Common-owned");
-        free(cmake);
-    }
-
-    char *doxyfile = read_file("support/Doxyfile", &size);
-    if (doxyfile) {
-        require_text_marker("support/Doxyfile", doxyfile,
-                            "INPUT                  = README.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
-        require_text_marker("support/Doxyfile", doxyfile,
-                            "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
-        require_text_marker("support/Doxyfile", doxyfile,
-                            "EXTRACT_LOCAL_CLASSES   = NO");
-        require_text_marker("support/Doxyfile", doxyfile,
-                            "ALIASES                += \"license=\\\\par License:\"");
-        if (strstr(doxyfile, "CLASS_DIAGRAMS"))
-            report_error("support/Doxyfile: obsolete CLASS_DIAGRAMS setting must not return");
-        free(doxyfile);
-    }
-
-    char *ci = read_file(".github/workflows/ci.yml", &size);
-    if (ci) {
-        require_text_marker(".github/workflows/ci.yml", ci, "make -j2 release");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "REQUIRE_I386=1 make check");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "cmake --build build-cmake --target system-monitor");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "gcc-multilib");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "support/source-groups/windows-product.txt");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "mapfile -t windows_sources");
-        require_text_marker(".github/workflows/ci.yml", ci,
-                            "$windowsSources = Get-Content 'support/source-groups/windows-product.txt'");
-        if (strstr(ci, "ctest --test-dir"))
-            report_error(
-                ".github/workflows/ci.yml: CTest must remain a targeted local "
-                "tool; CI executes the canonical Make suite once");
-        if (strstr(ci, "local-native:"))
-            report_error(
-                ".github/workflows/ci.yml: duplicate hosted native verification "
-                "job must not return");
-        free(ci);
-    }
-
-    char *release = read_file(".github/workflows/release.yml", &size);
-    if (release) {
-        require_text_marker(".github/workflows/release.yml", release,
-                            "actions/download-artifact@v4");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "name: system-monitor-release-assets");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "RELEASE_SOURCE_SHA");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "RELEASE_VERSION");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "RELEASE_SHA256SUMS.txt");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "github.event.workflow_run.head_sha");
-        require_text_marker(".github/workflows/release.yml", release,
-                            "published releases are immutable");
-        if (strstr(release, "actions/checkout@") ||
-            strstr(release, "make -j2 release") ||
-            strstr(release, "REQUIRE_I386=1 make check") ||
-            strstr(release, "ctest --test-dir"))
-            report_error(
-                ".github/workflows/release.yml: publication must consume the "
-                "sealed Verify bundle without a second checkout or rebuild");
-        free(release);
-    }
-
-}
-
-
-static void check_private_app_coupling(void)
-{
-    StringList allowed;
-    read_manifest("support/app-internal-allowlist.txt", "src", &allowed);
-
     std::error_code error;
     for (std::filesystem::directory_iterator iterator("src", error), end;
          !error && iterator != end; iterator.increment(error)) {
         if (!iterator->is_regular_file(error)) continue;
         const std::string name = iterator->path().filename().string();
-        if (!ends_with(name, ".c") && !ends_with(name, ".h")) continue;
-        if (name == "app_internal.h") continue;
-        size_t size = 0U;
-        char *contents = read_file(iterator->path().string().c_str(), &size);
-        (void)size;
-        if (!contents) continue;
-        if (strstr(contents, "#include \"app_internal.h\"") &&
-            !list_contains(&allowed, name.c_str()))
-            report_error("src/%s: direct app_internal.h access is not approved; use a narrow context bridge",
+        if (!ends_with(name, ".c") && !ends_with(name, ".cpp")) continue;
+        if (!list_contains(sources, name))
+            report_error("support/sources.txt: unlisted application source %s",
                          name.c_str());
-        free(contents);
     }
     if (error)
-        report_error("src: unable to audit private application coupling: %s",
-                     error.message().c_str());
-
-    size_t size = 0U;
-    char *windows = read_file("src/main_windows.c", &size);
-    (void)size;
-    if (windows) {
-        static const char *const forbidden[] = {
-            "typedef struct {\n    COLORREF background",
-            "static bool resolve_theme(",
-            "static DWORD WINAPI process_worker_main(",
-            "static bool start_process_worker(",
-            "state->process_lock",
-            "state->process_event",
-            "state->process_thread"
-        };
-        for (size_t index = 0U;
-             index < sizeof(forbidden) / sizeof(forbidden[0]); index++)
-            if (strstr(windows, forbidden[index]))
-                report_error("src/main_windows.c: extracted Windows owner leaked back into shell: %s",
-                             forbidden[index]);
-        free(windows);
-    }
+        report_error("src: unable to enumerate: %s", error.message().c_str());
 }
 
-static void check_source_group_manifests(const StringList *sources)
+static void check_source_group_manifests(const StringList &sources)
 {
     static const char *const manifests[] = {
         "support/source-groups/hardware-monitor-linux.txt",
@@ -1122,30 +480,287 @@ static void check_source_group_manifests(const StringList *sources)
         "support/source-groups/process-linux.txt",
         "support/source-groups/windows-product.txt"
     };
-    for (size_t manifest = 0U;
-         manifest < sizeof(manifests) / sizeof(manifests[0]); manifest++) {
-        StringList group;
-        read_manifest(manifests[manifest], "src", &group);
+    for (const char *manifest : manifests) {
+        const StringList group = read_manifest(manifest, "src");
         for (const std::string &entry : group)
-            if (!list_contains(sources, entry.c_str()))
+            if (!list_contains(sources, entry))
                 report_error("%s: %s is not registered in support/sources.txt",
-                             manifests[manifest], entry.c_str());
+                             manifest, entry.c_str());
+    }
+}
+
+static void check_private_app_coupling(void)
+{
+    const StringList allowed =
+        read_manifest("support/app-internal-allowlist.txt", "src");
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator("src", error), end;
+         !error && iterator != end; iterator.increment(error)) {
+        if (!iterator->is_regular_file(error)) continue;
+        const std::string name = iterator->path().filename().string();
+        if ((!ends_with(name, ".c") && !ends_with(name, ".h")) ||
+            name == "app_internal.h")
+            continue;
+        std::string text;
+        if (!read_text(iterator->path(), &text)) continue;
+        if (text.find("#include \"app_internal.h\"") != std::string::npos &&
+            !list_contains(allowed, name))
+            report_error("src/%s: direct app_internal.h access is not approved; use a narrow context bridge",
+                         name.c_str());
+    }
+    if (error)
+        report_error("src: unable to audit private application coupling: %s",
+                     error.message().c_str());
+}
+
+static bool maintained_markdown_path(const std::string &path)
+{
+    static const char *const maintained[] = {
+        "./README.md", "./CHANGELOG.md", "./CONTRIBUTING.md", "./SECURITY.md",
+        "./docs/ARCHITECTURE.md", "./docs/VALIDATION.md", "./docs/HARDWARE.md",
+        "./.github/CODE_OF_CONDUCT.md"
+    };
+    for (const char *candidate : maintained)
+        if (path == candidate) return true;
+    return false;
+}
+
+static void check_markdown_tree(void)
+{
+    std::error_code error;
+    std::filesystem::recursive_directory_iterator iterator(
+        ".", std::filesystem::directory_options::skip_permission_denied, error);
+    const std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::string name = iterator->path().filename().string();
+        std::string path = iterator->path().generic_string();
+        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
+        if (iterator->is_directory(error) &&
+            (name == ".git" || name == "build" || name.rfind("build-", 0U) == 0U ||
+             path == "./src/infiltratr-common")) {
+            iterator.disable_recursion_pending();
+        } else if (iterator->is_regular_file(error) && ends_with(name, ".md") &&
+                   !maintained_markdown_path(path)) {
+            report_error("%s: unapproved maintained Markdown file", path.c_str());
+        }
+        iterator.increment(error);
+    }
+    if (error)
+        report_error("repository: unable to audit Markdown layout: %s",
+                     error.message().c_str());
+}
+
+static void check_repository_layout(void)
+{
+    static const char *const retired_root_entries[] = {
+        ".clang-format", ".editorconfig", "Doxyfile", "NATIVE_INSTALLER_EDITION",
+        "VERSION", "data", "icons", "install.sh", "packaging", "shared",
+        "sources.txt", "tests", "tools"
+    };
+    for (const char *entry : retired_root_entries)
+        if (regular_file(entry) || directory_path(entry))
+            report_error("%s: internal project material must remain under src/ or support/",
+                         entry);
+
+    static const char *const required_docs[] = {
+        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
+        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
+        ".github/CODE_OF_CONDUCT.md", "support/Doxyfile", "LICENSE",
+        "support/packaging/copyright"
+    };
+    for (const char *path : required_docs)
+        if (!regular_file(path)) report_error("%s: required project file is missing", path);
+
+    check_markdown_tree();
+}
+
+static void check_licensing_contract(void)
+{
+    for (const char *path : {
+             ".gitmodules", "CMakeLists.txt", "Makefile", "support/Doxyfile",
+             "src/.clang-format", "support/sources.txt",
+             ".github/workflows/ci.yml", ".github/workflows/release.yml",
+             ".github/workflows/thread-sanitizer.yml",
+             "support/windows/build-release.ps1"})
+        require_prefix(path, LSM_SPDX_HASH);
+
+    for (const char *path : {
+             "README.md", "CONTRIBUTING.md", "SECURITY.md",
+             "docs/ARCHITECTURE.md", "docs/HARDWARE.md",
+             ".github/CODE_OF_CONDUCT.md"})
+        require_prefix(path, LSM_SPDX_MARKDOWN);
+
+    require_prefix("support/installer/bootstrap.sh",
+                   "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n");
+
+    for (const char *path : {
+             "LICENSE", "src/infiltratr-common/LICENSE",
+             "support/resources/icons/system-monitor.png.license",
+             "support/resources/fonts/mb-corpo-fonts.tar.xz",
+             "support/packaging/copyright"})
+        if (!regular_file(path)) report_error("%s: required licensing asset is missing", path);
+
+    std::string license;
+    if (read_text("LICENSE", &license)) {
+        require_marker("LICENSE", license, "GNU GENERAL PUBLIC LICENSE");
+        require_marker("LICENSE", license, "Version 3, 29 June 2007");
+    }
+    std::string copyright;
+    if (read_text("support/packaging/copyright", &copyright))
+        require_marker("support/packaging/copyright", copyright, "License: GPL-3+");
+}
+
+static void check_shell_boundary(void)
+{
+    const char *bootstrap_path = "support/installer/bootstrap.sh";
+    std::string bootstrap;
+    if (!read_text(bootstrap_path, &bootstrap)) {
+        report_error("%s: unable to read", bootstrap_path);
+        return;
+    }
+    if (bootstrap.size() > 4096U)
+        report_error("%s: bootstrap exceeds the 4096-byte shell boundary",
+                     bootstrap_path);
+    require_marker(bootstrap_path, bootstrap, "support/tools/native_installer.c");
+    require_marker(bootstrap_path, bootstrap, "exec \"$builder\"");
+
+    std::error_code error;
+    std::filesystem::recursive_directory_iterator iterator(
+        ".", std::filesystem::directory_options::skip_permission_denied, error);
+    const std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::string name = iterator->path().filename().string();
+        std::string path = iterator->path().generic_string();
+        if (path.rfind("./", 0U) != 0U) path.insert(0U, "./");
+        if (iterator->is_directory(error) &&
+            (name == ".git" || name == "build" || name.rfind("build-", 0U) == 0U ||
+             path == "./src/infiltratr-common")) {
+            iterator.disable_recursion_pending();
+        } else if (iterator->is_regular_file(error) && ends_with(path, ".sh") &&
+                   path != "./support/installer/bootstrap.sh") {
+            report_error("%s: unexpected shell source; reusable project logic must remain native",
+                         path.c_str());
+        }
+        iterator.increment(error);
+    }
+    if (error)
+        report_error("repository: unable to audit shell boundary: %s",
+                     error.message().c_str());
+}
+
+static void check_build_and_release_contracts(void)
+{
+    std::string makefile;
+    if (read_text("Makefile", &makefile)) {
+        require_marker("Makefile", makefile, "common-library: common-check");
+        require_marker("Makefile", makefile, "release:");
+        require_marker("Makefile", makefile, "$(MAKE) deb");
+        require_marker("Makefile", makefile, "$(MAKE) native-installer");
+        forbid_marker("Makefile", makefile, "INFILTRATR_COMMON_SOURCES",
+                      "Common private source membership must remain Common-owned");
+    }
+
+    std::string cmake;
+    if (read_text("CMakeLists.txt", &cmake)) {
+        require_marker("CMakeLists.txt", cmake, "HEAD:src/infiltratr-common");
+        require_marker("CMakeLists.txt", cmake, "add_executable(system-monitor");
+        require_marker("CMakeLists.txt", cmake, "InfiltratrCommon::Common");
+        require_marker("CMakeLists.txt", cmake,
+                       "add_subdirectory(\"${INFILTRATR_COMMON_DIR}\"");
+        forbid_marker("CMakeLists.txt", cmake, "support/tests/",
+                      "CMake must not duplicate the canonical Make regression graph");
+        forbid_marker("CMakeLists.txt", cmake, "add_test(",
+                      "CMake must not maintain a second regression-test registry");
+        forbid_marker("CMakeLists.txt", cmake, "LSM_DEVELOPER_SMOKE_TARGETS",
+                      "retired duplicate CMake smoke graph returned");
+        forbid_marker("CMakeLists.txt", cmake, "${INFILTRATR_COMMON_DIR}/src/",
+                      "Common private source membership must remain Common-owned");
+    }
+
+    std::string ci;
+    if (read_text(".github/workflows/ci.yml", &ci)) {
+        require_marker(".github/workflows/ci.yml", ci, "REQUIRE_I386=1 make check");
+        require_marker(".github/workflows/ci.yml", ci, "make -j2 release");
+        require_marker(".github/workflows/ci.yml", ci,
+                       "cmake --build build-cmake --target system-monitor");
+        require_marker(".github/workflows/ci.yml", ci,
+                       "support/windows/build-release.ps1");
+        forbid_marker(".github/workflows/ci.yml", ci, "gcc-multilib",
+                      "retired CI implementation marker returned");
+        forbid_marker(".github/workflows/ci.yml", ci, "mapfile -t windows_sources",
+                      "Windows build implementation leaked back into workflow YAML");
+        forbid_marker(".github/workflows/ci.yml", ci,
+                      "Get-Content 'support/source-groups/windows-product.txt'",
+                      "Windows source membership must be owned by build-release.ps1");
+        forbid_marker(".github/workflows/ci.yml", ci, "ctest --test-dir",
+                      "CI must execute the canonical Make regression suite once");
+    }
+
+    std::string windows;
+    if (read_text("support/windows/build-release.ps1", &windows)) {
+        require_marker("support/windows/build-release.ps1", windows,
+                       "support/source-groups/windows-product.txt");
+        require_marker("support/windows/build-release.ps1", windows,
+                       "support/windows/prepare-typography.ps1");
+        require_marker("support/windows/build-release.ps1", windows,
+                       "infiltratr-common-portable");
+        require_marker("support/windows/build-release.ps1", windows,
+                       "support/tools/windows_backend_probe.c");
+        require_marker("support/windows/build-release.ps1", windows,
+                       "system-monitor-$version-windows.exe");
+    }
+
+    std::string release;
+    if (read_text(".github/workflows/release.yml", &release)) {
+        for (const char *marker : {
+                 "actions/download-artifact@v4", "system-monitor-release-assets",
+                 "RELEASE_SOURCE_SHA", "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt",
+                 "github.event.workflow_run.head_sha", "published releases are immutable"})
+            require_marker(".github/workflows/release.yml", release, marker);
+        for (const char *marker : {"actions/checkout@", "make -j2 release",
+                                   "REQUIRE_I386=1 make check", "ctest --test-dir"})
+            forbid_marker(".github/workflows/release.yml", release, marker,
+                          "publication must consume the sealed Verify bundle without rebuilding");
+    }
+}
+
+static void check_documentation_contract(void)
+{
+    std::string readme;
+    if (read_text("README.md", &readme)) {
+        check_unit_label_policy("README.md", readme);
+        for (const char *marker : {
+                 "## Clean-sheet provenance", "## Capabilities", "## Build and test",
+                 "src/infiltratr-common", "## Release assets",
+                 "## Technical documentation", "docs/ARCHITECTURE.md",
+                 "docs/HARDWARE.md", "docs/VALIDATION.md", "CONTRIBUTING.md",
+                 "SECURITY.md", "## Licence and provenance", "GPL-3.0-or-later"})
+            require_marker("README.md", readme, marker);
+    }
+
+    std::string doxyfile;
+    if (read_text("support/Doxyfile", &doxyfile)) {
+        require_marker("support/Doxyfile", doxyfile,
+                       "INPUT                  = README.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
+        require_marker("support/Doxyfile", doxyfile,
+                       "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
+        require_marker("support/Doxyfile", doxyfile, "EXTRACT_LOCAL_CLASSES   = NO");
+        forbid_marker("support/Doxyfile", doxyfile, "CLASS_DIAGRAMS",
+                      "obsolete Doxygen CLASS_DIAGRAMS setting must not return");
     }
 }
 
 int main(void)
 {
-    StringList sources;
-    read_manifest("support/sources.txt", "src", &sources);
-    check_source_manifest(&sources);
-    check_source_group_manifests(&sources);
+    const StringList sources = read_manifest("support/sources.txt", "src");
+    check_source_manifest(sources);
+    check_source_group_manifests(sources);
     check_private_app_coupling();
-    check_root_layout();
-    check_markdown_policy();
-    check_engineering_documentation();
+    check_repository_layout();
     check_licensing_contract();
     check_shell_boundary();
-    check_shared_release_contract();
+    check_build_and_release_contracts();
+    check_documentation_contract();
     scan_source_tree("src");
     scan_source_tree("support/tests");
     scan_source_tree("support/tools");

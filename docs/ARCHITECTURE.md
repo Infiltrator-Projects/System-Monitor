@@ -28,7 +28,13 @@ Renderers own widgets, drawing, events and accessibility. Shared labels, units a
 
 Private application storage remains owned by the composition root. Coordinators that do not own that storage consume narrow views through dedicated runtime, process and presentation context bridges rather than including the complete `LsmApp` layout. Top-level page activation, keyboard commands, window-manager mechanics and theme projection have separate presentation owners so a change in one policy does not require the others to know its private state.
 
-Coupling boundaries are mechanically enforced. `support/app-internal-allowlist.txt` is the closed set of implementation files permitted to include `app_internal.h`; new coordinators must use a narrow context bridge. Native Windows theme projection and process-worker lifetime are separate owners from the Win32 shell. Shared source groups under `support/source-groups/` are consumed by Make, CMake and CI so test and cross-build membership has one authority instead of parallel hand-maintained lists.
+Coupling boundaries are mechanically enforced. `support/app-internal-allowlist.txt` is the closed set of implementation files permitted to include `app_internal.h`; new coordinators must use a narrow context bridge. Native Windows theme projection and process-worker lifetime are separate owners from the Win32 shell. Shared source groups under `support/source-groups/` define source membership where multiple build contexts genuinely need the same subset rather than maintaining parallel source lists.
+
+## Build ownership
+
+The build system deliberately has one authority per concern. Make owns the regression, static-analysis, packaging and release-quality graph through `make check` and the release targets. CMake owns the Linux application build used by development and GTK runtime qualification; it does not duplicate Make's smoke-test registry. The native Windows release recipe lives in `support/windows/build-release.ps1`, while GitHub Actions only orchestrates that recipe and transports its qualified artifact.
+
+`src/infiltratr-common` is a Git submodule. In a Git checkout, CMake validates the checked-out Common revision against the parent repository gitlink instead of maintaining an independent application-build pin. Release source archives carry the exact Common tree they were built with.
 
 ## Runtime contracts
 
@@ -54,6 +60,6 @@ Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or 
 
 ## Common
 
-`src/infiltratr-common` is pinned to an exact Infiltrator Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
+`src/infiltratr-common` is pinned by the parent repository gitlink to an exact Infiltratr Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
 
 Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../SECURITY.md).

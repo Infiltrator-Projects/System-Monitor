@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.187 - 2026-10-13
+
+- Remove the unused duplicate CMake smoke-test and developer-tool graph so `make check` is the single regression and quality-test authority while CMake owns only the Linux application build.
+- Move native Windows release compilation and qualification out of workflow YAML into `support/windows/build-release.ps1`, centralising compiler warnings, link libraries, Common construction, source membership and backend probes.
+- Replace brittle source-audit checks for obsolete CI spelling with semantic build and release ownership checks, eliminating legacy marker comments that existed only to satisfy the checker.
+- Make CMake verify Infiltratr Common against the parent repository gitlink instead of using its own pin for application-build correctness, preventing a stale configured submodule from being accepted.
+
 ## 1.0.186 - 2026-10-13
 
 - Add explicit regression coverage for the Overview page-scroll preference boundary so the tab-count-derived parser remains protected at the current highest tab index.
