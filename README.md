@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Current source version:** 1.0.183 ([version file](support/VERSION))
+**Current source version:** 1.0.184 ([version file](support/VERSION))
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -35,7 +35,7 @@ Run `make check` for the authoritative verification suite. Installation is owned
 
 ## Releases
 
-Development stays on `main`. System Monitor 1.0.183 is the current tested release baseline. Releases are produced from the exact tested commit; `support/VERSION` is the release-intent source of truth, and published tags and assets are immutable.
+Development stays on `main`. System Monitor 1.0.184 is the current tested release baseline. Releases are produced from the exact tested commit; `support/VERSION` is the release-intent source of truth, and published tags and assets are immutable.
 
 ## Release assets
 

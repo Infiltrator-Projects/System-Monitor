@@ -1040,26 +1040,29 @@ static void check_shared_release_contract(void)
     char *release = read_file(".github/workflows/release.yml", &size);
     if (release) {
         require_text_marker(".github/workflows/release.yml", release,
-                            "infiltrator-system-monitor_${version}_amd64.deb");
+                            "actions/download-artifact@v4");
         require_text_marker(".github/workflows/release.yml", release,
-                            "infiltrator-system-monitor-${version}-native-installer.run");
-        if (strstr(release, "System-Monitor-${version}-source.zip"))
-            report_error(
-                ".github/workflows/release.yml: releases must upload only "
-                "the .deb, .run and .exe artifacts");
+                            "name: system-monitor-release-assets");
         require_text_marker(".github/workflows/release.yml", release,
-                            "test \"$head_commit\" = \"$EXPECTED_SHA\"");
+                            "RELEASE_SOURCE_SHA");
         require_text_marker(".github/workflows/release.yml", release,
-                            "make -j2 release");
+                            "RELEASE_VERSION");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "RELEASE_SHA256SUMS.txt");
+        require_text_marker(".github/workflows/release.yml", release,
+                            "github.event.workflow_run.head_sha");
         require_text_marker(".github/workflows/release.yml", release,
                             "published releases are immutable");
-        if (strstr(release, "REQUIRE_I386=1 make check") ||
+        if (strstr(release, "actions/checkout@") ||
+            strstr(release, "make -j2 release") ||
+            strstr(release, "REQUIRE_I386=1 make check") ||
             strstr(release, "ctest --test-dir"))
             report_error(
-                ".github/workflows/release.yml: publication must trust the "
-                "exact successful Verify SHA instead of replaying the full suite");
+                ".github/workflows/release.yml: publication must consume the "
+                "sealed Verify bundle without a second checkout or rebuild");
         free(release);
     }
+
 }
 
 
