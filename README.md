@@ -35,7 +35,7 @@ Run `make check` for the authoritative verification suite. Installation is owned
 
 ## Releases
 
-Development stays on `main`. Releases are produced from the exact tested commit; published tags and assets are immutable.
+Development stays on `main`. System Monitor 1.0.178 is the current tested release baseline. Releases are produced from the exact tested commit; published tags and assets are immutable.
 
 ## Release assets
 
