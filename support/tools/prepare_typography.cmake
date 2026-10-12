@@ -12,11 +12,25 @@ if(NOT LSM_FONT_ARCHIVE_HASH STREQUAL INFILTRATR_MB_CORPO_ARCHIVE_SHA256)
 endif()
 file(MAKE_DIRECTORY "${LSM_FONT_OUTPUT_DIR}")
 file(ARCHIVE_EXTRACT INPUT "${LSM_FONT_ARCHIVE}" DESTINATION "${LSM_FONT_OUTPUT_DIR}")
+
+if(LSM_FONT_CREATE_ROLE_ALIASES)
+    set(LSM_FONT_ROLE_ALIAS_BRAND_REGULAR "brand_regular.ttf")
+    set(LSM_FONT_ROLE_ALIAS_UI_REGULAR "ui_regular.ttf")
+    set(LSM_FONT_ROLE_ALIAS_UI_BOLD "ui_bold.ttf")
+endif()
+
 foreach(LSM_FONT_ROLE BRAND_REGULAR UI_REGULAR UI_BOLD)
     set(LSM_FONT_FILE "${INFILTRATR_MB_CORPO_${LSM_FONT_ROLE}_FILE}")
     file(SHA256 "${LSM_FONT_OUTPUT_DIR}/${LSM_FONT_FILE}" LSM_FONT_HASH)
     if(NOT LSM_FONT_HASH STREQUAL INFILTRATR_MB_CORPO_${LSM_FONT_ROLE}_SHA256)
         message(FATAL_ERROR "Bundled ${LSM_FONT_FILE} does not match Common's canonical SHA-256")
+    endif()
+    if(LSM_FONT_CREATE_ROLE_ALIASES)
+        set(LSM_FONT_ALIAS "${LSM_FONT_ROLE_ALIAS_${LSM_FONT_ROLE}}")
+        configure_file(
+            "${LSM_FONT_OUTPUT_DIR}/${LSM_FONT_FILE}"
+            "${LSM_FONT_OUTPUT_DIR}/${LSM_FONT_ALIAS}"
+            COPYONLY)
     endif()
 endforeach()
 message(STATUS "Verified all three locally bundled MB Corpo faces")

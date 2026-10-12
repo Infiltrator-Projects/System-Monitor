@@ -89,6 +89,20 @@ static gboolean valid_stack_name(const char *value)
     return TRUE;
 }
 
+static gboolean preference_page_scroll_index(const char *key,
+                                             size_t *index_out)
+{
+    static const char prefix[] = "page_scroll_";
+    int64_t parsed = 0;
+    if (!key || !index_out || !lsm_string_starts_with(key, prefix) ||
+        !infiltratr_parse_i64_range(
+            key + sizeof(prefix) - 1U, 10U, 0,
+            (int64_t)LSM_TAB_COUNT - 1, &parsed))
+        return FALSE;
+    *index_out = (size_t)parsed;
+    return TRUE;
+}
+
 void lsm_preferences_load(LsmApp *app)
 {
     if (!app || !app->paths.preferences_path[0]) return;
@@ -108,6 +122,7 @@ void lsm_preferences_load(LsmApp *app)
          line = strtok_r(NULL, "\n", &save)) {
         char *key = NULL;
         char *value = NULL;
+        size_t page_scroll_index = 0U;
         if (infiltratr_config_parse_line(line, &key, &value) !=
             INFILTRATR_CONFIG_LINE_ENTRY)
             continue;
@@ -184,14 +199,10 @@ void lsm_preferences_load(LsmApp *app)
                  valid_stack_name(value))
             lsm_copy_string(app->runtime.selected_performance_page, sizeof(app->runtime.selected_performance_page),
                             value);
-        else if (lsm_string_starts_with(key, "page_scroll_") &&
-                 key[12] >= '0' && key[12] <= '7' && key[13] == '\0') {
-            const size_t index = (size_t)(key[12] - '0');
-            if (index < LSM_TAB_COUNT)
-                app->runtime.page_scroll[index] = validated_double(
-                    value, 0.0, 1000000000.0,
-                    app->runtime.page_scroll[index]);
-        }
+        else if (preference_page_scroll_index(key, &page_scroll_index))
+            app->runtime.page_scroll[page_scroll_index] = validated_double(
+                value, 0.0, 1000000000.0,
+                app->runtime.page_scroll[page_scroll_index]);
     }
     free(content);
 }

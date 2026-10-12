@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.185 - 2026-10-13
+
+- Make persisted page-scroll parsing use a numeric tab index bounded by the actual tab count rather than a fixed single-digit range.
+- Reuse the canonical bundled-font verifier for Windows instead of downloading and independently parsing the font metadata during the Windows build.
+- Generate Windows font role aliases from the already verified canonical font assets so there is only one font-selection authority.
+
 ## 1.0.184 - 2026-10-13
 
 - Make Publish release consume the sealed Verify bundle as its release contract without a second source checkout or product rebuild.
