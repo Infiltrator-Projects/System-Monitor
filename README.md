@@ -43,6 +43,7 @@ A published release contains the tested installable package and native installer
 
 ## Technical documentation
 
+- [Engineering philosophy](PHILOSOPHY.md) — governing engineering and documentation standard.
 - [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
 - [Hardware collection](docs/HARDWARE.md) — hardware rules, units and provenance.
 - [Validation](docs/VALIDATION.md) — compact verification entry point.
