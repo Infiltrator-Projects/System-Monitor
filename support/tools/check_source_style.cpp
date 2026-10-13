@@ -580,7 +580,6 @@ static void check_licensing_contract(void)
              ".gitmodules", "CMakeLists.txt", "Makefile", "support/Doxyfile",
              "src/.clang-format", "support/sources.txt",
              ".github/workflows/ci.yml", ".github/workflows/release.yml",
-             ".github/workflows/thread-sanitizer.yml",
              "support/windows/build-release.ps1"})
         require_prefix(path, LSM_SPDX_HASH);
 
