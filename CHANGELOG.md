@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.192 - 2026-10-13
+
+- Remove the obsolete, unwired Win32 process-worker implementation and its duplicate public contract now that `windows_process_runtime.c` owns the live Windows process-worker lifecycle.
+- Make canonical Verify run on a clean Ubuntu 24.04 host with declared dependencies instead of depending on persistent self-hosted runner state.
+- Restore release-history continuity by documenting the previously published 1.0.191 workflow-hardening release.
+
+## 1.0.191 - 2026-10-13
+
+- Move pinned GitHub artifact upload/download actions to their Node 24-compatible major versions while preserving the sealed single-producer release path.
+- Make the release-ownership audit semantic with respect to pinned artifact-action revisions instead of coupling validation to one version spelling.
+
 ## 1.0.190 - 2026-10-13
 
 - Remove obsolete include-order-dependent page-registry macro aliases now that the composition root calls the registry explicitly.
