@@ -1,4 +1,12 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Changelog
+
+## 1.0.194 - 2026-10-13
+
+- Integrate the governing engineering philosophy into the maintained-document, generated-reference and licensing contracts instead of leaving it outside repository validation.
+- Make the source-style audit keep one maintained-Markdown inventory for approval, required-file and SPDX checks, removing duplicated document-policy lists that could drift independently.
+- Remove duplicate `LSM_NAME_LEN` and `LSM_PATH_LEN` ownership from `monitor_types.h`; the lower platform-neutral process model now owns the shared model buffer capacities consumed by the monitor model.
 
 ## 1.0.193 - 2026-10-13
 
