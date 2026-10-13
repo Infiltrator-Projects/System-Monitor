@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     name: Verify source
-    runs-on: [self-hosted, Linux, X64, linux-native, bigbedroom]
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     env:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
+          for command_name in clang cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
             command -v "$command_name" >/dev/null 2>&1 || {
               echo "Self-hosted runner is missing $command_name." >&2
               exit 1
@@ -160,8 +160,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Keep the race-check build isolated from the release build so
-          # sanitizer instrumentation can never leak into shipped artifacts.
           export TSAN_OPTIONS='halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1'
           make BUILD_DIR=build-tsan ENABLE_LTO=0 CFLAGS='-O1 -g' \
             CC='gcc -fsanitize=thread -fno-omit-frame-pointer' \
@@ -258,6 +256,7 @@ jobs:
 
   windows-release:
     name: Build and qualify exact Windows release artifact
+    needs: test
     runs-on: windows-2025
     timeout-minutes: 12
     steps:
