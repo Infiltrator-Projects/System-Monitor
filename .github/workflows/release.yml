@@ -65,43 +65,36 @@ jobs:
             sha256sum -c RELEASE_SHA256SUMS.txt
           )
 
-          mapfile -t assets < <(
+          mapfile -t sealed_assets < <(
             awk 'NF == 2 { name=$2; sub(/^\*/, "", name); print name }' \
-              release/RELEASE_SHA256SUMS.txt
+              release/RELEASE_SHA256SUMS.txt | sort
           )
-          test "${#assets[@]}" -eq 3
-          test "$(printf '%s\n' "${assets[@]}" | sort -u | wc -l)" -eq 3
+          expected_deb="infiltrator-system-monitor_${version}_amd64.deb"
+          expected_installer="infiltrator-system-monitor-${version}-native-installer.run"
+          expected_windows="system-monitor-${version}-windows.exe"
+          mapfile -t expected_assets < <(
+            printf '%s\n' "$expected_deb" "$expected_installer" "$expected_windows" | sort
+          )
+          test "${#sealed_assets[@]}" -eq 3
+          test "$(printf '%s\n' "${sealed_assets[@]}" | sort -u | wc -l)" -eq 3
+          if [[ "$(printf '%s\n' "${sealed_assets[@]}")" != \
+                "$(printf '%s\n' "${expected_assets[@]}")" ]]; then
+            printf 'Sealed release asset identity does not match version %s.\n' "$version" >&2
+            printf 'Expected:\n%s\nSealed:\n%s\n' \
+              "$(printf '  %s\n' "${expected_assets[@]}")" \
+              "$(printf '  %s\n' "${sealed_assets[@]}")" >&2
+            exit 1
+          fi
 
-          deb=
-          installer=
-          windows_app=
+          deb="$expected_deb"
+          installer="$expected_installer"
+          windows_app="$expected_windows"
           asset_paths=()
-          for asset in "${assets[@]}"; do
+          for asset in "${expected_assets[@]}"; do
             [[ "$asset" != */* ]]
             test -f "release/$asset"
             asset_paths+=("release/$asset")
-            case "$asset" in
-              *.deb)
-                test -z "$deb"
-                deb="$asset"
-                ;;
-              *.run)
-                test -z "$installer"
-                installer="$asset"
-                ;;
-              *.exe)
-                test -z "$windows_app"
-                windows_app="$asset"
-                ;;
-              *)
-                printf 'Unexpected sealed release asset: %s\n' "$asset" >&2
-                exit 1
-                ;;
-            esac
           done
-          test -n "$deb"
-          test -n "$installer"
-          test -n "$windows_app"
           test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           chmod +x "release/$installer"
@@ -132,11 +125,11 @@ jobs:
             tag_exists=true
           fi
 
-          expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
+          expected_remote_assets=$(printf '%s\n' "${expected_assets[@]}")
           verify_release_bytes() {
             local remote_assets tmp asset
             remote_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
-            if [[ "$remote_assets" != "$expected_assets" ]]; then
+            if [[ "$remote_assets" != "$expected_remote_assets" ]]; then
               printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
               return 1
             fi
@@ -146,7 +139,7 @@ jobs:
               rm -rf "$tmp"
               return 1
             fi
-            for asset in "${assets[@]}"; do
+            for asset in "${expected_assets[@]}"; do
               if ! cmp -s "release/$asset" "$tmp/$asset"; then
                 printf 'Remote asset %s differs from the qualified artifact.\n' "$asset" >&2
                 rm -rf "$tmp"
