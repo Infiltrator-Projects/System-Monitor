@@ -21,9 +21,9 @@ concurrency:
 # source checkout. Superseded verified runs and already-published versions are
 # successful no-ops rather than spurious release failures. New releases are
 # staged as drafts, byte-verified remotely, and only then published; an
-# interrupted draft remains mutable recovery state rather than a broken
-# immutable release. Central APT publication remains independently owned by
-# Infiltrator-Repository.
+# interrupted draft remains mutable recovery state whose expected assets can
+# be deterministically restored from the same sealed bundle. Central APT
+# publication remains independently owned by Infiltrator-Repository.
 
 jobs:
   publish:
@@ -116,26 +116,21 @@ jobs:
 
           tag_exists=false
           tag_sha=
-          refresh_tag_identity() {
-            tag_exists=false
-            tag_sha=
-            if tag_identity=$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" \
-                --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null); then
-              read -r tag_type tag_sha <<<"$tag_identity"
-              if [[ "$tag_type" != "commit" ]]; then
-                printf 'Release tag %s is not a lightweight commit tag; refusing to reinterpret it.\n' \
-                  "$tag" >&2
-                exit 1
-              fi
-              if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
-                printf 'Version %s is already tagged at %s; verified main %s has no new release intent.\n' \
-                  "$version" "$tag_sha" "$SOURCE_SHA"
-                exit 0
-              fi
-              tag_exists=true
+          if tag_identity=$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" \
+              --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null); then
+            read -r tag_type tag_sha <<<"$tag_identity"
+            if [[ "$tag_type" != "commit" ]]; then
+              printf 'Release tag %s is not a lightweight commit tag; refusing to reinterpret it.\n' \
+                "$tag" >&2
+              exit 1
             fi
-          }
-          refresh_tag_identity
+            if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
+              printf 'Version %s is already tagged at %s; verified main %s has no new release intent.\n' \
+                "$version" "$tag_sha" "$SOURCE_SHA"
+              exit 0
+            fi
+            tag_exists=true
+          fi
 
           expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
           verify_release_bytes() {
@@ -161,13 +156,23 @@ jobs:
             rm -rf "$tmp"
           }
 
+          draft_exists=false
           if gh release view "$tag" >/dev/null 2>&1; then
             is_draft=$(gh release view "$tag" --json isDraft --jq '.isDraft')
             if [[ "$is_draft" == "true" ]]; then
-              printf 'Discarding interrupted mutable draft %s before deterministic recovery.\n' \
+              draft_exists=true
+              if [[ "$tag_exists" != "true" ]]; then
+                draft_target=$(gh release view "$tag" --json targetCommitish \
+                  --jq '.targetCommitish')
+                if [[ "$draft_target" != "$SOURCE_SHA" ]]; then
+                  printf 'Draft %s targets %s instead of qualified source %s.\n' \
+                    "$tag" "$draft_target" "$SOURCE_SHA" >&2
+                  exit 1
+                fi
+              fi
+              printf 'Restoring interrupted mutable draft %s from sealed qualified assets.\n' \
                 "$tag"
-              gh release delete "$tag" --yes
-              refresh_tag_identity
+              gh release upload "$tag" "${asset_paths[@]}" --clobber
             else
               verify_release_bytes
               echo "Exact immutable release $tag already exists; verified qualified bytes."
@@ -175,18 +180,20 @@ jobs:
             fi
           fi
 
-          if [[ "$tag_exists" == "true" ]]; then
-            gh release create "$tag" "${asset_paths[@]}" \
-              --verify-tag \
-              --draft \
-              --title "System Monitor $version" \
-              --notes "Verified System Monitor ${version} release."
-          else
-            gh release create "$tag" "${asset_paths[@]}" \
-              --target "$SOURCE_SHA" \
-              --draft \
-              --title "System Monitor $version" \
-              --notes "Verified System Monitor ${version} release."
+          if [[ "$draft_exists" != "true" ]]; then
+            if [[ "$tag_exists" == "true" ]]; then
+              gh release create "$tag" "${asset_paths[@]}" \
+                --verify-tag \
+                --draft \
+                --title "System Monitor $version" \
+                --notes "Verified System Monitor ${version} release."
+            else
+              gh release create "$tag" "${asset_paths[@]}" \
+                --target "$SOURCE_SHA" \
+                --draft \
+                --title "System Monitor $version" \
+                --notes "Verified System Monitor ${version} release."
+            fi
           fi
 
           # A draft is intentionally mutable recovery state. Prove the remote
