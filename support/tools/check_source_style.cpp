@@ -712,7 +712,7 @@ static void check_build_and_release_contracts(void)
     std::string release;
     if (read_text(".github/workflows/release.yml", &release)) {
         for (const char *marker : {
-                 "actions/download-artifact@v4", "system-monitor-release-assets",
+                 "uses: actions/download-artifact@", "system-monitor-release-assets",
                  "RELEASE_SOURCE_SHA", "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt",
                  "github.event.workflow_run.head_sha", "published releases are immutable"})
             require_marker(".github/workflows/release.yml", release, marker);
