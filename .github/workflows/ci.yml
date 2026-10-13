@@ -156,6 +156,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake doxygen git libgtk-3-dev pkg-config xauth xvfb
 
+      - name: Race-check asynchronous process worker ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep the race-check build isolated from the release build so
+          # sanitizer instrumentation can never leak into shipped artifacts.
+          export TSAN_OPTIONS='halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1'
+          make BUILD_DIR=build-tsan ENABLE_LTO=0 CFLAGS='-O1 -g' \
+            CC='gcc -fsanitize=thread -fno-omit-frame-pointer' \
+            async-workers-smoke
+
       - name: Build release artifacts once
         run: make -j2 release
 
