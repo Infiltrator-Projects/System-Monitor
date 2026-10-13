@@ -8,4 +8,6 @@ The source/repository audit protects architectural ownership as well as formatti
 
 Compilation, deterministic tests, sanitizers, portability checks, runtime GTK smoke tests and physical-device evidence cover different contracts and are not interchangeable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
 
-Published releases identify the exact tested revision and remain immutable.
+Published releases identify the exact tested revision and remain immutable. Publish consumes only the sealed Verify bundle; after first publication and on idempotent reruns it downloads the remote release and byte-compares every published binary with that qualified bundle before the workflow can succeed.
+
+Generated build trees, package outputs and qualification scratch state are local workspace state rather than repository material. The Windows release recipe keeps intermediate files under `build/`, emits the qualified executable directly under its versioned release name and removes its startup-smoke marker after qualification; the root `.gitignore` is a narrow final guard against accidentally staging supported build outputs.

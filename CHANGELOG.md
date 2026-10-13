@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.196 - 2026-10-13
+
+- Make first publication prove its own postcondition: Publish now downloads the newly created GitHub release and byte-compares all three remote assets with the sealed Verify bundle in the same run, reusing the same verifier used by idempotent reruns.
+- Reduce Windows release choreography by keeping generated headers and backend probes under `build/`, compiling the GUI directly to its final version-qualified artifact name, and deterministically removing the startup-smoke marker even on failure.
+- Add a deliberately narrow root `.gitignore` for supported build trees, package outputs and legacy Windows scratch names so ordinary qualification work cannot accidentally become repository state.
+- Document the strengthened release post-verification and generated-workspace ownership contracts without changing the deliberate Make/CMake/Windows/Common architectural boundaries.
+
 ## 1.0.195 - 2026-10-13
 
 - Advance the exact Infiltratr Common gitlink from published 1.19.35 to published 1.19.41, inheriting strengthened POSIX and temporal contracts while keeping monitoring policy, hardware interpretation and product presentation locally owned.

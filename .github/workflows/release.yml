@@ -19,9 +19,11 @@ concurrency:
 # SHA, version and checksums are the release contract. This workflow never
 # rebuilds product binaries and never reparses release identity from a second
 # source checkout. Superseded verified runs and already-published versions are
-# successful no-ops rather than spurious release failures. Keep this contract
-# implementation-light so qualification and publication cannot drift together.
-# Central APT publication remains owned independently by Infiltrator-Repository.
+# successful no-ops rather than spurious release failures. New releases are
+# staged as drafts, byte-verified remotely, and only then published; an
+# interrupted draft remains mutable recovery state rather than a broken
+# immutable release. Central APT publication remains independently owned by
+# Infiltrator-Repository.
 
 jobs:
   publish:
@@ -113,56 +115,84 @@ jobs:
           fi
 
           tag_exists=false
-          if tag_identity=$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" \
-              --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null); then
-            read -r tag_type tag_sha <<<"$tag_identity"
-            if [[ "$tag_type" != "commit" ]]; then
-              printf 'Release tag %s is not a lightweight commit tag; refusing to reinterpret it.\n' \
-                "$tag" >&2
-              exit 1
+          tag_sha=
+          refresh_tag_identity() {
+            tag_exists=false
+            tag_sha=
+            if tag_identity=$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" \
+                --jq '"\(.object.type) \(.object.sha)"' 2>/dev/null); then
+              read -r tag_type tag_sha <<<"$tag_identity"
+              if [[ "$tag_type" != "commit" ]]; then
+                printf 'Release tag %s is not a lightweight commit tag; refusing to reinterpret it.\n' \
+                  "$tag" >&2
+                exit 1
+              fi
+              if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
+                printf 'Version %s is already tagged at %s; verified main %s has no new release intent.\n' \
+                  "$version" "$tag_sha" "$SOURCE_SHA"
+                exit 0
+              fi
+              tag_exists=true
             fi
-            if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
-              printf 'Version %s is already published at %s; verified main %s has no new release intent.\n' \
-                "$version" "$tag_sha" "$SOURCE_SHA"
-              exit 0
-            fi
-            tag_exists=true
-          fi
+          }
+          refresh_tag_identity
 
           expected_assets=$(printf '%s\n' "${assets[@]}" | sort)
-          if gh release view "$tag" >/dev/null 2>&1; then
-            published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
-            if [[ "$published_assets" != "$expected_assets" ]]; then
-              printf 'Release %s has an unexpected asset set; published releases are immutable.\n' \
-                "$tag" >&2
-              exit 1
+          verify_release_bytes() {
+            local remote_assets tmp asset
+            remote_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+            if [[ "$remote_assets" != "$expected_assets" ]]; then
+              printf 'Release %s has an unexpected asset set.\n' "$tag" >&2
+              return 1
             fi
+
             tmp=$(mktemp -d)
-            trap 'rm -rf "$tmp"' EXIT
-            gh release download "$tag" --dir "$tmp"
+            if ! gh release download "$tag" --dir "$tmp"; then
+              rm -rf "$tmp"
+              return 1
+            fi
             for asset in "${assets[@]}"; do
-              cmp -s "release/$asset" "$tmp/$asset" || {
-                printf 'Published asset %s differs from the qualified artifact.\n' "$asset" >&2
-                exit 1
-              }
+              if ! cmp -s "release/$asset" "$tmp/$asset"; then
+                printf 'Remote asset %s differs from the qualified artifact.\n' "$asset" >&2
+                rm -rf "$tmp"
+                return 1
+              fi
             done
-            echo "Exact immutable release $tag already exists; verified qualified bytes."
-            exit 0
+            rm -rf "$tmp"
+          }
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            is_draft=$(gh release view "$tag" --json isDraft --jq '.isDraft')
+            if [[ "$is_draft" == "true" ]]; then
+              printf 'Discarding interrupted mutable draft %s before deterministic recovery.\n' \
+                "$tag"
+              gh release delete "$tag" --yes
+              refresh_tag_identity
+            else
+              verify_release_bytes
+              echo "Exact immutable release $tag already exists; verified qualified bytes."
+              exit 0
+            fi
           fi
 
           if [[ "$tag_exists" == "true" ]]; then
             gh release create "$tag" "${asset_paths[@]}" \
               --verify-tag \
+              --draft \
               --title "System Monitor $version" \
-              --notes "Verified System Monitor ${version} release." \
-              --latest
+              --notes "Verified System Monitor ${version} release."
           else
             gh release create "$tag" "${asset_paths[@]}" \
               --target "$SOURCE_SHA" \
+              --draft \
               --title "System Monitor $version" \
-              --notes "Verified System Monitor ${version} release." \
-              --latest
+              --notes "Verified System Monitor ${version} release."
           fi
 
-          published_assets=$(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
-          test "$published_assets" = "$expected_assets"
+          # A draft is intentionally mutable recovery state. Prove the remote
+          # asset set and every byte before crossing the publication boundary,
+          # then prove the same immutable state once more afterwards.
+          verify_release_bytes
+          gh release edit "$tag" --draft=false --latest
+          test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "false"
+          verify_release_bytes

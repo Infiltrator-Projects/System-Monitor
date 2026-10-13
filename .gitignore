@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Generated build trees and qualified release outputs belong to the local
+# workspace, never to source control. Keep this list narrow so new repository
+# material cannot disappear behind an over-broad ignore rule.
+/build/
+/build-*/
+
+# Linux release/package outputs.
+/infiltrator-system-monitor_*.deb
+/infiltrator-system-monitor-*-native-installer.run
+/System-Monitor-*-source.zip
+
+# Windows qualified outputs and legacy scratch names from older recipes.
+/system-monitor-*-windows.exe
+/system-monitor-windows.exe
+/windows-backend-probe.exe
+/windows-startup-smoke.txt
+/windows-version.h

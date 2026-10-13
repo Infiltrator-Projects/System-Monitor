@@ -38,12 +38,19 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Invalid System Monitor version: $version"
 }
 
-New-Item -ItemType Directory -Force -Path build | Out-Null
-$versionHeader = Join-Path $PWD 'windows-version.h'
+$repositoryRoot = (Get-Location).Path
+$buildDir = Join-Path $repositoryRoot 'build'
+New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+$versionHeader = Join-Path $buildDir 'windows-version.h'
+$fontObject = Join-Path $buildDir 'windows-fonts.o'
+$backendProbe = Join-Path $buildDir 'windows-backend-probe.exe'
+$releaseExecutable = Join-Path $repositoryRoot "system-monitor-$version-windows.exe"
+$startupMarker = Join-Path $repositoryRoot 'windows-startup-smoke.txt'
+
 Set-Content -LiteralPath $versionHeader `
     -Value "#define LSM_VERSION `"$version`"" -Encoding ascii
 
-& (Join-Path $PWD 'support/windows/prepare-typography.ps1')
+& (Join-Path $repositoryRoot 'support/windows/prepare-typography.ps1')
 if ($LASTEXITCODE -ne 0) {
     throw 'Windows typography preparation failed.'
 }
@@ -56,7 +63,7 @@ Invoke-Checked -Command $windres -Arguments @(
     '-Isrc',
     'support/windows/system-monitor-fonts.rc',
     '-O', 'coff',
-    '-o', 'build/windows-fonts.o'
+    '-o', $fontObject
 ) -FailureMessage 'Windows font resource compilation failed'
 
 $windowsSources = Get-Content 'support/source-groups/windows-product.txt' |
@@ -71,7 +78,7 @@ $ninja = Get-Command ninja.exe -ErrorAction SilentlyContinue
 if (-not $ninja) {
     throw 'Ninja is required to build the pinned Common library on Windows.'
 }
-$commonBuild = Join-Path $PWD 'build/common-windows'
+$commonBuild = Join-Path $buildDir 'common-windows'
 Invoke-Checked -Command 'cmake' -Arguments @(
     '-S', 'src/infiltratr-common',
     '-B', $commonBuild,
@@ -108,44 +115,57 @@ $guiArguments = @(
 ) + $warningArguments + $includeArguments + @(
     '-include', $versionHeader
 ) + $windowsSources + @(
-    'build/windows-fonts.o', $commonLibrary
+    $fontObject, $commonLibrary
 ) + $backendLibraries + @(
     '-lcomctl32', '-lgdi32', '-ldwmapi', '-static-libgcc', '-mwindows',
-    '-o', 'system-monitor-windows.exe'
+    '-o', $releaseExecutable
 )
+Remove-Item -LiteralPath $releaseExecutable -ErrorAction SilentlyContinue
 Invoke-Checked -Command $gcc -Arguments $guiArguments `
     -FailureMessage 'Windows GUI compile failed'
 
 $embedded = [Text.Encoding]::ASCII.GetString(
-    [IO.File]::ReadAllBytes('system-monitor-windows.exe'))
+    [IO.File]::ReadAllBytes($releaseExecutable))
 if (-not $embedded.Contains($version)) {
     throw "Windows GUI does not contain source version $version."
 }
 
-Remove-Item windows-startup-smoke.txt -ErrorAction SilentlyContinue
-$process = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') `
-    -ArgumentList '--startup-smoke' -PassThru
-if (-not $process.WaitForExit(30000)) {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-    throw 'Windows GUI startup smoke timed out.'
-}
-$status = if (Test-Path windows-startup-smoke.txt) {
-    (Get-Content windows-startup-smoke.txt -Raw).Trim()
-} else {
-    'missing'
-}
-if ($process.ExitCode -ne 0 -or $status -ne 'success') {
-    throw "Windows GUI startup failed: exit=$($process.ExitCode), stage=$status"
-}
+Remove-Item -LiteralPath $startupMarker -ErrorAction SilentlyContinue
+$process = $null
+$normal = $null
+try {
+    $process = Start-Process -FilePath $releaseExecutable `
+        -WorkingDirectory $repositoryRoot -ArgumentList '--startup-smoke' -PassThru
+    if (-not $process.WaitForExit(30000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw 'Windows GUI startup smoke timed out.'
+    }
+    $status = if (Test-Path -LiteralPath $startupMarker) {
+        (Get-Content -LiteralPath $startupMarker -Raw).Trim()
+    } else {
+        'missing'
+    }
+    if ($process.ExitCode -ne 0 -or $status -ne 'success') {
+        throw "Windows GUI startup failed: exit=$($process.ExitCode), stage=$status"
+    }
 
-$normal = Start-Process -FilePath (Join-Path $PWD 'system-monitor-windows.exe') `
-    -PassThru
-Start-Sleep -Seconds 5
-if ($normal.HasExited) {
-    throw "Windows GUI exited during backend startup with code $($normal.ExitCode)."
+    $normal = Start-Process -FilePath $releaseExecutable `
+        -WorkingDirectory $repositoryRoot -PassThru
+    Start-Sleep -Seconds 5
+    if ($normal.HasExited) {
+        throw "Windows GUI exited during backend startup with code $($normal.ExitCode)."
+    }
+    Stop-Process -Id $normal.Id -Force
+    $normal.WaitForExit()
+} finally {
+    if ($process -and -not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($normal -and -not $normal.HasExited) {
+        Stop-Process -Id $normal.Id -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Item -LiteralPath $startupMarker -ErrorAction SilentlyContinue
 }
-Stop-Process -Id $normal.Id -Force
-$normal.WaitForExit()
 
 $probeArguments = @(
     '-std=c17', '-O2', '-D_WIN32_WINNT=0x0601'
@@ -155,11 +175,9 @@ $probeArguments = @(
     'src/process_backend_windows.c',
     $commonLibrary
 ) + $backendLibraries + @(
-    '-static-libgcc', '-o', 'windows-backend-probe.exe'
+    '-static-libgcc', '-o', $backendProbe
 )
 Invoke-Checked -Command $gcc -Arguments $probeArguments `
     -FailureMessage 'Windows backend probe compile failed'
-Invoke-Checked -Command (Join-Path $PWD 'windows-backend-probe.exe') `
-    -Arguments @() -FailureMessage 'Windows backend topology probe failed'
-
-Move-Item 'system-monitor-windows.exe' "system-monitor-$version-windows.exe"
+Invoke-Checked -Command $backendProbe -Arguments @() `
+    -FailureMessage 'Windows backend topology probe failed'
