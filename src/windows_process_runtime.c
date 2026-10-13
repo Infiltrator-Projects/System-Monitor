@@ -169,8 +169,21 @@ bool lsm_windows_process_runtime_stop(LsmWindowsProcessRuntime *state)
 bool lsm_windows_process_runtime_available(
     const LsmWindowsProcessRuntime *runtime)
 {
-    return runtime && runtime->process_thread &&
-           runtime->process_lock_initialised;
+    if (!runtime || !runtime->process_thread ||
+        !runtime->process_lock_initialised)
+        return false;
+
+    /*
+     * A Windows thread handle remains valid after its thread exits. Backend
+     * creation happens inside the worker after start() has returned, so a
+     * failed backend can leave a valid handle referring to a terminated
+     * worker. The worker always returns zero; STILL_ACTIVE therefore
+     * unambiguously represents the one state in which requests can make
+     * progress.
+     */
+    DWORD exit_code = 0U;
+    return GetExitCodeThread(runtime->process_thread, &exit_code) != FALSE &&
+           exit_code == STILL_ACTIVE;
 }
 
 bool lsm_windows_process_runtime_abandoned(

@@ -173,6 +173,7 @@ $probeArguments = @(
     'support/tools/windows_backend_probe.c',
     'src/monitor_backend_windows.c',
     'src/process_backend_windows.c',
+    'src/windows_process_runtime.c',
     $commonLibrary
 ) + $backendLibraries + @(
     '-static-libgcc', '-o', $backendProbe

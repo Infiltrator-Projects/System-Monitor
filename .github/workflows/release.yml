@@ -125,7 +125,32 @@ jobs:
               exit 1
             fi
             if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
-              printf 'Version %s is already tagged at %s; verified main %s has no new release intent.\n' \
+              mapfile -t comparison < <(
+                gh api "repos/${GH_REPO}/compare/${tag_sha}...${SOURCE_SHA}" \
+                  --jq '(.files | length | tostring), (.files[].filename)'
+              )
+              test "${#comparison[@]}" -ge 1
+              changed_file_count="${comparison[0]}"
+              [[ "$changed_file_count" =~ ^[0-9]+$ ]]
+              if ((changed_file_count >= 300)); then
+                printf 'Version %s comparison reached GitHub file limits; refusing ambiguous same-version reuse.\n' \
+                  "$version" >&2
+                exit 1
+              fi
+
+              product_change=false
+              for changed_path in "${comparison[@]:1}"; do
+                case "$changed_path" in
+                  .github/workflows/*) ;;
+                  *) product_change=true ;;
+                esac
+              done
+              if [[ "$product_change" == "true" ]]; then
+                printf 'Version %s is already tagged at %s, but qualified main %s changes product source; advance support/VERSION.\n' \
+                  "$version" "$tag_sha" "$SOURCE_SHA" >&2
+                exit 1
+              fi
+              printf 'Version %s is already tagged at %s; qualified main %s changes workflows only, so there is no new release intent.\n' \
                 "$version" "$tag_sha" "$SOURCE_SHA"
               exit 0
             fi

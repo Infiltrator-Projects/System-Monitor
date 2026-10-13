@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.197 - 2026-10-13
+
+- Make native Windows process-worker availability reflect actual thread liveness, so backend creation failure cannot leave the UI indefinitely reporting a background refresh after its worker has already exited.
+- Extend the native Windows backend probe to enforce the terminated-worker unavailable invariant against the exact live process-runtime implementation used by the product.
+- Harden same-version release recovery: when an existing version tag points at another commit, Publish now permits a no-op only for workflow-only changes and fails closed on product-source reuse or an ambiguous GitHub comparison.
+
 ## 1.0.196 - 2026-10-13
 
 - Make first publication prove its own postcondition: Publish now downloads the newly created GitHub release and byte-compares all three remote assets with the sealed Verify bundle in the same run, reusing the same verifier used by idempotent reruns.

@@ -14,6 +14,7 @@
  */
 #include "monitor_platform.h"
 #include "process_backend.h"
+#include "windows_process_runtime.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -29,9 +30,41 @@ static double bytes_to_gb(uint64_t bytes)
     return (double)bytes / (1024.0 * 1024.0 * 1024.0);
 }
 
+static DWORD WINAPI exited_process_worker(LPVOID user_data)
+{
+    (void)user_data;
+    return 0U;
+}
+
+static bool verify_terminated_process_worker_unavailable(void)
+{
+    LsmWindowsProcessRuntime runtime = {0};
+    InitializeCriticalSection(&runtime.process_lock);
+    runtime.process_lock_initialised = true;
+    runtime.process_thread = CreateThread(
+        NULL, 0U, exited_process_worker, NULL, 0U, NULL);
+    if (!runtime.process_thread) {
+        DeleteCriticalSection(&runtime.process_lock);
+        return false;
+    }
+
+    const DWORD stopped = WaitForSingleObject(runtime.process_thread, 2000U);
+    const bool unavailable =
+        stopped == WAIT_OBJECT_0 &&
+        !lsm_windows_process_runtime_available(&runtime);
+    const bool cleaned = lsm_windows_process_runtime_stop(&runtime);
+    return unavailable && cleaned;
+}
+
 int main(void)
 {
     printf("System Monitor experimental Windows backend probe\n\n");
+
+    if (!verify_terminated_process_worker_unavailable()) {
+        fprintf(stderr,
+                "Terminated process worker remained available to the UI.\n");
+        return EXIT_FAILURE;
+    }
 
     LsmMonitor *monitor = (LsmMonitor *)calloc(1U, sizeof(*monitor));
     if (!monitor) {
