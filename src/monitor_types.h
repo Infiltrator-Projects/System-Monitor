@@ -40,10 +40,6 @@
 #define LSM_MAX_BLUETOOTH_DEVICES 32
 /** Maximum populated SMBIOS memory modules retained for presentation. */
 #define LSM_MAX_MEMORY_MODULES 32
-/** Standard short-name buffer size. */
-#define LSM_NAME_LEN 128
-/** Standard filesystem-path buffer size. */
-#define LSM_PATH_LEN 512
 /** Standard opaque platform-identity buffer size. */
 #define LSM_IDENTITY_LEN 512
 
@@ -388,7 +384,5 @@ typedef struct {
     double sample_monotonic_seconds;  /**< Monotonic completion time for sample_generation. */
     void *backend_state; /**< Opaque platform collector state; presentation must not inspect it. */
 } LsmMonitor;
-
-
 
 #endif
