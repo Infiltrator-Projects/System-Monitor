@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in clang cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
+          for command_name in cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
             command -v "$command_name" >/dev/null 2>&1 || {
               echo "Self-hosted runner is missing $command_name." >&2
               exit 1
