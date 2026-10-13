@@ -20,7 +20,6 @@ performance_pages_core.c
 performance_pages_devices.c
 performance_present_internal.h
 preferences.c
-preferences_dialog.c
 process_actions.c
 process_inspector.c
 processes_ui.c

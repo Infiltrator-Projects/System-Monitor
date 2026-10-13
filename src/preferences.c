@@ -7,6 +7,8 @@
  * only project-owned keys, bounds every numeric value and keeps safe defaults
  * when input is malformed. Saving uses the application's durable atomic-file
  * provider, so a power loss cannot leave a partially written configuration.
+ * Accepted dialog changes are committed here so the editor does not need the
+ * private application layout or cross-subsystem refresh knowledge.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -25,13 +27,13 @@
 #include "numeric_io.h"
 #include "performance.h"
 #include "processes_ui.h"
-#include "ui_helpers.h"
 
 #include <infiltratr/config.h>
 #include <infiltratr/core.h>
 #include <infiltratr/design.h>
 #include <infiltratr/format.h>
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -285,4 +287,76 @@ void lsm_preferences_save(const LsmApp *app)
     if (failure != 0)
         fprintf(stderr, "Unable to save System Monitor preferences: %s\n",
                 strerror(failure));
+}
+
+bool lsm_preferences_dialog_values(
+    const LsmApp *app, LsmPreferencesDialogValues *values)
+{
+    if (!app || !values) return false;
+    *values = (LsmPreferencesDialogValues) {
+        .update_interval_ms = app->runtime.update_interval_ms,
+        .filesystem_update_interval_ms = app->runtime.filesystem_update_interval_ms,
+        .network_use_bits = app->runtime.network_use_bits,
+        .network_total_separate = app->runtime.network_total_separate,
+        .network_total_use_bits = app->runtime.network_total_use_bits,
+        .process_cpu_per_core = app->runtime.process_cpu_per_core,
+        .newer_on_right = app->runtime.newer_on_right,
+        .graph_data_points = app->runtime.graph_data_points,
+        .graph_smooth = app->runtime.graph_smooth,
+        .cpu_stacked = app->runtime.cpu_stacked,
+        .memory_logarithmic = app->runtime.memory_logarithmic,
+        .confirm_process_actions = app->runtime.confirm_process_actions,
+        .show_all_filesystems = app->runtime.show_all_filesystems,
+        .process_heatmap = app->details.process_heatmap,
+        .always_on_top = app->runtime.always_on_top,
+        .compact_summary = app->runtime.compact_summary
+    };
+    return true;
+}
+
+void lsm_preferences_commit_dialog_values(
+    LsmApp *app, const LsmPreferencesDialogValues *values)
+{
+    if (!app || !values) return;
+
+    app->runtime.update_interval_ms = values->update_interval_ms;
+    app->runtime.filesystem_update_interval_ms =
+        values->filesystem_update_interval_ms;
+    app->runtime.network_use_bits = values->network_use_bits;
+    app->runtime.network_total_separate = values->network_total_separate;
+    app->runtime.network_total_use_bits = values->network_total_use_bits;
+    app->runtime.process_cpu_per_core = values->process_cpu_per_core;
+    app->runtime.newer_on_right = values->newer_on_right;
+    app->runtime.graph_data_points = values->graph_data_points;
+    app->runtime.graph_smooth = values->graph_smooth;
+    app->runtime.cpu_stacked = values->cpu_stacked;
+    app->runtime.memory_logarithmic = values->memory_logarithmic;
+    app->runtime.confirm_process_actions = values->confirm_process_actions;
+    app->runtime.show_all_filesystems = values->show_all_filesystems;
+    app->details.process_heatmap = values->process_heatmap;
+    app->runtime.always_on_top = values->always_on_top;
+    app->runtime.compact_summary = values->compact_summary;
+
+    if (app->shell.always_on_top_menu_item)
+        gtk_check_menu_item_set_active(
+            GTK_CHECK_MENU_ITEM(app->shell.always_on_top_menu_item),
+            app->runtime.always_on_top);
+    if (app->shell.compact_summary_menu_item)
+        gtk_check_menu_item_set_active(
+            GTK_CHECK_MENU_ITEM(app->shell.compact_summary_menu_item),
+            app->runtime.compact_summary);
+    if (app->filesystem.filesystem_show_all)
+        gtk_toggle_button_set_active(
+            GTK_TOGGLE_BUTTON(app->filesystem.filesystem_show_all),
+            app->runtime.show_all_filesystems);
+
+    lsm_preferences_save(app);
+    lsm_app_preferences_changed(app);
+    lsm_performance_apply_graph_preferences(app);
+    app->processes.processes_model_dirty = TRUE;
+    app->details.details_model_dirty = TRUE;
+    lsm_processes_present_snapshot(app);
+    lsm_details_present_snapshot(app);
+    lsm_performance_refresh(app);
+    lsm_filesystems_refresh(app);
 }

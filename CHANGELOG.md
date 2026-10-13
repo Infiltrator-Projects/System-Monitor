@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.193 - 2026-10-13
+
+- Move the GTK Preferences editor off the complete private `LsmApp` layout by exposing only an editable preference-value snapshot and one preferences-domain commit operation.
+- Centralise accepted preference mutation, persistence, dependent control synchronisation and affected-page refreshes so the dialog no longer duplicates cross-subsystem ownership knowledge.
+- Reduce approved direct `app_internal.h` consumers from 25 to 24 while preserving the existing preference semantics and refresh sequence.
+
 ## 1.0.192 - 2026-10-13
 
 - Remove the obsolete, unwired Win32 process-worker implementation and its duplicate public contract now that `windows_process_runtime.c` owns the live Windows process-worker lifecycle.
