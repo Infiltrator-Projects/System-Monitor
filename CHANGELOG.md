@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.189 - 2026-10-13
+
+- Integrate ThreadSanitizer into the clean Ubuntu Linux release qualification so asynchronous process-worker races block the canonical Verify workflow and therefore block publication.
+- Isolate the ThreadSanitizer build under its own build directory so sanitizer instrumentation cannot leak into release artifacts.
+- Remove the redundant standalone ThreadSanitizer workflow and its duplicate checkout/dependency orchestration.
+
 ## 1.0.188 - 2026-10-13
 
 - Make the parent repository gitlink the single Infiltratr Common revision authority for both Make and CMake, removing duplicate tag, version and commit pins and the source-archive network fallback.
