@@ -18,12 +18,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef LSM_NAME_LEN
+/** Standard short-name buffer capacity shared by platform-neutral models. */
 #define LSM_NAME_LEN 128
-#endif
-#ifndef LSM_PATH_LEN
+/** Standard filesystem-path buffer capacity shared by platform-neutral models. */
 #define LSM_PATH_LEN 512
-#endif
 
 /** Maximum processor positions addressable by the portable affinity model. */
 #define LSM_PROCESS_MAX_CPUS 512U
