@@ -35,6 +35,12 @@ using StringList = std::vector<std::string>;
 
 static unsigned error_count;
 
+static const char *const maintained_markdown[] = {
+    "README.md", "PHILOSOPHY.md", "CHANGELOG.md", "CONTRIBUTING.md",
+    "SECURITY.md", "docs/ARCHITECTURE.md", "docs/VALIDATION.md",
+    "docs/HARDWARE.md", ".github/CODE_OF_CONDUCT.md"
+};
+
 #if defined(__GNUC__) || defined(__clang__)
 static void report_error(const char *format, ...)
     __attribute__((format(printf, 1, 2)));
@@ -515,13 +521,10 @@ static void check_private_app_coupling(void)
 
 static bool maintained_markdown_path(const std::string &path)
 {
-    static const char *const maintained[] = {
-        "./README.md", "./CHANGELOG.md", "./CONTRIBUTING.md", "./SECURITY.md",
-        "./docs/ARCHITECTURE.md", "./docs/VALIDATION.md", "./docs/HARDWARE.md",
-        "./.github/CODE_OF_CONDUCT.md"
-    };
-    for (const char *candidate : maintained)
-        if (path == candidate) return true;
+    const std::string relative =
+        path.rfind("./", 0U) == 0U ? path.substr(2U) : path;
+    for (const char *candidate : maintained_markdown)
+        if (relative == candidate) return true;
     return false;
 }
 
@@ -562,14 +565,14 @@ static void check_repository_layout(void)
             report_error("%s: internal project material must remain under src/ or support/",
                          entry);
 
-    static const char *const required_docs[] = {
-        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-        "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/HARDWARE.md",
-        ".github/CODE_OF_CONDUCT.md", "support/Doxyfile", "LICENSE",
-        "support/packaging/copyright"
-    };
-    for (const char *path : required_docs)
-        if (!regular_file(path)) report_error("%s: required project file is missing", path);
+    for (const char *path : maintained_markdown)
+        if (!regular_file(path))
+            report_error("%s: required project file is missing", path);
+
+    for (const char *path : {
+             "support/Doxyfile", "LICENSE", "support/packaging/copyright"})
+        if (!regular_file(path))
+            report_error("%s: required project file is missing", path);
 
     check_markdown_tree();
 }
@@ -583,10 +586,7 @@ static void check_licensing_contract(void)
              "support/windows/build-release.ps1"})
         require_prefix(path, LSM_SPDX_HASH);
 
-    for (const char *path : {
-             "README.md", "CONTRIBUTING.md", "SECURITY.md",
-             "docs/ARCHITECTURE.md", "docs/HARDWARE.md",
-             ".github/CODE_OF_CONDUCT.md"})
+    for (const char *path : maintained_markdown)
         require_prefix(path, LSM_SPDX_MARKDOWN);
 
     require_prefix("support/installer/bootstrap.sh",
@@ -731,16 +731,17 @@ static void check_documentation_contract(void)
         for (const char *marker : {
                  "## Clean-sheet provenance", "## Capabilities", "## Build and test",
                  "src/infiltratr-common", "## Release assets",
-                 "## Technical documentation", "docs/ARCHITECTURE.md",
-                 "docs/HARDWARE.md", "docs/VALIDATION.md", "CONTRIBUTING.md",
-                 "SECURITY.md", "## Licence and provenance", "GPL-3.0-or-later"})
+                 "## Technical documentation", "PHILOSOPHY.md",
+                 "docs/ARCHITECTURE.md", "docs/HARDWARE.md", "docs/VALIDATION.md",
+                 "CONTRIBUTING.md", "SECURITY.md", "## Licence and provenance",
+                 "GPL-3.0-or-later"})
             require_marker("README.md", readme, marker);
     }
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
         require_marker("support/Doxyfile", doxyfile,
-                       "INPUT                  = README.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
+                       "INPUT                  = README.md PHILOSOPHY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
         require_marker("support/Doxyfile", doxyfile,
                        "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
         require_marker("support/Doxyfile", doxyfile, "EXTRACT_LOCAL_CLASSES   = NO");
