@@ -499,6 +499,7 @@ static void check_private_app_coupling(void)
 {
     const StringList allowed =
         read_manifest("support/app-internal-allowlist.txt", "src");
+    StringList direct_consumers;
     std::error_code error;
     for (std::filesystem::directory_iterator iterator("src", error), end;
          !error && iterator != end; iterator.increment(error)) {
@@ -509,14 +510,22 @@ static void check_private_app_coupling(void)
             continue;
         std::string text;
         if (!read_text(iterator->path(), &text)) continue;
-        if (text.find("#include \"app_internal.h\"") != std::string::npos &&
-            !list_contains(allowed, name))
+        if (text.find("#include \"app_internal.h\"") == std::string::npos)
+            continue;
+        direct_consumers.push_back(name);
+        if (!list_contains(allowed, name))
             report_error("src/%s: direct app_internal.h access is not approved; use a narrow context bridge",
                          name.c_str());
     }
-    if (error)
+    if (error) {
         report_error("src: unable to audit private application coupling: %s",
                      error.message().c_str());
+        return;
+    }
+    for (const std::string &name : allowed)
+        if (!list_contains(direct_consumers, name))
+            report_error("support/app-internal-allowlist.txt: %s no longer includes app_internal.h; remove the stale coupling approval",
+                         name.c_str());
 }
 
 static bool maintained_markdown_path(const std::string &path)
@@ -655,7 +664,9 @@ static void check_build_and_release_contracts(void)
         require_marker("Makefile", makefile, "release:");
         require_marker("Makefile", makefile, "$(MAKE) deb");
         require_marker("Makefile", makefile, "$(MAKE) native-installer");
-        forbid_marker("Makefile", makefile, "INFILTRATR_COMMON_SOURCES",
+        forbid_marker("Makefile", makefile, "$(INFILTRATR_COMMON_DIR)/src/",
+                      "Common private source membership must remain Common-owned");
+        forbid_marker("Makefile", makefile, "src/infiltratr-common/src/",
                       "Common private source membership must remain Common-owned");
     }
 
@@ -670,8 +681,6 @@ static void check_build_and_release_contracts(void)
                       "CMake must not duplicate the canonical Make regression graph");
         forbid_marker("CMakeLists.txt", cmake, "add_test(",
                       "CMake must not maintain a second regression-test registry");
-        forbid_marker("CMakeLists.txt", cmake, "LSM_DEVELOPER_SMOKE_TARGETS",
-                      "retired duplicate CMake smoke graph returned");
         forbid_marker("CMakeLists.txt", cmake, "${INFILTRATR_COMMON_DIR}/src/",
                       "Common private source membership must remain Common-owned");
     }
@@ -684,13 +693,9 @@ static void check_build_and_release_contracts(void)
                        "cmake --build build-cmake --target system-monitor");
         require_marker(".github/workflows/ci.yml", ci,
                        "support/windows/build-release.ps1");
-        forbid_marker(".github/workflows/ci.yml", ci, "gcc-multilib",
-                      "retired CI implementation marker returned");
-        forbid_marker(".github/workflows/ci.yml", ci, "mapfile -t windows_sources",
-                      "Windows build implementation leaked back into workflow YAML");
         forbid_marker(".github/workflows/ci.yml", ci,
-                      "Get-Content 'support/source-groups/windows-product.txt'",
-                      "Windows source membership must be owned by build-release.ps1");
+                      "support/source-groups/windows-product.txt",
+                      "Windows source membership must remain owned by build-release.ps1");
         forbid_marker(".github/workflows/ci.yml", ci, "ctest --test-dir",
                       "CI must execute the canonical Make regression suite once");
     }
@@ -714,7 +719,8 @@ static void check_build_and_release_contracts(void)
         for (const char *marker : {
                  "uses: actions/download-artifact@", "system-monitor-release-assets",
                  "RELEASE_SOURCE_SHA", "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt",
-                 "github.event.workflow_run.head_sha", "published releases are immutable"})
+                 "github.event.workflow_run.head_sha", "gh release download",
+                 "cmp -s \"release/$asset\"", "gh release create"})
             require_marker(".github/workflows/release.yml", release, marker);
         for (const char *marker : {"actions/checkout@", "make -j2 release",
                                    "REQUIRE_I386=1 make check", "ctest --test-dir"})
@@ -745,8 +751,6 @@ static void check_documentation_contract(void)
         require_marker("support/Doxyfile", doxyfile,
                        "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
         require_marker("support/Doxyfile", doxyfile, "EXTRACT_LOCAL_CLASSES   = NO");
-        forbid_marker("support/Doxyfile", doxyfile, "CLASS_DIAGRAMS",
-                      "obsolete Doxygen CLASS_DIAGRAMS setting must not return");
     }
 }
 

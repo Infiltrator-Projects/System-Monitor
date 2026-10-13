@@ -28,7 +28,7 @@ Renderers own widgets, drawing, events and accessibility. Shared labels, units a
 
 Private application storage remains owned by the composition root. Coordinators that do not own that storage consume narrow views through dedicated runtime, process and presentation context bridges rather than including the complete `LsmApp` layout. Top-level page activation, keyboard commands, window-manager mechanics and theme projection have separate presentation owners so a change in one policy does not require the others to know its private state.
 
-Coupling boundaries are mechanically enforced. `support/app-internal-allowlist.txt` is the closed set of implementation files permitted to include `app_internal.h`; new coordinators must use a narrow context bridge. Native Windows theme projection and process-worker lifetime are separate owners from the Win32 shell. Shared source groups under `support/source-groups/` define source membership where multiple build contexts genuinely need the same subset rather than maintaining parallel source lists.
+Coupling boundaries are mechanically enforced. `support/app-internal-allowlist.txt` is the exact closed set of implementation files permitted to include `app_internal.h`: unlisted direct consumers fail verification, and stale entries fail once a consumer has been decoupled so an old exception cannot silently authorise future re-coupling. New coordinators must use a narrow context bridge. Native Windows theme projection and process-worker lifetime are separate owners from the Win32 shell. Shared source groups under `support/source-groups/` define source membership where multiple build contexts genuinely need the same subset rather than maintaining parallel source lists.
 
 ## Build ownership
 

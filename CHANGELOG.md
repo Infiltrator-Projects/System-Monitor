@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.195 - 2026-10-13
+
+- Advance the exact Infiltratr Common gitlink from published 1.19.35 to published 1.19.41, inheriting strengthened POSIX and temporal contracts while keeping monitoring policy, hardware interpretation and product presentation locally owned.
+- Make `support/app-internal-allowlist.txt` an exact private-state exception set: every direct `app_internal.h` consumer must be listed and every listed exception must still be a consumer, so completed decoupling cannot leave latent permission to reintroduce private-state coupling.
+- Reduce architecture-audit brittleness by replacing retired implementation-spelling sentinels with direct ownership and integrity invariants for Common private sources, Windows source membership and byte-for-byte immutable release verification.
+- Preserve deliberate build/release separation after the forensic re-audit: Make remains the regression, packaging and release-quality authority; CMake remains the Linux application-build authority; Windows has one native release recipe; Publish consumes only the sealed qualified artifacts; deterministic source archives remain independently owned by `make dist`.
+
 ## 1.0.194 - 2026-10-13
 
 - Integrate the governing engineering philosophy into the maintained-document, generated-reference and licensing contracts instead of leaving it outside repository validation.
