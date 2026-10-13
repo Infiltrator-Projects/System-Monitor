@@ -16,26 +16,33 @@ concurrency:
 jobs:
   test:
     name: Verify source
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
-      - name: Verify self-hosted runner contract
+      - name: Install verification dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake doxygen g++ gcc git libc6-dev-i386 libgtk-3-dev make \
+            pkg-config xauth xvfb
+
+      - name: Verify verification-toolchain contract
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
+          for command_name in clang cmake doxygen gcc g++ git make pkg-config xauth Xvfb xvfb-run; do
             command -v "$command_name" >/dev/null 2>&1 || {
-              echo "Self-hosted runner is missing $command_name." >&2
+              echo "Verification runner is missing $command_name." >&2
               exit 1
             }
           done
           pkg-config --exists gtk+-3.0
           probe="$(mktemp --suffix=.c)"
-          trap 'rm -f "$probe" "$RUNNER_TEMP/system-monitor-m32-probe"' EXIT
+          trap 'rm -f "$probe" "$RUNNER_TEMP/system-monitor-m32-probe.o"' EXIT
           printf 'int main(void){return 0;}\n' > "$probe"
-          gcc -m32 "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe"
+          gcc -m32 -c "$probe" -o "$RUNNER_TEMP/system-monitor-m32-probe.o"
 
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
