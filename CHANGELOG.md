@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.190 - 2026-10-13
+
+- Remove obsolete include-order-dependent page-registry macro aliases now that the composition root calls the registry explicitly.
+- Eliminate the implementation-only preprocessor switch that existed solely to suppress those aliases, leaving page-registry and shell ownership visible in ordinary function calls.
+
 ## 1.0.189 - 2026-10-13
 
 - Integrate ThreadSanitizer into the clean Ubuntu Linux release qualification so asynchronous process-worker races block the canonical Verify workflow and therefore block publication.

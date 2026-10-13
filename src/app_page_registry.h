@@ -91,21 +91,10 @@ gboolean lsm_app_page_registry_active_periodic_update(gpointer user_data);
 void lsm_app_page_registry_connect_notebook(LsmApp *app);
 
 /**
- * Connect shell mechanics and replace page-aware keyboard policy.
+ * Connect shell mechanics and page-aware keyboard policy explicitly.
  *
  * @param [in,out] app Application whose top-level window is connected.
  */
 void lsm_app_page_registry_connect_window(LsmApp *app);
-
-/*
- * app.c includes this header before app_shell.h. Route only the two shell
- * connection points that carry top-level page policy through the registry;
- * app_shell.c itself is compiled without these aliases and continues to own
- * window mechanics, styling and navigation widgets.
- */
-#ifndef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
-#define lsm_app_shell_connect_notebook lsm_app_page_registry_connect_notebook
-#define lsm_app_shell_connect_window lsm_app_page_registry_connect_window
-#endif
 
 #endif

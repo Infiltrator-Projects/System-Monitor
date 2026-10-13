@@ -14,9 +14,7 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#define LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 #include "app_page_registry.h"
-#undef LSM_APP_PAGE_REGISTRY_IMPLEMENTATION
 
 #include "app_keyboard.h"
 #include "app_presentation_context.h"
