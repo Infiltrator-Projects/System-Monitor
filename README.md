@@ -31,7 +31,7 @@ make
 ./build/system-monitor
 ```
 
-Run `make check` for the authoritative verification suite. CMake intentionally owns only the Linux application build rather than duplicating the regression graph. Installation is owned by the Debian package or native installer; direct `make install` is disabled. Main-branch changes also run a dedicated ThreadSanitizer workflow over the asynchronous process-worker path.
+Run `make check` for the authoritative verification suite. CMake intentionally owns only the Linux application build rather than duplicating the regression graph. Installation is owned by the Debian package or native installer; direct `make install` is disabled. Main-branch release qualification also runs ThreadSanitizer over the asynchronous process-worker path before Linux release artifacts are accepted.
 
 ## Releases
 
