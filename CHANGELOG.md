@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.199 - 2026-10-14
+
+- Complete the Common 1.19.42 adoption audit: verify that the 1.19.41-to-1.19.42 implementation delta changes no pre-existing System Monitor parsing, I/O, arithmetic, timing or persistence contract, then retain the full exact-pin qualification as the integration proof.
+- Remove the pre-1.0.39 decimal-comma persistence compatibility shim and consume Common's strict bounded decimal parser directly for preferences and App History, with malformed or superseded rows marked for canonical rewrite.
+- Route disk latency operation/time rollback handling through Common's monotonic counter-delta contract instead of maintaining a second private unsigned-counter rule.
+- Require every future Common advancement to include both an old-to-new behavioural regression review and a product-side Common-adoption audit, preventing dependency repins from accumulating avoidable local rework.
+
 ## 1.0.198 - 2026-10-14
 
 - Advance the exact Infiltratr Common gitlink to published 1.19.42 and consume Common's new shared-design validators instead of duplicating palette and metrics ABI-prefix rules in the Win32 adapter.

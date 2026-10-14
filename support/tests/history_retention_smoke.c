@@ -147,28 +147,32 @@ int main(void)
     char history_path[LSM_PATH_LEN];
     snprintf(history_path, sizeof(history_path), "%s/app-history.tsv", directory);
 
-    FILE *legacy = fopen(history_path, "w");
-    if (!legacy) return fail("unable to create decimal-comma history fixture");
+    FILE *strict = fopen(history_path, "w");
+    if (!strict) return fail("unable to create strict history fixture");
     if (fputs("# System-Monitor App History v1\n"
+              "uid:1000|/canonical\tcanonical\tuser\t/canonical"
+              "\t1.500000\t2.250000\t3\t4\t5\t10\t20\n"
               "uid:1000|/legacy\tlegacy\tuser\t/legacy"
               "\t1,500000\t2,250000\t3\t4\t5\t10\t20\n"
               "negative\tbad\tuser\t/bad\t-1\t2\t0\t0\t0\t10\t20\n"
               "huge\tbad\tuser\t/bad\t1e300\t2\t0\t0\t0\t10\t20\n"
               "active\tbad\tuser\t/bad\t1\t-2\t0\t0\t0\t10\t20\n",
-              legacy) == EOF ||
-        fclose(legacy) != 0)
-        return fail("unable to write decimal-comma history fixture");
-    LsmApp *legacy_app = calloc(1U, sizeof(*legacy_app));
-    if (!legacy_app || !lsm_history_test_init(legacy_app, directory))
-        return fail("unable to load decimal-comma history fixture");
-    if (lsm_history_test_retained_count(legacy_app) != 1U ||
-        !lsm_history_test_contains(legacy_app, "uid:1000|/legacy"))
-        return fail("history accepted invalid durations or lost decimal-comma recovery");
-    lsm_history_save(legacy_app);
-    if (!history_contains_text(history_path, "\t1.500000\t2.250000\t"))
-        return fail("legacy decimal-comma history was not canonicalised");
-    lsm_history_test_dispose(legacy_app);
-    free(legacy_app);
+              strict) == EOF ||
+        fclose(strict) != 0)
+        return fail("unable to write strict history fixture");
+    LsmApp *strict_app = calloc(1U, sizeof(*strict_app));
+    if (!strict_app || !lsm_history_test_init(strict_app, directory))
+        return fail("unable to load strict history fixture");
+    if (lsm_history_test_retained_count(strict_app) != 1U ||
+        !lsm_history_test_contains(strict_app, "uid:1000|/canonical") ||
+        lsm_history_test_contains(strict_app, "uid:1000|/legacy"))
+        return fail("history did not enforce the current strict numeric grammar");
+    lsm_history_save(strict_app);
+    if (history_contains_text(history_path, ",") ||
+        history_contains_text(history_path, "/legacy"))
+        return fail("rejected pre-release history rows survived canonical rewrite");
+    lsm_history_test_dispose(strict_app);
+    free(strict_app);
 
     if (unlink(history_path) != 0)
         return fail("unable to reset persistence fixture");

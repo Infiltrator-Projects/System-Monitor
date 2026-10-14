@@ -24,7 +24,6 @@
 #include "atomic_file.h"
 #include "details_page.h"
 #include "filesystems.h"
-#include "numeric_io.h"
 #include "performance.h"
 #include "processes_ui.h"
 
@@ -74,8 +73,8 @@ static double validated_double(const char *value, double minimum,
                                double maximum, double fallback)
 {
     double parsed = 0.0;
-    return numeric_io_parse_persisted_double_range(
-        value, minimum, maximum, &parsed, NULL) ? parsed : fallback;
+    return infiltratr_parse_double_range(
+        value, minimum, maximum, &parsed) ? parsed : fallback;
 }
 
 static gboolean valid_stack_name(const char *value)

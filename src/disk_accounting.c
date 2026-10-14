@@ -71,20 +71,22 @@ void lsm_disk_accounting_update(LsmDiskInfo *disk,
             disk->active_percent = lsm_clamp_double(
                 io_milliseconds_per_second / 10.0, 0.0, 100.0);
 
+        uint64_t read_operations = 0U;
+        uint64_t write_operations = 0U;
+        uint64_t read_time = 0U;
+        uint64_t write_time = 0U;
         const bool read_valid =
-            counters->read_operations >= state->previous_read_operations &&
-            counters->read_ms >= state->previous_read_ms;
+            lsm_u64_counter_delta(
+                counters->read_operations, state->previous_read_operations,
+                &read_operations) &&
+            lsm_u64_counter_delta(
+                counters->read_ms, state->previous_read_ms, &read_time);
         const bool write_valid =
-            counters->write_operations >= state->previous_write_operations &&
-            counters->write_ms >= state->previous_write_ms;
-        const uint64_t read_operations = read_valid
-            ? counters->read_operations - state->previous_read_operations : 0U;
-        const uint64_t write_operations = write_valid
-            ? counters->write_operations - state->previous_write_operations : 0U;
-        const uint64_t read_time = read_valid
-            ? counters->read_ms - state->previous_read_ms : 0U;
-        const uint64_t write_time = write_valid
-            ? counters->write_ms - state->previous_write_ms : 0U;
+            lsm_u64_counter_delta(
+                counters->write_operations, state->previous_write_operations,
+                &write_operations) &&
+            lsm_u64_counter_delta(
+                counters->write_ms, state->previous_write_ms, &write_time);
         if (read_valid)
             disk->read_response_ms = read_operations > 0U
                 ? (double)read_time / (double)read_operations : 0.0;

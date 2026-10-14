@@ -38,6 +38,8 @@ The build system deliberately has one authority per concern. Make owns the regre
 
 While the Infiltrator estate remains pre-release, System Monitor follows the current shared Common contract rather than carrying product-local compatibility machinery for superseded internal revisions. The gitlink must remain within five published Common releases of the latest qualified Common release; normal dependency maintenance should advance directly to the newest reviewed release. This cadence rule does not weaken Common's own API/ABI discipline or justify moving product semantics into the shared library.
 
+Every Common advancement is also a dependency review. The previous and proposed exact Common revisions must be compared for behavioural-contract changes, the canonical System Monitor qualification must run against the proposed pin, and product-local helpers must be audited against the current Common API surface. When semantics genuinely match and Common owns the stronger generic contract, System Monitor consumes Common and retires the local mechanism; monitoring policy, hardware interpretation and product presentation remain local.
+
 ## Runtime contracts
 
 - Availability is distinct from value; valid zero never means unavailable.

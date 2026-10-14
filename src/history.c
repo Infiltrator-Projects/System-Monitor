@@ -25,7 +25,6 @@
 #include "common.h"
 #include "history_persistence.h"
 #include "temporal_presentation.h"
-#include "numeric_io.h"
 #include "refresh_policy.h"
 #include "ui_helpers.h"
 
@@ -362,13 +361,18 @@ static LsmHistorySaveRequest *history_save_request_create(LsmApp *app)
     return request;
 }
 
+/*
+ * Return TRUE when a persisted row must not survive the current canonical
+ * format. The loader uses that signal to mark history dirty so malformed or
+ * superseded pre-release rows are removed on the next durable rewrite.
+ */
 static gboolean history_load_record(LsmApp *app, char *line)
 {
     if (!app || !line || !*line || *line == '#') return FALSE;
     gchar **fields = g_strsplit(line, "\t", 11);
     if (g_strv_length(fields) < 11) {
         g_strfreev(fields);
-        return FALSE;
+        return TRUE;
     }
 
     double cpu_seconds = 0.0;
@@ -378,21 +382,17 @@ static gboolean history_load_record(LsmApp *app, char *line)
     uint64_t peak_rss_bytes = 0U;
     int64_t first_seen = 0;
     int64_t last_seen = 0;
-    bool cpu_legacy_decimal = false;
-    bool active_legacy_decimal = false;
-    if (!numeric_io_parse_persisted_double_range(
-            fields[4], 0.0, (double)UINT64_MAX,
-            &cpu_seconds, &cpu_legacy_decimal) ||
-        !numeric_io_parse_persisted_double_range(
-            fields[5], 0.0, (double)UINT64_MAX,
-            &active_seconds, &active_legacy_decimal) ||
+    if (!infiltratr_parse_double_range(
+            fields[4], 0.0, (double)UINT64_MAX, &cpu_seconds) ||
+        !infiltratr_parse_double_range(
+            fields[5], 0.0, (double)UINT64_MAX, &active_seconds) ||
         !infiltratr_parse_u64(fields[6], 10U, &read_bytes) ||
         !infiltratr_parse_u64(fields[7], 10U, &write_bytes) ||
         !infiltratr_parse_u64(fields[8], 10U, &peak_rss_bytes) ||
         !infiltratr_parse_i64(fields[9], 10U, &first_seen) ||
         !infiltratr_parse_i64(fields[10], 10U, &last_seen)) {
         g_strfreev(fields);
-        return FALSE;
+        return TRUE;
     }
 
     LsmHistoryEntry *entry = g_new0(LsmHistoryEntry, 1U);
@@ -408,7 +408,7 @@ static gboolean history_load_record(LsmApp *app, char *line)
     entry->first_seen = first_seen;
     entry->last_seen = last_seen;
 
-    gboolean truncated = cpu_legacy_decimal || active_legacy_decimal;
+    gboolean truncated = FALSE;
     const gboolean existed = g_hash_table_contains(
         app->history.app_history, entry->key);
     if (!existed &&
