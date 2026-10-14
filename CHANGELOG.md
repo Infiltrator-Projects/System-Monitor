@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.200 - 2026-10-14
+
+- Make Common dependency preparation explicit: CMake and normal Make verification now validate the parent-pinned submodule without hidden network or source-tree mutation, while `make common-bootstrap` is the single opt-in fetch path for an incomplete Git checkout.
+- Move every persisted graphical preference default into the preferences owner so the application composition root retains lifecycle ordering without duplicating preference policy.
+- Make the authoritative Clang and Doxygen documentation gates fail closed when their required tools are unavailable, and give deterministic coverage one manifest for both its exact module scope and expected count.
+- Remove redundant source checkouts from clean-host installer qualification and release sealing by carrying `support/VERSION` with the already-qualified Linux artifact bundle.
+
 ## 1.0.199 - 2026-10-14
 
 - Complete the Common 1.19.42 adoption audit: verify that the 1.19.41-to-1.19.42 implementation delta changes no pre-existing System Monitor parsing, I/O, arithmetic, timing or persistence contract, then retain the full exact-pin qualification as the integration proof.

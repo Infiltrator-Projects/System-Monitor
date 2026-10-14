@@ -6,7 +6,9 @@ System Monitor is an original clean-sheet implementation. Do not copy, translate
 
 Follow the durable contracts in [Architecture](docs/ARCHITECTURE.md). Behavioural changes should update the owning tests; update documentation only when a documented contract changes.
 
-`make check` is the authoritative verification suite. Use `make docs` for Doxygen validation and `make -j2 release` for a release-equivalent packaging pass.
+`make check` is the authoritative verification suite. Its documentation gates require Clang and Doxygen. Use `make docs` for Doxygen validation and `make -j2 release` for a release-equivalent packaging pass.
+
+Dependency preparation is explicit: clone with submodules or run `make common-bootstrap`. `make check`, normal builds and CMake configuration validate the pinned Common revision but never fetch or mutate it implicitly.
 
 Normal development stays on `main`. Keep changes focused, preserve strict warnings, and represent unsupported or inaccessible telemetry as unavailable rather than inventing a value.
 

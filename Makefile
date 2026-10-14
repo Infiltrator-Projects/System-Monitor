@@ -164,10 +164,20 @@ LDLIBS += $(GTK_LIBS) -lm -ldl
 all: common-check
 	@$(MAKE) --no-print-directory build-all
 
-build-all: $(TARGET)
-
-common-bootstrap: common-check
-	@:
+# Dependency preparation is an explicit operation. Verification and normal
+# builds never mutate the checkout or access the network behind the caller's
+# back; they only validate the exact parent-repository gitlink.
+common-bootstrap:
+	@test -e .git || { \
+		echo "common-bootstrap is only available from a Git checkout." >&2; \
+		exit 1; \
+	}
+	@command -v git >/dev/null 2>&1 || { \
+		echo "git is required to initialise the pinned Infiltratr Common submodule." >&2; \
+		exit 1; \
+	}
+	git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"
+	@$(MAKE) --no-print-directory common-check
 
 # The parent gitlink is the sole Common revision authority in a Git checkout.
 # Complete source archives already carry that exact Common tree and therefore
@@ -182,11 +192,8 @@ common-check:
 			echo "Unable to read the Infiltratr Common gitlink from the parent repository." >&2; \
 			exit 1; \
 		}; \
-		if test ! -f "$(INFILTRATR_COMMON_DIR)/VERSION"; then \
-			git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"; \
-		fi; \
 		test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
-			echo "Unable to initialise the pinned Infiltratr Common submodule." >&2; \
+			echo "Infiltratr Common is not initialised; run 'make common-bootstrap' or clone with --recurse-submodules." >&2; \
 			exit 1; \
 		}; \
 		actual_commit=$$(git -C "$(INFILTRATR_COMMON_DIR)" rev-parse HEAD 2>/dev/null) || { \
@@ -403,45 +410,40 @@ style-check: cxx-check $(STYLE_CHECKER)
 	./$(STYLE_CHECKER)
 
 clang-doc-check: | $(BUILD_DIR)
-	@if command -v $(CLANG) >/dev/null 2>&1; then \
-		set -e; \
-		doc_flags="-Wdocumentation"; \
-		tmp=$$(mktemp); \
-		printf '/** test */\nint value;\n' | $(CLANG) -x c -c -o $$tmp \
-			-Werror -Wdocumentation-pedantic - >/dev/null 2>&1 && \
-			doc_flags="$$doc_flags -Wdocumentation-pedantic"; \
-		rm -f $$tmp; \
-		if [ -n "$(strip $(C_SOURCES))" ]; then \
-			$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
-				-Wpedantic -Werror $$doc_flags -fsyntax-only $(C_SOURCES); \
-		fi; \
-		if [ -n "$(strip $(CXX_SOURCES))" ]; then \
-			$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
-				-Wpedantic -Werror $$doc_flags -fsyntax-only $(CXX_SOURCES); \
-		fi; \
-		echo "Clang documentation syntax pass completed."; \
-	else \
-		echo "Clang is unavailable; documentation syntax gate skipped."; \
-	fi
+	@command -v $(CLANG) >/dev/null 2>&1 || { \
+		echo "Clang is required for the authoritative documentation syntax gate." >&2; \
+		exit 1; \
+	}
+	@set -e; \
+	doc_flags="-Wdocumentation"; \
+	tmp=$$(mktemp); \
+	printf '/** test */\nint value;\n' | $(CLANG) -x c -c -o $$tmp \
+		-Werror -Wdocumentation-pedantic - >/dev/null 2>&1 && \
+		doc_flags="$$doc_flags -Wdocumentation-pedantic"; \
+	rm -f $$tmp; \
+	if [ -n "$(strip $(C_SOURCES))" ]; then \
+		$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c17 -Wall -Wextra \
+			-Wpedantic -Werror $$doc_flags -fsyntax-only $(C_SOURCES); \
+	fi; \
+	if [ -n "$(strip $(CXX_SOURCES))" ]; then \
+		$(CLANG) $(DOC_CPPFLAGS) -Isupport/tests/compat -std=c++17 -Wall -Wextra \
+			-Wpedantic -Werror $$doc_flags -fsyntax-only $(CXX_SOURCES); \
+	fi; \
+	echo "Clang documentation syntax pass completed."
 
 doxygen-check:
 	@test -f support/Doxyfile
-	@if command -v $(DOXYGEN) >/dev/null 2>&1; then \
-		set -e; \
-		$(DOXYGEN) support/Doxyfile; \
-		echo "Doxygen generated-reference contract passed."; \
-	else \
-		echo "Doxygen is unavailable; generated-reference gate skipped."; \
-	fi
+	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
+		echo "Doxygen is required for the authoritative generated-reference gate." >&2; \
+		exit 1; \
+	}
+	@$(DOXYGEN) support/Doxyfile
+	@echo "Doxygen generated-reference contract passed."
 
 docs-check: style-check clang-doc-check doxygen-check
 	@echo "Maintained documentation and source contracts passed."
 
 docs: docs-check
-	@command -v $(DOXYGEN) >/dev/null 2>&1 || { \
-		echo "Doxygen is required to generate the HTML reference."; \
-		exit 1; \
-	}
 	@echo "Documentation generated in build/docs/html/index.html"
 
 # Compile every translation unit under the project's strongest portable GCC
@@ -490,19 +492,6 @@ analyzer-check: check-deps | $(BUILD_DIR)
 		echo "Compiler has no -fanalyzer support; static-analyser gate skipped."; \
 	fi
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 monitor-platform-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/monitor_platform_smoke.c \
 		src/monitor.c $(INFILTRATR_COMMON_ARCHIVE) -o $(BUILD_DIR)/monitor-platform-smoke
@@ -516,14 +505,10 @@ backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		-o $(BUILD_DIR)/backend-smoke
 	./$(BUILD_DIR)/backend-smoke
 
-
-
-
-
 history-retention-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -DLSM_HISTORY_TEST_API -std=c17 $(STRICT_WARNINGS) \
 		support/tests/history_retention_smoke.c src/history.c src/history_persistence.c src/temporal_presentation.c \
-		  src/ui_helpers.c \
+		src/ui_helpers.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/history-retention-smoke
 	./$(BUILD_DIR)/history-retention-smoke
@@ -538,15 +523,10 @@ temporal-presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 async-workers-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
 		support/tests/async_workers_smoke.c src/process_scanner.c \
-		src/process_recorder.c $(PROCESS_SOURCES)  \
+		src/process_recorder.c $(PROCESS_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
 		-o $(BUILD_DIR)/async-workers-smoke
 	./$(BUILD_DIR)/async-workers-smoke
-
-
-
-
-
 
 battery-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/battery_smoke.c \
@@ -555,19 +535,14 @@ battery-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		-o $(BUILD_DIR)/battery-smoke
 	./$(BUILD_DIR)/battery-smoke
 
-
-
-
-
 portability-check: $(PORTABILITY_CHECKER)
 	REQUIRE_I386=$(REQUIRE_I386) CC=$(CC) CXX=$(CXX) ./$(PORTABILITY_CHECKER) --root .
-
 
 nvml-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -shared -fPIC -std=c17 $(STRICT_WARNINGS) support/tests/mock_nvml.c \
 		-o $(BUILD_DIR)/libnvidia-ml-test.so
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		support/tests/nvml_smoke.c src/nvml.c  \
+		support/tests/nvml_smoke.c src/nvml.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -ldl -lm -o $(BUILD_DIR)/nvml-smoke
 	LSM_NVML_LIBRARY=$(CURDIR)/$(BUILD_DIR)/libnvidia-ml-test.so \
 		./$(BUILD_DIR)/nvml-smoke
@@ -581,7 +556,7 @@ runtime-stability-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 
 process-scan-benchmark: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) \
-		support/tests/process_scan_benchmark.c $(PROCESS_SOURCES)  \
+		support/tests/process_scan_benchmark.c $(PROCESS_SOURCES) \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/process-scan-benchmark
 	./$(BUILD_DIR)/process-scan-benchmark
 
@@ -708,9 +683,6 @@ native-command-audit:
 		src/task_launcher.c
 	@echo "Native command, dependency and executable-boundary audit passed."
 
-
-
-
 application-catalog-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/application_catalog_smoke.c src/application_catalog.c \
@@ -718,14 +690,9 @@ application-catalog-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		-o $(BUILD_DIR)/application-catalog-smoke
 	./$(BUILD_DIR)/application-catalog-smoke
 
-
-
-
-
 system-snapshot-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		support/tests/system_snapshot_smoke.c src/system_snapshot.c src/temporal_presentation.c src/project_info.c \
-		   \
 		$(INFILTRATR_COMMON_ARCHIVE) -pthread -lm \
 		-o $(BUILD_DIR)/system-snapshot-smoke
 	./$(BUILD_DIR)/system-snapshot-smoke
@@ -733,20 +700,27 @@ system-snapshot-smoke: | $(BUILD_DIR)
 process-export-smoke: | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
 		-ffunction-sections -fdata-sections support/tests/process_export_smoke.c \
-		src/process_export.c  src/process_model.c  \
+		src/process_export.c src/process_model.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -Wl,--gc-sections -lm \
 		-o $(BUILD_DIR)/process-export-smoke
 	./$(BUILD_DIR)/process-export-smoke
 
-
 # Instrument deterministic accounting, parsing, selection, formatting and
-# cadence modules. The consolidated subsystem runners exercise the same case
-# bodies while four executables replace seventeen one-case coverage programs.
+# cadence modules. One explicit gate manifest owns the exact coverage scope and
+# derives both the gcov input set and the expected module count.
 COVERAGE_METRICS_SOURCES := $(METRICS_TEST_SOURCES)
 COVERAGE_STORAGE_SOURCES := $(STORAGE_TEST_SOURCES)
 COVERAGE_PROCESS_SOURCES := $(PROCESS_TEST_SOURCES)
 COVERAGE_ACCELERATOR_SOURCES := $(ACCELERATOR_TEST_SOURCES)
 COVERAGE_ALL_SOURCES := $(COVERAGE_METRICS_SOURCES) $(COVERAGE_STORAGE_SOURCES) $(COVERAGE_PROCESS_SOURCES) $(COVERAGE_ACCELERATOR_SOURCES)
+COVERAGE_GATE_SOURCES := \
+	src/cpu_accounting.c src/disk_accounting.c src/process_gpu.c \
+	src/storage_metadata.c src/smbios_memory.c src/memory_accounting.c \
+	src/pressure.c src/sample_history.c src/overview_history.c \
+	src/gpu_metrics.c src/performance_selection.c src/process_grouping.c \
+	src/mountinfo.c src/cpu_direct.c src/refresh_policy.c \
+	src/npu_telemetry.c src/filesystem_inventory.c src/process_inspection.c
+COVERAGE_GATE_COUNT := $(words $(COVERAGE_GATE_SOURCES))
 COVERAGE_METRICS_OBJECTS := $(patsubst src/%.c,$(COVERAGE_DIR)/%.o,$(COVERAGE_METRICS_SOURCES))
 COVERAGE_STORAGE_OBJECTS := $(patsubst src/%.c,$(COVERAGE_DIR)/%.o,$(COVERAGE_STORAGE_SOURCES))
 COVERAGE_PROCESS_OBJECTS := $(patsubst src/%.c,$(COVERAGE_DIR)/%.o,$(COVERAGE_PROCESS_SOURCES))
@@ -777,9 +751,9 @@ coverage-check: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(COVERAGE_DIR)/storage-smoke
 	$(COVERAGE_DIR)/process-smoke
 	$(COVERAGE_DIR)/accelerator-smoke
-	cd $(COVERAGE_DIR) && gcov -o . ../../src/cpu_accounting.c ../../src/disk_accounting.c ../../src/process_gpu.c ../../src/storage_metadata.c ../../src/smbios_memory.c ../../src/memory_accounting.c ../../src/pressure.c ../../src/sample_history.c ../../src/overview_history.c ../../src/gpu_metrics.c ../../src/performance_selection.c ../../src/process_grouping.c ../../src/mountinfo.c ../../src/cpu_direct.c ../../src/refresh_policy.c ../../src/npu_telemetry.c ../../src/filesystem_inventory.c ../../src/process_inspection.c > coverage.txt
-	@awk '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != 18) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
-	@echo "Coverage scope: 18 deterministic core modules, each at least 65%; this is not a whole-application percentage."
+	cd $(COVERAGE_DIR) && gcov -o . $(addprefix ../../,$(COVERAGE_GATE_SOURCES)) > coverage.txt
+	@awk -v expected='$(COVERAGE_GATE_COUNT)' '/^File .*\.c/ { file=$$0; next } /^File / { file=""; next } /^Lines executed:/ && file != "" { line=$$0; sub(/^Lines executed:/, "", line); sub(/%.*/, "", line); printf "%s — %s%% lines\n", file, line; if ((line + 0) < 65) failed=1; total += line + 0; checked++; file="" } END { if (checked != expected) failed=1; if (checked > 0) printf "Selected deterministic core average — %.1f%% lines across %d modules\n", total / checked, checked; exit failed }' $(COVERAGE_DIR)/coverage.txt
+	@echo "Coverage scope: $(COVERAGE_GATE_COUNT) deterministic core modules, each at least 65%; this is not a whole-application percentage."
 	@echo "Deterministic core line-coverage gate passed."
 
 install install-built uninstall:

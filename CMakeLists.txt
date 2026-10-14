@@ -7,34 +7,25 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 # The parent repository gitlink is the sole Common revision authority in a Git
-# checkout. Complete source archives carry that exact Common tree, so archive
-# builds need neither Git nor a second application-owned pin.
+# checkout. Complete source archives carry that exact Common tree. Configuration
+# is validation-only: dependency fetching is an explicit checkout/bootstrap
+# operation rather than a hidden source-tree mutation performed by CMake.
 set(LSM_GIT_CHECKOUT FALSE)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
     set(LSM_GIT_CHECKOUT TRUE)
 endif()
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
-    if(NOT LSM_GIT_CHECKOUT)
+    if(LSM_GIT_CHECKOUT)
         message(FATAL_ERROR
-            "src/infiltratr-common is missing. Use a complete release source archive or initialise the repository submodule.")
+            "src/infiltratr-common is not initialised. Clone with --recurse-submodules or run 'make common-bootstrap' before configuring.")
     endif()
-    find_program(LSM_GIT_EXECUTABLE git REQUIRED)
-    execute_process(
-        COMMAND "${LSM_GIT_EXECUTABLE}" submodule update --init --depth 1 --
-                src/infiltratr-common
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        RESULT_VARIABLE LSM_COMMON_FETCH_RESULT)
-    if(NOT LSM_COMMON_FETCH_RESULT EQUAL 0 OR
-       NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
-        message(FATAL_ERROR "Unable to initialise the pinned Infiltratr Common submodule.")
-    endif()
+    message(FATAL_ERROR
+        "src/infiltratr-common is missing. Use a complete release source archive.")
 endif()
 
 if(LSM_GIT_CHECKOUT)
-    if(NOT LSM_GIT_EXECUTABLE)
-        find_program(LSM_GIT_EXECUTABLE git REQUIRED)
-    endif()
+    find_program(LSM_GIT_EXECUTABLE git REQUIRED)
     execute_process(
         COMMAND "${LSM_GIT_EXECUTABLE}" rev-parse HEAD:src/infiltratr-common
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

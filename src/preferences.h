@@ -35,6 +35,17 @@ typedef struct {
 } LsmPreferencesDialogValues;
 
 /**
+ * Initialise every persisted preference to its compiled product default.
+ *
+ * This is the single authority for preference defaults. The application
+ * composition root owns lifecycle ordering only and then overlays persisted
+ * values by calling lsm_preferences_load().
+ *
+ * @param [in,out] app Application receiving compiled preference defaults.
+ */
+void lsm_preferences_initialise_defaults(LsmApp *app);
+
+/**
  * Load saved preferences while preserving compiled defaults for missing keys.
  *
  * Unknown keys and malformed values are ignored so a newer configuration file

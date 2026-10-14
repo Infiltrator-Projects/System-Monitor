@@ -37,6 +37,37 @@
 #include <stdlib.h>
 #include <string.h>
 
+void lsm_preferences_initialise_defaults(LsmApp *app)
+{
+    if (!app) return;
+
+    app->runtime.update_interval_ms = LSM_DEFAULT_UPDATE_INTERVAL_MS;
+    app->runtime.filesystem_update_interval_ms = 5000U;
+    app->runtime.theme_mode = INFILTRATR_THEME_SYSTEM;
+    app->runtime.newer_on_right = TRUE;
+    app->runtime.network_use_bits = FALSE;
+    app->runtime.network_total_separate = FALSE;
+    app->runtime.network_total_use_bits = FALSE;
+    app->runtime.graph_smooth = TRUE;
+    app->runtime.cpu_stacked = FALSE;
+    app->runtime.memory_logarithmic = FALSE;
+    app->runtime.graph_data_points = 100U;
+    app->runtime.process_cpu_per_core = FALSE;
+    app->runtime.confirm_process_actions = TRUE;
+    app->runtime.show_all_filesystems = FALSE;
+    app->details.process_heatmap = FALSE;
+    app->runtime.always_on_top = FALSE;
+    app->runtime.compact_summary = FALSE;
+    app->runtime.window_width = LSM_DEFAULT_WINDOW_WIDTH;
+    app->runtime.window_height = LSM_DEFAULT_WINDOW_HEIGHT;
+    app->runtime.window_maximized = FALSE;
+    app->runtime.last_tab = LSM_TAB_OVERVIEW;
+    for (size_t index = 0U; index < LSM_TAB_COUNT; index++)
+        app->runtime.page_scroll[index] = 0.0;
+    lsm_copy_string(app->runtime.selected_performance_page,
+                    sizeof(app->runtime.selected_performance_page), "cpu");
+}
+
 static gboolean parse_boolean(const char *value, gboolean fallback)
 {
     bool parsed = false;
