@@ -256,21 +256,21 @@ int main(void)
 
     FILE *file = fopen(saved->paths.preferences_path, "w");
     assert(file);
-    fputs("page_scroll_1=321,750\n", file);
+    fputs("page_scroll_1=321.750\n", file);
     assert(fclose(file) == 0);
     loaded->runtime.page_scroll[LSM_TAB_PROCESSES] = 0.0;
     lsm_preferences_load(loaded);
     assert(fabs(loaded->runtime.page_scroll[LSM_TAB_PROCESSES] - 321.75) < 0.001);
-    lsm_preferences_save(loaded);
-    file = fopen(saved->paths.preferences_path, "r");
+
+    /* Pre-release preferences have one current numeric grammar. A comma
+     * decimal from the retired pre-1.0.39 format must not be reinterpreted. */
+    file = fopen(saved->paths.preferences_path, "w");
     assert(file);
-    char canonical[4096];
-    const size_t canonical_length =
-        fread(canonical, 1U, sizeof(canonical) - 1U, file);
-    canonical[canonical_length] = '\0';
+    fputs("page_scroll_1=321,750\n", file);
     assert(fclose(file) == 0);
-    assert(strstr(canonical, "page_scroll_1=321.750"));
-    assert(!strstr(canonical, "page_scroll_1=321,750"));
+    loaded->runtime.page_scroll[LSM_TAB_PROCESSES] = 12.0;
+    lsm_preferences_load(loaded);
+    assert(loaded->runtime.page_scroll[LSM_TAB_PROCESSES] == 12.0);
 
     file = fopen(saved->paths.preferences_path, "w");
     assert(file);
