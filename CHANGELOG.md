@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.198 - 2026-10-14
+
+- Advance the exact Infiltratr Common gitlink to published 1.19.42 and consume Common's new shared-design validators instead of duplicating palette and metrics ABI-prefix rules in the Win32 adapter.
+- Keep native Win32 integer-range, host-theme detection, registry persistence and palette projection product-owned while making Common the single authority for validity of its shared design records.
+- Record the pre-release dependency cadence: System Monitor follows the current Common contract directly, carries no compatibility shims solely for superseded internal Common revisions, and must remain within five published Common releases of the latest qualified release.
+
 ## 1.0.197 - 2026-10-13
 
 - Make native Windows process-worker availability reflect actual thread liveness, so backend creation failure cannot leave the UI indefinitely reporting a background refresh after its worker has already exited.

@@ -10,7 +10,6 @@
 #include "windows_theme.h"
 
 #include <limits.h>
-#include <stddef.h>
 #include <stdint.h>
 
 static COLORREF colourref_from_common(uint32_t rgb)
@@ -23,11 +22,7 @@ static COLORREF colourref_from_common(uint32_t rgb)
 
 bool lsm_windows_theme_design_supported(const InfiltratrDesignMetrics *design)
 {
-    return design &&
-           design->abi_version == INFILTRATR_DESIGN_METRICS_ABI &&
-           design->struct_size >=
-               offsetof(InfiltratrDesignMetrics, screen_padding) +
-               sizeof(design->screen_padding) &&
+    return infiltratr_design_metrics_is_valid(design) &&
            design->small_radius <= (uint32_t)INT_MAX &&
            design->control_radius <= (uint32_t)INT_MAX &&
            design->card_radius <= (uint32_t)INT_MAX &&
@@ -35,15 +30,6 @@ bool lsm_windows_theme_design_supported(const InfiltratrDesignMetrics *design)
            design->control_spacing <= (uint32_t)INT_MAX &&
            design->section_spacing <= (uint32_t)INT_MAX &&
            design->screen_padding <= (uint32_t)INT_MAX;
-}
-
-static bool palette_supported(const InfiltratrThemePalette *palette)
-{
-    return palette &&
-           palette->abi_version == INFILTRATR_THEME_PALETTE_ABI &&
-           palette->struct_size >=
-               offsetof(InfiltratrThemePalette, success_border_rgb) +
-               sizeof(palette->success_border_rgb);
 }
 
 static bool system_prefers_dark(void)
@@ -97,7 +83,7 @@ bool lsm_windows_theme_resolve(LsmWindowsTheme *theme)
     if (!theme) return false;
     const InfiltratrThemePalette *source =
         infiltratr_theme_resolve(theme->mode, system_prefers_dark());
-    if (!palette_supported(source)) return false;
+    if (!infiltratr_theme_palette_is_valid(source)) return false;
     project_palette(source, &theme->palette);
     return true;
 }

@@ -36,6 +36,8 @@ The build system deliberately has one authority per concern. Make owns the regre
 
 `src/infiltratr-common` is a Git submodule. In a Git checkout, CMake validates the checked-out Common revision against the parent repository gitlink instead of maintaining an independent application-build pin. Release source archives carry the exact Common tree they were built with.
 
+While the Infiltrator estate remains pre-release, System Monitor follows the current shared Common contract rather than carrying product-local compatibility machinery for superseded internal revisions. The gitlink must remain within five published Common releases of the latest qualified Common release; normal dependency maintenance should advance directly to the newest reviewed release. This cadence rule does not weaken Common's own API/ABI discipline or justify moving product semantics into the shared library.
+
 ## Runtime contracts
 
 - Availability is distinct from value; valid zero never means unavailable.
@@ -60,6 +62,6 @@ Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or 
 
 ## Common
 
-`src/infiltratr-common` is pinned by the parent repository gitlink to an exact Infiltratr Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local.
+`src/infiltratr-common` is pinned by the parent repository gitlink to an exact Infiltratr Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.
 
 Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../SECURITY.md).
