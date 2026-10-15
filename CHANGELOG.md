@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.201 - 2026-10-15
+
+- Reduce repository-audit coupling to incidental build and workflow spelling: retain source manifests, ownership boundaries, licensing, shell limits, Common encapsulation and sealed-release invariants while allowing semantically equivalent command layout and orchestration refactors.
+- Make Doxygen's fail-closed undocumented/API-contract settings the documentation authority instead of maintaining a second hand-written public-declaration parser in the source-style auditor.
+- Preserve the deliberate single-authority build model: Make owns verification and packaging, CMake owns the Linux application build, the Windows release script owns the native Windows build, and Publish consumes only the sealed qualified artifact bundle.
+
 ## 1.0.200 - 2026-10-14
 
 - Make Common dependency preparation explicit: CMake and normal Make verification now validate the parent-pinned submodule without hidden network or source-tree mutation, while `make common-bootstrap` is the single opt-in fetch path for an incomplete Git checkout.
