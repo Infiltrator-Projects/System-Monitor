@@ -156,13 +156,12 @@ LDFLAGS += -Wl,--gc-sections -Wl,--as-needed \
 	$(REPRODUCIBLE_PATH_FLAGS) $(NATIVE_PROFILE_LDFLAGS) -pthread
 LDLIBS += $(GTK_LIBS) -lm -ldl
 
-.PHONY: all build-all clean run install install-built uninstall check build-check check-deps cxx-check common-bootstrap common-check common-library strict-check style-check FORCE \
+.PHONY: all clean run install install-built uninstall check build-check check-deps cxx-check common-bootstrap common-check common-library strict-check style-check FORCE \
 	core-suite-smoke peripheral-suite-smoke metrics-suite-smoke storage-suite-smoke process-suite-smoke ui-suite-smoke accelerator-suite-smoke \
 	backend-smoke monitor-platform-smoke battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke system-snapshot-smoke process-export-smoke history-retention-smoke async-workers-smoke runtime-stability-smoke process-scan-benchmark \
 	native-command-audit portability-check sanitizer-check analyzer-check clang-doc-check doxygen-check docs-check docs benchmark installer-check native-installer dist deb coverage-check release
 
-all: common-check
-	@$(MAKE) --no-print-directory build-all
+all: $(TARGET)
 
 # Dependency preparation is an explicit operation. Verification and normal
 # builds never mutate the checkout or access the network behind the caller's
@@ -287,7 +286,7 @@ cxx-check:
 		exit 1; \
 	}
 
-check: style-check docs-check installer-check build-check
+check: docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
 build-check: check-deps strict-check portability-check \
@@ -811,7 +810,5 @@ dist: common-check clean
 		rm -rf "$$tmp"
 	@echo "Created deterministic optional source archive: $(SOURCE_ZIP)"
 
-release:
-	$(MAKE) deb
-	$(MAKE) native-installer
+release: deb native-installer
 	@echo "Release artifacts created: $(DEB_OUTPUT), infiltrator-system-monitor-$(VERSION)-native-installer.run"

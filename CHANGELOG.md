@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.202 - 2026-10-15
+
+- Repair the default Make build by removing the orphaned `build-all` indirection and making `all` depend directly on the application target.
+- Simplify verification and release orchestration by removing a redundant `style-check` dependency and expressing Debian/native-installer release artifacts as direct Make prerequisites instead of recursive Make invocations.
+- Make the repository audit protect durable contracts rather than theme/CSS, README-heading and Doxygen-layout spellings; keep GTK behavioural qualification and Doxygen itself authoritative for those semantics while guarding the real default-build and release dependency graph.
+
 ## 1.0.201 - 2026-10-15
 
 - Reduce repository-audit coupling to incidental build and workflow spelling: retain source manifests, ownership boundaries, licensing, shell limits, Common encapsulation and sealed-release invariants while allowing semantically equivalent command layout and orchestration refactors.

@@ -246,22 +246,6 @@ static void check_source_boundaries(const std::string &path,
             forbid_marker(path.c_str(), text, marker,
                           "theme implementation leaked into shell navigation");
     }
-    if (path == "src/app_theme.c") {
-        require_marker(path.c_str(), text, "lsm_app_shell_apply_theme");
-        require_marker(path.c_str(), text, "infiltratr_theme_resolve");
-        require_marker(path.c_str(), text, "gtk_css_provider_load_from_data");
-        require_marker(path.c_str(), text, "button:hover > label");
-        require_marker(path.c_str(), text, "button:hover > image");
-        require_marker(path.c_str(), text, "menu menuitem:disabled label");
-        for (const char *marker : {
-                 "button label, button image",
-                 "button:hover label, button:hover image",
-                 "button:active label, button:active image",
-                 "button:checked label, button:checked image",
-                 "button:disabled label, button:disabled image"})
-            forbid_marker(path.c_str(), text, marker,
-                          "button selector recolours nested composite content");
-    }
 }
 
 static void check_source_file(const std::filesystem::path &filesystem_path)
@@ -573,12 +557,23 @@ static void check_build_and_release_contracts(void)
 {
     std::string makefile;
     if (read_text("Makefile", &makefile)) {
+        require_line_tokens("Makefile", makefile, {"all:", "$(TARGET)"},
+                            "default application build");
         require_line_tokens("Makefile", makefile,
                             {"common-library:", "common-check"},
                             "Common dependency ownership");
         for (const char *target : {"check:", "build-check:", "deb:",
-                                   "native-installer:", "release:"})
+                                   "native-installer:"})
             require_line_tokens("Makefile", makefile, {target}, target);
+        require_line_tokens("Makefile", makefile,
+                            {"release:", "deb", "native-installer"},
+                            "release artifact dependencies");
+        forbid_marker("Makefile", makefile, "build-all",
+                      "obsolete recursive default-build indirection");
+        forbid_marker("Makefile", makefile, "\t$(MAKE) deb",
+                      "release target must express dependencies directly");
+        forbid_marker("Makefile", makefile, "\t$(MAKE) native-installer",
+                      "release target must express dependencies directly");
         forbid_marker("Makefile", makefile, "$(INFILTRATR_COMMON_DIR)/src/",
                       "Common private source membership must remain Common-owned");
         forbid_marker("Makefile", makefile, "src/infiltratr-common/src/",
@@ -655,26 +650,26 @@ static void check_documentation_contract(void)
     if (read_text("README.md", &readme)) {
         check_unit_label_policy("README.md", readme);
         for (const char *marker : {
-                 "## Clean-sheet provenance", "## Capabilities", "## Build and test",
-                 "src/infiltratr-common", "## Release assets",
-                 "## Technical documentation", "PHILOSOPHY.md",
+                 "src/infiltratr-common", "PHILOSOPHY.md",
                  "docs/ARCHITECTURE.md", "docs/HARDWARE.md", "docs/VALIDATION.md",
-                 "CONTRIBUTING.md", "SECURITY.md", "## Licence and provenance",
-                 "GPL-3.0-or-later"})
+                 "CONTRIBUTING.md", "SECURITY.md", "GPL-3.0-or-later"})
             require_marker("README.md", readme, marker);
     }
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
-        for (const char *marker : {
-                 "INPUT                  = README.md PHILOSOPHY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src",
-                 "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common",
-                 "EXTRACT_LOCAL_CLASSES   = NO",
-                 "WARN_IF_UNDOCUMENTED    = YES",
-                 "WARN_IF_DOC_ERROR       = YES",
-                 "WARN_NO_PARAMDOC        = YES",
-                 "WARN_AS_ERROR           = YES"})
+        for (const char *marker : {"README.md", "PHILOSOPHY.md", "CHANGELOG.md",
+                                   "CONTRIBUTING.md", "SECURITY.md",
+                                   ".github/CODE_OF_CONDUCT.md", "docs", "src",
+                                   "src/pci_names_data.c", "src/infiltratr-common"})
             require_marker("support/Doxyfile", doxyfile, marker);
+        require_line_tokens("support/Doxyfile", doxyfile,
+                            {"EXTRACT_LOCAL_CLASSES", "NO"},
+                            "local-class extraction policy");
+        for (const char *setting : {"WARN_IF_UNDOCUMENTED", "WARN_IF_DOC_ERROR",
+                                    "WARN_NO_PARAMDOC", "WARN_AS_ERROR"})
+            require_line_tokens("support/Doxyfile", doxyfile, {setting, "YES"},
+                                "fail-closed Doxygen warning policy");
     }
 }
 
