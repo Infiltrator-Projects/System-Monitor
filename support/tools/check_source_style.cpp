@@ -246,6 +246,22 @@ static void check_source_boundaries(const std::string &path,
             forbid_marker(path.c_str(), text, marker,
                           "theme implementation leaked into shell navigation");
     }
+    if (path == "src/app_theme.c") {
+        require_marker(path.c_str(), text, "lsm_app_shell_apply_theme");
+        require_marker(path.c_str(), text, "infiltratr_theme_resolve");
+        require_marker(path.c_str(), text, "gtk_css_provider_load_from_data");
+        require_marker(path.c_str(), text, "button:hover > label");
+        require_marker(path.c_str(), text, "button:hover > image");
+        require_marker(path.c_str(), text, "menu menuitem:disabled label");
+        for (const char *marker : {
+                 "button label, button image",
+                 "button:hover label, button:hover image",
+                 "button:active label, button:active image",
+                 "button:checked label, button:checked image",
+                 "button:disabled label, button:disabled image"})
+            forbid_marker(path.c_str(), text, marker,
+                          "button selector recolours nested composite content");
+    }
 }
 
 static void check_source_file(const std::filesystem::path &filesystem_path)
@@ -468,6 +484,15 @@ static void check_licensing_contract(void)
              "support/resources/fonts/mb-corpo-fonts.tar.xz",
              "support/packaging/copyright"})
         if (!regular_file(path)) report_error("%s: required licensing asset is missing", path);
+
+    std::string license;
+    if (read_text("LICENSE", &license)) {
+        require_marker("LICENSE", license, "GNU GENERAL PUBLIC LICENSE");
+        require_marker("LICENSE", license, "Version 3, 29 June 2007");
+    }
+    std::string copyright;
+    if (read_text("support/packaging/copyright", &copyright))
+        require_marker("support/packaging/copyright", copyright, "License: GPL-3+");
 }
 
 static void check_shell_boundary(void)
@@ -482,6 +507,7 @@ static void check_shell_boundary(void)
         report_error("%s: bootstrap exceeds the 4096-byte shell boundary",
                      bootstrap_path);
     require_marker(bootstrap_path, bootstrap, "support/tools/native_installer.c");
+    require_marker(bootstrap_path, bootstrap, "exec \"$builder\"");
 
     std::error_code error;
     std::filesystem::recursive_directory_iterator iterator(
@@ -547,6 +573,9 @@ static void check_build_and_release_contracts(void)
 {
     std::string makefile;
     if (read_text("Makefile", &makefile)) {
+        require_line_tokens("Makefile", makefile,
+                            {"common-library:", "common-check"},
+                            "Common dependency ownership");
         for (const char *target : {"check:", "build-check:", "deb:",
                                    "native-installer:", "release:"})
             require_line_tokens("Makefile", makefile, {target}, target);
@@ -558,10 +587,13 @@ static void check_build_and_release_contracts(void)
 
     std::string cmake;
     if (read_text("CMakeLists.txt", &cmake)) {
+        require_marker("CMakeLists.txt", cmake, "HEAD:src/infiltratr-common");
         require_line_tokens("CMakeLists.txt", cmake,
                             {"add_executable", "system-monitor"},
                             "application target ownership");
         require_marker("CMakeLists.txt", cmake, "InfiltratrCommon::Common");
+        require_marker("CMakeLists.txt", cmake,
+                       "add_subdirectory(\"${INFILTRATR_COMMON_DIR}\"");
         forbid_marker("CMakeLists.txt", cmake, "support/tests/",
                       "CMake must not duplicate the canonical Make regression graph");
         forbid_marker("CMakeLists.txt", cmake, "add_test(",
@@ -576,6 +608,9 @@ static void check_build_and_release_contracts(void)
                             {"make", "check"}, "canonical verification");
         require_line_tokens(".github/workflows/ci.yml", ci,
                             {"make", "release"}, "release build");
+        require_line_tokens(".github/workflows/ci.yml", ci,
+                            {"cmake", "--build", "system-monitor"},
+                            "CMake application qualification");
         require_marker(".github/workflows/ci.yml", ci,
                        "support/windows/build-release.ps1");
         forbid_marker(".github/workflows/ci.yml", ci,
@@ -587,20 +622,26 @@ static void check_build_and_release_contracts(void)
 
     std::string windows;
     if (read_text("support/windows/build-release.ps1", &windows)) {
-        require_marker("support/windows/build-release.ps1", windows,
-                       "support/source-groups/windows-product.txt");
-        require_marker("support/windows/build-release.ps1", windows,
-                       "infiltratr-common-portable");
+        for (const char *marker : {
+                 "support/source-groups/windows-product.txt",
+                 "support/windows/prepare-typography.ps1",
+                 "infiltratr-common-portable",
+                 "support/tools/windows_backend_probe.c",
+                 "system-monitor-$version-windows.exe"})
+            require_marker("support/windows/build-release.ps1", windows, marker);
     }
 
     std::string release;
     if (read_text(".github/workflows/release.yml", &release)) {
         for (const char *marker : {
-                 "system-monitor-release-assets", "RELEASE_SOURCE_SHA",
-                 "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt"})
+                 "actions/download-artifact@", "system-monitor-release-assets",
+                 "RELEASE_SOURCE_SHA", "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt",
+                 "github.event.workflow_run.head_sha", "gh release download",
+                 "gh release create"})
             require_marker(".github/workflows/release.yml", release, marker);
         require_line_tokens(".github/workflows/release.yml", release,
-                            {"gh", "release"}, "GitHub release publication");
+                            {"cmp", "release/", "asset"},
+                            "remote release byte verification");
         for (const char *marker : {"actions/checkout@", "make -j2 release",
                                    "REQUIRE_I386=1 make check", "ctest --test-dir"})
             forbid_marker(".github/workflows/release.yml", release, marker,
@@ -625,10 +666,14 @@ static void check_documentation_contract(void)
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
-        for (const char *marker : {"WARN_IF_UNDOCUMENTED    = YES",
-                                   "WARN_IF_DOC_ERROR       = YES",
-                                   "WARN_NO_PARAMDOC        = YES",
-                                   "WARN_AS_ERROR           = YES"})
+        for (const char *marker : {
+                 "INPUT                  = README.md PHILOSOPHY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src",
+                 "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common",
+                 "EXTRACT_LOCAL_CLASSES   = NO",
+                 "WARN_IF_UNDOCUMENTED    = YES",
+                 "WARN_IF_DOC_ERROR       = YES",
+                 "WARN_NO_PARAMDOC        = YES",
+                 "WARN_AS_ERROR           = YES"})
             require_marker("support/Doxyfile", doxyfile, marker);
     }
 }
