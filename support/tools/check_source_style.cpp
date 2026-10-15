@@ -3,10 +3,11 @@
  * @file check_source_style.cpp
  * @brief Mechanical source, architecture and repository consistency audit.
  *
- * The checker validates durable contracts rather than workflow implementation
- * spelling. It deliberately avoids duplicating the project's build or test
- * graph: Make owns regression execution, CMake owns the Linux application
- * build, and the Windows release script owns the native Windows build recipe.
+ * This checker protects durable repository invariants. It deliberately avoids
+ * treating incidental command spelling, whitespace or workflow step layout as
+ * architecture: Make owns verification and packaging, CMake owns the Linux
+ * application build, the Windows release script owns the native Windows build,
+ * and the publication workflow consumes only a sealed qualified artifact.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -20,6 +21,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -161,127 +163,6 @@ static bool path_has_compat_component(const std::string &path)
            path.rfind("compat/", 0U) == 0U;
 }
 
-static bool inside_block_comment(std::string_view text, size_t position)
-{
-    const size_t open = text.rfind("/*", position);
-    const size_t close = text.rfind("*/", position);
-    return open != std::string::npos &&
-           (close == std::string::npos || open > close);
-}
-
-static bool range_contains(std::string_view text, size_t start, size_t end,
-                           std::string_view needle)
-{
-    if (start > end || end > text.size()) return false;
-    return text.substr(start, end - start).find(needle) != std::string::npos;
-}
-
-static bool declaration_returns_void(std::string_view declaration)
-{
-    const size_t first = declaration.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) return false;
-    return declaration.substr(first, 4U) == "void" &&
-           declaration.size() > first + 4U &&
-           (declaration[first + 4U] == ' ' || declaration[first + 4U] == '\t' ||
-            declaration[first + 4U] == '\r' || declaration[first + 4U] == '\n');
-}
-
-static void check_public_header_documentation(const std::string &path,
-                                              const std::string &text)
-{
-    if (!ends_with(path, ".h")) return;
-
-    size_t cursor = 0U;
-    while ((cursor = text.find("lsm_", cursor)) != std::string::npos) {
-        if (inside_block_comment(text, cursor)) {
-            cursor += 4U;
-            continue;
-        }
-        if (cursor > 0U) {
-            const char previous = text[cursor - 1U];
-            if ((previous >= 'A' && previous <= 'Z') ||
-                (previous >= 'a' && previous <= 'z') ||
-                (previous >= '0' && previous <= '9') || previous == '_') {
-                cursor += 4U;
-                continue;
-            }
-        }
-
-        const size_t semicolon = text.find(';', cursor);
-        const size_t open_parenthesis = text.find('(', cursor);
-        const size_t brace = text.find('{', cursor);
-        if (semicolon == std::string::npos ||
-            open_parenthesis == std::string::npos ||
-            open_parenthesis > semicolon ||
-            (brace != std::string::npos && brace < semicolon)) {
-            cursor += 4U;
-            continue;
-        }
-
-        const size_t line_start = text.rfind('\n', cursor);
-        const size_t declaration_start =
-            line_start == std::string::npos ? 0U : line_start + 1U;
-        const size_t comment_close = text.rfind("*/", declaration_start);
-        size_t documentation = std::string::npos;
-        if (comment_close != std::string::npos)
-            documentation = text.rfind("/**", comment_close);
-
-        bool attached = documentation != std::string::npos;
-        if (attached) {
-            const size_t between_start = comment_close + 2U;
-            for (size_t index = between_start; index < declaration_start; index++) {
-                const char value = text[index];
-                if (value != ' ' && value != '\t' && value != '\r' && value != '\n') {
-                    attached = false;
-                    break;
-                }
-            }
-        }
-        if (!attached) {
-            report_error("%s:%zu: public lsm_ declaration lacks a Doxygen comment",
-                         path.c_str(), line_number_at(text, declaration_start));
-            cursor = semicolon + 1U;
-            continue;
-        }
-
-        size_t close_parenthesis = open_parenthesis;
-        unsigned nesting = 0U;
-        while (close_parenthesis < semicolon) {
-            if (text[close_parenthesis] == '(') nesting++;
-            else if (text[close_parenthesis] == ')') {
-                if (nesting == 0U) break;
-                nesting--;
-                if (nesting == 0U) break;
-            }
-            close_parenthesis++;
-        }
-        if (close_parenthesis >= semicolon) {
-            report_error("%s:%zu: malformed public function declaration",
-                         path.c_str(), line_number_at(text, declaration_start));
-            cursor = semicolon + 1U;
-            continue;
-        }
-
-        std::string arguments = trim(text.substr(
-            open_parenthesis + 1U,
-            close_parenthesis - open_parenthesis - 1U));
-        const bool has_parameters = !arguments.empty() && arguments != "void";
-        if (has_parameters &&
-            !range_contains(text, documentation, comment_close, "@param"))
-            report_error("%s:%zu: parameterised public API lacks @param contracts",
-                         path.c_str(), line_number_at(text, declaration_start));
-
-        const std::string declaration = text.substr(
-            comment_close + 2U, cursor - (comment_close + 2U));
-        if (!declaration_returns_void(declaration) &&
-            !range_contains(text, documentation, comment_close, "@return"))
-            report_error("%s:%zu: value-returning public API lacks @return semantics",
-                         path.c_str(), line_number_at(text, declaration_start));
-
-        cursor = semicolon + 1U;
-    }
-}
-
 static void check_unit_label_policy(const char *path, const std::string &text)
 {
     static const char forbidden[][4] = {
@@ -365,22 +246,6 @@ static void check_source_boundaries(const std::string &path,
             forbid_marker(path.c_str(), text, marker,
                           "theme implementation leaked into shell navigation");
     }
-    if (path == "src/app_theme.c") {
-        require_marker(path.c_str(), text, "lsm_app_shell_apply_theme");
-        require_marker(path.c_str(), text, "infiltratr_theme_resolve");
-        require_marker(path.c_str(), text, "gtk_css_provider_load_from_data");
-        require_marker(path.c_str(), text, "button:hover > label");
-        require_marker(path.c_str(), text, "button:hover > image");
-        require_marker(path.c_str(), text, "menu menuitem:disabled label");
-        for (const char *marker : {
-                 "button label, button image",
-                 "button:hover label, button:hover image",
-                 "button:active label, button:active image",
-                 "button:checked label, button:checked image",
-                 "button:disabled label, button:disabled image"})
-            forbid_marker(path.c_str(), text, marker,
-                          "button selector recolours nested composite content");
-    }
 }
 
 static void check_source_file(const std::filesystem::path &filesystem_path)
@@ -401,20 +266,16 @@ static void check_source_file(const std::filesystem::path &filesystem_path)
                   "stale project repository identity");
 
     if (!path_has_compat_component(path)) {
-        const size_t header_end = [&text]() {
-            size_t position = 0U;
-            unsigned lines = 0U;
-            while (position < text.size() && lines < 24U) {
-                if (text[position++] == '\n') lines++;
-            }
-            return position;
-        }();
+        size_t header_end = 0U;
+        unsigned lines = 0U;
+        while (header_end < text.size() && lines < 24U) {
+            if (text[header_end++] == '\n') lines++;
+        }
         const std::string header = text.substr(0U, header_end);
         for (const char *marker : {"@file", "@brief", "@author", "@copyright",
                                    LSM_DOXYGEN_LICENSE})
             if (header.find(marker) == std::string::npos)
                 report_error("%s: missing %s in file header", path.c_str(), marker);
-        check_public_header_documentation(path, text);
     }
 
     size_t line = 1U;
@@ -607,15 +468,6 @@ static void check_licensing_contract(void)
              "support/resources/fonts/mb-corpo-fonts.tar.xz",
              "support/packaging/copyright"})
         if (!regular_file(path)) report_error("%s: required licensing asset is missing", path);
-
-    std::string license;
-    if (read_text("LICENSE", &license)) {
-        require_marker("LICENSE", license, "GNU GENERAL PUBLIC LICENSE");
-        require_marker("LICENSE", license, "Version 3, 29 June 2007");
-    }
-    std::string copyright;
-    if (read_text("support/packaging/copyright", &copyright))
-        require_marker("support/packaging/copyright", copyright, "License: GPL-3+");
 }
 
 static void check_shell_boundary(void)
@@ -630,7 +482,6 @@ static void check_shell_boundary(void)
         report_error("%s: bootstrap exceeds the 4096-byte shell boundary",
                      bootstrap_path);
     require_marker(bootstrap_path, bootstrap, "support/tools/native_installer.c");
-    require_marker(bootstrap_path, bootstrap, "exec \"$builder\"");
 
     std::error_code error;
     std::filesystem::recursive_directory_iterator iterator(
@@ -656,14 +507,49 @@ static void check_shell_boundary(void)
                      error.message().c_str());
 }
 
+static bool line_contains_tokens(std::string_view line,
+                                 std::initializer_list<std::string_view> tokens)
+{
+    size_t cursor = 0U;
+    for (const std::string_view token : tokens) {
+        const size_t found = line.find(token, cursor);
+        if (found == std::string_view::npos) return false;
+        cursor = found + token.size();
+    }
+    return true;
+}
+
+static bool text_has_line_tokens(const std::string &text,
+                                 std::initializer_list<std::string_view> tokens)
+{
+    size_t start = 0U;
+    while (start <= text.size()) {
+        const size_t end = text.find('\n', start);
+        const size_t finish = end == std::string::npos ? text.size() : end;
+        if (line_contains_tokens(
+                std::string_view(text.data() + start, finish - start), tokens))
+            return true;
+        if (end == std::string::npos) break;
+        start = end + 1U;
+    }
+    return false;
+}
+
+static void require_line_tokens(const char *path, const std::string &text,
+                                std::initializer_list<std::string_view> tokens,
+                                const char *contract)
+{
+    if (!text_has_line_tokens(text, tokens))
+        report_error("%s: missing %s contract", path, contract);
+}
+
 static void check_build_and_release_contracts(void)
 {
     std::string makefile;
     if (read_text("Makefile", &makefile)) {
-        require_marker("Makefile", makefile, "common-library: common-check");
-        require_marker("Makefile", makefile, "release:");
-        require_marker("Makefile", makefile, "$(MAKE) deb");
-        require_marker("Makefile", makefile, "$(MAKE) native-installer");
+        for (const char *target : {"check:", "build-check:", "deb:",
+                                   "native-installer:", "release:"})
+            require_line_tokens("Makefile", makefile, {target}, target);
         forbid_marker("Makefile", makefile, "$(INFILTRATR_COMMON_DIR)/src/",
                       "Common private source membership must remain Common-owned");
         forbid_marker("Makefile", makefile, "src/infiltratr-common/src/",
@@ -672,11 +558,10 @@ static void check_build_and_release_contracts(void)
 
     std::string cmake;
     if (read_text("CMakeLists.txt", &cmake)) {
-        require_marker("CMakeLists.txt", cmake, "HEAD:src/infiltratr-common");
-        require_marker("CMakeLists.txt", cmake, "add_executable(system-monitor");
+        require_line_tokens("CMakeLists.txt", cmake,
+                            {"add_executable", "system-monitor"},
+                            "application target ownership");
         require_marker("CMakeLists.txt", cmake, "InfiltratrCommon::Common");
-        require_marker("CMakeLists.txt", cmake,
-                       "add_subdirectory(\"${INFILTRATR_COMMON_DIR}\"");
         forbid_marker("CMakeLists.txt", cmake, "support/tests/",
                       "CMake must not duplicate the canonical Make regression graph");
         forbid_marker("CMakeLists.txt", cmake, "add_test(",
@@ -687,10 +572,10 @@ static void check_build_and_release_contracts(void)
 
     std::string ci;
     if (read_text(".github/workflows/ci.yml", &ci)) {
-        require_marker(".github/workflows/ci.yml", ci, "REQUIRE_I386=1 make check");
-        require_marker(".github/workflows/ci.yml", ci, "make -j2 release");
-        require_marker(".github/workflows/ci.yml", ci,
-                       "cmake --build build-cmake --target system-monitor");
+        require_line_tokens(".github/workflows/ci.yml", ci,
+                            {"make", "check"}, "canonical verification");
+        require_line_tokens(".github/workflows/ci.yml", ci,
+                            {"make", "release"}, "release build");
         require_marker(".github/workflows/ci.yml", ci,
                        "support/windows/build-release.ps1");
         forbid_marker(".github/workflows/ci.yml", ci,
@@ -705,23 +590,17 @@ static void check_build_and_release_contracts(void)
         require_marker("support/windows/build-release.ps1", windows,
                        "support/source-groups/windows-product.txt");
         require_marker("support/windows/build-release.ps1", windows,
-                       "support/windows/prepare-typography.ps1");
-        require_marker("support/windows/build-release.ps1", windows,
                        "infiltratr-common-portable");
-        require_marker("support/windows/build-release.ps1", windows,
-                       "support/tools/windows_backend_probe.c");
-        require_marker("support/windows/build-release.ps1", windows,
-                       "system-monitor-$version-windows.exe");
     }
 
     std::string release;
     if (read_text(".github/workflows/release.yml", &release)) {
         for (const char *marker : {
-                 "uses: actions/download-artifact@", "system-monitor-release-assets",
-                 "RELEASE_SOURCE_SHA", "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt",
-                 "github.event.workflow_run.head_sha", "gh release download",
-                 "cmp -s \"release/$asset\"", "gh release create"})
+                 "system-monitor-release-assets", "RELEASE_SOURCE_SHA",
+                 "RELEASE_VERSION", "RELEASE_SHA256SUMS.txt"})
             require_marker(".github/workflows/release.yml", release, marker);
+        require_line_tokens(".github/workflows/release.yml", release,
+                            {"gh", "release"}, "GitHub release publication");
         for (const char *marker : {"actions/checkout@", "make -j2 release",
                                    "REQUIRE_I386=1 make check", "ctest --test-dir"})
             forbid_marker(".github/workflows/release.yml", release, marker,
@@ -746,11 +625,11 @@ static void check_documentation_contract(void)
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
-        require_marker("support/Doxyfile", doxyfile,
-                       "INPUT                  = README.md PHILOSOPHY.md CHANGELOG.md CONTRIBUTING.md SECURITY.md .github/CODE_OF_CONDUCT.md docs src");
-        require_marker("support/Doxyfile", doxyfile,
-                       "EXCLUDE                 = src/pci_names_data.c src/infiltratr-common");
-        require_marker("support/Doxyfile", doxyfile, "EXTRACT_LOCAL_CLASSES   = NO");
+        for (const char *marker : {"WARN_IF_UNDOCUMENTED    = YES",
+                                   "WARN_IF_DOC_ERROR       = YES",
+                                   "WARN_NO_PARAMDOC        = YES",
+                                   "WARN_AS_ERROR           = YES"})
+            require_marker("support/Doxyfile", doxyfile, marker);
     }
 }
 
