@@ -71,6 +71,30 @@ bool lsm_app_process_selection_view(const LsmApp *app,
                                     LsmProcessSelectionView *view);
 
 /**
+ * Resolve one total-capacity process CPU sample into the configured display
+ * convention without exposing monitor topology or preference storage.
+ * @param app Application owning process CPU presentation policy.
+ * @param total_percent Process share expressed against total computer capacity.
+ * @return Percentage in the user's configured process-display convention.
+ */
+double lsm_app_process_displayed_cpu_percent(const LsmApp *app,
+                                             double total_percent);
+
+/**
+ * Resolve process-history direction without exposing preference storage.
+ * @param app Application owning graph presentation policy.
+ * @return TRUE when newest process history samples belong on the right.
+ */
+gboolean lsm_app_process_history_newer_on_right(const LsmApp *app);
+
+/**
+ * Resolve the destructive-process-action confirmation policy.
+ * @param app Application owning process action preferences.
+ * @return TRUE when process actions require confirmation. NULL fails closed.
+ */
+gboolean lsm_app_process_actions_require_confirmation(const LsmApp *app);
+
+/**
  * Return whether process heat-map presentation is enabled.
  * @param app Application owning process presentation preferences.
  * @return TRUE when heat-map presentation is enabled; otherwise FALSE.

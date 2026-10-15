@@ -47,6 +47,25 @@ bool lsm_app_process_selection_view(const LsmApp *app,
     return true;
 }
 
+double lsm_app_process_displayed_cpu_percent(const LsmApp *app,
+                                             double total_percent)
+{
+    if (!app || !app->runtime.process_cpu_per_core) return total_percent;
+    const unsigned cores = app->monitor.cpu.logical_cores
+        ? app->monitor.cpu.logical_cores : 1U;
+    return total_percent * (double)cores;
+}
+
+gboolean lsm_app_process_history_newer_on_right(const LsmApp *app)
+{
+    return app && app->runtime.newer_on_right;
+}
+
+gboolean lsm_app_process_actions_require_confirmation(const LsmApp *app)
+{
+    return !app || app->runtime.confirm_process_actions;
+}
+
 gboolean lsm_app_process_heatmap_enabled(const LsmApp *app)
 {
     return app && app->details.process_heatmap;

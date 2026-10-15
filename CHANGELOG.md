@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.203 - 2026-10-15
+
+- Remove Process Inspector from the complete private `LsmApp` layout by routing retained process data, CPU display policy, graph direction and destructive-action confirmation through the process context, and window parenting through the presentation context.
+- Make process presentation policy fail closed for destructive-action confirmation while preserving existing CPU and history semantics.
+- Reduce the exact private-application-state allowlist from 24 to 23 direct consumers without weakening the build, test or sealed-release ownership model.
+
 ## 1.0.202 - 2026-10-15
 
 - Repair the default Make build by removing the orphaned `build-all` indirection and making `all` depend directly on the application target.

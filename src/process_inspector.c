@@ -15,7 +15,8 @@
  * @license GPL-3.0-or-later
  */
 #include "process_inspector.h"
-#include "app_internal.h"
+#include "app_presentation_context.h"
+#include "app_process_context.h"
 
 #include "common.h"
 #include "temporal_presentation.h"
@@ -99,16 +100,25 @@ typedef struct {
 /* Every inspector operation revalidates the process instance token. A
  * recycled process identifier must never redirect an existing inspector to a
  * different process. */
-static const LsmProcessInfo *snapshot_process(
-    const LsmApp *app, LsmProcessId pid, LsmProcessInstanceId instance_id)
+static const LsmProcessInfo *snapshot_process_from_view(
+    const LsmProcessSelectionView *view, LsmProcessId pid,
+    LsmProcessInstanceId instance_id)
 {
-    if (!app) return NULL;
-    for (size_t index = 0U; index < app->process.process_snapshot_count; index++) {
-        const LsmProcessInfo *process = &app->process.process_snapshot[index];
+    if (!view) return NULL;
+    for (size_t index = 0U; index < view->process_count; index++) {
+        const LsmProcessInfo *process = &view->processes[index];
         if (process->pid == pid && process->instance_id == instance_id)
             return process;
     }
     return NULL;
+}
+
+static const LsmProcessInfo *snapshot_process(
+    const LsmApp *app, LsmProcessId pid, LsmProcessInstanceId instance_id)
+{
+    LsmProcessSelectionView view = {0};
+    if (!lsm_app_process_selection_view(app, &view)) return NULL;
+    return snapshot_process_from_view(&view, pid, instance_id);
 }
 
 static bool inspector_identity_current(const ProcessInspector *inspector)
@@ -129,14 +139,6 @@ static bool require_current_identity(ProcessInspector *inspector,
 static int priority_index(LsmProcessPriority priority)
 {
     return (int)priority;
-}
-
-static double displayed_cpu(const LsmApp *app, double total_percent)
-{
-    if (!app || !app->runtime.process_cpu_per_core) return total_percent;
-    const unsigned cores = app->monitor.cpu.logical_cores ?
-        app->monitor.cpu.logical_cores : 1U;
-    return total_percent * (double)cores;
 }
 
 static GtkWidget *detail_value(void)
@@ -349,16 +351,19 @@ static void present_threads(ProcessInspector *inspector,
 static void populate_family(ProcessInspector *inspector)
 {
     gtk_list_store_clear(inspector->family_store);
-    const LsmProcessInfo *selected = snapshot_process(inspector->app, inspector->pid,
-                                                      inspector->instance_id);
+    LsmProcessSelectionView view = {0};
+    const LsmProcessInfo *selected = NULL;
+    if (lsm_app_process_selection_view(inspector->app, &view))
+        selected = snapshot_process_from_view(&view, inspector->pid,
+                                              inspector->instance_id);
     if (!selected) {
         lsm_ui_set_label_text(inspector->family_status,
                               "Process family unavailable — the process has exited");
         return;
     }
     size_t child_count = 0U;
-    for (size_t index = 0U; index < inspector->app->process.process_snapshot_count; index++) {
-        const LsmProcessInfo *process = &inspector->app->process.process_snapshot[index];
+    for (size_t index = 0U; index < view.process_count; index++) {
+        const LsmProcessInfo *process = &view.processes[index];
         const char *relationship = NULL;
         if (process->pid == selected->ppid) relationship = "Parent";
         else if (process->ppid == selected->pid) {
@@ -371,7 +376,8 @@ static void populate_family(ProcessInspector *inspector)
         snprintf(pid, sizeof(pid), "%llu",
                  (unsigned long long)process->pid);
         snprintf(cpu, sizeof(cpu), "%.1f%%",
-                 displayed_cpu(inspector->app, process->cpu_percent));
+                 lsm_app_process_displayed_cpu_percent(
+                     inspector->app, process->cpu_percent));
         snprintf(memory, sizeof(memory), "%.1f%%", process->memory_percent);
         gtk_list_store_append(inspector->family_store, &iterator);
         gtk_list_store_set(inspector->family_store, &iterator,
@@ -623,7 +629,8 @@ static gboolean inspector_update(gpointer user_data)
         lsm_ui_set_label_text(inspector->overview_values[index], "%s",
                               values[index] && *values[index] ? values[index] : "N/A");
 
-    const double cpu_value = displayed_cpu(inspector->app, process.cpu_percent);
+    const double cpu_value = lsm_app_process_displayed_cpu_percent(
+        inspector->app, process.cpu_percent);
     snprintf(cpu, sizeof(cpu), "%.1f%%", cpu_value);
     snprintf(memory, sizeof(memory), "%.1f%%", process.memory_percent);
     if (process.io_rate_available) {
@@ -638,7 +645,8 @@ static gboolean inspector_update(gpointer user_data)
     set_large_metric(inspector->read_value, read_rate);
     set_large_metric(inspector->write_value, write_rate);
     lsm_graph_push(inspector->performance_graph, process.cpu_percent,
-                   process.memory_percent, inspector->app->runtime.newer_on_right);
+                   process.memory_percent,
+                   lsm_app_process_history_newer_on_right(inspector->app));
     lsm_ui_set_label_text(inspector->identity_label,
                           "%s — PID %llu — %s", process.name,
                           (unsigned long long)process.pid,
@@ -793,7 +801,7 @@ static void end_process_clicked(GtkButton *button, gpointer user_data)
     (void)button;
     ProcessInspector *inspector = user_data;
     if (!require_current_identity(inspector, "Unable to end process")) return;
-    if (!inspector->app->runtime.confirm_process_actions) {
+    if (!lsm_app_process_actions_require_confirmation(inspector->app)) {
         if (!lsm_process_control(inspector->pid, inspector->instance_id,
                                  LSM_PROCESS_CONTROL_TERMINATE)) {
             char error[160];
@@ -873,13 +881,10 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
                                 LsmProcessInstanceId instance_id)
 {
     if (!app || pid < 1 || instance_id == 0U) return;
-    const LsmProcessInfo *process = NULL;
-    for (size_t index = 0U; index < app->process.process_snapshot_count; index++)
-        if (app->process.process_snapshot[index].pid == pid &&
-            app->process.process_snapshot[index].instance_id == instance_id) {
-            process = &app->process.process_snapshot[index];
-            break;
-        }
+    LsmProcessSelectionView view = {0};
+    if (!lsm_app_process_selection_view(app, &view)) return;
+    const LsmProcessInfo *process = snapshot_process_from_view(
+        &view, pid, instance_id);
     if (!process) return;
 
     ProcessInspector *inspector = g_new0(ProcessInspector, 1U);
@@ -891,8 +896,10 @@ void lsm_process_inspector_show(LsmApp *app, LsmProcessId pid,
     snprintf(title, sizeof(title), "%s — Process Inspector", process->name);
     gtk_window_set_title(GTK_WINDOW(inspector->window), title);
     lsm_ui_set_workarea_default_size(GTK_WINDOW(inspector->window), 980, 720);
-    gtk_window_set_transient_for(GTK_WINDOW(inspector->window),
-                                 GTK_WINDOW(app->shell.window));
+    GtkWidget *parent = lsm_app_presentation_window(app);
+    if (parent)
+        gtk_window_set_transient_for(GTK_WINDOW(inspector->window),
+                                     GTK_WINDOW(parent));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(inspector->window), TRUE);
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

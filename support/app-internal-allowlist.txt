@@ -21,7 +21,6 @@ performance_pages_devices.c
 performance_present_internal.h
 preferences.c
 process_actions.c
-process_inspector.c
 processes_ui.c
 startup.c
 users.c
