@@ -41,17 +41,17 @@ if(LSM_GIT_CHECKOUT)
         RESULT_VARIABLE LSM_COMMON_COMMIT_RESULT)
     if(NOT LSM_COMMON_GITLINK_RESULT EQUAL 0 OR
        NOT LSM_COMMON_COMMIT_RESULT EQUAL 0)
-        message(FATAL_ERROR "Unable to verify the Infiltratr Common submodule revision.")
+        message(FATAL_ERROR "Unable to verify the Libraries submodule revision.")
     endif()
     if(NOT LSM_COMMON_COMMIT STREQUAL LSM_COMMON_EXPECTED_COMMIT)
         message(FATAL_ERROR
-            "Infiltratr Common is not at the parent repository's pinned gitlink revision ${LSM_COMMON_EXPECTED_COMMIT}; found ${LSM_COMMON_COMMIT}.")
+            "Libraries is not at the parent repository's pinned gitlink revision ${LSM_COMMON_EXPECTED_COMMIT}; found ${LSM_COMMON_COMMIT}.")
     endif()
 endif()
 
 file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
 string(STRIP "${INFILTRATR_COMMON_VERSION}" INFILTRATR_COMMON_VERSION)
-message(STATUS "Using Infiltratr Common ${INFILTRATR_COMMON_VERSION}")
+message(STATUS "Using Libraries ${INFILTRATR_COMMON_VERSION}")
 
 set(LSM_FONT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/fonts")
 include("${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake")

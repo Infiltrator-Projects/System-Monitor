@@ -22,7 +22,7 @@
 #define LSM_PROJECT_COMMENTS                                                   \
     "A native C/GTK system monitor authored by Shannon Smith. "                 \
     "System Monitor uses native operating-system interfaces and the pinned "   \
-    "Infiltratr Common foundation."
+    "Libraries foundation."
 
 static const InfiltratrProjectInfo project_info = {
     .struct_size = sizeof(InfiltratrProjectInfo),

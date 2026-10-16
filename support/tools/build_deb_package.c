@@ -429,13 +429,13 @@ static void format_debian_date(time_t epoch, char *destination, size_t size)
 static void install_release_changelog(const char *version, time_t epoch)
 {
     static const char relative[] =
-        "usr/share/doc/infiltrator-system-monitor/changelog";
+        "usr/share/doc/system-monitor/changelog";
     char date[64];
     format_debian_date(epoch, date, sizeof(date));
     char text[1536];
     const int written = snprintf(
         text, sizeof(text),
-        "infiltrator-system-monitor (%s) unstable; urgency=medium\n\n"
+        "system-monitor (%s) unstable; urgency=medium\n\n"
         "  * Release %s. See the GitHub release notes for details.\n\n"
         " -- Shannon Smith <The-First-Infiltrator@users.noreply.github.com>  %s\n",
         version, version, date);
@@ -448,7 +448,7 @@ static void install_release_changelog(const char *version, time_t epoch)
     char destination[PATH_MAX];
     stage_path(source, sizeof(source), relative);
     stage_path(destination, sizeof(destination),
-               "usr/share/doc/infiltrator-system-monitor/changelog.gz");
+               "usr/share/doc/system-monitor/changelog.gz");
     gzip_changelog(source, destination);
     if (unlink(source) != 0)
         fail("remove temporary changelog: %s", strerror(errno));
@@ -511,11 +511,11 @@ int main(int argc, char **argv)
              LSM_GLIBC_BASELINE_MINOR);
     /* Both the prebuilt DEB and native installer use this same font payload. */
     copy_staged("build/fonts/mb_corpo_a_cond_regular.ttf",
-                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_a_cond_regular.ttf", 0644);
+                "usr/share/fonts/truetype/system-monitor/mb_corpo_a_cond_regular.ttf", 0644);
     copy_staged("build/fonts/mb_corpo_s_regular.ttf",
-                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_s_regular.ttf", 0644);
+                "usr/share/fonts/truetype/system-monitor/mb_corpo_s_regular.ttf", 0644);
     copy_staged("build/fonts/mb_corpo_s_bold.ttf",
-                "usr/share/fonts/truetype/infiltrator-system-monitor/mb_corpo_s_bold.ttf", 0644);
+                "usr/share/fonts/truetype/system-monitor/mb_corpo_s_bold.ttf", 0644);
 
     /* Keep the desktop icon canonical name, and also ship package-name aliases
      * inside this package. Linux Mint Software Manager resolves APT packages
@@ -525,18 +525,18 @@ int main(int argc, char **argv)
                 "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
     copy_staged("support/resources/icons/system-monitor.png",
-                "usr/share/icons/hicolor/96x96/apps/infiltrator-system-monitor.png",
+                "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
     copy_staged("support/resources/icons/system-monitor.png",
-                "usr/share/app-install/icons/infiltrator-system-monitor.png",
+                "usr/share/app-install/icons/system-monitor.png",
                 0644);
-    copy_staged("LICENSE", "usr/share/doc/infiltrator-system-monitor/LICENSE", 0644);
+    copy_staged("LICENSE", "usr/share/doc/system-monitor/LICENSE", 0644);
     copy_staged("support/packaging/copyright",
-                "usr/share/doc/infiltrator-system-monitor/copyright", 0644);
-    copy_staged(".github/README.md", "usr/share/doc/infiltrator-system-monitor/README.md", 0644);
+                "usr/share/doc/system-monitor/copyright", 0644);
+    copy_staged(".github/README.md", "usr/share/doc/system-monitor/README.md", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",
-                    "usr/share/doc/infiltrator-system-monitor/BUILD-INFO", 0644);
+                    "usr/share/doc/system-monitor/BUILD-INFO", 0644);
 
     install_release_changelog(version, epoch);
 
@@ -559,8 +559,11 @@ int main(int argc, char **argv)
     char control[LSM_DEB_TEXT];
     const int written = snprintf(
         control, sizeof(control),
-        "Package: infiltrator-system-monitor\n"
+        "Package: system-monitor\n"
         "Version: %s\n"
+        "Provides: infiltrator-system-monitor, linux-system-monitor\n"
+        "Breaks: infiltrator-system-monitor (<< %s), linux-system-monitor (<< %s)\n"
+        "Replaces: infiltrator-system-monitor (<< %s), linux-system-monitor (<< %s)\n"
         "Section: utils\n"
         "Priority: optional\n"
         "Architecture: %s\n"
@@ -574,7 +577,7 @@ int main(int argc, char **argv)
         " Linux kernel and driver interfaces directly without command-line telemetry\n"
         " tools, Python runtimes, helper executables or third-party monitoring plugins.\n"
         "Installed-Size: %llu\n",
-        version, architecture, LSM_GLIBC_BASELINE_MAJOR,
+        version, version, version, version, version, architecture, LSM_GLIBC_BASELINE_MAJOR,
         LSM_GLIBC_BASELINE_MINOR, (unsigned long long)installed_size_kb);
     if (written < 0 || (size_t)written >= sizeof(control))
         fail("control file is too large");

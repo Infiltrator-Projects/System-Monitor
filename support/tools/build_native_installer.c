@@ -32,7 +32,7 @@ static const char installer_body[] =
     "set -Eeuo pipefail\n"
     "\n"
     "source_url=\"https://github.com/Infiltrator-Projects/System-Monitor/archive/${source_revision}.tar.gz\"\n"
-    "common_url=\"https://github.com/Infiltrator-Projects/Infiltrator-Libraries/archive/${common_revision}.tar.gz\"\n"
+    "common_url=\"https://github.com/Infiltrator-Projects/Libraries/archive/${common_revision}.tar.gz\"\n"
     "system_package_mode=0\n"
     "for argument in \"$@\"; do\n"
     "    case \"$argument\" in\n"
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 
     char default_output[LSM_INSTALLER_PATH_LEN];
     const int written = snprintf(default_output, sizeof(default_output),
-        "infiltrator-system-monitor-%s-native-installer.run", version);
+        "system-monitor-%s-native-installer.run", version);
     if (written < 0 || (size_t)written >= sizeof(default_output))
         fail("Default installer path is too long.");
     const char *output_path = argc == 2 ? argv[1] : default_output;

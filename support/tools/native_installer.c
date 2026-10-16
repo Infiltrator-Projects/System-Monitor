@@ -428,7 +428,7 @@ static void command_first_line(const char *command, const char *argument,
 static void usage(const char *version)
 {
     printf("System Monitor %s hardware-native installer\n\n", version);
-    printf("Usage: infiltrator-system-monitor-%s-native-installer.run [options]\n\n",
+    printf("Usage: system-monitor-%s-native-installer.run [options]\n\n",
            version);
     puts("Options:");
     puts("  --profile native|aggressive|portable");
@@ -746,7 +746,7 @@ int main(int argc, char **argv)
     printf("  Jobs:         %d\n", jobs);
     if (aggressive_profile)
         puts("  PGO:          two-pass training on this machine before final rebuild");
-    puts("  Installation: installs the infiltrator-system-monitor Debian package");
+    puts("  Installation: installs the system-monitor Debian package");
     puts("  Privileges:   missing prerequisites and final package installation only");
     if (dry_run) return EXIT_SUCCESS;
 
@@ -851,7 +851,7 @@ int main(int argc, char **argv)
     written = snprintf(text, sizeof(text),
         "Version: %s\nBuilt locally: %s\nArchitecture: %s\nCompiler: %s\n"
         "Profile: %s\nC flags: %s\nPGO: %s\n"
-        "Shared C library: Infiltratr Common %s\n"
+        "Shared C library: Libraries %s\n"
         "License: GPL-3.0-or-later\n"
         "Installation model: hardware-native Debian package\n"
         "Package ownership: system-monitor\n",
@@ -867,7 +867,7 @@ int main(int argc, char **argv)
 
     char package_path[LSM_BUILDER_PATH_LEN];
     written = snprintf(package_path, sizeof(package_path),
-                       "%s/infiltrator-system-monitor_%s_%s.deb", cleanup_stage,
+                       "%s/system-monitor_%s_%s.deb", cleanup_stage,
                        version, package_architecture);
     if (written < 0 || (size_t)written >= sizeof(package_path))
         fail("native package path is too long");
@@ -887,7 +887,7 @@ int main(int argc, char **argv)
 
     if (root_system_mode) {
         const char *const remove_arguments[] = {
-            dpkg, "--remove", "infiltrator-system-monitor", NULL
+            dpkg, "--remove", "system-monitor", NULL
         };
         (void)run_process(NULL, remove_arguments, false);
         const char *const install_arguments[] = {

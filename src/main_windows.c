@@ -3274,7 +3274,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
             write_startup_smoke_status("design_contract_failed\n");
         } else {
             MessageBoxW(
-                NULL, L"Infiltratr Common design contract is unavailable.",
+                NULL, L"Libraries design contract is unavailable.",
                 L"System Monitor", MB_OK | MB_ICONERROR);
         }
         free(state);
@@ -3286,7 +3286,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
             write_startup_smoke_status("theme_contract_failed\n");
         } else {
             MessageBoxW(
-                NULL, L"Infiltratr Common theme contract is unavailable.",
+                NULL, L"Libraries theme contract is unavailable.",
                 L"System Monitor", MB_OK | MB_ICONERROR);
         }
         free(state);

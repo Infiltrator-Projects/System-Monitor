@@ -102,7 +102,7 @@ jobs:
           test -n "$deb"
           test -n "$installer"
           test -n "$windows_app"
-          test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
+          test "$(dpkg-deb -f "release/$deb" Package)" = "system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           chmod +x "release/$installer"
           "release/$installer" --help >/dev/null

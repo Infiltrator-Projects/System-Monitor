@@ -181,11 +181,11 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < support/VERSION)
-          deb="infiltrator-system-monitor_${version}_amd64.deb"
-          installer="infiltrator-system-monitor-${version}-native-installer.run"
+          deb="system-monitor_${version}_amd64.deb"
+          installer="system-monitor-${version}-native-installer.run"
           test -f "$deb"
           test -x "$installer"
-          test "$(dpkg-deb -f "$deb" Package)" = "infiltrator-system-monitor"
+          test "$(dpkg-deb -f "$deb" Package)" = "system-monitor"
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           dependencies=$(dpkg-deb -f "$deb" Depends)
           grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
@@ -199,15 +199,15 @@ jobs:
           dpkg-deb -e "$deb" "$tmp/control"
           grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
           ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
-          font_root="$tmp/root/usr/share/fonts/truetype/infiltrator-system-monitor"
+          font_root="$tmp/root/usr/share/fonts/truetype/system-monitor"
           for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
             test -f "$font_root/$face"
             cmp "build/fonts/$face" "$font_root/$face"
           done
-          changelog="$tmp/root/usr/share/doc/infiltrator-system-monitor/changelog.gz"
+          changelog="$tmp/root/usr/share/doc/system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')
-          test "$first_line" = "infiltrator-system-monitor (${version}) unstable; urgency=medium"
+          test "$first_line" = "system-monitor (${version}) unstable; urgency=medium"
           ./"$installer" --help >/dev/null
 
       - name: Upload exact Linux release candidate
@@ -215,8 +215,8 @@ jobs:
         with:
           name: system-monitor-linux-release
           path: |
-            infiltrator-system-monitor_*.deb
-            infiltrator-system-monitor-*-native-installer.run
+            system-monitor_*.deb
+            system-monitor-*-native-installer.run
             build/fonts/*.ttf
             support/VERSION
           if-no-files-found: error
@@ -248,16 +248,16 @@ jobs:
           installer="${installers[0]}"
           chmod +x "$installer"
           sudo ./"$installer" --profile aggressive --system-package-mode
-          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" = "install ok installed"
-          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" = "$version"
+          test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
           for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            cmp "build/fonts/$face" "/usr/share/fonts/truetype/infiltrator-system-monitor/$face"
+            cmp "build/fonts/$face" "/usr/share/fonts/truetype/system-monitor/$face"
           done
           pgo_log=$(mktemp)
           ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
           ! grep -Fq 'stringop-overread' "$pgo_log"
-          test "$(dpkg-query -W -f='${Status}' infiltrator-system-monitor)" = "install ok installed"
-          test "$(dpkg-query -W -f='${Version}' infiltrator-system-monitor)" = "$version"
+          test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
+          test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
 
   windows-release:
     name: Build and qualify exact Windows release artifact
@@ -302,8 +302,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tr -d '[:space:]' < candidate-linux/support/VERSION)
-          expected_deb="infiltrator-system-monitor_${version}_amd64.deb"
-          expected_installer="infiltrator-system-monitor-${version}-native-installer.run"
+          expected_deb="system-monitor_${version}_amd64.deb"
+          expected_installer="system-monitor-${version}-native-installer.run"
           expected_windows="system-monitor-${version}-windows.exe"
           mapfile -t debs < <(find candidate-linux -maxdepth 1 -type f -name '*.deb' -printf '%f\n' | sort)
           mapfile -t installers < <(find candidate-linux -maxdepth 1 -type f -name '*.run' -printf '%f\n' | sort)
@@ -323,7 +323,7 @@ jobs:
           cp "candidate-linux/$installer" "release/$installer"
           cp "candidate-windows/$windows_app" "release/$windows_app"
           chmod +x "release/$installer"
-          test "$(dpkg-deb -f "release/$deb" Package)" = "infiltrator-system-monitor"
+          test "$(dpkg-deb -f "release/$deb" Package)" = "system-monitor"
           test "$(dpkg-deb -f "release/$deb" Version)" = "$version"
           "release/$installer" --help >/dev/null
           (

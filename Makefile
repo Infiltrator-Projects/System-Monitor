@@ -31,7 +31,7 @@ NATIVE_INSTALLER_TEST := $(BUILD_DIR)/native-installer-test
 DEB_PACKAGE_BUILDER := $(BUILD_DIR)/build-deb-package
 GLIBC_ABI_SMOKE := $(BUILD_DIR)/glibc-abi-smoke
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
-DEB_OUTPUT ?= infiltrator-system-monitor_$(VERSION)_$(DEB_ARCH).deb
+DEB_OUTPUT ?= system-monitor_$(VERSION)_$(DEB_ARCH).deb
 SOURCE_ZIP := System-Monitor-$(VERSION)-source.zip
 DIST_SOURCE_DATE_EPOCH ?= 315532800
 BUILD_CONFIG := $(BUILD_DIR)/build-config.txt
@@ -172,7 +172,7 @@ common-bootstrap:
 		exit 1; \
 	}
 	@command -v git >/dev/null 2>&1 || { \
-		echo "git is required to initialise the pinned Infiltratr Common submodule." >&2; \
+		echo "git is required to initialise the pinned Libraries submodule." >&2; \
 		exit 1; \
 	}
 	git submodule update --init --depth 1 -- "$(INFILTRATR_COMMON_DIR)"
@@ -184,23 +184,23 @@ common-bootstrap:
 common-check:
 	@if test -e .git; then \
 		command -v git >/dev/null 2>&1 || { \
-			echo "git is required to verify the pinned Infiltratr Common submodule." >&2; \
+			echo "git is required to verify the pinned Libraries submodule." >&2; \
 			exit 1; \
 		}; \
 		expected_commit=$$(git rev-parse HEAD:"$(INFILTRATR_COMMON_DIR)" 2>/dev/null) || { \
-			echo "Unable to read the Infiltratr Common gitlink from the parent repository." >&2; \
+			echo "Unable to read the Libraries gitlink from the parent repository." >&2; \
 			exit 1; \
 		}; \
 		test -f "$(INFILTRATR_COMMON_DIR)/VERSION" || { \
-			echo "Infiltratr Common is not initialised; run 'make common-bootstrap' or clone with --recurse-submodules." >&2; \
+			echo "Libraries is not initialised; run 'make common-bootstrap' or clone with --recurse-submodules." >&2; \
 			exit 1; \
 		}; \
 		actual_commit=$$(git -C "$(INFILTRATR_COMMON_DIR)" rev-parse HEAD 2>/dev/null) || { \
-			echo "Unable to read the checked-out Infiltratr Common revision." >&2; \
+			echo "Unable to read the checked-out Libraries revision." >&2; \
 			exit 1; \
 		}; \
 		if test "$$actual_commit" != "$$expected_commit"; then \
-			echo "Infiltratr Common is not at the parent repository gitlink $$expected_commit; found $$actual_commit." >&2; \
+			echo "Libraries is not at the parent repository gitlink $$expected_commit; found $$actual_commit." >&2; \
 			exit 1; \
 		fi; \
 	else \
@@ -243,7 +243,7 @@ $(BUILD_CONFIG): FORCE | $(BUILD_DIR)
 	@if ! cmp -s $@.tmp $@; then mv -f $@.tmp $@; else rm -f $@.tmp; fi
 
 $(BUILD_INFO): $(VERSION_FILE) $(INFILTRATR_COMMON_DIR)/VERSION | $(BUILD_DIR)
-	@printf 'Version: %s\nProfile: %s\nShared C library: Infiltratr Common %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: infiltrator-system-monitor\n' \
+	@printf 'Version: %s\nProfile: %s\nShared C library: Libraries %s\nLicense: GPL-3.0-or-later\nInstallation model: generic Debian package\nPackage ownership: system-monitor\n' \
 		'$(VERSION)' '$(BUILD_PROFILE)' '$(INFILTRATR_COMMON_VERSION)' > $@
 
 $(BUILD_DIR)/%.o: src/%.c src/glibc_compat.h $(VERSION_FILE) $(BUILD_CONFIG) | $(BUILD_DIR) check-deps
@@ -763,15 +763,15 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO) $(FONT_STAMP)
 	dpkg-deb --contents $(DEB_OUTPUT) > $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
 	@for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do \
-		grep -q "usr/share/fonts/truetype/infiltrator-system-monitor/$$face$$" \
+		grep -q "usr/share/fonts/truetype/system-monitor/$$face$$" \
 			$(BUILD_DIR)/deb-contents.txt || exit 1; \
 	done
-	grep -q 'usr/share/doc/infiltrator-system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
+	grep -q 'usr/share/doc/system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/icons/hicolor/96x96/apps/infiltrator-system-monitor.png$$' \
+	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/app-install/icons/infiltrator-system-monitor.png$$' \
+	grep -q 'usr/share/app-install/icons/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	@test "$$(awk '$$1 ~ /^-/ && $$1 ~ /x/ {print $$6}' \
 		$(BUILD_DIR)/deb-contents.txt | grep -v '^\./usr/bin/system-monitor$$' | wc -l)" -eq 0
@@ -807,4 +807,4 @@ dist: common-check clean
 	@echo "Created deterministic optional source archive: $(SOURCE_ZIP)"
 
 release: deb native-installer
-	@echo "Release artifacts created: $(DEB_OUTPUT), infiltrator-system-monitor-$(VERSION)-native-installer.run"
+	@echo "Release artifacts created: $(DEB_OUTPUT), system-monitor-$(VERSION)-native-installer.run"

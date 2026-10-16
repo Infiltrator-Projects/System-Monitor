@@ -6,8 +6,8 @@
 /build-*/
 
 # Linux release/package outputs.
-/infiltrator-system-monitor_*.deb
-/infiltrator-system-monitor-*-native-installer.run
+/system-monitor_*.deb
+/system-monitor-*-native-installer.run
 /System-Monitor-*-source.zip
 
 # Windows qualified outputs and legacy scratch names from older recipes.
