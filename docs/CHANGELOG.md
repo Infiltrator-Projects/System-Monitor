@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 1.0.205 — 2026-10-16
+
+- Organise repository guidance under `.github` and project documentation under `docs`, keeping build entry points and `LICENSE` at the repository root.
+- Update relative links, Doxygen inputs, maintained-document checks and Debian package README sourcing for the new document locations.
+
 ## 1.0.204 — 2026-10-16
 
 Keep presentation-contract checks executable independently of `NDEBUG`, so optimized qualification cannot erase label, layout and unit assertions.
