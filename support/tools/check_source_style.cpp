@@ -38,7 +38,7 @@ using StringList = std::vector<std::string>;
 static unsigned error_count;
 
 static const char *const maintained_markdown[] = {
-    ".github/README.md", "PHILOSOPHY.md", "CHANGELOG.md", ".github/CONTRIBUTING.md",
+    ".github/README.md", "docs/PHILOSOPHY.md", "docs/CHANGELOG.md", ".github/CONTRIBUTING.md",
     ".github/SECURITY.md", "docs/ARCHITECTURE.md", "docs/VALIDATION.md",
     "docs/HARDWARE.md", ".github/CODE_OF_CONDUCT.md"
 };
@@ -650,7 +650,7 @@ static void check_documentation_contract(void)
     if (read_text(".github/README.md", &readme)) {
         check_unit_label_policy(".github/README.md", readme);
         for (const char *marker : {
-                 "src/infiltratr-common", "PHILOSOPHY.md",
+                 "src/infiltratr-common", "docs/PHILOSOPHY.md",
                  "docs/ARCHITECTURE.md", "docs/HARDWARE.md", "docs/VALIDATION.md",
                  "CONTRIBUTING.md", "SECURITY.md", "GPL-3.0-or-later"})
             require_marker(".github/README.md", readme, marker);
@@ -658,7 +658,7 @@ static void check_documentation_contract(void)
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
-        for (const char *marker : {".github/README.md", "PHILOSOPHY.md", "CHANGELOG.md",
+        for (const char *marker : {".github/README.md", "docs/PHILOSOPHY.md", "docs/CHANGELOG.md",
                                    ".github/CONTRIBUTING.md", ".github/SECURITY.md",
                                    ".github/CODE_OF_CONDUCT.md", "docs", "src",
                                    "src/pci_names_data.c", "src/infiltratr-common"})
