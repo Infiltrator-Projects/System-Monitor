@@ -517,13 +517,8 @@ int main(int argc, char **argv)
     copy_staged("build/fonts/mb_corpo_s_bold.ttf",
                 "usr/share/fonts/truetype/system-monitor/mb_corpo_s_bold.ttf", 0644);
 
-    /* Keep the desktop icon canonical name, and also ship package-name aliases
-     * inside this package. Linux Mint Software Manager resolves APT packages
-     * by package name, so these aliases let the application own its artwork
-     * without a separate app-install helper package. */
-    copy_staged("support/resources/icons/system-monitor.png",
-                "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
-                0644);
+    /* The desktop and package share one canonical icon name. Linux Mint
+     * Software Manager also reads the app-install icon owned by this package. */
     copy_staged("support/resources/icons/system-monitor.png",
                 "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
