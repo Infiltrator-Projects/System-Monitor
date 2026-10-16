@@ -43,6 +43,8 @@ Development stays on `main`. `support/VERSION` is the sole release-intent source
 
 A published release contains the tested installable package and native installer assets defined by the release workflow; release assets identify the same immutable source revision. Windows verification and release packaging use `support/windows/build-release.ps1`, which consumes the canonical `support/source-groups/windows-product.txt` source manifest so compiler policy, source membership and the published executable cannot drift into separate workflow definitions.
 
+The native `.run` installer downloads the exact release source and its pinned Common source over HTTPS, compiles on the target machine and installs the resulting Debian package. It contains no embedded source archive. It needs an Internet connection and either curl or wget; `--help` works offline.
+
 ## Technical documentation
 
 - [Engineering philosophy](../docs/PHILOSOPHY.md) — governing engineering and documentation standard.

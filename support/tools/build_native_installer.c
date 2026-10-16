@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file build_native_installer.c
- * @brief Build the auditable self-extracting hardware-native installer.
+ * @brief Generate a small installer that downloads its exact release source.
  *
- * Packaging is performed by a compiled C tool rather than a project shell
- * script.  GNU tar remains a release-time dependency because the generated
- * installer carries a standard gzip-compressed tar payload that users can
- * inspect or extract with ordinary Linux tools.
+ * The generated Bash entry point carries only the release version and the
+ * parent and Common commit identities. It downloads both HTTPS source archives
+ * before handing compilation and package installation to the existing native
+ * installer. Source bytes are never appended to the executable script. Release
+ * generation requires a Git checkout so the parent gitlink remains the sole
+ * Common revision authority; ordinary application builds remain offline.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -20,166 +22,139 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
 
 #define LSM_INSTALLER_PATH_LEN 4096U
-#define LSM_INSTALLER_LINE_LEN 512U
-#define LSM_INSTALLER_ARGUMENTS 32U
-#define LSM_INSTALLER_DEFAULT_EPOCH "315532800"
+#define LSM_INSTALLER_VERSION_LEN 64U
+#define LSM_INSTALLER_REVISION_LEN 41U
 
-static const char installer_header[] =
-    "#!/usr/bin/env bash\n"
-    "# SPDX-License-Identifier: GPL-3.0-or-later\n"
+static const char installer_body[] =
     "set -Eeuo pipefail\n"
     "\n"
-    "allow_root_for_help=0\n"
+    "source_url=\"https://github.com/Infiltrator-Projects/System-Monitor/archive/${source_revision}.tar.gz\"\n"
+    "common_url=\"https://github.com/Infiltrator-Projects/Infiltrator-Libraries/archive/${common_revision}.tar.gz\"\n"
     "system_package_mode=0\n"
-    "forward=()\n"
-    "while (($#)); do\n"
-    "    case \"$1\" in\n"
-    "        -h|--help) allow_root_for_help=1; forward+=(\"$1\"); shift ;;\n"
-    "        --system-package-mode) system_package_mode=1; forward+=(\"$1\"); shift ;;\n"
-    "        *) forward+=(\"$1\"); shift ;;\n"
+    "for argument in \"$@\"; do\n"
+    "    case \"$argument\" in\n"
+    "        -h|--help)\n"
+    "            printf 'System Monitor %s source-download installer\\n\\n' \"$version\"\n"
+    "            printf 'Downloads the release source, compiles it on this machine and installs it.\\n'\n"
+    "            printf 'Source revision: %s\\n\\n' \"$source_revision\"\n"
+    "            printf 'Options: --profile native|aggressive|portable --compiler PATH --jobs NUMBER\\n'\n"
+    "            printf '         --skip-tests --no-strip --dry-run --system-package-mode -h --help\\n'\n"
+    "            exit 0 ;;\n"
+    "        --system-package-mode) system_package_mode=1 ;;\n"
     "    esac\n"
     "done\n"
+    "if ((EUID == 0 && system_package_mode == 0)); then\n"
+    "    printf 'Do not run this file with sudo or as root.\\n' >&2\n"
+    "    exit 1\n"
+    "fi\n"
+    "if ((EUID != 0 && system_package_mode != 0)); then\n"
+    "    printf 'Error: --system-package-mode requires root.\\n' >&2\n"
+    "    exit 1\n"
+    "fi\n"
     "\n"
-    "((EUID != 0 || allow_root_for_help || system_package_mode)) || { echo 'Do not run this file with sudo or as root.' >&2; exit 1; }\n"
+    "curl_path=$(command -v curl 2>/dev/null || true)\n"
+    "wget_path=$(command -v wget 2>/dev/null || true)\n"
+    "if [[ -z \"$curl_path\" && -z \"$wget_path\" ]]; then\n"
+    "    printf 'Install curl or wget, then run the installer again.\\n' >&2\n"
+    "    exit 1\n"
+    "fi\n"
+    "command -v tar >/dev/null 2>&1 || { printf 'The installer requires tar.\\n' >&2; exit 1; }\n"
     "\n"
-    "payload_line=$(awk '/^__LSM_NATIVE_PAYLOAD_BELOW__$/ {print NR + 1; exit}' \"$0\")\n"
-    "[[ -n \"$payload_line\" ]] || { echo 'Payload marker missing.' >&2; exit 1; }\n"
-    "work=$(mktemp -d)\n"
+    "download() {\n"
+    "    if [[ -n \"$curl_path\" ]]; then\n"
+    "        \"$curl_path\" --fail --show-error --location --proto '=https' --proto-redir '=https' \\\n"
+    "            --connect-timeout 30 --max-time 300 --retry 2 --output \"$2\" \"$1\"\n"
+    "    else\n"
+    "        \"$wget_path\" --https-only --timeout=30 --tries=3 --output-document=\"$2\" \"$1\"\n"
+    "    fi\n"
+    "}\n"
+    "\n"
+    "work=$(mktemp -d \"${TMPDIR:-/tmp}/lsm-source-download-XXXXXX\")\n"
     "cleanup() { rm -rf -- \"$work\"; }\n"
     "trap cleanup EXIT\n"
     "source_root=\"$work/source\"\n"
     "mkdir -p -- \"$source_root\"\n"
-    "tail -n +\"$payload_line\" \"$0\" | tar -xz -C \"$source_root\"\n"
+    "printf 'Downloading System Monitor %s source...\\n' \"$version\"\n"
+    "download \"$source_url\" \"$work/system-monitor.tar.gz\" || {\n"
+    "    printf 'Unable to download the release source. Nothing was installed.\\n' >&2\n"
+    "    exit 1\n"
+    "}\n"
+    "tar -xzf \"$work/system-monitor.tar.gz\" --strip-components=1 --no-same-owner -C \"$source_root\"\n"
+    "[[ -r \"$source_root/support/VERSION\" ]] || { printf 'Release source has no version.\\n' >&2; exit 1; }\n"
+    "actual_version=$(tr -d '[:space:]' < \"$source_root/support/VERSION\")\n"
+    "[[ \"$actual_version\" == \"$version\" ]] || { printf 'Release source version does not match the installer.\\n' >&2; exit 1; }\n"
+    "printf 'Downloading the matching shared-library source...\\n'\n"
+    "download \"$common_url\" \"$work/common.tar.gz\" || {\n"
+    "    printf 'Unable to download the shared-library source. Nothing was installed.\\n' >&2\n"
+    "    exit 1\n"
+    "}\n"
+    "common_root=\"$source_root/src/infiltratr-common\"\n"
+    "mkdir -p -- \"$common_root\"\n"
+    "tar -xzf \"$work/common.tar.gz\" --strip-components=1 --no-same-owner -C \"$common_root\"\n"
+    "[[ -s \"$common_root/VERSION\" ]] || { printf 'Shared-library source is incomplete.\\n' >&2; exit 1; }\n"
     "bootstrap=\"$source_root/support/installer/bootstrap.sh\"\n"
-    "[[ -x \"$bootstrap\" ]] || { echo 'Extracted installer was not found.' >&2; exit 1; }\n"
-    "\"$bootstrap\" \"${forward[@]}\"\n"
-    "exit $?\n"
-    "__LSM_NATIVE_PAYLOAD_BELOW__\n";
+    "[[ -x \"$bootstrap\" ]] || { printf 'Downloaded installer was not found.\\n' >&2; exit 1; }\n"
+    "printf 'Compiling the downloaded source and preparing installation...\\n'\n"
+    "\"$bootstrap\" \"$@\"\n";
 
-static void fail_errno(const char *operation, const char *path)
+static void fail(const char *message)
 {
-    if (path)
-        fprintf(stderr, "%s: %s: %s\n", operation, path, strerror(errno));
-    else
-        fprintf(stderr, "%s: %s\n", operation, strerror(errno));
+    fprintf(stderr, "%s\n", message);
     exit(EXIT_FAILURE);
 }
 
-static bool join_path(char *destination, size_t destination_size,
-                      const char *left, const char *right)
+static void read_version(char *version, size_t size)
 {
-    const int written = snprintf(destination, destination_size, "%s/%s", left, right);
-    return written >= 0 && (size_t)written < destination_size;
-}
-
-static char *trim(char *text)
-{
-    while (*text == ' ' || *text == '\t' || *text == '\r' || *text == '\n') text++;
-    char *end = text + strlen(text);
-    while (end > text &&
-           (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
-        *--end = '\0';
-    return text;
-}
-
-static char *read_version(const char *root)
-{
-    char path[LSM_INSTALLER_PATH_LEN];
-    if (!join_path(path, sizeof(path), root, "support/VERSION")) {
-        fputs("Project root path is too long.\n", stderr);
-        exit(EXIT_FAILURE);
-    }
-    FILE *file = fopen(path, "r");
-    if (!file) fail_errno("Unable to open", path);
-    char line[LSM_INSTALLER_LINE_LEN];
-    if (!fgets(line, sizeof(line), file)) {
+    FILE *file = fopen("support/VERSION", "r");
+    if (!file) fail("Unable to open support/VERSION.");
+    if (!fgets(version, (int)size, file)) {
         fclose(file);
-        fprintf(stderr, "Unable to read %s\n", path);
-        exit(EXIT_FAILURE);
+        fail("Unable to read support/VERSION.");
     }
+    const int extra = fgetc(file);
     fclose(file);
-    char *version = strdup(trim(line));
-    if (!version) fail_errno("Unable to allocate version string", NULL);
-    return version;
-}
-
-static bool valid_source_epoch(const char *value)
-{
-    if (!value || !*value || strlen(value) > 20U) return false;
-    for (const unsigned char *cursor = (const unsigned char *)value;
-         *cursor; cursor++)
-        if (*cursor < '0' || *cursor > '9') return false;
-    return true;
-}
-
-static int run_command(const char *const source_arguments[])
-{
-    char *arguments[LSM_INSTALLER_ARGUMENTS];
-    size_t count = 0U;
-    while (source_arguments[count]) {
-        if (count + 1U >= LSM_INSTALLER_ARGUMENTS) {
-            fputs("Packaging command argument limit exceeded.\n", stderr);
-            return 125;
-        }
-        arguments[count] = strdup(source_arguments[count]);
-        if (!arguments[count]) {
-            while (count > 0U) free(arguments[--count]);
-            fail_errno("Unable to allocate command argument", NULL);
-        }
-        count++;
-    }
-    arguments[count] = NULL;
-
-    const pid_t child = fork();
-    if (child < 0) {
-        for (size_t index = 0U; index < count; index++) free(arguments[index]);
-        fail_errno("fork", NULL);
-    }
-    if (child == 0) {
-        execvp(arguments[0], arguments);
-        _exit(errno == ENOENT ? 127 : 126);
-    }
-
-    int status = 0;
-    while (waitpid(child, &status, 0) < 0) {
-        if (errno == EINTR) continue;
-        for (size_t index = 0U; index < count; index++) free(arguments[index]);
-        fail_errno("waitpid", NULL);
-    }
-    for (size_t index = 0U; index < count; index++) free(arguments[index]);
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
-    return 125;
-}
-
-static void append_file(FILE *output, const char *path)
-{
-    FILE *input = fopen(path, "rb");
-    if (!input) fail_errno("Unable to open payload", path);
-    unsigned char buffer[64U * 1024U];
-    size_t length = 0U;
-    while ((length = fread(buffer, 1U, sizeof(buffer), input)) > 0U) {
-        if (fwrite(buffer, 1U, length, output) != length) {
-            fclose(input);
-            fail_errno("Unable to append payload", path);
+    if (extra != EOF) fail("Release version is too long.");
+    version[strcspn(version, "\r\n")] = '\0';
+    unsigned dots = 0U;
+    bool digit = false;
+    for (const char *cursor = version; *cursor; cursor++) {
+        if (*cursor >= '0' && *cursor <= '9') {
+            digit = true;
+        } else if (*cursor == '.' && digit && dots < 2U) {
+            dots++;
+            digit = false;
+        } else {
+            fail("Release version must have three numeric components.");
         }
     }
-    if (ferror(input)) {
-        fclose(input);
-        fail_errno("Unable to read payload", path);
-    }
-    fclose(input);
+    if (dots != 2U || !digit)
+        fail("Release version must have three numeric components.");
+}
+
+static void read_revision(const char *command, char *revision, size_t size)
+{
+    FILE *pipe = popen(command, "r");
+    if (!pipe) fail("Unable to read the release revision from Git.");
+    const bool read_ok = fgets(revision, (int)size, pipe) != NULL;
+    const int status = pclose(pipe);
+    if (!read_ok || status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        fail("Generate the source-download installer from a Git checkout.");
+    revision[strcspn(revision, "\r\n")] = '\0';
+    if (strlen(revision) != 40U)
+        fail("Git returned an invalid source revision.");
+    for (const char *cursor = revision; *cursor; cursor++)
+        if (!((*cursor >= '0' && *cursor <= '9') ||
+              (*cursor >= 'a' && *cursor <= 'f')))
+            fail("Git returned an invalid source revision.");
 }
 
 int main(int argc, char **argv)
 {
     if (argc == 2 && (strcmp(argv[1], "--help") == 0 ||
-                      strcmp(argv[1], "-h") == 0)) {
+                     strcmp(argv[1], "-h") == 0)) {
         printf("Usage: %s [OUTPUT.run]\n", argv[0]);
         return EXIT_SUCCESS;
     }
@@ -187,99 +162,35 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: %s [OUTPUT.run]\n", argv[0]);
         return EXIT_FAILURE;
     }
-
-    char root[LSM_INSTALLER_PATH_LEN];
-    if (!getcwd(root, sizeof(root))) fail_errno("getcwd", NULL);
-    char *version = read_version(root);
+    char version[LSM_INSTALLER_VERSION_LEN];
+    char source_revision[LSM_INSTALLER_REVISION_LEN];
+    char common_revision[LSM_INSTALLER_REVISION_LEN];
+    read_version(version, sizeof(version));
+    read_revision("git rev-parse --verify HEAD", source_revision,
+                  sizeof(source_revision));
+    read_revision("git rev-parse --verify HEAD:src/infiltratr-common",
+                  common_revision, sizeof(common_revision));
 
     char default_output[LSM_INSTALLER_PATH_LEN];
-    const int default_length = snprintf(default_output, sizeof(default_output),
-        "%s/infiltrator-system-monitor-%s-native-installer.run", root, version);
-    if (default_length < 0 || (size_t)default_length >= sizeof(default_output)) {
-        free(version);
-        fputs("Default installer path is too long.\n", stderr);
-        return EXIT_FAILURE;
-    }
+    const int written = snprintf(default_output, sizeof(default_output),
+        "infiltrator-system-monitor-%s-native-installer.run", version);
+    if (written < 0 || (size_t)written >= sizeof(default_output))
+        fail("Default installer path is too long.");
     const char *output_path = argc == 2 ? argv[1] : default_output;
-
-    char temporary_template[] = "/tmp/lsm-installer-XXXXXX";
-    char *temporary = mkdtemp(temporary_template);
-    if (!temporary) {
-        free(version);
-        fail_errno("mkdtemp", NULL);
-    }
-    char payload[LSM_INSTALLER_PATH_LEN];
-    if (!join_path(payload, sizeof(payload), temporary, "payload.tar.gz")) {
-        free(version);
-        rmdir(temporary);
-        fputs("Temporary payload path is too long.\n", stderr);
-        return EXIT_FAILURE;
-    }
-
-    const char *source_epoch = getenv("SOURCE_DATE_EPOCH");
-    if (!valid_source_epoch(source_epoch))
-        source_epoch = LSM_INSTALLER_DEFAULT_EPOCH;
-    char mtime_argument[64];
-    const int mtime_length = snprintf(
-        mtime_argument, sizeof(mtime_argument), "--mtime=@%s", source_epoch);
-    if (mtime_length < 0 ||
-        (size_t)mtime_length >= sizeof(mtime_argument)) {
-        free(version);
-        rmdir(temporary);
-        fputs("SOURCE_DATE_EPOCH is out of range.\n", stderr);
-        return EXIT_FAILURE;
-    }
-
-    const char *tar_arguments[] = {
-        "tar", "--sort=name", mtime_argument, "--owner=0", "--group=0",
-        "--numeric-owner", "--exclude-vcs", "--exclude=./build",
-        "--exclude=./build-*",
-        "--exclude=*.deb", "--exclude=*.zip", "--exclude=*.tar.gz",
-        "--exclude=*.run", "--exclude=*.exe",
-        "-C", root, "-czf", payload, ".", NULL
-    };
-    const int tar_result = run_command(tar_arguments);
-    if (tar_result != 0) {
-        free(version);
-        unlink(payload);
-        rmdir(temporary);
-        fprintf(stderr, "tar failed while creating the source payload (status %d).\n",
-                tar_result);
-        return EXIT_FAILURE;
-    }
-
-    FILE *output = fopen(output_path, "wb");
-    if (!output) {
-        free(version);
-        unlink(payload);
-        rmdir(temporary);
-        fail_errno("Unable to create installer", output_path);
-    }
-    if (fwrite(installer_header, 1U, sizeof(installer_header) - 1U, output) !=
-        sizeof(installer_header) - 1U) {
-        fclose(output);
-        free(version);
-        unlink(payload);
-        rmdir(temporary);
-        fail_errno("Unable to write installer header", output_path);
-    }
-    append_file(output, payload);
-    if (fclose(output) != 0) {
-        free(version);
-        unlink(payload);
-        rmdir(temporary);
-        fail_errno("Unable to close installer", output_path);
-    }
-    if (chmod(output_path, 0755) != 0) {
-        free(version);
-        unlink(payload);
-        rmdir(temporary);
-        fail_errno("Unable to make installer executable", output_path);
-    }
-
-    unlink(payload);
-    rmdir(temporary);
+    FILE *output = fopen(output_path, "w");
+    if (!output) fail("Unable to create the source-download installer.");
+    const int header = fprintf(output,
+        "#!/usr/bin/env bash\n# SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "version='%s'\nsource_revision='%s'\ncommon_revision='%s'\n",
+        version, source_revision, common_revision);
+    const bool body_ok = header >= 0 &&
+        fwrite(installer_body, 1U, sizeof(installer_body) - 1U, output) ==
+        sizeof(installer_body) - 1U;
+    const int close_result = fclose(output);
+    if (!body_ok || close_result != 0)
+        fail("Unable to write the source-download installer.");
+    if (chmod(output_path, 0755) != 0)
+        fail("Unable to make the source-download installer executable.");
     puts(output_path);
-    free(version);
     return EXIT_SUCCESS;
 }

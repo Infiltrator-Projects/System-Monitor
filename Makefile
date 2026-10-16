@@ -621,13 +621,9 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 		$(BUILD_DIR)/native-installer-smoke-b.run >/dev/null
 	cmp -s $(BUILD_DIR)/native-installer-smoke-a.run \
 		$(BUILD_DIR)/native-installer-smoke-b.run
-	@payload_line=$$(awk '/^__LSM_NATIVE_PAYLOAD_BELOW__$$/ {print NR + 1; exit}' \
-		$(BUILD_DIR)/native-installer-smoke-a.run); \
-		test -n "$$payload_line"; \
-		tail -n +"$$payload_line" $(BUILD_DIR)/native-installer-smoke-a.run | \
-			tar -tzf - > $(BUILD_DIR)/native-installer-contents.txt
-	@! grep -Eq '\.exe$$' $(BUILD_DIR)/native-installer-contents.txt
-	./$(BUILD_DIR)/native-installer-smoke-a.run --help >/dev/null
+	bash -n $(BUILD_DIR)/native-installer-smoke-a.run
+	@test "$$(wc -c < $(BUILD_DIR)/native-installer-smoke-a.run)" -lt 16384
+	PATH=/nonexistent /bin/bash $(BUILD_DIR)/native-installer-smoke-a.run --help >/dev/null
 	rm -f $(BUILD_DIR)/native-installer-smoke-a.run \
 		$(BUILD_DIR)/native-installer-smoke-b.run
 	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/' $(INSTALL_BOOTSTRAP)
