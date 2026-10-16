@@ -2,6 +2,10 @@
 
 # Changelog
 
+## 1.0.204 — 2026-10-16
+
+Keep presentation-contract checks executable independently of `NDEBUG`, so optimized qualification cannot erase label, layout and unit assertions.
+
 ## 1.0.203 - 2026-10-15
 
 - Remove Process Inspector from the complete private `LsmApp` layout by routing retained process data, CPU display policy, graph direction and destructive-action confirmation through the process context, and window parenting through the presentation context.
