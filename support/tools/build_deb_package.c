@@ -533,7 +533,7 @@ int main(int argc, char **argv)
     copy_staged("LICENSE", "usr/share/doc/infiltrator-system-monitor/LICENSE", 0644);
     copy_staged("support/packaging/copyright",
                 "usr/share/doc/infiltrator-system-monitor/copyright", 0644);
-    copy_staged("README.md", "usr/share/doc/infiltrator-system-monitor/README.md", 0644);
+    copy_staged(".github/README.md", "usr/share/doc/infiltrator-system-monitor/README.md", 0644);
     if (regular_file("build/BUILD-INFO"))
         copy_staged("build/BUILD-INFO",
                     "usr/share/doc/infiltrator-system-monitor/BUILD-INFO", 0644);

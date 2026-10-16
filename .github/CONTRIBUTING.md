@@ -4,7 +4,7 @@
 
 System Monitor is an original clean-sheet implementation. Do not copy, translate, adapt, port or derive implementation code from another system-monitoring application.
 
-Follow the durable contracts in [Architecture](docs/ARCHITECTURE.md). Behavioural changes should update the owning tests; update documentation only when a documented contract changes.
+Follow the durable contracts in [Architecture](../docs/ARCHITECTURE.md). Behavioural changes should update the owning tests; update documentation only when a documented contract changes.
 
 `make check` is the authoritative verification suite. Its documentation gates require Clang and Doxygen. Use `make docs` for Doxygen validation and `make -j2 release` for a release-equivalent packaging pass.
 

@@ -38,8 +38,8 @@ using StringList = std::vector<std::string>;
 static unsigned error_count;
 
 static const char *const maintained_markdown[] = {
-    "README.md", "PHILOSOPHY.md", "CHANGELOG.md", "CONTRIBUTING.md",
-    "SECURITY.md", "docs/ARCHITECTURE.md", "docs/VALIDATION.md",
+    ".github/README.md", "PHILOSOPHY.md", "CHANGELOG.md", ".github/CONTRIBUTING.md",
+    ".github/SECURITY.md", "docs/ARCHITECTURE.md", "docs/VALIDATION.md",
     "docs/HARDWARE.md", ".github/CODE_OF_CONDUCT.md"
 };
 
@@ -647,19 +647,19 @@ static void check_build_and_release_contracts(void)
 static void check_documentation_contract(void)
 {
     std::string readme;
-    if (read_text("README.md", &readme)) {
-        check_unit_label_policy("README.md", readme);
+    if (read_text(".github/README.md", &readme)) {
+        check_unit_label_policy(".github/README.md", readme);
         for (const char *marker : {
                  "src/infiltratr-common", "PHILOSOPHY.md",
                  "docs/ARCHITECTURE.md", "docs/HARDWARE.md", "docs/VALIDATION.md",
                  "CONTRIBUTING.md", "SECURITY.md", "GPL-3.0-or-later"})
-            require_marker("README.md", readme, marker);
+            require_marker(".github/README.md", readme, marker);
     }
 
     std::string doxyfile;
     if (read_text("support/Doxyfile", &doxyfile)) {
-        for (const char *marker : {"README.md", "PHILOSOPHY.md", "CHANGELOG.md",
-                                   "CONTRIBUTING.md", "SECURITY.md",
+        for (const char *marker : {".github/README.md", "PHILOSOPHY.md", "CHANGELOG.md",
+                                   ".github/CONTRIBUTING.md", ".github/SECURITY.md",
                                    ".github/CODE_OF_CONDUCT.md", "docs", "src",
                                    "src/pci_names_data.c", "src/infiltratr-common"})
             require_marker("support/Doxyfile", doxyfile, marker);

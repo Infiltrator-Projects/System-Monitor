@@ -66,4 +66,4 @@ Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or 
 
 `src/infiltratr-common` is pinned by the parent repository gitlink to an exact Infiltratr Common commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.
 
-Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../SECURITY.md).
+Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security boundaries live in [Security](../.github/SECURITY.md).

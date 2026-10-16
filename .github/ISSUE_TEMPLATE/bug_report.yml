@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve Linux System Monitor. Do not include secrets or sensitive security details here; use SECURITY.md for vulnerability reports.
+        Thanks for helping improve Linux System Monitor. Do not include secrets or sensitive security details here; use .github/SECURITY.md for vulnerability reports.
 
   - type: input
     id: version

@@ -3,7 +3,7 @@
 # System Monitor
 
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Release identity:** [`support/VERSION`](support/VERSION)
+**Release identity:** [`support/VERSION`](../support/VERSION)
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -45,10 +45,10 @@ A published release contains the tested installable package and native installer
 
 ## Technical documentation
 
-- [Engineering philosophy](PHILOSOPHY.md) — governing engineering and documentation standard.
-- [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
-- [Hardware collection](docs/HARDWARE.md) — hardware rules, units and provenance.
-- [Validation](docs/VALIDATION.md) — compact verification entry point.
+- [Engineering philosophy](../PHILOSOPHY.md) — governing engineering and documentation standard.
+- [Architecture](../docs/ARCHITECTURE.md) — durable software contracts.
+- [Hardware collection](../docs/HARDWARE.md) — hardware rules, units and provenance.
+- [Validation](../docs/VALIDATION.md) — compact verification entry point.
 - [Contributing](CONTRIBUTING.md) — verification and repository discipline.
 - [Security](SECURITY.md) — security boundaries and reporting.
 
