@@ -11,8 +11,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_METRIC_FORMAT_H
-#define INFILTRATOR_SYSTEM_MONITOR_METRIC_FORMAT_H
+#ifndef SYSTEM_MONITOR_METRIC_FORMAT_H
+#define SYSTEM_MONITOR_METRIC_FORMAT_H
 
 #include <infiltratr/format.h>
 

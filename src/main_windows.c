@@ -405,7 +405,7 @@ static void show_about_window(LsmWindowsUiState *state)
     if (!state || !state->window || !state->instance) return;
 
     static const wchar_t about_class_name[] =
-        L"InfiltratorSystemMonitorAbout";
+        L"SystemMonitorAbout";
 
     WNDCLASSEXW window_class;
     ZeroMemory(&window_class, sizeof(window_class));
@@ -3229,7 +3229,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
     (void)SetProcessDPIAware();
 
     static const wchar_t class_name[] =
-        L"InfiltratorSystemMonitorWindows";
+        L"SystemMonitorWindows";
 
     WNDCLASSEXW window_class;
     ZeroMemory(&window_class, sizeof(window_class));

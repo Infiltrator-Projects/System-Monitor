@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file common.h
- * @brief Stable System Monitor names mapped directly to Infiltratr Common.
+ * @brief Stable System Monitor names mapped directly to Libraries.
  *
  * This header keeps established lsm_ call sites readable while eliminating
  * the former wrapper translation unit. Reusable implementation and contracts
- * are owned entirely by the pinned Infiltratr Common library.
+ * are owned entirely by the pinned Libraries library.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_COMMON_H
-#define INFILTRATOR_SYSTEM_MONITOR_COMMON_H
+#ifndef SYSTEM_MONITOR_COMMON_H
+#define SYSTEM_MONITOR_COMMON_H
 
 #include <infiltratr/arithmetic.h>
 #include <infiltratr/core.h>

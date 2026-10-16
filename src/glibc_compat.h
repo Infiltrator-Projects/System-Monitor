@@ -18,8 +18,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_GLIBC_COMPAT_H
-#define INFILTRATOR_SYSTEM_MONITOR_GLIBC_COMPAT_H
+#ifndef SYSTEM_MONITOR_GLIBC_COMPAT_H
+#define SYSTEM_MONITOR_GLIBC_COMPAT_H
 
 #include <features.h>
 

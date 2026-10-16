@@ -24,7 +24,7 @@
 static int write_provider(const char *path)
 {
     static const char text[] =
-        "provider=infiltrator-system-settings\n"
+        "provider=system-settings\n"
         "policy-version=3\n"
         "contract=infiltratr-temporal-v3\n";
     FILE *file = fopen(path, "wb");

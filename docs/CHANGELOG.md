@@ -46,7 +46,7 @@ Keep presentation-contract checks executable independently of `NDEBUG`, so optim
 
 ## 1.0.198 - 2026-10-14
 
-- Advance the exact Infiltratr Common gitlink to published 1.19.42 and consume Common's new shared-design validators instead of duplicating palette and metrics ABI-prefix rules in the Win32 adapter.
+- Advance the exact Libraries gitlink to published 1.19.42 and consume Common's new shared-design validators instead of duplicating palette and metrics ABI-prefix rules in the Win32 adapter.
 - Keep native Win32 integer-range, host-theme detection, registry persistence and palette projection product-owned while making Common the single authority for validity of its shared design records.
 - Record the pre-release dependency cadence: System Monitor follows the current Common contract directly, carries no compatibility shims solely for superseded internal Common revisions, and must remain within five published Common releases of the latest qualified release.
 
@@ -65,7 +65,7 @@ Keep presentation-contract checks executable independently of `NDEBUG`, so optim
 
 ## 1.0.195 - 2026-10-13
 
-- Advance the exact Infiltratr Common gitlink from published 1.19.35 to published 1.19.41, inheriting strengthened POSIX and temporal contracts while keeping monitoring policy, hardware interpretation and product presentation locally owned.
+- Advance the exact Libraries gitlink from published 1.19.35 to published 1.19.41, inheriting strengthened POSIX and temporal contracts while keeping monitoring policy, hardware interpretation and product presentation locally owned.
 - Make `support/app-internal-allowlist.txt` an exact private-state exception set: every direct `app_internal.h` consumer must be listed and every listed exception must still be a consumer, so completed decoupling cannot leave latent permission to reintroduce private-state coupling.
 - Reduce architecture-audit brittleness by replacing retired implementation-spelling sentinels with direct ownership and integrity invariants for Common private sources, Windows source membership and byte-for-byte immutable release verification.
 - Preserve deliberate build/release separation after the forensic re-audit: Make remains the regression, packaging and release-quality authority; CMake remains the Linux application-build authority; Windows has one native release recipe; Publish consumes only the sealed qualified artifacts; deterministic source archives remain independently owned by `make dist`.
@@ -106,7 +106,7 @@ Keep presentation-contract checks executable independently of `NDEBUG`, so optim
 
 ## 1.0.188 - 2026-10-13
 
-- Make the parent repository gitlink the single Infiltratr Common revision authority for both Make and CMake, removing duplicate tag, version and commit pins and the source-archive network fallback.
+- Make the parent repository gitlink the single Libraries revision authority for both Make and CMake, removing duplicate tag, version and commit pins and the source-archive network fallback.
 - Centralise metrics, storage, process and accelerator test source membership so ordinary, sanitizer and coverage builds cannot drift independently.
 - Remove the self-hosted CI Git package bootstrap and validate the runner toolchain contract before checkout instead.
 - Make `support/VERSION` the only maintained source-version value by removing duplicate current-version strings from README and CI.
@@ -116,7 +116,7 @@ Keep presentation-contract checks executable independently of `NDEBUG`, so optim
 - Remove the unused duplicate CMake smoke-test and developer-tool graph so `make check` is the single regression and quality-test authority while CMake owns only the Linux application build.
 - Move native Windows release compilation and qualification out of workflow YAML into `support/windows/build-release.ps1`, centralising compiler warnings, link libraries, Common construction, source membership and backend probes.
 - Replace brittle source-audit checks for obsolete CI spelling with semantic build and release ownership checks, eliminating legacy marker comments that existed only to satisfy the checker.
-- Make CMake verify Infiltratr Common against the parent repository gitlink instead of using its own pin for application-build correctness, preventing a stale configured submodule from being accepted.
+- Make CMake verify Libraries against the parent repository gitlink instead of using its own pin for application-build correctness, preventing a stale configured submodule from being accepted.
 - Harden Technical Details layout persistence by validating saved column order as a complete permutation, deriving width bounds from column metadata and centralising identity-order reset logic.
 
 ## 1.0.186 - 2026-10-13

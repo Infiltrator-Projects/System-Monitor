@@ -556,9 +556,6 @@ int main(int argc, char **argv)
         control, sizeof(control),
         "Package: system-monitor\n"
         "Version: %s\n"
-        "Provides: infiltrator-system-monitor, linux-system-monitor\n"
-        "Breaks: infiltrator-system-monitor (<< %s), linux-system-monitor (<< %s)\n"
-        "Replaces: infiltrator-system-monitor (<< %s), linux-system-monitor (<< %s)\n"
         "Section: utils\n"
         "Priority: optional\n"
         "Architecture: %s\n"
@@ -572,7 +569,7 @@ int main(int argc, char **argv)
         " Linux kernel and driver interfaces directly without command-line telemetry\n"
         " tools, Python runtimes, helper executables or third-party monitoring plugins.\n"
         "Installed-Size: %llu\n",
-        version, version, version, version, version, architecture, LSM_GLIBC_BASELINE_MAJOR,
+        version, architecture, LSM_GLIBC_BASELINE_MAJOR,
         LSM_GLIBC_BASELINE_MINOR, (unsigned long long)installed_size_kb);
     if (written < 0 || (size_t)written >= sizeof(control))
         fail("control file is too large");

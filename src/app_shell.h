@@ -7,8 +7,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_APP_SHELL_H
-#define INFILTRATOR_SYSTEM_MONITOR_APP_SHELL_H
+#ifndef SYSTEM_MONITOR_APP_SHELL_H
+#define SYSTEM_MONITOR_APP_SHELL_H
 
 #include "app.h"
 
@@ -16,7 +16,7 @@
  * Apply the selected appearance mode.
  *
  * Follow-system mode keeps the host GTK palette authoritative. Day and Night
- * use the semantic palettes supplied by Infiltratr Common. The implementation
+ * use the semantic palettes supplied by Libraries. The implementation
  * is isolated in app_theme.c rather than shell navigation code.
  *
  * @param [in,out] app Active application context.

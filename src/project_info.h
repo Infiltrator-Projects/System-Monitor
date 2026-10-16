@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file project_info.h
- * @brief Canonical application identity exposed through Infiltratr Common.
+ * @brief Canonical application identity exposed through Libraries.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_PROJECT_INFO_H
-#define INFILTRATOR_SYSTEM_MONITOR_PROJECT_INFO_H
+#ifndef SYSTEM_MONITOR_PROJECT_INFO_H
+#define SYSTEM_MONITOR_PROJECT_INFO_H
 
 #include <infiltratr/core.h>
 

@@ -8,7 +8,7 @@
  * refresh. The adapter is entirely optional: systems without NVML continue
  * using DRM/sysfs metrics and gain no new package dependency.
  *
- * Infiltratr Common owns cross-platform module lifetime and symbol transfer.
+ * Libraries owns cross-platform module lifetime and symbol transfer.
  * This module retains only NVML-specific discovery, required/optional symbol
  * policy and metrics semantics.
  *

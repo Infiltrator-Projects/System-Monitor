@@ -7,8 +7,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
-#define INFILTRATOR_SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
+#ifndef SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
+#define SYSTEM_MONITOR_PROCESS_LOG_PLOT_H
 
 #include <gtk/gtk.h>
 

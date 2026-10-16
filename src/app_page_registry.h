@@ -11,8 +11,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_APP_PAGE_REGISTRY_H
-#define INFILTRATOR_SYSTEM_MONITOR_APP_PAGE_REGISTRY_H
+#ifndef SYSTEM_MONITOR_APP_PAGE_REGISTRY_H
+#define SYSTEM_MONITOR_APP_PAGE_REGISTRY_H
 
 #include "app.h"
 #include "app_config.h"

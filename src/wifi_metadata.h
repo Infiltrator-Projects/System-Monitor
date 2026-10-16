@@ -6,8 +6,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_WIFI_METADATA_H
-#define INFILTRATOR_SYSTEM_MONITOR_WIFI_METADATA_H
+#ifndef SYSTEM_MONITOR_WIFI_METADATA_H
+#define SYSTEM_MONITOR_WIFI_METADATA_H
 
 #include "monitor_types.h"
 

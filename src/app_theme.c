@@ -6,7 +6,7 @@
  * Theme construction is isolated from shell navigation and window lifecycle so
  * visual policy can evolve without making the shell a cross-feature change
  * hotspot. Semantic palette, typography and geometry values remain supplied by
- * Infiltratr Common.
+ * Libraries.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith

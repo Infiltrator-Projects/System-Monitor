@@ -16,8 +16,8 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#ifndef INFILTRATOR_SYSTEM_MONITOR_MONITOR_PLATFORM_H
-#define INFILTRATOR_SYSTEM_MONITOR_MONITOR_PLATFORM_H
+#ifndef SYSTEM_MONITOR_MONITOR_PLATFORM_H
+#define SYSTEM_MONITOR_MONITOR_PLATFORM_H
 
 #include "monitor_types.h"
 
