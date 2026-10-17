@@ -197,7 +197,7 @@ jobs:
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
           dpkg-deb -e "$deb" "$tmp/control"
-          grep -Fq '/usr/bin/system-monitor --install-capability' "$tmp/control/postinst"
+          grep -Fq '/Programs/system-monitor --install-capability' "$tmp/control/postinst"
           ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
           font_root="$tmp/root/usr/share/fonts/truetype/system-monitor"
           for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
