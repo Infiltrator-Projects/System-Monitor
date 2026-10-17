@@ -189,21 +189,27 @@ jobs:
           test "$(dpkg-deb -f "$deb" Version)" = "$version"
           dependencies=$(dpkg-deb -f "$deb" Depends)
           grep -Eq 'libgtk-3-0(t64)?' <<<"$dependencies"
-          ! grep -Eq 'fontconfig|libcap2-bin|libbluetooth' <<<"$dependencies"
+          grep -Fq 'ca-certificates' <<<"$dependencies"
+          grep -Fq 'fontconfig' <<<"$dependencies"
+          grep -Fq 'xz-utils' <<<"$dependencies"
+          grep -Eq 'curl[[:space:]]*\|[[:space:]]*wget' <<<"$dependencies"
+          ! grep -Eq 'libcap2-bin|libbluetooth' <<<"$dependencies"
           expected_members=$(printf 'debian-binary\ncontrol.tar.xz\ndata.tar.xz')
           test "$(ar t "$deb")" = "$expected_members"
           ! dpkg-deb --contents "$deb" | grep -q '1970-01-01'
+          ! dpkg-deb --contents "$deb" | grep -q 'usr/share/fonts/truetype/system-monitor/'
+          ! dpkg-deb --contents "$deb" | grep -Eq 'System/Resources/Fonts/mb_corpo[^/]*\.ttf$'
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           dpkg-deb -x "$deb" "$tmp/root"
           dpkg-deb -e "$deb" "$tmp/control"
+          grep -Fq '/usr/lib/system-monitor/ensure-native-fonts' "$tmp/control/postinst"
           grep -Fq '/Programs/system-monitor --install-capability' "$tmp/control/postinst"
           ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
-          font_root="$tmp/root/usr/share/fonts/truetype/system-monitor"
-          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            test -f "$font_root/$face"
-            cmp "build/fonts/$face" "$font_root/$face"
-          done
+          helper="$tmp/root/usr/lib/system-monitor/ensure-native-fonts"
+          test -x "$helper"
+          cmp "src/infiltratr-common/cmake/InfiltratrEnsureNativeFonts.sh" "$helper"
+          test ! -e "$tmp/root/usr/share/fonts/truetype/system-monitor"
           changelog="$tmp/root/usr/share/doc/system-monitor/changelog.gz"
           gzip -t "$changelog"
           first_line=$(gzip -cd "$changelog" | sed -n '1p')
@@ -250,14 +256,19 @@ jobs:
           sudo ./"$installer" --profile aggressive --system-package-mode
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
+          ! dpkg -L system-monitor | grep -q '/usr/share/fonts/truetype/system-monitor/'
           for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            cmp "build/fonts/$face" "/usr/share/fonts/truetype/system-monitor/$face"
+            cmp "build/fonts/$face" "/System/Resources/Fonts/$face"
           done
           pgo_log=$(mktemp)
           ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
           ! grep -Fq 'stringop-overread' "$pgo_log"
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
+          ! dpkg -L system-monitor | grep -q '/usr/share/fonts/truetype/system-monitor/'
+          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
+            cmp "build/fonts/$face" "/System/Resources/Fonts/$face"
+          done
 
   windows-release:
     name: Build and qualify exact Windows release artifact
