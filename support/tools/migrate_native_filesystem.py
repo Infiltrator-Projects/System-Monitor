@@ -97,14 +97,14 @@ if end_anchor not in text:
     raise SystemExit("System Monitor native installer completion anchor missing")
 installer.write_text(text.replace(end_anchor, replacement, 1))
 
-Path("support/VERSION").write_text("1.0.208\n")
+Path("support/VERSION").write_text("1.0.209\n")
 
 changelog = Path("docs/CHANGELOG.md")
 text = changelog.read_text()
 heading = "# Changelog\n"
 entry = '''# Changelog
 
-## 1.0.208 - 2026-10-17
+## 1.0.209 - 2026-10-17
 
 - Install the Linux application only at `/Programs/system-monitor`; no System Monitor executable or compatibility link is installed under `/usr/bin`.
 - Make the standalone Debian and hardware-native installation paths establish the native InfiltratorOS filesystem skeleton when needed.
@@ -124,7 +124,7 @@ section = '''
 On Linux, the user-launchable application has one authoritative executable path: `/Programs/system-monitor`. `/Programs` is the single application namespace for Infiltrator software regardless of whether a program is bundled with InfiltratorOS or installed independently. `/System` is reserved for operating-system infrastructure, and `/System/Commands` is reserved for genuine command helpers. System Monitor therefore creates the common native skeleton when necessary but does not create `/System/Programs` and does not install an executable or compatibility link under `/usr/bin`.
 '''
 if "## Native Linux filesystem ownership" not in text:
-    architecture.write_text(text.rstrip() + section + "\n")
+    architecture.write_text((text.rstrip() + section).rstrip() + "\n")
 
 readme = Path(".github/README.md")
 text = readme.read_text()
@@ -135,7 +135,7 @@ section = '''
 System Monitor installs its Linux executable at `/Programs/system-monitor`. The Debian package and hardware-native installer establish the InfiltratorOS native filesystem skeleton when needed and add `/System/Commands:/Programs` to future login-shell PATHs. No System Monitor executable or compatibility link is installed under `/usr/bin`, and the desktop launcher uses the absolute native path.
 '''
 if "### Native Linux installation path" not in text:
-    readme.write_text(text.rstrip() + section + "\n")
+    readme.write_text((text.rstrip() + section).rstrip() + "\n")
 
 for path in [builder, makefile, installer]:
     product_text = path.read_text()
