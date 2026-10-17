@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.210 - 2026-10-17
+
+- Remove application-owned MB Corpo TTFs from the Linux package and establish the canonical shared `/System/Resources/Fonts` cache through the exact pinned Common bootstrap.
+- Preserve standalone Mint/Ubuntu installation by packaging only the installer-side native-font bootstrap under `/usr/lib/system-monitor`; System Monitor no longer owns a private font payload.
+- Make Debian package qualification reject `/usr/share/fonts/truetype/system-monitor/` and require the shared-font bootstrap dependencies.
+
 ## 1.0.209 - 2026-10-17
 
 - Install the Linux application only at `/Programs/system-monitor`; no System Monitor executable or compatibility link is installed under `/usr/bin`.
