@@ -90,16 +90,7 @@ if ((${#missing[@]})); then
         exit 1
     fi
 
-    printf '\nThe installer can install the required packages: %s\n' "${packages[*]}"
-    answer=${LSM_AUTO_INSTALL_BUILD_REQUIREMENTS:-}
-    if [[ -z "$answer" && -t 0 ]]; then
-        read -r -p 'Install build requirements? [Y/n] ' answer || answer=
-    fi
-    case "$answer" in
-        ""|y|Y|yes|YES|Yes) ;;
-        *) printf 'Nothing was installed or changed.\n' >&2; exit 1 ;;
-    esac
-
+    printf '\nInstalling required packages automatically: %s\n' "${packages[*]}"
     printf '\nUpdating packages...\n'
     if ((system_package_mode)); then
         "$apt_get" -o DPkg::Lock::Timeout=300 update
@@ -131,4 +122,8 @@ export LSM_SOURCE_ROOT="$ROOT"
 export LSM_BOOTSTRAP_CC="$compiler"
 export LSM_BOOTSTRAP_BINARY="$builder"
 trap - EXIT
-exec "$builder" "$@"
+
+# The production installer has one build policy: native CPU tuning, LTO and
+# trained two-pass PGO. Append the internal engine selector last so historical
+# caller arguments cannot weaken that policy.
+exec "$builder" "$@" --profile aggressive
