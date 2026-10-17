@@ -763,15 +763,18 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO) $(FONT_STAMP)
 	dpkg-deb --contents $(DEB_OUTPUT) > $(BUILD_DIR)/deb-contents.txt
 	grep -q 'Programs/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
 	grep -q 'etc/profile.d/91-infiltrator-system-monitor-path.sh$$' $(BUILD_DIR)/deb-contents.txt
+	grep -q 'usr/lib/system-monitor/ensure-native-fonts$$' $(BUILD_DIR)/deb-contents.txt
 	@for dir in Programs System/Commands System/Libraries System/Devices System/Filesystems System/Kernel/Images System/Kernel/Modules System/Kernel/Firmware System/Resources/Calendars System/Resources/Clocks System/Resources/Fonts System/Resources/Locales System/Resources/Icons System/Resources/Themes System/Preferences Users Volumes Temporary; do \
 		grep -q "$$dir/$$" $(BUILD_DIR)/deb-contents.txt || exit 1; \
 	done
 	@! grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
 	@! grep -q 'System/Programs/' $(BUILD_DIR)/deb-contents.txt
-	@for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do \
-		grep -q "usr/share/fonts/truetype/system-monitor/$$face$$" \
-			$(BUILD_DIR)/deb-contents.txt || exit 1; \
-	done
+	@! grep -q 'usr/share/fonts/truetype/system-monitor/' $(BUILD_DIR)/deb-contents.txt
+	@depends="$$(dpkg-deb -f $(DEB_OUTPUT) Depends)"; \
+		printf '%s\n' "$$depends" | grep -Fq 'ca-certificates'; \
+		printf '%s\n' "$$depends" | grep -Fq 'fontconfig'; \
+		printf '%s\n' "$$depends" | grep -Fq 'xz-utils'; \
+		printf '%s\n' "$$depends" | grep -Eq 'curl[[:space:]]*\|[[:space:]]*wget'
 	grep -q 'usr/share/doc/system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
@@ -780,7 +783,8 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO) $(FONT_STAMP)
 	grep -q 'usr/share/app-install/icons/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	@test "$$(awk '$$1 ~ /^-/ && $$1 ~ /x/ {print $$6}' \
-		$(BUILD_DIR)/deb-contents.txt | grep -v '^\./Programs/system-monitor$$' | wc -l)" -eq 0
+		$(BUILD_DIR)/deb-contents.txt | \
+		grep -Ev '^\./(Programs/system-monitor|usr/lib/system-monitor/ensure-native-fonts)$$' | wc -l)" -eq 0
 	@! grep -Eq '(libexec|polkit|rules\.d|Configure-Hardware|Run-Linux)' \
 		$(BUILD_DIR)/deb-contents.txt
 	@repro='$(BUILD_DIR)/deb-reproducibility-check.deb'; \
