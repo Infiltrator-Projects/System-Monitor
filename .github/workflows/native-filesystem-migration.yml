@@ -1,0 +1,182 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Native filesystem migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/native-filesystem-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Apply one-authority native filesystem migration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected migration anchor missing in {path}: {old[:100]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"migration anchor is not unique in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          builder = Path("support/tools/build_deb_package.c")
+          text = builder.read_text()
+          anchor = "    const time_t epoch = source_date_epoch();\n\n"
+          if anchor not in text:
+              raise SystemExit("System Monitor package builder native-root anchor missing")
+          native_setup = r'''    const time_t epoch = source_date_epoch();
+
+    /* Every standalone Infiltrator package can establish the same native OS
+     * namespace. Directories are shared package structure; executable files
+     * remain owned only by the product that installs them. */
+    static const char *native_directories[] = {
+        "System/Commands",
+        "System/Libraries",
+        "System/Devices",
+        "System/Filesystems",
+        "System/Kernel/Images",
+        "System/Kernel/Modules",
+        "System/Kernel/Firmware",
+        "System/Resources/Calendars",
+        "System/Resources/Clocks",
+        "System/Resources/Fonts",
+        "System/Resources/Locales",
+        "System/Resources/Icons",
+        "System/Resources/Themes",
+        "System/Preferences",
+        "Programs",
+        "Users",
+        "Volumes",
+        "Temporary"
+    };
+    for (size_t index = 0U;
+         index < sizeof(native_directories) / sizeof(native_directories[0]);
+         index++) {
+        char native_directory[PATH_MAX];
+        stage_path(native_directory, sizeof(native_directory),
+                   native_directories[index]);
+        make_directories(native_directory, 0755);
+    }
+
+    const char native_path_profile[] =
+        "# InfiltratorOS native PATH.\n"
+        "case \":$PATH:\" in *:/Programs:*) ;; *) PATH=\"/Programs:$PATH\" ;; esac\n"
+        "case \":$PATH:\" in *:/System/Commands:*) ;; *) PATH=\"/System/Commands:$PATH\" ;; esac\n"
+        "export PATH\n";
+    write_staged("etc/profile.d/91-infiltrator-system-monitor-path.sh",
+                 0644, native_path_profile);
+
+'''
+          text = text.replace(anchor, native_setup, 1)
+          text = text.replace('"usr/bin/system-monitor"', '"Programs/system-monitor"')
+          text = text.replace('"Exec=system-monitor\\n"', '"Exec=/Programs/system-monitor\\n"')
+          text = text.replace('"/usr/bin/system-monitor --install-capability || "',
+                              '"/Programs/system-monitor --install-capability || "')
+          if 'usr/bin/system-monitor' in text:
+              raise SystemExit("System Monitor package builder still contains /usr/bin/system-monitor")
+          builder.write_text(text)
+
+          makefile = Path("Makefile")
+          text = makefile.read_text()
+          text = text.replace("grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt",
+                              "grep -q 'Programs/system-monitor$$' $(BUILD_DIR)/deb-contents.txt")
+          text = text.replace("grep -v '^\\./usr/bin/system-monitor$$'",
+                              "grep -v '^\\./Programs/system-monitor$$'")
+          check_anchor = "\tgrep -q 'Programs/system-monitor$$' $(BUILD_DIR)/deb-contents.txt\n"
+          if check_anchor not in text:
+              raise SystemExit("System Monitor Makefile package path check anchor missing")
+          extra_checks = r'''	grep -q 'etc/profile.d/91-infiltrator-system-monitor-path.sh$$' $(BUILD_DIR)/deb-contents.txt
+	@for dir in Programs System/Commands System/Libraries System/Devices System/Filesystems System/Kernel/Images System/Kernel/Modules System/Kernel/Firmware System/Resources/Calendars System/Resources/Clocks System/Resources/Fonts System/Resources/Locales System/Resources/Icons System/Resources/Themes System/Preferences Users Volumes Temporary; do \
+		grep -q "$$dir/$$" $(BUILD_DIR)/deb-contents.txt || exit 1; \
+	done
+	@! grep -q 'usr/bin/system-monitor$$' $(BUILD_DIR)/deb-contents.txt
+	@! grep -q 'System/Programs/' $(BUILD_DIR)/deb-contents.txt
+'''
+          text = text.replace(check_anchor, check_anchor + extra_checks, 1)
+          makefile.write_text(text)
+
+          installer = Path("support/tools/native_installer.c")
+          text = installer.read_text()
+          end_anchor = '''    printf("\\nSystem Monitor %s is installed system-wide.\\n", version);
+    puts("The normal menu launcher and system-monitor command now use this");
+    puts("hardware-native build. APT records it as the installed package.");
+'''
+          replacement = '''    if (!executable_file("/Programs/system-monitor"))
+        fail("installed package is missing /Programs/system-monitor");
+
+    printf("\\nSystem Monitor %s is installed system-wide.\\n", version);
+    puts("The menu launcher and native /Programs path now use this");
+    puts("hardware-native build. APT records it as the installed package.");
+'''
+          if end_anchor not in text:
+              raise SystemExit("System Monitor native installer completion anchor missing")
+          installer.write_text(text.replace(end_anchor, replacement, 1))
+
+          Path("support/VERSION").write_text("1.0.208\n")
+
+          changelog = Path("docs/CHANGELOG.md")
+          text = changelog.read_text()
+          heading = "# Changelog\n"
+          entry = '''# Changelog
+
+## 1.0.208 - 2026-10-17
+
+- Install the Linux application only at `/Programs/system-monitor`; no System Monitor executable or compatibility link is installed under `/usr/bin`.
+- Make the standalone Debian and hardware-native installation paths establish the native InfiltratorOS filesystem skeleton when needed.
+- Add the native `/System/Commands:/Programs` login-shell PATH bridge and use `/Programs/system-monitor` directly from desktop and package capability setup.
+- Release qualification rejects the obsolete `/System/Programs` split and any `/usr/bin/system-monitor` package entry.
+'''
+          if heading not in text:
+              raise SystemExit("System Monitor changelog heading missing")
+          changelog.write_text(text.replace(heading, entry, 1))
+
+          architecture = Path("docs/ARCHITECTURE.md")
+          text = architecture.read_text()
+          section = '''
+
+## Native Linux filesystem ownership
+
+On Linux, the user-launchable application has one authoritative executable path: `/Programs/system-monitor`. `/Programs` is the single application namespace for Infiltrator software regardless of whether a program is bundled with InfiltratorOS or installed independently. `/System` is reserved for operating-system infrastructure, and `/System/Commands` is reserved for genuine command helpers. System Monitor therefore creates the common native skeleton when necessary but does not create `/System/Programs` and does not install an executable or compatibility link under `/usr/bin`.
+'''
+          if "## Native Linux filesystem ownership" not in text:
+              architecture.write_text(text.rstrip() + section + "\n")
+
+          readme = Path(".github/README.md")
+          text = readme.read_text()
+          section = '''
+
+### Native Linux installation path
+
+System Monitor installs its Linux executable at `/Programs/system-monitor`. The Debian package and hardware-native installer establish the InfiltratorOS native filesystem skeleton when needed and add `/System/Commands:/Programs` to future login-shell PATHs. No System Monitor executable or compatibility link is installed under `/usr/bin`, and the desktop launcher uses the absolute native path.
+'''
+          if "### Native Linux installation path" not in text:
+              readme.write_text(text.rstrip() + section + "\n")
+
+          # The migration must leave no product executable in the old namespace.
+          for path in [builder, makefile, installer]:
+              product_text = path.read_text()
+              if "/System/Programs" in product_text:
+                  raise SystemExit(f"obsolete /System/Programs contract remains in {path}")
+      - name: Commit native filesystem release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'The-First-Infiltrator'
+          git config user.email 'The-First-Infiltrator@users.noreply.github.com'
+          git add Makefile support/VERSION support/tools/build_deb_package.c support/tools/native_installer.c docs/CHANGELOG.md docs/ARCHITECTURE.md .github/README.md
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'Migration already applied.'; exit 0; }
+          git commit -m 'Release System Monitor 1.0.208 native filesystem layout'
+          git push origin HEAD:main
