@@ -57,3 +57,7 @@ The native `.run` installer downloads the exact release source and its pinned Co
 ## Licence and provenance
 
 Shannon Smith-owned System Monitor source, documentation and application artwork are licensed under GPL-3.0-or-later. Documented dependencies, first-party Common infrastructure and separately licensed assets retain their own identities and licences.
+
+### Native Linux installation path
+
+System Monitor installs its Linux executable at `/Programs/system-monitor`. The Debian package and hardware-native installer establish the InfiltratorOS native filesystem skeleton when needed and add `/System/Commands:/Programs` to future login-shell PATHs. No System Monitor executable or compatibility link is installed under `/usr/bin`, and the desktop launcher uses the absolute native path.

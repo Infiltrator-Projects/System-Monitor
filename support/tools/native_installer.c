@@ -901,8 +901,11 @@ int main(int argc, char **argv)
         run_required(NULL, install_arguments);
     }
 
+    if (!executable_file("/Programs/system-monitor"))
+        fail("installed package is missing /Programs/system-monitor");
+
     printf("\nSystem Monitor %s is installed system-wide.\n", version);
-    puts("The normal menu launcher and system-monitor command now use this");
+    puts("The menu launcher and native /Programs path now use this");
     puts("hardware-native build. APT records it as the installed package.");
     return EXIT_SUCCESS;
 }

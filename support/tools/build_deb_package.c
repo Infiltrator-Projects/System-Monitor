@@ -482,11 +482,51 @@ int main(int argc, char **argv)
 
     const time_t epoch = source_date_epoch();
 
+    /* Every standalone Infiltrator package can establish the same native OS
+     * namespace. Directories are shared package structure; executable files
+     * remain owned only by the product that installs them. */
+    static const char *native_directories[] = {
+        "System/Commands",
+        "System/Libraries",
+        "System/Devices",
+        "System/Filesystems",
+        "System/Kernel/Images",
+        "System/Kernel/Modules",
+        "System/Kernel/Firmware",
+        "System/Resources/Calendars",
+        "System/Resources/Clocks",
+        "System/Resources/Fonts",
+        "System/Resources/Locales",
+        "System/Resources/Icons",
+        "System/Resources/Themes",
+        "System/Preferences",
+        "Programs",
+        "Users",
+        "Volumes",
+        "Temporary"
+    };
+    for (size_t index = 0U;
+         index < sizeof(native_directories) / sizeof(native_directories[0]);
+         index++) {
+        char native_directory[PATH_MAX];
+        stage_path(native_directory, sizeof(native_directory),
+                   native_directories[index]);
+        make_directories(native_directory, 0755);
+    }
+
+    const char native_path_profile[] =
+        "# InfiltratorOS native PATH.\n"
+        "case \":$PATH:\" in *:/Programs:*) ;; *) PATH=\"/Programs:$PATH\" ;; esac\n"
+        "case \":$PATH:\" in *:/System/Commands:*) ;; *) PATH=\"/System/Commands:$PATH\" ;; esac\n"
+        "export PATH\n";
+    write_staged("etc/profile.d/91-infiltrator-system-monitor-path.sh",
+                 0644, native_path_profile);
+
     copy_staged("build/system-monitor",
-                "usr/bin/system-monitor", 0755);
+                "Programs/system-monitor", 0755);
     char staged_application[PATH_MAX];
     stage_path(staged_application, sizeof(staged_application),
-               "usr/bin/system-monitor");
+               "Programs/system-monitor");
     const char *keep_debug = getenv("LSM_KEEP_DEBUG");
     if (!keep_debug || strcmp(keep_debug, "1") != 0)
         strip_binary_if_available(staged_application);
@@ -541,7 +581,7 @@ int main(int argc, char **argv)
         "Type=Application\n"
         "Name=System Monitor\n"
         "Comment=Native Linux system and hardware monitor\n"
-        "Exec=system-monitor\n"
+        "Exec=/Programs/system-monitor\n"
         "Icon=system-monitor\n"
         "Terminal=false\n"
         "Categories=System;Monitor;GTK;\n"
@@ -578,7 +618,7 @@ int main(int argc, char **argv)
     const char postinst[] =
         "#!/bin/sh\n"
         "set -e\n"
-        "/usr/bin/system-monitor --install-capability || "
+        "/Programs/system-monitor --install-capability || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "could not apply CAP_NET_RAW.' >&2\n"
         "exit 0\n";

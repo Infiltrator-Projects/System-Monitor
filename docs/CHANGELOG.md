@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.209 - 2026-10-17
+
+- Install the Linux application only at `/Programs/system-monitor`; no System Monitor executable or compatibility link is installed under `/usr/bin`.
+- Make the standalone Debian and hardware-native installation paths establish the native InfiltratorOS filesystem skeleton when needed.
+- Add the native `/System/Commands:/Programs` login-shell PATH bridge and use `/Programs/system-monitor` directly from desktop and package capability setup.
+- Release qualification rejects the obsolete `/System/Programs` split and any `/usr/bin/system-monitor` package entry.
+
 ## 1.0.205 — 2026-10-16
 
 - Replace the self-extracting native installer with a small source downloader that fetches the exact release and pinned Common revisions over HTTPS before compiling and installing; keep help available offline.
