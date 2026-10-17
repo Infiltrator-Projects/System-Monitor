@@ -356,7 +356,7 @@ static void cleanup_mock_install(const char *source_root)
         access(marker, F_OK) != 0)
         return;
 
-    const char *commands[][4] = {
+    char *commands[][4] = {
         {"/usr/bin/rm", "-f", "/Programs/system-monitor", NULL},
         {"/usr/bin/rmdir", "/Programs", NULL, NULL}
     };
@@ -370,7 +370,7 @@ static void cleanup_mock_install(const char *source_root)
             arguments[count++] = "-n";
             arguments[count++] = "--";
             for (size_t part = 0U; commands[index][part]; part++)
-                arguments[count++] = (char *)commands[index][part];
+                arguments[count++] = commands[index][part];
             arguments[count] = NULL;
             execv("/usr/bin/sudo", arguments);
             _exit(126);
