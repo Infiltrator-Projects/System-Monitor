@@ -1,0 +1,29 @@
+name: One-shot fixture NUL correction
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-fix-fixture-nul.yml
+      - support/tools/one_shot_fix_fixture_nul.py
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: python3 support/tools/one_shot_fix_fixture_nul.py
+      - shell: bash
+        run: |
+          set -euo pipefail
+          git add support/tests/native_installer_safety.c
+          git diff --cached --check
+          git config user.name 'The-First-Infiltrator'
+          git config user.email 'The-First-Infiltrator@users.noreply.github.com'
+          git commit -m 'Fix native installer fixture terminators'
+          git push origin HEAD:main
