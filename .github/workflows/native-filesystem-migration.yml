@@ -28,5 +28,5 @@ jobs:
           git add Makefile support/VERSION support/tools/build_deb_package.c support/tools/native_installer.c docs/CHANGELOG.md docs/ARCHITECTURE.md .github/README.md
           git diff --cached --check
           git diff --cached --quiet && { echo 'Migration already applied.'; exit 0; }
-          git commit -m 'Release System Monitor 1.0.208 native filesystem layout'
+          git commit -m 'Release System Monitor 1.0.209 native filesystem layout'
           git push origin HEAD:main
