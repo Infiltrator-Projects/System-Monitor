@@ -5,8 +5,8 @@
  *
  * The release package contains one project executable: the GTK application.
  * Desktop metadata and passive resources are generated from project-owned
- * constants; no helper, launcher, daemon, service or command-line setup tool
- * is installed.
+ * constants. The only installed helper is the package-maintenance bootstrap
+ * that establishes the shared native font resources during configuration.
  *
  * @author Shannon Smith
  * @copyright Copyright (c) 2000-2026 Shannon Smith
@@ -549,13 +549,16 @@ int main(int argc, char **argv)
              "baseline GLIBC_%u.%u", staged_application, required_glibc_major,
              required_glibc_minor, LSM_GLIBC_BASELINE_MAJOR,
              LSM_GLIBC_BASELINE_MINOR);
-    /* Both the prebuilt DEB and native installer use this same font payload. */
-    copy_staged("build/fonts/mb_corpo_a_cond_regular.ttf",
-                "usr/share/fonts/truetype/system-monitor/mb_corpo_a_cond_regular.ttf", 0644);
-    copy_staged("build/fonts/mb_corpo_s_regular.ttf",
-                "usr/share/fonts/truetype/system-monitor/mb_corpo_s_regular.ttf", 0644);
-    copy_staged("build/fonts/mb_corpo_s_bold.ttf",
-                "usr/share/fonts/truetype/system-monitor/mb_corpo_s_bold.ttf", 0644);
+
+    /* Linux packages establish one persistent native font cache. The helper is
+     * copied from the exact Common gitlink; the DEB does not own duplicate TTFs
+     * under /usr/share/fonts. */
+    const char font_bootstrap[] =
+        "src/infiltratr-common/cmake/InfiltratrEnsureNativeFonts.sh";
+    if (!regular_file(font_bootstrap))
+        fail("pinned Common native font bootstrap is missing");
+    copy_staged(font_bootstrap,
+                "usr/lib/system-monitor/ensure-native-fonts", 0755);
 
     /* The desktop and package share one canonical icon name. Linux Mint
      * Software Manager also reads the app-install icon owned by this package. */
@@ -601,8 +604,8 @@ int main(int argc, char **argv)
         "Architecture: %s\n"
         "Maintainer: Shannon Smith <The-First-Infiltrator@users.noreply.github.com>\n"
         "Homepage: https://github.com/Infiltrator-Projects/System-Monitor\n"
-        "Depends: libc6 (>= %u.%u), "
-        "libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
+        "Depends: libc6 (>= %u.%u), ca-certificates, fontconfig, xz-utils, "
+        "curl | wget, libgtk-3-0 (>= 3.22) | libgtk-3-0t64 (>= 3.22)\n"
         "Description: native GTK system and hardware monitor for Linux\n"
         " A native C system monitor with performance graphs, process management,\n"
         " storage, network, battery, GPU and NPU telemetry. Hardware collectors use\n"
@@ -618,6 +621,7 @@ int main(int argc, char **argv)
     const char postinst[] =
         "#!/bin/sh\n"
         "set -e\n"
+        "/usr/lib/system-monitor/ensure-native-fonts\n"
         "/Programs/system-monitor --install-capability || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "could not apply CAP_NET_RAW.' >&2\n"
