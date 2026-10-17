@@ -315,7 +315,18 @@ static int mock_dpkg(int argc, char **argv)
      * remains deterministic across sudo's environment sanitisation and cannot
      * be confused with production package state. */
     char mock_directory[LSM_SAFETY_PATH_LEN];
-    parent_path(argv[0], mock_directory, sizeof(mock_directory));
+    const size_t mock_path_length = strlen(argv[0]);
+    if (mock_path_length == 0U || mock_path_length >= sizeof(mock_directory))
+        return EXIT_FAILURE;
+    memcpy(mock_directory, argv[0], mock_path_length + 1U);
+    char *mock_slash = strrchr(mock_directory, '/');
+    if (!mock_slash) {
+        memcpy(mock_directory, ".", 2U);
+    } else if (mock_slash == mock_directory) {
+        mock_slash[1] = ' ';
+    } else {
+        *mock_slash = ' ';
+    }
     char marker[LSM_SAFETY_PATH_LEN];
     if (!join_path(marker, sizeof(marker), mock_directory,
                    ".mock-installed-system-monitor"))
@@ -551,7 +562,7 @@ int main(int argc, char **argv)
 
     const int install_result = run_installer(builder, source_root, home, search_path,
                                              log_path, run_user, run_group, false);
-    cleanup_mock_install(mock_path);
+    cleanup_mock_install(mock_bin);
     if (install_result != 0) {
         remove_tree(work);
         fprintf(stderr, "Native installer failed in the safety test (status %d).\n",
