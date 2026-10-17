@@ -306,15 +306,18 @@ static int mock_dpkg(int argc, char **argv)
         return EXIT_SUCCESS;
     if (errno != ENOENT) return EXIT_FAILURE;
 
-    const char *source_root = getenv("LSM_SAFETY_SOURCE");
-    if (!source_root) return EXIT_FAILURE;
     make_directories("/Programs", 0755);
     char executable[LSM_SAFETY_PATH_LEN];
     if (!realpath(argv[0], executable)) return EXIT_FAILURE;
     copy_regular_file(executable, "/Programs/system-monitor", 0755);
 
+    /* Keep fixture ownership state beside the isolated mock command set. This
+     * remains deterministic across sudo's environment sanitisation and cannot
+     * be confused with production package state. */
+    char mock_directory[LSM_SAFETY_PATH_LEN];
+    parent_path(argv[0], mock_directory, sizeof(mock_directory));
     char marker[LSM_SAFETY_PATH_LEN];
-    if (!join_path(marker, sizeof(marker), source_root,
+    if (!join_path(marker, sizeof(marker), mock_directory,
                    ".mock-installed-system-monitor"))
         return EXIT_FAILURE;
     FILE *marker_file = fopen(marker, "wx");
@@ -348,31 +351,26 @@ static int mock_sudo(int argc, char **argv)
     return EXIT_FAILURE;
 }
 
-static void cleanup_mock_install(const char *source_root)
+static void cleanup_mock_install(const char *mock_path)
 {
     char marker[LSM_SAFETY_PATH_LEN];
-    if (!join_path(marker, sizeof(marker), source_root,
+    if (!join_path(marker, sizeof(marker), mock_path,
                    ".mock-installed-system-monitor") ||
         access(marker, F_OK) != 0)
         return;
 
-    char *commands[][4] = {
-        {"/usr/bin/rm", "-f", "/Programs/system-monitor", NULL},
-        {"/usr/bin/rmdir", "/Programs", NULL, NULL}
-    };
     for (size_t index = 0U; index < 2U; index++) {
         const pid_t child = fork();
         if (child < 0) fail_errno("fork", NULL);
         if (child == 0) {
-            char *arguments[8];
-            size_t count = 0U;
-            arguments[count++] = "/usr/bin/sudo";
-            arguments[count++] = "-n";
-            arguments[count++] = "--";
-            for (size_t part = 0U; commands[index][part]; part++)
-                arguments[count++] = commands[index][part];
-            arguments[count] = NULL;
-            execv("/usr/bin/sudo", arguments);
+            if (index == 0U) {
+                execl("/usr/bin/sudo", "/usr/bin/sudo", "-n", "--",
+                      "/usr/bin/rm", "-f", "/Programs/system-monitor",
+                      (char *)NULL);
+            } else {
+                execl("/usr/bin/sudo", "/usr/bin/sudo", "-n", "--",
+                      "/usr/bin/rmdir", "/Programs", (char *)NULL);
+            }
             _exit(126);
         }
         int status = 0;
@@ -553,7 +551,7 @@ int main(int argc, char **argv)
 
     const int install_result = run_installer(builder, source_root, home, search_path,
                                              log_path, run_user, run_group, false);
-    cleanup_mock_install(source_root);
+    cleanup_mock_install(mock_path);
     if (install_result != 0) {
         remove_tree(work);
         fprintf(stderr, "Native installer failed in the safety test (status %d).\n",
