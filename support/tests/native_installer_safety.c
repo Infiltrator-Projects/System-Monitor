@@ -323,9 +323,9 @@ static int mock_dpkg(int argc, char **argv)
     if (!mock_slash) {
         memcpy(mock_directory, ".", 2U);
     } else if (mock_slash == mock_directory) {
-        mock_slash[1] = ' ';
+        mock_slash[1] = '\0';
     } else {
-        *mock_slash = ' ';
+        *mock_slash = '\0';
     }
     char marker[LSM_SAFETY_PATH_LEN];
     if (!join_path(marker, sizeof(marker), mock_directory,
