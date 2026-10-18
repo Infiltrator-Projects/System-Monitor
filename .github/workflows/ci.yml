@@ -86,6 +86,16 @@ jobs:
             fi
           fi
 
+      - name: Guard fixed-navy header foreground against Day palette regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, TRUE)' src/app_theme.c
+          grep -Fq '@define-color lsm_header_title' src/app_theme.c
+          grep -Fq '#lsm-header-brand-title { color: @lsm_header_title;' src/app_theme.c
+          grep -Fq '#lsm-header-brand-subtitle { color: @lsm_header_summary;' src/app_theme.c
+          grep -Fq '#lsm-shell-header .lsm-window-control > image { color: @lsm_header_title;' src/app_theme.c
+
       - name: Verify CMake application build
         run: |
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release

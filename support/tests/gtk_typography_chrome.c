@@ -106,13 +106,21 @@ int main(int argc, char **argv)
         check_font(body, typography->ui_family);
         check_font(title, typography->brand_family);
         check_font(find_named(header, "lsm-header-brand-title"), typography->brand_family);
-        const InfiltratrThemePalette *palette = infiltratr_theme_resolve(modes[mode], FALSE);
+        const InfiltratrThemePalette *header_ink =
+            infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, TRUE);
+        if (!header_ink) return EXIT_FAILURE;
+        // The header remains navy in both themes; its title and controls
+        // must keep light ink when the rest of the workspace turns white.
+        check_colour(find_named(header, "lsm-header-brand-title"),
+                     GTK_STATE_FLAG_NORMAL, header_ink->title_rgb);
+        check_colour(find_named(header, "lsm-header-brand-subtitle"),
+                     GTK_STATE_FLAG_NORMAL, header_ink->summary_rgb);
         for (size_t key = 0U; key < G_N_ELEMENTS(keys); key++) {
             GtkWidget *button = g_object_get_data(G_OBJECT(app->shell.window), keys[key]);
             GtkWidget *image = gtk_bin_get_child(GTK_BIN(button));
             for (size_t state = 0U; state < G_N_ELEMENTS(states); state++) {
                 const uint32_t expected = key == 2U && states[state] == GTK_STATE_FLAG_PRELIGHT
-                    ? 0xFFFFFFU : palette->title_rgb;
+                    ? 0xFFFFFFU : header_ink->title_rgb;
                 gtk_widget_set_state_flags(button, states[state], TRUE);
                 gtk_widget_set_state_flags(image, states[state], TRUE);
                 while (gtk_events_pending()) gtk_main_iteration();
@@ -129,6 +137,6 @@ int main(int argc, char **argv)
     gtk_widget_destroy(app->shell.window);
     g_object_unref(app->shell.theme_provider);
     g_free(app);
-    puts("DEB fonts resolve to MB Corpo and titlebar icons follow Day/Night in all tested states.");
+    puts("DEB fonts resolve to MB Corpo and fixed-navy titlebar keeps legible light text/icons in both themes.");
     return EXIT_SUCCESS;
 }

@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.218 - 2026-10-18
+
+- Correct Day-mode contrast in the deliberately dark System Monitor header: use Common's Night title/summary foreground colours for the fixed navy chrome, independent of the workspace theme.
+- Keep title, subtitle and window controls legible in both modes, with restrained header-specific hover treatment, rather than changing the hero/dashboard or the global Day palette.
+- Extend the GTK chrome regression test and CI source contract to reject dark Day-mode lettering on the fixed dark header; leave telemetry and window geometry unchanged.
+
 ## 1.0.217 - 2026-10-18
 
 - Improve System Monitor's small descriptive type after reviewing a running 1.0.216 Night screenshot: slightly larger header subtitle, summary and overview gauge/stat captions.

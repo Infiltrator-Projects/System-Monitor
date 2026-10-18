@@ -80,9 +80,14 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (app->runtime.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
     const InfiltratrThemePalette *palette =
         infiltratr_theme_resolve(app->runtime.theme_mode, system_dark);
+    // The integrated header is deliberately dark in *both* Day and Night.
+    // Its foreground therefore comes from Common's Night ink roles, not
+    // from the current workspace palette (which is dark in Day mode).
+    const InfiltratrThemePalette *header_ink =
+        infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, TRUE);
     const InfiltratrTypography *typography = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
-    if (!palette || !typography || !metrics || !typography->ui_family ||
+    if (!palette || !header_ink || !typography || !metrics || !typography->ui_family ||
         !typography->brand_family)
         return;
 
@@ -105,6 +110,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         "@define-color lsm_border #%06X;"
         "@define-color lsm_text #%06X;"
         "@define-color lsm_title #%06X;"
+        "@define-color lsm_header_title #%06X;"
+        "@define-color lsm_header_summary #%06X;"
         "@define-color lsm_muted #%06X;"
         "@define-color lsm_subtle #%06X;"
         "@define-color lsm_button_background #%06X;"
@@ -199,6 +206,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)palette->border_rgb,
         (unsigned int)palette->text_rgb,
         (unsigned int)palette->title_rgb,
+        (unsigned int)header_ink->title_rgb,
+        (unsigned int)header_ink->summary_rgb,
         (unsigned int)palette->muted_rgb,
         (unsigned int)palette->subtle_rgb,
         (unsigned int)palette->button_background_rgb,
@@ -282,8 +291,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " box-shadow: 0 0 18px alpha(@lsm_neutral, 0.18);"
         "}"
         "#lsm-header-brand-icon image { color: @lsm_neutral; }"
-        "#lsm-header-brand-title { color: @lsm_title; font-size: 20px; }"
-        "#lsm-header-brand-subtitle { color: @lsm_summary; font-size: 12px; }"
+        "#lsm-header-brand-title { color: @lsm_header_title; font-size: 20px; }"
+        "#lsm-header-brand-subtitle { color: @lsm_header_summary; font-size: 12px; }"
         "#lsm-header-end { margin-left: 10px; }"
         ".lsm-window-control {"
         " min-width: 30px; min-height: 30px; padding: 4px;"
@@ -291,9 +300,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         " border: 1px solid transparent; border-radius: 8px; box-shadow: none;"
         "}"
         "#lsm-shell-header .lsm-window-control,"
-        "#lsm-shell-header .lsm-window-control > image { color: @lsm_title; }"
-        ".lsm-window-control:hover {"
-        " background-color: @lsm_surface_hover; border-color: @lsm_border;"
+        "#lsm-shell-header .lsm-window-control > image { color: @lsm_header_title; }"
+        "#lsm-shell-header .lsm-window-control:hover {"
+        " background-color: alpha(@lsm_header_title, 0.13);"
+        " border-color: alpha(@lsm_header_title, 0.26);"
         "}"
         "#lsm-shell-header .lsm-window-control-close:hover,"
         "#lsm-shell-header .lsm-window-control-close:hover > image {"
