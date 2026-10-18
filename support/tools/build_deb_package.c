@@ -554,7 +554,7 @@ int main(int argc, char **argv)
      * copied from the exact Common gitlink; the DEB does not own duplicate TTFs
      * under /usr/share/fonts. */
     const char extended_font_bootstrap[] =
-        "src/infiltratr-common/cmake/InfiltratrEnsureExtendedFonts.sh";
+        "support/installer/ensure-extended-fonts.sh";
     if (!regular_file(extended_font_bootstrap))
         fail("pinned Common extended font bootstrap is missing");
     copy_staged(extended_font_bootstrap,

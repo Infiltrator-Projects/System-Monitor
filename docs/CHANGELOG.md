@@ -4,7 +4,7 @@
 
 ## 1.0.213 - 2026-10-18
 
-- Pin Libraries/Common 1.19.57 and ship its shared installer for all 23 verified InfiltratorOS MB/Daimler font faces.
+- Keep the exact Libraries/Common 1.19.51 runtime revision and package a verified snapshot of Common 1.19.57's additive installer-only 23-face font helper, avoiding unrelated calendar/clock semantic changes.
 - Standalone System Monitor installation now provisions the same role-specific S Text/Cond, S Title and A Screen1 faces used under InfiltratorOS, with source hashes verified before publication and persistent machine-cache ownership preserved.
 - Do not reinstall retired 1.000 TTF files into the 23-font cache; older applications that still need the old bootstrap remain independently responsible for it, without new package-owned TTF duplication.
 

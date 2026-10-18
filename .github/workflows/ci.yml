@@ -211,7 +211,7 @@ jobs:
           ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
           helper="$tmp/root/usr/lib/system-monitor/ensure-extended-fonts"
           test -x "$helper"
-          cmp "src/infiltratr-common/cmake/InfiltratrEnsureExtendedFonts.sh" "$helper"
+          cmp "support/installer/ensure-extended-fonts.sh" "$helper"
           test ! -e "$tmp/root/usr/lib/system-monitor/ensure-native-fonts"
           test ! -e "$tmp/root/usr/share/fonts/truetype/system-monitor"
           changelog="$tmp/root/usr/share/doc/system-monitor/changelog.gz"
