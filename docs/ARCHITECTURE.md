@@ -71,3 +71,7 @@ Hardware-specific rules live in [Hardware collection](HARDWARE.md). Security bou
 ## Native Linux filesystem ownership
 
 On Linux, the user-launchable application has one authoritative executable path: `/Programs/system-monitor`. `/Programs` is the single application namespace for Infiltrator software regardless of whether a program is bundled with InfiltratorOS or installed independently. `/System` is reserved for operating-system infrastructure, and `/System/Commands` is reserved for genuine command helpers. System Monitor therefore creates the common native skeleton when necessary but does not create `/System/Programs` and does not install an executable or compatibility link under `/usr/bin`.
+
+## Extended typography provisioning
+
+System Monitor's Debian package copies both the pinned Common legacy and extended font bootstrap scripts. Its configure hook invokes them in order. The extended 23-face snapshot is source-pinned to the immutable InfiltratorOS inventory and verifies each TTF before populating the persistent machine cache; no application package owns those fonts. The Linux GTK theme selects S Text, S Text Cond, S Title and A Screen1 roles from that catalogue. Windows private font embedding remains on the original qualified three-face archive until its corresponding platform asset integration is proven.

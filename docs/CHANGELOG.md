@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.213 - 2026-10-18
+
+- Pin Libraries/Common 1.19.57 and ship its shared installer for all 23 verified InfiltratorOS MB/Daimler font faces.
+- Standalone System Monitor installation now provisions the same role-specific S Text/Cond, S Title and A Screen1 faces used under InfiltratorOS, with source hashes verified before publication and persistent machine-cache ownership preserved.
+- Retain the original legacy-font bootstrap for other pinned consumers and avoid package-owned TTF duplication.
+
 ## 1.0.212 - 2026-10-18
 
 - Optimise Linux typography by task from the 23-face InfiltratorOS font catalogue: MB Corpo S Text for legible UI labels, S Title Bold for headings, S Text Cond for dense process rows and A Screen1 Cond for numerical performance readouts.

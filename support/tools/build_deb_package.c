@@ -559,6 +559,12 @@ int main(int argc, char **argv)
         fail("pinned Common native font bootstrap is missing");
     copy_staged(font_bootstrap,
                 "usr/lib/system-monitor/ensure-native-fonts", 0755);
+    const char extended_font_bootstrap[] =
+        "src/infiltratr-common/cmake/InfiltratrEnsureExtendedFonts.sh";
+    if (!regular_file(extended_font_bootstrap))
+        fail("pinned Common extended font bootstrap is missing");
+    copy_staged(extended_font_bootstrap,
+                "usr/lib/system-monitor/ensure-extended-fonts", 0755);
 
     /* The desktop and package share one canonical icon name. Linux Mint
      * Software Manager also reads the app-install icon owned by this package. */
@@ -622,6 +628,7 @@ int main(int argc, char **argv)
         "#!/bin/sh\n"
         "set -e\n"
         "/usr/lib/system-monitor/ensure-native-fonts\n"
+        "/usr/lib/system-monitor/ensure-extended-fonts\\n"
         "/Programs/system-monitor --install-capability || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "could not apply CAP_NET_RAW.' >&2\n"
