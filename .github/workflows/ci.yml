@@ -261,8 +261,13 @@ jobs:
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
           ! dpkg -L system-monitor | grep -q '/usr/share/fonts/truetype/system-monitor/'
-          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            cmp "build/fonts/$face" "/System/Resources/Fonts/$face"
+          # Independently installed native packages must establish the current
+          # verified machine cache, not resurrect the obsolete three-file archive.
+          for face in mb_corpo_a_title_cond_regular.ttf mb_corpo_s_text_regular.ttf mb_corpo_s_title_bold.ttf; do
+            expected=$(awk -v filename="$face" '$2 == filename { print $1 }' \
+              support/installer/ensure-extended-fonts.sh)
+            test "${#expected}" -eq 64
+            printf '%s  %s\n' "$expected" "/System/Resources/Fonts/$face" | sha256sum -c -
           done
           pgo_log=$(mktemp)
           ./"$installer" --profile aggressive --skip-tests 2>&1 | tee "$pgo_log"
@@ -270,8 +275,13 @@ jobs:
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
           ! dpkg -L system-monitor | grep -q '/usr/share/fonts/truetype/system-monitor/'
-          for face in mb_corpo_a_cond_regular.ttf mb_corpo_s_regular.ttf mb_corpo_s_bold.ttf; do
-            cmp "build/fonts/$face" "/System/Resources/Fonts/$face"
+          # Independently installed native packages must establish the current
+          # verified machine cache, not resurrect the obsolete three-file archive.
+          for face in mb_corpo_a_title_cond_regular.ttf mb_corpo_s_text_regular.ttf mb_corpo_s_title_bold.ttf; do
+            expected=$(awk -v filename="$face" '$2 == filename { print $1 }' \
+              support/installer/ensure-extended-fonts.sh)
+            test "${#expected}" -eq 64
+            printf '%s  %s\n' "$expected" "/System/Resources/Fonts/$face" | sha256sum -c -
           done
 
   windows-release:
