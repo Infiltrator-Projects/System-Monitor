@@ -17,7 +17,7 @@
 
 #define LSM_PROGRAM_NAME "System Monitor"
 #define LSM_EXECUTABLE_NAME "system-monitor"
-#define LSM_INSTALLED_EXECUTABLE_PATH "/usr/bin/system-monitor"
+#define LSM_INSTALLED_EXECUTABLE_PATH "/Programs/system-monitor"
 /* Stable compatibility key, not repository/package branding. Changing this
  * GApplication identity requires an explicit desktop-state migration plan. */
 #define LSM_APPLICATION_ID "io.github.theinfiltratr.SystemMonitor"

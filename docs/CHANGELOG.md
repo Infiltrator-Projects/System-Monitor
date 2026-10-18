@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.216 - 2026-10-18
+
+- Correct the executable's capability-installation target to the authoritative `/Programs/system-monitor` path. The Debian post-install script has used that path since 1.0.209, but the application-side `LSM_INSTALLED_EXECUTABLE_PATH` still incorrectly pointed at `/usr/bin/system-monitor`, causing a misleading warning and disabling optional raw Bluetooth capture.
+- Add a source/package path-contract assertion and run the real `--install-capability` mode against the installed executable in clean-host qualification, so this mismatch cannot silently pass another release.
+- Preserve the narrow `CAP_NET_RAW` handling and explicitly avoid recreating the retired `/usr/bin` application alias.
+
 ## 1.0.215 - 2026-10-18
 
 - Extend the Windows executable beyond the older three privately embedded fonts, using six SHA-256-qualified Text, Text Bold, Text Cond, Title Bold, A Title Cond and A Screen1 roles.

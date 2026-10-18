@@ -208,6 +208,9 @@ jobs:
           grep -Fq '/usr/lib/system-monitor/ensure-extended-fonts' "$tmp/control/postinst"
           ! grep -Fq '/usr/lib/system-monitor/ensure-native-fonts' "$tmp/control/postinst"
           grep -Fq '/Programs/system-monitor --install-capability' "$tmp/control/postinst"
+          grep -Fqx '#define LSM_INSTALLED_EXECUTABLE_PATH "/Programs/system-monitor"' src/app_config.h
+          ! grep -Fq 'LSM_INSTALLED_EXECUTABLE_PATH "/usr/bin/system-monitor"' src/app_config.h
+          grep -Fq 'lsm_linux_apply_net_raw_file_capability(LSM_INSTALLED_EXECUTABLE_PATH)' src/main.c
           ! grep -Eq 'setcap|fc-cache|gtk-update-icon-cache|update-desktop-database' "$tmp/control/postinst"
           helper="$tmp/root/usr/lib/system-monitor/ensure-extended-fonts"
           test -x "$helper"
@@ -260,6 +263,8 @@ jobs:
           sudo ./"$installer" --profile aggressive --system-package-mode
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
+          test -x /Programs/system-monitor
+          sudo /Programs/system-monitor --install-capability
           ! dpkg -L system-monitor | grep -q '/usr/share/fonts/truetype/system-monitor/'
           # Independently installed native packages must establish the current
           # verified machine cache, not resurrect the obsolete three-file archive.
