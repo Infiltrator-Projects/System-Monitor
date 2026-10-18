@@ -628,7 +628,7 @@ int main(int argc, char **argv)
         "#!/bin/sh\n"
         "set -e\n"
         "/usr/lib/system-monitor/ensure-native-fonts\n"
-        "/usr/lib/system-monitor/ensure-extended-fonts\\n"
+        "/usr/lib/system-monitor/ensure-extended-fonts\n"
         "/Programs/system-monitor --install-capability || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "
         "could not apply CAP_NET_RAW.' >&2\n"
