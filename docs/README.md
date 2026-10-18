@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # System Monitor documentation
 
 The root [README](../README.md) introduces the application. [InfiltratorOS product-family and UI contract](https://github.com/Infiltrator-Projects/InfiltratorOS/blob/main/docs/PRODUCT-FAMILY.md) governs shared application identity, semantic appearance, MB Corpo roles and independent installation.

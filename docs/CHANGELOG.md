@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.211 - 2026-10-18
+
+- Restore the standard root `README.md` and `docs/README.md` documentation entry points, linking System Monitor to the InfiltratorOS product-family design contract.
+- Update the maintained-document audit, Doxygen main page and shipped package README source together, so new repository layout is verified rather than bypassing quality gates.
+- Keep Common's versioned palette, native font cache and single-source build/release implementation unchanged; this is a repository/documentation integration release.
+
 ## 1.0.210 - 2026-10-17
 
 - Remove application-owned MB Corpo TTFs from the Linux package and establish the canonical shared `/System/Resources/Fonts` cache through the exact pinned Common bootstrap.
