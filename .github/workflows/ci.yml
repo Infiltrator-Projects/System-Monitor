@@ -265,7 +265,7 @@ jobs:
           # verified machine cache, not resurrect the obsolete three-file archive.
           for face in mb_corpo_a_title_cond_regular.ttf mb_corpo_s_text_regular.ttf mb_corpo_s_title_bold.ttf; do
             expected=$(awk -v filename="$face" '$2 == filename { print $1 }' \
-              support/installer/ensure-extended-fonts.sh)
+              /usr/lib/system-monitor/ensure-extended-fonts)
             test "${#expected}" -eq 64
             printf '%s  %s\n' "$expected" "/System/Resources/Fonts/$face" | sha256sum -c -
           done
@@ -279,7 +279,7 @@ jobs:
           # verified machine cache, not resurrect the obsolete three-file archive.
           for face in mb_corpo_a_title_cond_regular.ttf mb_corpo_s_text_regular.ttf mb_corpo_s_title_bold.ttf; do
             expected=$(awk -v filename="$face" '$2 == filename { print $1 }' \
-              support/installer/ensure-extended-fonts.sh)
+              /usr/lib/system-monitor/ensure-extended-fonts)
             test "${#expected}" -eq 64
             printf '%s  %s\n' "$expected" "/System/Resources/Fonts/$face" | sha256sum -c -
           done
