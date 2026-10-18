@@ -9,6 +9,7 @@ The root [README](../README.md) introduces the application. [InfiltratorOS produ
 - [Engineering philosophy](PHILOSOPHY.md) — this project's obligations under [Libraries/Common philosophy](https://github.com/Infiltrator-Projects/Libraries/blob/main/docs/PHILOSOPHY.md).
 - [Architecture](ARCHITECTURE.md) — ownership, concurrency, platform boundaries and runtime semantics.
 - [Hardware](HARDWARE.md) — hardware interfaces, units and provenance.
+- [Shared 23-font hierarchy](https://github.com/Infiltrator-Projects/InfiltratorOS/blob/main/docs/FONT-ROLES.md) — audited families and System Monitor display roles.
 - [Validation](VALIDATION.md) — tests and release qualification.
 - [Changelog](CHANGELOG.md) — recorded product changes.
 - [Contributing](../.github/CONTRIBUTING.md) — development and verification discipline.

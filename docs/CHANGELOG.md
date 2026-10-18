@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.212 - 2026-10-18
+
+- Optimise Linux typography by task from the 23-face InfiltratorOS font catalogue: MB Corpo S Text for legible UI labels, S Title Bold for headings, S Text Cond for dense process rows and A Screen1 Cond for numerical performance readouts.
+- Retain Common's three-face fallback when separately installed before the extended font resources; preserve Windows' already verified private three-face font embedding until its asset bundle is migrated.
+- Keep Common-owned Day/Night semantic colours, metric rules and hardware/process behaviour unchanged.
+
 ## 1.0.211 - 2026-10-18
 
 - Restore the standard root `README.md` and `docs/README.md` documentation entry points, linking System Monitor to the InfiltratorOS product-family design contract.

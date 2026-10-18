@@ -91,7 +91,7 @@ void lsm_app_shell_apply_theme(LsmApp *app)
 
     g_string_append_printf(
         css,
-        "* { font-family: \"%s\"; font-weight: %u; }"
+        "* { font-family: \"MB Corpo S Text WEB\", \"%s\"; font-weight: %u; }"
         "headerbar .title, .titlebar .title, #lsm-header-brand-title,"
         " .lsm-performance-title {"
         " font-family: \"%s\"; font-weight: %u;"
@@ -624,6 +624,30 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->small_radius,
         (unsigned int)metrics->control_radius);
+
+    /* Task-specific typesetting. Product chrome remains based on Common's
+     * semantic palette and typography. The original three Common faces are
+     * retained as a standalone-install fallback until the full shared
+     * 23-face font cache is qualified for every supported platform. */
+    g_string_append(
+        css,
+        ".lsm-overview-card-title, .lsm-performance-title {"
+        " font-family: 'MB Corpo S Title WEB', 'MB Corpo S Text WEB';"
+        " font-weight: 700;"
+        "}"
+        ".lsm-overview-value, .lsm-overview-gauge-value,"
+        " .lsm-overview-stat-value, .lsm-metric-value {"
+        " font-family: 'MB Corpo A Screen1 Cond WEB', 'MB Corpo A Title Cond WEB';"
+        " font-weight: 400;"
+        "}"
+        "treeview, treeview * {"
+        " font-family: 'MB Corpo S Text WEB Cond', 'MB Corpo S Title WEB';"
+        "}"
+        ".lsm-overview-card-meta, .lsm-overview-stat-caption,"
+        " .lsm-overview-gauge-caption, .lsm-metric-caption {"
+        " font-family: 'MB Corpo S Text WEB', 'MB Corpo S Title WEB';"
+        " font-weight: 400;"
+        "}");
 
     GError *css_error = NULL;
     if (!gtk_css_provider_load_from_data(
