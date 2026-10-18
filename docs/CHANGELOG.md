@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.217 - 2026-10-18
+
+- Improve System Monitor's small descriptive type after reviewing a running 1.0.216 Night screenshot: slightly larger header subtitle, summary and overview gauge/stat captions.
+- Use existing Common summary contrast roles for short descriptions and metrics, preserving the stronger MB Corpo S Title headings and A Screen1 numerical values.
+- Keep dashboard card geometry, colour-coded sensor signals, monitoring data, hardware access, packaging ownership and verified CAP_NET_RAW setup unchanged.
+
 ## 1.0.216 - 2026-10-18
 
 - Correct the executable's capability-installation target to the authoritative `/Programs/system-monitor` path. The Debian post-install script has used that path since 1.0.209, but the application-side `LSM_INSTALLED_EXECUTABLE_PATH` still incorrectly pointed at `/usr/bin/system-monitor`, causing a misleading warning and disabling optional raw Bluetooth capture.
