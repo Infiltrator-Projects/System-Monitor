@@ -19,3 +19,7 @@ Publish consumes only the sealed Verify bundle. New releases are staged as mutab
 Generated build trees, package outputs and qualification scratch state are local workspace state rather than repository material. The Windows release recipe keeps intermediate files under `build/`, emits the qualified executable directly under its versioned release name and removes its startup-smoke marker after qualification; the root `.gitignore` is a narrow final guard against accidentally staging supported build outputs.
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
+
+## Maintained documentation updates
+
+The already-published version guard compares executable and release-affecting source, while allowing standalone README and `docs/**` maintenance without fabricating a new binary version. Workflow-only fixes also remain exempt. All application source, build configuration, packaging and other non-documentation changes still require an advanced `support/VERSION` after publication. These exclusions must stay narrow; a document or build file must not be used to smuggle altered release assets under an old version.

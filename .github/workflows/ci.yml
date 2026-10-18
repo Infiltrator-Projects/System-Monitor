@@ -77,7 +77,9 @@ jobs:
             tag_commit=$(git rev-list -n 1 "v${version}")
             head_commit=$(git rev-parse HEAD)
             if [[ "$tag_commit" != "$head_commit" ]] &&
-               ! git diff --quiet "$tag_commit" HEAD -- . ':!.github/workflows'; then
+               ! git diff --quiet "$tag_commit" HEAD -- . \
+                 ':!.github/workflows' ':!README.md' \
+                 ':!.github/README.md' ':!docs/**'; then
               printf 'Source version %s is already published at %s; advance support/VERSION before changing product source.\n' \
                 "$version" "$tag_commit" >&2
               exit 1

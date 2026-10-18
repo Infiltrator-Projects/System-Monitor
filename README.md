@@ -2,8 +2,10 @@
 
 # System Monitor
 
+**InfiltratorOS product family:** [InfiltratorOS](https://github.com/Infiltrator-Projects/InfiltratorOS) · [System Monitor](https://github.com/Infiltrator-Projects/System-Monitor) · [Calculator](https://github.com/Infiltrator-Projects/Calculator) · [Files](https://github.com/Infiltrator-Projects/Files). Independently installable components, one [product-family and UI contract](https://github.com/Infiltrator-Projects/InfiltratorOS/blob/main/docs/PRODUCT-FAMILY.md).
+
 **Project copyright:** © 2000-2026 Shannon Smith  
-**Release identity:** [`support/VERSION`](../support/VERSION)
+**Release identity:** [`support/VERSION`](support/VERSION)
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
@@ -47,12 +49,12 @@ The native `.run` installer downloads the exact release source and its pinned Co
 
 ## Technical documentation
 
-- [Engineering philosophy](../docs/PHILOSOPHY.md) — governing engineering and documentation standard.
-- [Architecture](../docs/ARCHITECTURE.md) — durable software contracts.
-- [Hardware collection](../docs/HARDWARE.md) — hardware rules, units and provenance.
-- [Validation](../docs/VALIDATION.md) — compact verification entry point.
-- [Contributing](CONTRIBUTING.md) — verification and repository discipline.
-- [Security](SECURITY.md) — security boundaries and reporting.
+- [Engineering philosophy](docs/PHILOSOPHY.md) — governing engineering and documentation standard.
+- [Architecture](docs/ARCHITECTURE.md) — durable software contracts.
+- [Hardware collection](docs/HARDWARE.md) — hardware rules, units and provenance.
+- [Validation](docs/VALIDATION.md) — compact verification entry point.
+- [Contributing](.github/CONTRIBUTING.md) — verification and repository discipline.
+- [Security](.github/SECURITY.md) — security boundaries and reporting.
 
 ## Licence and provenance
 
