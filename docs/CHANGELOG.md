@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 1.0.214 - 2026-10-18
+
+- Correct Debian package content qualification to expect the verified 23-face `ensure-extended-fonts` helper actually staged by the package builder, rather than the retired `ensure-native-fonts` path.
+- Correct the installed-executable allowlist to check that same helper name. Preserve the complete native typography bootstrap and immutable release qualification.
+
 ## 1.0.213 - 2026-10-18
 
 - Keep the exact Libraries/Common 1.19.51 runtime revision and package a verified snapshot of Common 1.19.57's additive installer-only 23-face font helper, avoiding unrelated calendar/clock semantic changes.
