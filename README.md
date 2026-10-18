@@ -9,7 +9,7 @@
 
 [![Verify](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/System-Monitor/actions/workflows/ci.yml)
 
-System Monitor is a native C17/GTK 3 desktop system manager for Linux, with a native Windows GUI preview. It provides process, performance, hardware, service, user and filesystem views using native operating-system and hardware interfaces wherever practical.
+System Monitor is a native C17/GTK 3 desktop system manager for Linux, with a native Windows GUI preview. Linux and Windows select roles from the same verified 23-face MB Corpo/Daimler collection; the Windows executable privately bundles six task-specific faces for body, headings, captions and telemetry. It provides process, performance, hardware, service, user and filesystem views using native operating-system and hardware interfaces wherever practical.
 
 ## Clean-sheet provenance
 

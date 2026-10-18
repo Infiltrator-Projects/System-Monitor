@@ -4,3 +4,6 @@
 LSM_WINDOWS_FONT_UI_REGULAR RCDATA "build/windows-fonts/ui_regular.ttf"
 LSM_WINDOWS_FONT_UI_BOLD RCDATA "build/windows-fonts/ui_bold.ttf"
 LSM_WINDOWS_FONT_BRAND_REGULAR RCDATA "build/windows-fonts/brand_regular.ttf"
+LSM_WINDOWS_FONT_CAPTION_REGULAR RCDATA "build/windows-fonts/caption_regular.ttf"
+LSM_WINDOWS_FONT_HEADING_BOLD RCDATA "build/windows-fonts/heading_bold.ttf"
+LSM_WINDOWS_FONT_METRIC_REGULAR RCDATA "build/windows-fonts/metric_regular.ttf"

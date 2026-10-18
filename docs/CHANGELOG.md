@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.215 - 2026-10-18
+
+- Extend the Windows executable beyond the older three privately embedded fonts, using six SHA-256-qualified Text, Text Bold, Text Cond, Title Bold, A Title Cond and A Screen1 roles.
+- Verify every selected asset against the same immutable 23-font InfiltratorOS manifest, register all six before first paint and fail rather than substituting an unrelated font.
+- Improve Windows telemetry, headings, labels and table readability while preserving Linux's pinned Common three-face verification baseline and standalone 23-face Linux font provisioning.
+
 ## 1.0.214 - 2026-10-18
 
 - Correct Debian package content qualification to expect the verified 23-face `ensure-extended-fonts` helper actually staged by the package builder, rather than the retired `ensure-native-fonts` path.

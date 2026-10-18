@@ -73,6 +73,7 @@ typedef struct {
     HWND process_list;
     HFONT body_font;
     HFONT body_bold_font;
+    HFONT caption_font;
     HFONT rail_value_font;
     HFONT title_font;
     HFONT heading_font;
@@ -850,7 +851,7 @@ static void draw_metric_block(
         rect.right, rect.bottom
     };
     draw_text(
-        dc, caption, caption_rect, state->body_font,
+        dc, caption, caption_rect, state->caption_font,
         state->theme.palette.summary,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     draw_text(
@@ -2183,7 +2184,10 @@ static bool install_embedded_typography(LsmWindowsUiState *state)
     const int resources[] = {
         LSM_WINDOWS_FONT_UI_REGULAR,
         LSM_WINDOWS_FONT_UI_BOLD,
-        LSM_WINDOWS_FONT_BRAND_REGULAR
+        LSM_WINDOWS_FONT_BRAND_REGULAR,
+        LSM_WINDOWS_FONT_CAPTION_REGULAR,
+        LSM_WINDOWS_FONT_HEADING_BOLD,
+        LSM_WINDOWS_FONT_METRIC_REGULAR
     };
     for (size_t index = 0U;
          index < sizeof(resources) / sizeof(resources[0]); index++) {
@@ -2229,49 +2233,36 @@ static HFONT create_font_exact(
 static bool create_fonts(LsmWindowsUiState *state)
 {
     if (!state) return false;
-
     const InfiltratrTypography *typography = infiltratr_typography();
     if (!typography ||
         typography->abi_version != INFILTRATR_TYPOGRAPHY_ABI)
         return false;
 
-    wchar_t ui_family[LF_FACESIZE];
-    wchar_t brand_family[LF_FACESIZE];
-    text_to_wide(
-        typography->ui_family, ui_family,
-        sizeof(ui_family) / sizeof(ui_family[0]));
-    text_to_wide(
-        typography->brand_family, brand_family,
-        sizeof(brand_family) / sizeof(brand_family[0]));
-    if (!ui_family[0] || !brand_family[0])
-        return false;
-
-    const int regular_weight =
-        typography->ui_regular_weight <= (uint32_t)INT_MAX
-            ? (int)typography->ui_regular_weight : FW_NORMAL;
-    const int bold_weight =
-        typography->ui_bold_weight <= (uint32_t)INT_MAX
-            ? (int)typography->ui_bold_weight : FW_BOLD;
-    const int brand_weight =
-        typography->brand_weight <= (uint32_t)INT_MAX
-            ? (int)typography->brand_weight : FW_NORMAL;
+    /* Each native Windows role is backed by an exact verified embedded face.
+     * GetTextFaceW in create_font_exact refuses silent Windows substitution. */
+    wchar_t brand_family[LF_FACESIZE] = L"";
+    text_to_wide(typography->brand_family, brand_family,
+                 sizeof(brand_family) / sizeof(brand_family[0]));
+    if (!brand_family[0]) return false;
 
     state->body_font =
-        create_font_exact(-17, regular_weight, ui_family);
+        create_font_exact(-17, FW_NORMAL, L"MB Corpo S Text WEB");
     state->body_bold_font =
-        create_font_exact(-17, bold_weight, ui_family);
+        create_font_exact(-17, FW_BOLD, L"MB Corpo S Text WEB");
+    state->caption_font =
+        create_font_exact(-15, FW_NORMAL, L"MB Corpo S Text WEB Cond");
     state->rail_value_font =
-        create_font_exact(-15, regular_weight, ui_family);
+        create_font_exact(-15, FW_NORMAL, L"MB Corpo A Screen1 Cond WEB");
     state->title_font =
-        create_font_exact(-24, brand_weight, brand_family);
+        create_font_exact(-24, FW_NORMAL, brand_family);
     state->heading_font =
-        create_font_exact(-19, bold_weight, ui_family);
+        create_font_exact(-19, FW_BOLD, L"MB Corpo S Title WEB");
     state->metric_font =
-        create_font_exact(-21, regular_weight, ui_family);
+        create_font_exact(-21, FW_NORMAL, L"MB Corpo A Screen1 Cond WEB");
 
     return state->body_font && state->body_bold_font &&
-        state->rail_value_font && state->title_font &&
-        state->heading_font && state->metric_font;
+        state->caption_font && state->rail_value_font &&
+        state->title_font && state->heading_font && state->metric_font;
 }
 
 static bool create_children(LsmWindowsUiState *state)
@@ -2807,6 +2798,7 @@ static void destroy_state(LsmWindowsUiState *state)
 
     if (state->body_font) DeleteObject(state->body_font);
     if (state->body_bold_font) DeleteObject(state->body_bold_font);
+    if (state->caption_font) DeleteObject(state->caption_font);
     if (state->rail_value_font) DeleteObject(state->rail_value_font);
     if (state->title_font) DeleteObject(state->title_font);
     if (state->heading_font) DeleteObject(state->heading_font);
@@ -2827,6 +2819,7 @@ static void destroy_state(LsmWindowsUiState *state)
 
     state->body_font = NULL;
     state->body_bold_font = NULL;
+    state->caption_font = NULL;
     state->rail_value_font = NULL;
     state->title_font = NULL;
     state->heading_font = NULL;
