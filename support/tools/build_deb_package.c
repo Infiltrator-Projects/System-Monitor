@@ -553,12 +553,6 @@ int main(int argc, char **argv)
     /* Linux packages establish one persistent native font cache. The helper is
      * copied from the exact Common gitlink; the DEB does not own duplicate TTFs
      * under /usr/share/fonts. */
-    const char font_bootstrap[] =
-        "src/infiltratr-common/cmake/InfiltratrEnsureNativeFonts.sh";
-    if (!regular_file(font_bootstrap))
-        fail("pinned Common native font bootstrap is missing");
-    copy_staged(font_bootstrap,
-                "usr/lib/system-monitor/ensure-native-fonts", 0755);
     const char extended_font_bootstrap[] =
         "src/infiltratr-common/cmake/InfiltratrEnsureExtendedFonts.sh";
     if (!regular_file(extended_font_bootstrap))
@@ -627,7 +621,6 @@ int main(int argc, char **argv)
     const char postinst[] =
         "#!/bin/sh\n"
         "set -e\n"
-        "/usr/lib/system-monitor/ensure-native-fonts\n"
         "/usr/lib/system-monitor/ensure-extended-fonts\n"
         "/Programs/system-monitor --install-capability || "
         "echo 'Warning: Bluetooth per-device traffic capture is unavailable; "

@@ -6,7 +6,7 @@
 
 - Pin Libraries/Common 1.19.57 and ship its shared installer for all 23 verified InfiltratorOS MB/Daimler font faces.
 - Standalone System Monitor installation now provisions the same role-specific S Text/Cond, S Title and A Screen1 faces used under InfiltratorOS, with source hashes verified before publication and persistent machine-cache ownership preserved.
-- Retain the original legacy-font bootstrap for other pinned consumers and avoid package-owned TTF duplication.
+- Do not reinstall retired 1.000 TTF files into the 23-font cache; older applications that still need the old bootstrap remain independently responsible for it, without new package-owned TTF duplication.
 
 ## 1.0.212 - 2026-10-18
 
