@@ -506,7 +506,10 @@ static void check_shell_boundary(void)
              path == "./src/infiltratr-common")) {
             iterator.disable_recursion_pending();
         } else if (iterator->is_regular_file(error) && ends_with(path, ".sh") &&
-                   path != "./support/installer/bootstrap.sh") {
+                   path != "./support/installer/bootstrap.sh" &&
+                   path != "./support/installer/ensure-extended-fonts.sh") {
+            /* This is a pinned, installer-only font resource from Common,
+             * not reusable System Monitor logic. */
             report_error("%s: unexpected shell source; reusable project logic must remain native",
                          path.c_str());
         }
