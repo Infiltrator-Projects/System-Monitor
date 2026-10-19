@@ -38,6 +38,8 @@ typedef struct LsmTemporalPolicyCache {
     InfiltratrTemporalClockPresentation *clock;
     char clock_id[INFILTRATR_TEMPORAL_ID_CAPACITY];
     bool clock_attempted;
+    /* One lazy Common date provider; discovery and retry remain Common-owned. */
+    InfiltratrTemporalDateProvider *calendar;
 } LsmTemporalPolicyCache;
 static LsmTemporalPolicyCache policy_cache;
 static pthread_mutex_t policy_cache_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -107,6 +109,27 @@ static bool format_selected_clock(const InfiltratrTemporalPolicyV3 *policy,
             policy->show_seconds, false, policy->location_configured,
             policy->latitude, policy->longitude, text, capacity, NULL);
     }
+    pthread_mutex_unlock(&policy_cache_lock);
+    return result;
+}
+/*
+ * The selected calendar is a system capability, not local application code.
+ * Serialising calls with clock presentation also protects module lifetimes.
+ */
+static bool format_selected_calendar(const InfiltratrTemporalPolicyV3 *policy,
+                                     const struct tm *local,
+                                     char *text, size_t capacity)
+{
+    const int64_t year = (int64_t)local->tm_year + INT64_C(1900);
+    bool result = false;
+    if (year < INT32_MIN || year > INT32_MAX) return false;
+    pthread_mutex_lock(&policy_cache_lock);
+    if (policy_cache.calendar == NULL)
+        policy_cache.calendar = infiltratr_temporal_posix_date_provider_new();
+    if (policy_cache.calendar != NULL)
+        result = infiltratr_temporal_posix_format_date(
+            policy_cache.calendar, policy->calendar, (int32_t)year,
+            local->tm_mon + 1, local->tm_mday, "short", text, capacity, NULL);
     pthread_mutex_unlock(&policy_cache_lock);
     return result;
 }
@@ -187,26 +210,29 @@ static bool format_exact_utc_zone(int32_t offset_seconds,
                    sign, hours, minutes);
     return written >= 0 && (size_t)written < capacity;
 }
-static bool combine_presentation(const struct tm *local, const char *clock_text,
-                                 bool include_date, bool include_zone,
-                                 int32_t utc_offset_seconds,
+static bool combine_presentation(const char *date_text, const char *clock_text,
+                                 bool include_zone, int32_t utc_offset_seconds,
                                  char *buffer, size_t capacity)
 {
-    char date[96] = "", zone[24] = "";
+    char zone[24] = "";
+    char combined[INFILTRATR_TEMPORAL_DATE_CAPACITY + 256U + 24U];
     int written;
-    if (local == NULL || clock_text == NULL || buffer == NULL || capacity == 0U)
-        return false;
-    if (include_date && strftime(date, sizeof(date), "%x", local) == 0U) return false;
+    if (clock_text == NULL || buffer == NULL || capacity == 0U ||
+        (date_text != NULL && date_text[0] == '\0')) return false;
     if (include_zone && !format_exact_utc_zone(
             utc_offset_seconds, zone, sizeof(zone))) return false;
-    if (include_date && include_zone)
-        written = snprintf(buffer, capacity, "%s %s %s", date, clock_text, zone);
-    else if (include_date)
-        written = snprintf(buffer, capacity, "%s %s", date, clock_text);
+    if (date_text != NULL && include_zone)
+        written = snprintf(combined, sizeof(combined), "%s %s %s",
+                           date_text, clock_text, zone);
+    else if (date_text != NULL)
+        written = snprintf(combined, sizeof(combined), "%s %s", date_text, clock_text);
     else if (include_zone)
-        written = snprintf(buffer, capacity, "%s %s", clock_text, zone);
-    else written = snprintf(buffer, capacity, "%s", clock_text);
-    return written >= 0 && (size_t)written < capacity;
+        written = snprintf(combined, sizeof(combined), "%s %s", clock_text, zone);
+    else written = snprintf(combined, sizeof(combined), "%s", clock_text);
+    if (written < 0 || (size_t)written >= sizeof(combined) ||
+        (size_t)written >= capacity) return false;
+    memcpy(buffer, combined, (size_t)written + 1U);
+    return true;
 }
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
@@ -223,6 +249,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
     int64_t epoch_seconds = unix_microseconds / LSM_MICROSECONDS_PER_SECOND;
     int32_t utc_offset_seconds = 0;
     char clock_text[256];
+    char date_text[INFILTRATR_TEMPORAL_DATE_CAPACITY];
     bool authority;
     if (buffer == NULL || capacity == 0U) return false;
     infiltratr_copy_string(buffer, capacity, "N/A");
@@ -230,15 +257,40 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
         unix_microseconds % LSM_MICROSECONDS_PER_SECOND != 0) epoch_seconds--;
     if (!local_time_for_epoch(epoch_seconds, &local)) return false;
     authority = effective_policy(&policy);
-    if (!authority || strcmp(policy.clock_mode, "standard") == 0)
+    const bool standard_clock = !authority ||
+        strcmp(policy.clock_mode, "standard") == 0;
+    const bool native_calendar = !authority ||
+        strcmp(policy.calendar, "gregorian") == 0;
+    const bool show_seconds = authority ? policy.show_seconds : native_show_seconds;
+
+    /* Keep native locale formatting when both policies are native. A custom
+     * calendar must also apply when the clock is Standard. */
+    if (standard_clock && (!include_date || native_calendar))
         return native_format(&local, include_date, include_zone,
-                             authority ? policy.show_seconds : native_show_seconds,
-                             buffer, capacity);
-    if (!local_utc_offset_seconds(&local, &utc_offset_seconds)) return false;
-    if (!format_selected_clock(&policy, unix_microseconds, utc_offset_seconds,
-                               clock_text, sizeof(clock_text))) return false;
-    return combine_presentation(&local, clock_text, include_date, include_zone,
-                                utc_offset_seconds, buffer, capacity);
+                             show_seconds, buffer, capacity);
+    if (include_date) {
+        if (native_calendar) {
+            if (strftime(date_text, sizeof(date_text), "%x", &local) == 0U)
+                return false;
+        } else if (!format_selected_calendar(
+                       &policy, &local, date_text, sizeof(date_text))) {
+            return false;
+        }
+    }
+    if (standard_clock) {
+        if (strftime(clock_text, sizeof(clock_text),
+                     show_seconds ? "%X" : "%H:%M", &local) == 0U)
+            return false;
+    } else {
+        if (!local_utc_offset_seconds(&local, &utc_offset_seconds) ||
+            !format_selected_clock(&policy, unix_microseconds, utc_offset_seconds,
+                                   clock_text, sizeof(clock_text)))
+            return false;
+    }
+    if (include_zone && !local_utc_offset_seconds(&local, &utc_offset_seconds))
+        return false;
+    return combine_presentation(include_date ? date_text : NULL, clock_text,
+                                include_zone, utc_offset_seconds, buffer, capacity);
 }
 bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        bool include_date,
@@ -379,6 +431,7 @@ void lsm_temporal_presentation_reset_cache_for_test(void)
 {
     pthread_mutex_lock(&policy_cache_lock);
     infiltratr_temporal_clock_presentation_free(policy_cache.clock);
+    infiltratr_temporal_posix_date_provider_free(policy_cache.calendar);
     memset(&policy_cache, 0, sizeof(policy_cache));
     pthread_mutex_unlock(&policy_cache_lock);
 }

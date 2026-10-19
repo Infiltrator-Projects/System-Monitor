@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.222 - 2026-10-20
+
+- Respect the selected System Settings calendar when presenting dated timestamps, invoking the installed Common Calendar Resource .so instead of always formatting Gregorian.
+- Compose selected calendar and clock independently (including Standard clock), preserving ordinary OS Gregorian output and failing closed for missing modules.
+- Validate the real installed Hebrew Calendar and French Revolutionary Decimal Clock modules together during Linux release qualification, with updated ownership and failure contracts.
+
+
 ## 1.0.221 - 2026-10-20
 
 - Advance Libraries/Common from 1.19.51 to the published 1.19.68 exact gitlink after reviewing the complete API and implementation delta, including the intentional retirement of compiled absolute clock faces.

@@ -66,6 +66,18 @@ Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or 
 
 Canonical Unix instants and duration measurements remain System Monitor state. System Settings owns the selected clock ID, and Common owns the validated native resource ABI. Explicit clock faces render only through the installed `/System/Resources/Clocks` provider for that stable ID; a missing resource is unavailable rather than an invitation to reimplement its notation. The Linux presentation adapter caches one validated Common clock presentation handle for the selected ID, and serialises selection replacement and invocation through the policy mutex so a module cannot be unloaded during formatting. Changing the selection replaces that handle; installing system clock modules is visible on the next application start. Canonical duration projection remains independent of installed clock faces.
 
+## Calendar resource integration
+
+The active System Settings calendar ID is independent of its clock ID.
+System Monitor resolves selected non-Gregorian dates through Common's
+validated native Calendar Resource provider in /System/Resources/Calendars,
+rather than implementing chronology locally. One lazy provider is retained
+behind the temporal policy mutex; Common owns replacement by stable ID and
+bounded retries when an installed module is absent. Unavailable custom
+calendars never become an unlabelled Gregorian date. Gregorian remains the
+normal OS locale; clock and calendar are composed independently without
+changing canonical Unix timestamps or SI measurements.
+
 ## Common
 
 `src/infiltratr-common` is pinned by the parent repository gitlink to an exact Libraries commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.

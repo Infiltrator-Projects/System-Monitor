@@ -96,6 +96,63 @@ int main(void)
     infiltratr_temporal_clock_presentation_free(installed_decimal);
     CHECK(setenv("TZ", "UTC", 1) == 0);
     tzset();
+
+    /*
+     * Real resource date presentation must be independent of the clock mode.
+     * Compare to Common's own validated provider rather than a hard-coded
+     * representation of Hebrew dates or an application-owned chronology.
+     */
+    InfiltratrTemporalDateProvider *installed_hebrew =
+        infiltratr_temporal_posix_date_provider_new();
+    char hebrew_date[INFILTRATR_TEMPORAL_DATE_CAPACITY];
+    CHECK(installed_hebrew != NULL);
+    const bool have_hebrew = infiltratr_temporal_posix_format_date(
+        installed_hebrew, "hebrew", INT32_C(1970), INT32_C(1), INT32_C(1),
+        "short", hebrew_date, sizeof(hebrew_date), NULL);
+    const char *require_hebrew = getenv("LSM_TEST_REQUIRE_HEBREW_RESOURCE");
+    if (require_hebrew != NULL && strcmp(require_hebrew, "1") == 0)
+        CHECK(have_hebrew);
+
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "standard");
+    infiltratr_copy_string(policy.calendar, sizeof(policy.calendar), "hebrew");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    if (have_hebrew) {
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true, text, sizeof(text)));
+        const size_t date_length = strlen(hebrew_date);
+        CHECK(strncmp(text, hebrew_date, date_length) == 0);
+        CHECK(text[date_length] == ' ');
+        CHECK(strstr(text, "12:00:00") != NULL);
+    } else {
+        CHECK(!lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true, text, sizeof(text)));
+        CHECK(strcmp(text, "N/A") == 0);
+    }
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "decimal");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    if (have_hebrew && have_decimal) {
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true, text, sizeof(text)));
+        CHECK(strncmp(text, hebrew_date, strlen(hebrew_date)) == 0);
+        CHECK(strstr(text, "5:00:00") != NULL);
+    }
+
+    /* Missing selected calendars must not fall back to Gregorian. */
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "standard");
+    infiltratr_copy_string(policy.calendar, sizeof(policy.calendar),
+                           "missing-system-monitor-test-calendar");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    CHECK(!lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), true, false, true, text, sizeof(text)));
+    CHECK(strcmp(text, "N/A") == 0);
+    infiltratr_temporal_posix_date_provider_free(installed_hebrew);
+    infiltratr_copy_string(policy.calendar, sizeof(policy.calendar), "gregorian");
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "decimal");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
     /*
      * French decimal time must not retain a 60-second minute. 86 SI seconds
      * is decimal second 99; at 87 SI seconds the duration crosses into
