@@ -139,9 +139,12 @@ jobs:
               fi
 
               product_change=false
+              # Match Verify's narrow release-identity exemptions. Maintained
+              # prose and workflow maintenance do not alter qualified binaries;
+              # all application, build and packaging changes require a new version.
               for changed_path in "${comparison[@]:1}"; do
                 case "$changed_path" in
-                  .github/workflows/*) ;;
+                  .github/workflows/*|README.md|.github/README.md|docs/*) ;;
                   *) product_change=true ;;
                 esac
               done
@@ -150,7 +153,7 @@ jobs:
                   "$version" "$tag_sha" "$SOURCE_SHA" >&2
                 exit 1
               fi
-              printf 'Version %s is already tagged at %s; qualified main %s changes workflows only, so there is no new release intent.\n' \
+              printf 'Version %s is already tagged at %s; qualified main %s changes only documentation or workflows, so there is no new release intent.\n' \
                 "$version" "$tag_sha" "$SOURCE_SHA"
               exit 0
             fi
