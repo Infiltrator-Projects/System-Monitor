@@ -47,8 +47,9 @@ static void check_font(GtkWidget *widget, const char *family)
     PangoFontDescription *actual = pango_font_describe(font);
     const char *resolved = pango_font_description_get_family(actual);
     if (!resolved || strcmp(resolved, family) != 0) {
-        fprintf(stderr, "GTK substituted %s for %s\n",
-                resolved ? resolved : "(missing)", family);
+        fprintf(stderr, "GTK resolved %s instead of %s (requested %s)\n",
+                resolved ? resolved : "(missing)", family,
+                pango_font_description_get_family(requested));
         exit(EXIT_FAILURE);
     }
     pango_font_description_free(actual);
@@ -106,7 +107,9 @@ int main(int argc, char **argv)
         /* Body copy deliberately uses S Text rather than Common's S Title
          * fallback identity. Assert the actual product role, not the fallback. */
         check_font(body, "MB Corpo S Text WEB");
-        check_font(title, typography->brand_family);
+        /* Performance headings are S Title Bold; A Title Cond is reserved
+         * for the product identity in the integrated header. */
+        check_font(title, typography->ui_family);
         check_font(find_named(header, "lsm-header-brand-title"), typography->brand_family);
         const InfiltratrThemePalette *header_ink =
             infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, TRUE);

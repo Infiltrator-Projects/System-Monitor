@@ -97,10 +97,10 @@ void lsm_app_shell_apply_theme(LsmApp *app)
     g_string_append_printf(
         css,
         "* { font-family: \"MB Corpo S Text WEB\", \"%s\"; font-weight: %u; }"
-        "headerbar .title, .titlebar .title, #lsm-header-brand-title,"
-        " .lsm-performance-title {"
+        "headerbar .title, .titlebar .title, #lsm-header-brand-title {"
         " font-family: \"%s\"; font-weight: %u;"
         "}"
+        ".lsm-performance-title { font-family: \"%s\"; font-weight: %u; }"
         "button, treeview header button, notebook tab { font-weight: %u; }"
         "@define-color lsm_background #%06X;"
         "@define-color lsm_panel #%06X;"
@@ -197,6 +197,8 @@ void lsm_app_shell_apply_theme(LsmApp *app)
         (unsigned int)typography->ui_regular_weight,
         typography->brand_family,
         (unsigned int)typography->brand_weight,
+        typography->ui_family,
+        (unsigned int)typography->ui_bold_weight,
         (unsigned int)typography->ui_bold_weight,
         (unsigned int)palette->background_rgb,
         (unsigned int)palette->panel_rgb,
