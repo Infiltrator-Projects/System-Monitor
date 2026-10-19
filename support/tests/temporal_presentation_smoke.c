@@ -11,6 +11,7 @@
 #include "temporal_presentation.h"
 #include <infiltratr/core.h>
 #include <infiltratr/temporal.h>
+#include <infiltratr/temporal_clock_resource.h>
 #include <infiltratr/temporal_posix.h>
 #include <errno.h>
 #include <stdio.h>
@@ -53,29 +54,46 @@ int main(void)
     policy.show_seconds = true;
     CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
     lsm_temporal_presentation_reset_cache_for_test();
-    CHECK(lsm_temporal_format_epoch_seconds(
-        INT64_C(43200), true, false, true, text, sizeof(text)));
-    CHECK(strstr(text, "5:00:00") != NULL);
+    InfiltratrTemporalClockPresentation *installed_decimal =
+        infiltratr_temporal_clock_presentation_new("decimal");
+    const bool have_decimal = installed_decimal != NULL;
+    const char *require_decimal = getenv("LSM_TEST_REQUIRE_DECIMAL_RESOURCE");
+    if (require_decimal != NULL && strcmp(require_decimal, "1") == 0)
+        CHECK(have_decimal);
+    if (have_decimal) {
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true, text, sizeof(text)));
+        CHECK(strstr(text, "5:00:00") != NULL);
+    } else {
+        CHECK(!lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true, text, sizeof(text)));
+        CHECK(strcmp(text, "N/A") == 0);
+    }
     /*
-     * A historical local offset can contain seconds. strftime("%z")
-     * truncates +00:19:32 to +0019 on glibc; System Monitor must pass the
-     * exact +1172 seconds to Common's clock formatter instead.
-     * A synthetic POSIX TZ makes this independent of the host tzdata.
+     * Only a validated installed clock may render a nonstandard civil time.
+     * Its exact historical +00:19:32 offset must pass from the Linux adapter
+     * through Common without minute truncation. Missing modules fail closed.
      */
     CHECK(setenv("TZ", "HST-0:19:32", 1) == 0);
     tzset();
-    char exact_offset_clock[256];
-    CHECK(infiltratr_temporal_format_clock_mode(
-        policy.clock_mode, INT64_C(0), INT32_C(1172),
-        policy.show_seconds, false, policy.location_configured,
-        policy.latitude, policy.longitude,
-        exact_offset_clock, sizeof(exact_offset_clock), NULL));
-    CHECK(lsm_temporal_format_epoch_seconds(
-        INT64_C(0), false, false, true, text, sizeof(text)));
-    CHECK(strcmp(text, exact_offset_clock) == 0);
-    CHECK(lsm_temporal_format_epoch_seconds(
-        INT64_C(0), false, true, true, text, sizeof(text)));
-    CHECK(strstr(text, " +001932") != NULL);
+    if (have_decimal) {
+        char expected[256];
+        CHECK(infiltratr_temporal_clock_presentation_format(
+            installed_decimal, NULL, INT64_C(0), INT32_C(1172),
+            policy.show_seconds, false, policy.location_configured,
+            policy.latitude, policy.longitude, expected, sizeof(expected), NULL));
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(0), false, false, true, text, sizeof(text)));
+        CHECK(strcmp(text, expected) == 0);
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(0), false, true, true, text, sizeof(text)));
+        CHECK(strstr(text, " +001932") != NULL);
+    } else {
+        CHECK(!lsm_temporal_format_epoch_seconds(
+            INT64_C(0), false, true, true, text, sizeof(text)));
+        CHECK(strcmp(text, "N/A") == 0);
+    }
+    infiltratr_temporal_clock_presentation_free(installed_decimal);
     CHECK(setenv("TZ", "UTC", 1) == 0);
     tzset();
     /*
@@ -165,9 +183,20 @@ int main(void)
     policy.longitude = 0.0;
     CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
     lsm_temporal_presentation_reset_cache_for_test();
-    CHECK(lsm_temporal_format_epoch_seconds(
-        INT64_C(43200), false, false, true, text, sizeof(text)));
-    CHECK(strstr(text, "Hora") != NULL || strstr(text, "Vigilia") != NULL);
+    /* A missing Roman module must not reinstate Common's retired clock-face
+     * implementation. Duration projections below remain independently valid. */
+    InfiltratrTemporalClockPresentation *roman =
+        infiltratr_temporal_clock_presentation_new("roman-temporal");
+    if (roman != NULL) {
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), false, false, true, text, sizeof(text)));
+        CHECK(strstr(text, "Hora") != NULL || strstr(text, "Vigilia") != NULL);
+    } else {
+        CHECK(!lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), false, false, true, text, sizeof(text)));
+        CHECK(strcmp(text, "N/A") == 0);
+    }
+    infiltratr_temporal_clock_presentation_free(roman);
     CHECK(lsm_temporal_format_duration_seconds(
         UINT64_C(3661), text, sizeof(text)));
     CHECK(strcmp(text, "01:01:01 SI") == 0);

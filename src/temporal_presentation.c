@@ -20,6 +20,7 @@
 #include <infiltratr/format.h>
 #include <infiltratr/posix.h>
 #include <infiltratr/temporal.h>
+#include <infiltratr/temporal_clock_resource.h>
 #include <infiltratr/temporal_posix.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -32,6 +33,11 @@ typedef struct LsmTemporalPolicyCache {
     uint64_t refreshed_ns;
     bool authority;
     bool initialized;
+    /* A selected executable module is opened once, never once per table cell.
+     * Missing resources remain unavailable until a new selection or process. */
+    InfiltratrTemporalClockPresentation *clock;
+    char clock_id[INFILTRATR_TEMPORAL_ID_CAPACITY];
+    bool clock_attempted;
 } LsmTemporalPolicyCache;
 static LsmTemporalPolicyCache policy_cache;
 static pthread_mutex_t policy_cache_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -70,6 +76,39 @@ static bool effective_policy(InfiltratrTemporalPolicyV3 *policy)
     authority = policy_cache.authority;
     pthread_mutex_unlock(&policy_cache_lock);
     return authority;
+}
+/*
+ * The process-global selection and module lifetime share the policy mutex.
+ * A policy edit may replace/unload the selected module; formatting while
+ * holding this mutex prevents an in-flight renderer from using freed code.
+ * No application-owned clock algorithm or compatibility fallback exists.
+ */
+static bool format_selected_clock(const InfiltratrTemporalPolicyV3 *policy,
+                                  int64_t instant, int32_t utc_offset,
+                                  char *text, size_t capacity)
+{
+    bool result = false;
+    pthread_mutex_lock(&policy_cache_lock);
+    if (strcmp(policy_cache.clock_id, policy->clock_mode) != 0) {
+        infiltratr_temporal_clock_presentation_free(policy_cache.clock);
+        policy_cache.clock = NULL;
+        memcpy(policy_cache.clock_id, policy->clock_mode,
+               sizeof(policy_cache.clock_id));
+        policy_cache.clock_attempted = false;
+    }
+    if (!policy_cache.clock_attempted) {
+        policy_cache.clock_attempted = true;
+        policy_cache.clock =
+            infiltratr_temporal_clock_presentation_new(policy->clock_mode);
+    }
+    if (policy_cache.clock != NULL) {
+        result = infiltratr_temporal_clock_presentation_format(
+            policy_cache.clock, NULL, instant, utc_offset,
+            policy->show_seconds, false, policy->location_configured,
+            policy->latitude, policy->longitude, text, capacity, NULL);
+    }
+    pthread_mutex_unlock(&policy_cache_lock);
+    return result;
 }
 static bool local_time_for_epoch(int64_t epoch_seconds, struct tm *local)
 {
@@ -196,11 +235,8 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                              authority ? policy.show_seconds : native_show_seconds,
                              buffer, capacity);
     if (!local_utc_offset_seconds(&local, &utc_offset_seconds)) return false;
-    if (!infiltratr_temporal_format_clock_mode(
-            policy.clock_mode, unix_microseconds, utc_offset_seconds,
-            policy.show_seconds, false, policy.location_configured,
-            policy.latitude, policy.longitude, clock_text,
-            sizeof(clock_text), NULL)) return false;
+    if (!format_selected_clock(&policy, unix_microseconds, utc_offset_seconds,
+                               clock_text, sizeof(clock_text))) return false;
     return combine_presentation(&local, clock_text, include_date, include_zone,
                                 utc_offset_seconds, buffer, capacity);
 }
@@ -342,6 +378,7 @@ bool lsm_temporal_format_remaining_seconds(uint64_t elapsed_seconds,
 void lsm_temporal_presentation_reset_cache_for_test(void)
 {
     pthread_mutex_lock(&policy_cache_lock);
+    infiltratr_temporal_clock_presentation_free(policy_cache.clock);
     memset(&policy_cache, 0, sizeof(policy_cache));
     pthread_mutex_unlock(&policy_cache_lock);
 }

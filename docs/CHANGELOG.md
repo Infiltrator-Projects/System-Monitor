@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.221 - 2026-10-20
+
+- Advance Libraries/Common from 1.19.51 to the published 1.19.68 exact gitlink after reviewing the complete API and implementation delta, including the intentional retirement of compiled absolute clock faces.
+- Move nonstandard civil-clock display to Common's validated installed native resource presentations, caching the selected module under the existing policy mutex and reporting unavailable resources without creating local clock fallbacks; retain Common-owned SI duration projection and exact historical UTC-offset handling.
+- Qualify the real GTK typography/header behaviour probe after clean-host package installation rather than relying solely on brittle CI CSS string checks; exercise a real Common-built decimal `.so` under the canonical system location and preserve absent-resource tests.
+
 ## 1.0.220 - 2026-10-19
 
 - Preserve seconds-bearing historical timezone offsets when projecting Unix instants into System Settings-selected clock modes; obtain the exact Linux civil offset rather than parsing minute-resolution `strftime("%z")` text, and retain those seconds in explicit clock-mode timezone labels.

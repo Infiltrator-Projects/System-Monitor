@@ -6,7 +6,7 @@ Validation policy is defined by the executable verification suite together with 
 
 The source/repository audit protects architectural ownership as well as formatting: source manifests must be complete, shared source groups must remain subordinate to the canonical source inventory, the private-application-state allowlist must exactly match its deliberate direct consumers, platform details must not cross declared presentation contracts, and build/release owners are checked by their durable responsibilities rather than retired implementation spellings.
 
-Compilation, deterministic tests, sanitizers, portability checks, runtime GTK smoke tests and physical-device evidence cover different contracts and are not interchangeable. The authoritative documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
+Compilation, deterministic tests, sanitizers, portability checks, runtime GTK smoke tests and physical-device evidence cover different contracts and are not interchangeable. The Linux Verify job compiles the actual GTK typography/chrome probe and the clean-host installer job executes it after installing the real package and font catalogue. The test checks Pango-resolved families, Day/Night header contrast, window-control state colours and Settings activation, not CSS source spelling. A separately staged canonical-name decimal clock resource from the exact Common gitlink also exercises the production module-based presentation path; the ordinary source smoke separately verifies absent-resource fail-closed behaviour. The authoritative documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
 
 Dependency preparation is outside verification. Git checkouts must already contain the parent-pinned Common revision, normally through recursive checkout or an explicit `make common-bootstrap`; Make and CMake validate that revision without performing hidden network or source-tree mutation.
 
@@ -30,7 +30,7 @@ The temporal-presentation smoke fixture supplies a synthetic POSIX zone with a
 seconds-bearing historical UTC offset (+00:19:32). It compares System Monitor's
 rendering against Common's clock formatter with the exact +1172-second offset
 and checks that an explicitly requested timezone label retains +001932.
-This protects the Linux native-time adapter against the minute-only truncation
+This protects the Linux native-time adapter and the installed Common clock-resource path against the minute-only truncation
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.
 

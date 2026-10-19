@@ -233,6 +233,21 @@ jobs:
           test "$first_line" = "system-monitor (${version}) unstable; urgency=medium"
           ./"$installer" --help >/dev/null
 
+      - name: Build GTK typography and chrome behaviour probe
+        run: make build/gtk-typography-chrome
+
+      - name: Qualify installed Common clock resource boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C src/infiltratr-common/resources/temporal \
+            'build/clock-resources/French Revolutionary Decimal Clock.so'
+          sudo install -d -m 0755 /System/Resources/Clocks
+          sudo install -m 0644 \
+            'src/infiltratr-common/resources/temporal/build/clock-resources/French Revolutionary Decimal Clock.so' \
+            '/System/Resources/Clocks/French Revolutionary Decimal Clock.so'
+          LSM_TEST_REQUIRE_DECIMAL_RESOURCE=1 make temporal-presentation-smoke
+
       - name: Upload exact Linux release candidate
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -241,6 +256,7 @@ jobs:
             system-monitor_*.deb
             system-monitor-*-native-installer.run
             build/fonts/*.ttf
+            build/gtk-typography-chrome
             support/VERSION
           if-no-files-found: error
           retention-days: 14
@@ -298,6 +314,12 @@ jobs:
             test "${#expected}" -eq 64
             printf '%s  %s\n' "$expected" "/System/Resources/Fonts/$face" | sha256sum -c -
           done
+      - name: Verify real GTK font resolution and header state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x ./build/gtk-typography-chrome
+          xvfb-run -a -s "-screen 0 1024x768x24" ./build/gtk-typography-chrome
 
   windows-release:
     name: Build and qualify exact Windows release artifact
