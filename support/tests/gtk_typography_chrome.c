@@ -103,7 +103,9 @@ int main(int argc, char **argv)
         app->runtime.theme_mode = modes[mode];
         lsm_app_shell_apply_theme(app);
         while (gtk_events_pending()) gtk_main_iteration();
-        check_font(body, typography->ui_family);
+        /* Body copy deliberately uses S Text rather than Common's S Title
+         * fallback identity. Assert the actual product role, not the fallback. */
+        check_font(body, "MB Corpo S Text WEB");
         check_font(title, typography->brand_family);
         check_font(find_named(header, "lsm-header-brand-title"), typography->brand_family);
         const InfiltratrThemePalette *header_ink =

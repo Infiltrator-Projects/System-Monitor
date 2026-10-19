@@ -7,7 +7,7 @@
 - Advance Libraries/Common from 1.19.51 to the published 1.19.68 exact gitlink after reviewing the complete API and implementation delta, including the intentional retirement of compiled absolute clock faces.
 - Retire the obsolete three-face 1.000 build archive; instead verify three exact 1.010 source-pinned font files against the updated Common manifest, keeping them build-time only.
 - Move nonstandard civil-clock display to Common's validated installed native resource presentations, caching the selected module under the existing policy mutex and reporting unavailable resources without creating local clock fallbacks; retain Common-owned SI duration projection and exact historical UTC-offset handling.
-- Qualify the real GTK typography/header behaviour probe after clean-host package installation rather than relying solely on brittle CI CSS string checks; exercise a real Common-built decimal `.so` under the canonical system location and preserve absent-resource tests.
+- Qualify the real GTK typography/header behaviour probe after clean-host package installation rather than relying on brittle CI CSS string checks; exercise a real Common-built decimal `.so` under the canonical system location and preserve absent-resource tests. Reapply executable mode to the downloaded GTK probe because artifact transport does not retain it; assert the actual Text body-font role rather than Common's Title fallback.
 
 ## 1.0.220 - 2026-10-19
 
