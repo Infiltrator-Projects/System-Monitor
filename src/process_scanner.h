@@ -45,7 +45,8 @@ void lsm_process_scanner_set_ready_callback(
  * Request a process scan, coalescing with any request already in progress.
  *
  * The most recent flags replace older pending flags. A scan already executing
- * is allowed to finish and the newest pending request runs immediately after it.
+ * is allowed to finish; matching new demand cancels obsolete queued work.
+ * Otherwise, the newest flags run immediately after the in-flight scan.
  *
  * @param [in,out] scanner Scanner worker.
  * @param [in] scan_flags LSM_PROCESS_SCAN_* flags required by the active UI.

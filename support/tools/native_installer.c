@@ -886,10 +886,11 @@ int main(int argc, char **argv)
     puts("Administrator permission is now required to replace the installed package.");
 
     if (root_system_mode) {
-        const char *const remove_arguments[] = {
-            dpkg, "--remove", "system-monitor", NULL
-        };
-        (void)run_process(NULL, remove_arguments, false);
+        /*
+         * dpkg --install owns both fresh installation and upgrade. Removing the
+         * working package first introduces a failure window before replacement
+         * succeeds; package transition and recovery must remain dpkg-owned.
+         */
         const char *const install_arguments[] = {
             dpkg, "--install", package_path, NULL
         };

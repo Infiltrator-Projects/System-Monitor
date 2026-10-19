@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.219 - 2026-10-19
+
+- Preserve the installed System Monitor package during privileged native upgrades: let one `dpkg --install` own the replacement instead of removing the working version first.
+- Correct detached Linux process-scan coalescing so a request satisfied by the current scan cancels obsolete queued enrichment; latest UI demand wins even when it returns to the in-flight flags.
+- Add an isolated controlled backend fixture proving both stale-scan cancellation and delivery of the newest distinct request.
+- Remove a redundant Debian icon payload assertion without weakening package validation; keep current Common integration and the qualified release workflow intact.
+
 ## 1.0.218 - 2026-10-18
 
 - Correct Day-mode contrast in the deliberately dark System Monitor header: use Common's Night title/summary foreground colours for the fixed navy chrome, independent of the workspace theme.

@@ -292,7 +292,7 @@ check: docs-check installer-check build-check
 build-check: check-deps strict-check portability-check \
 	core-suite-smoke presentation-smoke backend-smoke monitor-platform-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
-	ui-suite-smoke accelerator-suite-smoke \
+	ui-suite-smoke accelerator-suite-smoke scanner-coalescing-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
 	system-snapshot-smoke process-export-smoke history-retention-smoke temporal-presentation-smoke \
 	async-workers-smoke runtime-stability-smoke \
@@ -312,6 +312,14 @@ $(BUILD_DIR)/gtk-typography-chrome: support/tests/gtk_typography_chrome.c \
 		-ffunction-sections -fdata-sections \
 		support/tests/gtk_typography_chrome.c src/app_shell.c src/app_theme.c \
 		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -Wl,--gc-sections -lm -o $@
+
+.PHONY: scanner-coalescing-smoke
+
+scanner-coalescing-smoke: | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/scanner_coalescing_smoke.c src/process_scanner.c \
+		$(GTK_LIBS) -pthread -o $(BUILD_DIR)/scanner-coalescing-smoke
+	./$(BUILD_DIR)/scanner-coalescing-smoke
 
 core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \
@@ -776,8 +784,6 @@ deb: $(TARGET) $(DEB_PACKAGE_BUILDER) $(BUILD_INFO) $(FONT_STAMP)
 		printf '%s\n' "$$depends" | grep -Fq 'xz-utils'; \
 		printf '%s\n' "$$depends" | grep -Eq 'curl[[:space:]]*\|[[:space:]]*wget'
 	grep -q 'usr/share/doc/system-monitor/copyright$$' $(BUILD_DIR)/deb-contents.txt
-	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
-		$(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/icons/hicolor/96x96/apps/system-monitor.png$$' \
 		$(BUILD_DIR)/deb-contents.txt
 	grep -q 'usr/share/app-install/icons/system-monitor.png$$' \

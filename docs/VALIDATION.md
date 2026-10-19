@@ -23,3 +23,17 @@ Optimized qualification retains executable checks in the desktop/presentation re
 ## Maintained documentation updates
 
 The already-published version guard compares executable and release-affecting source, while allowing standalone README and `docs/**` maintenance without fabricating a new binary version. Workflow-only fixes also remain exempt. All application source, build configuration, packaging and other non-documentation changes still require an advanced `support/VERSION` after publication. These exclusions must stay narrow; a document or build file must not be used to smuggle altered release assets under an old version.
+
+## Background scan coalescing and upgrade recovery
+
+The `scanner-coalescing-smoke` fixture blocks a synthetic backend scan, changes
+requested enrichment through the public scanner API and proves that a request
+already satisfied by in-flight work invalidates stale queued work. It also
+verifies that the latest distinct request survives coalescing. The test uses
+the production scanner implementation without depending on procfs timing;
+live-backend and sanitizer qualifications remain independent.
+
+Native installation delegates package replacement to a single `dpkg --install`
+operation. Removing the working package first is prohibited because it creates
+an unnecessary failure window. This does not imply fully transactional rollback
+of failed Debian maintainer scripts: their recovery remains dpkg-owned.

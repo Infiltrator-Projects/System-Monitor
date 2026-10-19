@@ -237,7 +237,14 @@ bool lsm_process_scanner_request(LsmProcessScanner *scanner,
         /* Timer requests matching the work already in flight are redundant.
          * A changed enrichment request (for example opening Details) is kept as
          * one follow-up scan so newly visible fields do not wait indefinitely. */
-        if (scan_flags != scanner->active_flags) {
+        if (scan_flags == scanner->active_flags) {
+            /*
+             * The active scan already satisfies the newest request. Cancel
+             * older queued enrichment from a view that is no longer selected,
+             * rather than performing obsolete work after this scan completes.
+             */
+            scanner->request_pending = false;
+        } else {
             scanner->requested_flags = scan_flags;
             scanner->request_pending = true;
         }
