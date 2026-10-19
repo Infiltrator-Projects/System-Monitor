@@ -234,6 +234,14 @@ static bool combine_presentation(const char *date_text, const char *clock_text,
     memcpy(buffer, combined, (size_t)written + 1U);
     return true;
 }
+/* Native Gregorian display follows libc locale policy; the suppression for
+ * its potentially two-digit %x year is intentionally scoped to this adapter. */
+static bool native_date_format(const struct tm *local,
+                               char *buffer, size_t capacity)
+{
+    return local != NULL && buffer != NULL && capacity != 0U &&
+        strftime(buffer, capacity, "%x", local) != 0U;
+}
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
@@ -270,7 +278,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                              show_seconds, buffer, capacity);
     if (include_date) {
         if (native_calendar) {
-            if (strftime(date_text, sizeof(date_text), "%x", &local) == 0U)
+            if (!native_date_format(&local, date_text, sizeof(date_text)))
                 return false;
         } else if (!format_selected_calendar(
                        &policy, &local, date_text, sizeof(date_text))) {
