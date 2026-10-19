@@ -465,7 +465,9 @@ static void check_licensing_contract(void)
     for (const char *path : {
              "LICENSE", "src/infiltratr-common/LICENSE",
              "support/resources/icons/system-monitor.png.license",
-             "support/resources/fonts/mb-corpo-fonts.tar.xz",
+             "support/resources/fonts/mb_corpo_a_title_cond_regular.ttf",
+             "support/resources/fonts/mb_corpo_s_title_regular.ttf",
+             "support/resources/fonts/mb_corpo_s_title_bold.ttf",
              "support/packaging/copyright"})
         if (!regular_file(path)) report_error("%s: required licensing asset is missing", path);
 

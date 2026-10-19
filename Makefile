@@ -260,7 +260,9 @@ common-library: common-check
 $(INFILTRATR_COMMON_ARCHIVE): common-library
 	@test -f "$@"
 
-$(FONT_STAMP): support/resources/fonts/mb-corpo-fonts.tar.xz \
+$(FONT_STAMP): support/resources/fonts/mb_corpo_a_title_cond_regular.ttf \
+	support/resources/fonts/mb_corpo_s_title_regular.ttf \
+	support/resources/fonts/mb_corpo_s_title_bold.ttf \
 	support/tools/prepare_typography.cmake \
 	$(INFILTRATR_COMMON_DIR)/cmake/InfiltratrTypographyAssets.cmake | common-check $(BUILD_DIR)
 	cmake -DLSM_FONT_OUTPUT_DIR="$(abspath $(BUILD_DIR)/fonts)" \

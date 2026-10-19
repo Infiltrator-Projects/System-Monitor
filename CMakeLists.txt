@@ -57,7 +57,9 @@ set(LSM_FONT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/fonts")
 include("${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake")
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/support/resources/fonts/mb-corpo-fonts.tar.xz"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/resources/fonts/mb_corpo_a_title_cond_regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/resources/fonts/mb_corpo_s_title_regular.ttf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/support/resources/fonts/mb_corpo_s_title_bold.ttf"
     "${INFILTRATR_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/tools/prepare_typography.cmake"
     "${CMAKE_CURRENT_SOURCE_DIR}/support/VERSION"

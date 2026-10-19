@@ -10,6 +10,8 @@ Compilation, deterministic tests, sanitizers, portability checks, runtime GTK sm
 
 Dependency preparation is outside verification. Git checkouts must already contain the parent-pinned Common revision, normally through recursive checkout or an explicit `make common-bootstrap`; Make and CMake validate that revision without performing hidden network or source-tree mutation.
 
+Three offline build-time fonts must match the exact Common SHA-256 manifest; the retired, incompatible 1.000 archive is rejected. These build inputs are not installed as duplicate product-owned font resources, and no implicit network fetching occurs during ordinary verification.
+
 Linux release qualification builds the installable artifacts once. Its artifact bundle also carries the authoritative `support/VERSION` and verified typography assets needed by downstream qualification, so clean-host installer testing and release sealing consume the qualified installer and typography artifacts. The source-download installer fetches System Monitor and Common at their embedded exact commit identities; clean-host qualification exercises those real HTTPS downloads, compilation and package installation before publication.
 
 The production native installer has one optimisation policy: CPU-native tuning, LTO and trained two-pass PGO. The bootstrap fixes that policy for every production invocation, so caller options cannot select a weaker build; `--system-package-mode` changes only the privilege handoff used by managed installation and does not change optimisation.
