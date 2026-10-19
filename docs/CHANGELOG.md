@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.223 - 2026-10-20
+
+- Introduce one presentation capacity across History, Users and system snapshots so valid long installed-calendar results are not misreported as unavailable by 64–256-byte UI buffers.
+- Statically verify the display capacity against Common's calendar/clock resource bounds and unify native civil-offset acquisition while keeping clock and calendar ownership unchanged.
+- Test local-midnight rollover into Common's installed calendar module, independent time-only presentation when the selected calendar is absent and explicit failure on undersized destinations; align temporal API documentation with actual date/zone semantics.
+
+
 ## 1.0.222 - 2026-10-20
 
 - Respect the selected System Settings calendar when presenting dated timestamps, invoking the installed Common Calendar Resource .so instead of always formatting Gregorian.

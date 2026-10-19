@@ -40,7 +40,7 @@ int main(void)
 {
     char root_template[] = "/tmp/lsm-temporal-XXXXXX";
     char *root = mkdtemp(root_template);
-    char provider[512], text[256];
+    char provider[512], text[LSM_TEMPORAL_PRESENTATION_CAPACITY];
     InfiltratrTemporalPolicyV3 policy;
     CHECK(root != NULL);
     CHECK(snprintf(provider, sizeof(provider), "%s/provider", root) > 0);
@@ -124,6 +124,28 @@ int main(void)
         CHECK(strncmp(text, hebrew_date, date_length) == 0);
         CHECK(text[date_length] == ' ');
         CHECK(strstr(text, "12:00:00") != NULL);
+        /* UTC 16:00 on January 1 becomes January 2 at local UTC+10.
+         * The Common calendar module must receive that civil day, not UTC. */
+        CHECK(setenv("TZ", "XST-10", 1) == 0);
+        tzset();
+        char next_day[INFILTRATR_TEMPORAL_DATE_CAPACITY];
+        CHECK(infiltratr_temporal_posix_format_date(
+            installed_hebrew, "hebrew", INT32_C(1970), INT32_C(1), INT32_C(2),
+            "short", next_day, sizeof(next_day), NULL));
+        CHECK(lsm_temporal_format_epoch_seconds(
+            INT64_C(57600), true, false, true, text, sizeof(text)));
+        CHECK(strncmp(text, next_day, strlen(next_day)) == 0);
+        CHECK(text[strlen(next_day)] == ' ');
+        CHECK(strstr(text, "02:00:00") != NULL);
+        CHECK(setenv("TZ", "UTC", 1) == 0);
+        tzset();
+
+        /* An undersized destination must report N/A, never a partial date. */
+        char too_small[8];
+        CHECK(!lsm_temporal_format_epoch_seconds(
+            INT64_C(43200), true, false, true,
+            too_small, sizeof(too_small)));
+        CHECK(strcmp(too_small, "N/A") == 0);
     } else {
         CHECK(!lsm_temporal_format_epoch_seconds(
             INT64_C(43200), true, false, true, text, sizeof(text)));
@@ -148,6 +170,9 @@ int main(void)
     CHECK(!lsm_temporal_format_epoch_seconds(
         INT64_C(43200), true, false, true, text, sizeof(text)));
     CHECK(strcmp(text, "N/A") == 0);
+    CHECK(lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), false, false, true, text, sizeof(text)));
+    CHECK(strcmp(text, "12:00:00") == 0);
     infiltratr_temporal_posix_date_provider_free(installed_hebrew);
     infiltratr_copy_string(policy.calendar, sizeof(policy.calendar), "gregorian");
     infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "decimal");

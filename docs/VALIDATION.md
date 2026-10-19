@@ -9,8 +9,12 @@ The source/repository audit protects architectural ownership as well as formatti
 Compilation, deterministic tests, sanitizers, portability checks, runtime GTK smoke tests and physical-device evidence cover different contracts and are not interchangeable. The Linux Verify job compiles the actual GTK typography/chrome probe and the clean-host installer job executes it after installing the real package and font catalogue. The test checks Pango-resolved families, Day/Night header contrast, window-control state colours and Settings activation, not CSS source spelling. Real canonical-name decimal clock and Hebrew calendar modules from the
 pinned Common revision are installed during release qualification, and the
 production presentation API is exercised with both Standard and decimal time
-plus non-Gregorian dates. Missing installed calendar IDs must fail closed;
-the ordinary source smoke independently exercises absent resources. The authoritative documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
+plus non-Gregorian dates. Missing installed calendar IDs must fail closed; they must not affect
+time-only output. The regression tests cover civil-date rollover across a
+deterministic UTC+10 zone and insufficient destination capacity without
+truncated output. The application's shared timestamp capacity is statically
+checked against Common's resource ABI maxima. The ordinary source smoke
+independently exercises absent resources. The authoritative documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
 
 Dependency preparation is outside verification. Git checkouts must already contain the parent-pinned Common revision, normally through recursive checkout or an explicit `make common-bootstrap`; Make and CMake validate that revision without performing hidden network or source-tree mutation.
 

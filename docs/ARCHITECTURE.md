@@ -76,7 +76,11 @@ behind the temporal policy mutex; Common owns replacement by stable ID and
 bounded retries when an installed module is absent. Unavailable custom
 calendars never become an unlabelled Gregorian date. Gregorian remains the
 normal OS locale; clock and calendar are composed independently without
-changing canonical Unix timestamps or SI measurements.
+changing canonical Unix timestamps or SI measurements. The local civil day,
+not the UTC day, is passed into the selected chronology. Human-readable
+timestamp callers share one bounded presentation capacity; its minimum
+against Common's combined module maxima is checked at compile time, so a
+valid resource is not silently lost to an undersized UI string.
 
 ## Common
 

@@ -18,14 +18,22 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/*
+ * The presentation layer may compose a validated calendar (512 bytes),
+ * clock (256 bytes) and signed numeric UTC offset. A single application
+ * capacity protects consumers from truncating legitimate resource output.
+ */
+#define LSM_TEMPORAL_PRESENTATION_CAPACITY 1024U
 /**
  * Format a canonical Unix-microsecond instant for human display.
  * @param unix_microseconds Canonical Unix instant in microseconds.
- * @param include_date Prepend the native local-calendar date when true.
- * @param include_zone Append the native numeric UTC offset when true.
+ * @param include_date Prepend the selected installed calendar date (native Gregorian by default).
+ * @param include_zone Append the local numeric UTC offset, including historical offset seconds.
  * @param native_show_seconds Fallback precision when no authority is active.
  * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
+ * @param capacity Destination capacity including NUL; use
+ *                 LSM_TEMPORAL_PRESENTATION_CAPACITY for complete display.
  * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
@@ -37,11 +45,12 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
 /**
  * Format a whole-second Unix instant for human display.
  * @param unix_seconds Canonical Unix instant in whole seconds.
- * @param include_date Prepend the native local-calendar date when true.
- * @param include_zone Append the native numeric UTC offset when true.
+ * @param include_date Prepend the selected installed calendar date (native Gregorian by default).
+ * @param include_zone Append the local numeric UTC offset, including historical offset seconds.
  * @param native_show_seconds Fallback precision when no authority is active.
  * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
+ * @param capacity Destination capacity including NUL; use
+ *                 LSM_TEMPORAL_PRESENTATION_CAPACITY for complete display.
  * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
@@ -58,7 +67,8 @@ bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
  *
  * @param elapsed_seconds Canonical accumulated SI seconds.
  * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
+ * @param capacity Destination capacity including NUL; use
+ *                 LSM_TEMPORAL_PRESENTATION_CAPACITY for complete display.
  * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
@@ -71,7 +81,8 @@ bool lsm_temporal_format_duration_seconds(uint64_t elapsed_seconds,
  *
  * @param elapsed_seconds Canonical elapsed SI seconds ending at the current instant.
  * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
+ * @param capacity Destination capacity including NUL; use
+ *                 LSM_TEMPORAL_PRESENTATION_CAPACITY for complete display.
  * @return true when the complete presentation was produced.
  */
 bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
@@ -84,7 +95,8 @@ bool lsm_temporal_format_elapsed_seconds(uint64_t elapsed_seconds,
  *
  * @param elapsed_seconds Canonical estimated SI seconds remaining.
  * @param buffer Destination text buffer.
- * @param capacity Destination capacity including the terminating NUL.
+ * @param capacity Destination capacity including NUL; use
+ *                 LSM_TEMPORAL_PRESENTATION_CAPACITY for complete display.
  * @return true when the complete presentation was produced or zero maps to N/A.
  */
 bool lsm_temporal_format_remaining_seconds(uint64_t elapsed_seconds,

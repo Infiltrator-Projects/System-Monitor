@@ -28,6 +28,12 @@
 #include <time.h>
 #define LSM_TEMPORAL_CACHE_NS UINT64_C(500000000)
 #define LSM_MICROSECONDS_PER_SECOND INT64_C(1000000)
+/* Common owns the component limits. Compilation must fail if the application
+ * presentation contract can no longer contain the full combined result. */
+_Static_assert(LSM_TEMPORAL_PRESENTATION_CAPACITY >=
+                   INFILTRATR_TEMPORAL_DATE_CAPACITY +
+                   INFILTRATR_TEMPORAL_CLOCK_TEXT_CAPACITY + 24U,
+               "Temporal presentation capacity cannot hold the Common resource output");
 typedef struct LsmTemporalPolicyCache {
     InfiltratrTemporalPolicyV3 policy;
     uint64_t refreshed_ns;
@@ -215,7 +221,7 @@ static bool combine_presentation(const char *date_text, const char *clock_text,
                                  char *buffer, size_t capacity)
 {
     char zone[24] = "";
-    char combined[INFILTRATR_TEMPORAL_DATE_CAPACITY + 256U + 24U];
+    char combined[LSM_TEMPORAL_PRESENTATION_CAPACITY];
     int written;
     if (clock_text == NULL || buffer == NULL || capacity == 0U ||
         (date_text != NULL && date_text[0] == '\0')) return false;
@@ -285,18 +291,18 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
             return false;
         }
     }
+    if ((!standard_clock || include_zone) &&
+        !local_utc_offset_seconds(&local, &utc_offset_seconds))
+        return false;
     if (standard_clock) {
         if (strftime(clock_text, sizeof(clock_text),
                      show_seconds ? "%X" : "%H:%M", &local) == 0U)
             return false;
-    } else {
-        if (!local_utc_offset_seconds(&local, &utc_offset_seconds) ||
-            !format_selected_clock(&policy, unix_microseconds, utc_offset_seconds,
-                                   clock_text, sizeof(clock_text)))
-            return false;
-    }
-    if (include_zone && !local_utc_offset_seconds(&local, &utc_offset_seconds))
+    } else if (!format_selected_clock(&policy, unix_microseconds,
+                                      utc_offset_seconds, clock_text,
+                                      sizeof(clock_text))) {
         return false;
+    }
     return combine_presentation(include_date ? date_text : NULL, clock_text,
                                 include_zone, utc_offset_seconds, buffer, capacity);
 }

@@ -450,7 +450,8 @@ static void apply_user_refresh(LsmApp *app, UserRefreshResult *result)
             if (strcmp(session->account_identity,
                        user->account_identity) != 0)
                 continue;
-            char location[256], leader[32], login[64], type[128];
+            char location[256], leader[32], type[128];
+            char login[LSM_TEMPORAL_PRESENTATION_CAPACITY];
             session_location(session, location, sizeof(location));
             snprintf(leader, sizeof(leader), "%llu",
                      (unsigned long long)session->leader);

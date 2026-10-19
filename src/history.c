@@ -253,7 +253,7 @@ static void history_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *render
 {
     (void)column;
     int field = GPOINTER_TO_INT(user_data);
-    char text[128] = "";
+    char text[LSM_TEMPORAL_PRESENTATION_CAPACITY] = "";
     if (field == HIST_COL_CPU_SECONDS || field == HIST_COL_ACTIVE_SECONDS) {
         double seconds = 0.0;
         gtk_tree_model_get(model, iter, field, &seconds, -1);

@@ -380,7 +380,7 @@ static bool write_snapshot(FILE *file, const void *user_data)
     if (!view || !view->monitor) return false;
 
     const time_t now = time(NULL);
-    char generated[256] = "N/A";
+    char generated[LSM_TEMPORAL_PRESENTATION_CAPACITY] = "N/A";
     if (now != (time_t)-1)
         (void)lsm_temporal_format_epoch_seconds(
             (int64_t)now, true, true, true,
