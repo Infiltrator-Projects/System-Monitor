@@ -28,7 +28,8 @@ The already-published version guard compares executable and release-affecting so
 
 The temporal-presentation smoke fixture supplies a synthetic POSIX zone with a
 seconds-bearing historical UTC offset (+00:19:32). It compares System Monitor's
-rendering against Common's clock formatter with the exact +1172-second offset.
+rendering against Common's clock formatter with the exact +1172-second offset
+and checks that an explicitly requested timezone label retains +001932.
 This protects the Linux native-time adapter against the minute-only truncation
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.

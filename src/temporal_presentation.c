@@ -127,8 +127,30 @@ static bool native_format(const struct tm *local, bool include_date,
                     show_seconds ? "%X" : "%H:%M",
                     local) != 0U;
 }
+/*
+ * Emit the exact offset only for the project's explicit clock projection;
+ * native locale mode deliberately continues to use libc's %z formatting.
+ * Historical local-mean-time offsets can include seconds, which %z truncates.
+ */
+static bool format_exact_utc_zone(int32_t offset_seconds,
+                                  char *buffer, size_t capacity)
+{
+    const char sign = offset_seconds < 0 ? '-' : '+';
+    const uint32_t magnitude = offset_seconds < 0
+        ? (uint32_t)(-(int64_t)offset_seconds) : (uint32_t)offset_seconds;
+    const unsigned hours = magnitude / 3600U;
+    const unsigned minutes = (magnitude % 3600U) / 60U;
+    const unsigned seconds = magnitude % 60U;
+    const int written = seconds != 0U
+        ? snprintf(buffer, capacity, "%c%02u%02u%02u",
+                   sign, hours, minutes, seconds)
+        : snprintf(buffer, capacity, "%c%02u%02u",
+                   sign, hours, minutes);
+    return written >= 0 && (size_t)written < capacity;
+}
 static bool combine_presentation(const struct tm *local, const char *clock_text,
                                  bool include_date, bool include_zone,
+                                 int32_t utc_offset_seconds,
                                  char *buffer, size_t capacity)
 {
     char date[96] = "", zone[24] = "";
@@ -136,7 +158,8 @@ static bool combine_presentation(const struct tm *local, const char *clock_text,
     if (local == NULL || clock_text == NULL || buffer == NULL || capacity == 0U)
         return false;
     if (include_date && strftime(date, sizeof(date), "%x", local) == 0U) return false;
-    if (include_zone && strftime(zone, sizeof(zone), "%z", local) == 0U) return false;
+    if (include_zone && !format_exact_utc_zone(
+            utc_offset_seconds, zone, sizeof(zone))) return false;
     if (include_date && include_zone)
         written = snprintf(buffer, capacity, "%s %s %s", date, clock_text, zone);
     else if (include_date)
@@ -179,7 +202,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
             policy.latitude, policy.longitude, clock_text,
             sizeof(clock_text), NULL)) return false;
     return combine_presentation(&local, clock_text, include_date, include_zone,
-                                buffer, capacity);
+                                utc_offset_seconds, buffer, capacity);
 }
 bool lsm_temporal_format_epoch_seconds(int64_t unix_seconds,
                                        bool include_date,

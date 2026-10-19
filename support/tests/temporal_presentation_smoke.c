@@ -73,6 +73,9 @@ int main(void)
     CHECK(lsm_temporal_format_epoch_seconds(
         INT64_C(0), false, false, true, text, sizeof(text)));
     CHECK(strcmp(text, exact_offset_clock) == 0);
+    CHECK(lsm_temporal_format_epoch_seconds(
+        INT64_C(0), false, true, true, text, sizeof(text)));
+    CHECK(strstr(text, " +001932") != NULL);
     CHECK(setenv("TZ", "UTC", 1) == 0);
     tzset();
     /*
