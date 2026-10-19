@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 1.0.220 - 2026-10-19
+
+- Preserve seconds-bearing historical timezone offsets when projecting Unix instants into System Settings-selected clock modes; obtain the exact Linux civil offset rather than parsing minute-resolution `strftime("%z")` text.
+- Add a tzdata-independent +00:19:32 regression fixture that compares the application adapter with Common's authoritative clock formatter; document the exact-offset boundary while retaining the existing pinned Common version and all release-qualification guarantees.
+
 ## 1.0.219 - 2026-10-19
 
 - Preserve the installed System Monitor package during privileged native upgrades: let one `dpkg --install` own the replacement instead of removing the working version first.

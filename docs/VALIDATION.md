@@ -24,6 +24,15 @@ Optimized qualification retains executable checks in the desktop/presentation re
 
 The already-published version guard compares executable and release-affecting source, while allowing standalone README and `docs/**` maintenance without fabricating a new binary version. Workflow-only fixes also remain exempt. All application source, build configuration, packaging and other non-documentation changes still require an advanced `support/VERSION` after publication. These exclusions must stay narrow; a document or build file must not be used to smuggle altered release assets under an old version.
 
+## Exact civil UTC offsets
+
+The temporal-presentation smoke fixture supplies a synthetic POSIX zone with a
+seconds-bearing historical UTC offset (+00:19:32). It compares System Monitor's
+rendering against Common's clock formatter with the exact +1172-second offset.
+This protects the Linux native-time adapter against the minute-only truncation
+of `strftime("%z")` without coupling the test to a distribution's tzdata
+release. Common remains the authority for nonstandard clock semantics.
+
 ## Background scan coalescing and upgrade recovery
 
 The `scanner-coalescing-smoke` fixture blocks a synthetic backend scan, changes

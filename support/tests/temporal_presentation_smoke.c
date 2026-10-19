@@ -57,6 +57,25 @@ int main(void)
         INT64_C(43200), true, false, true, text, sizeof(text)));
     CHECK(strstr(text, "5:00:00") != NULL);
     /*
+     * A historical local offset can contain seconds. strftime("%z")
+     * truncates +00:19:32 to +0019 on glibc; System Monitor must pass the
+     * exact +1172 seconds to Common's clock formatter instead.
+     * A synthetic POSIX TZ makes this independent of the host tzdata.
+     */
+    CHECK(setenv("TZ", "HST-0:19:32", 1) == 0);
+    tzset();
+    char exact_offset_clock[256];
+    CHECK(infiltratr_temporal_format_clock_mode(
+        policy.clock_mode, INT64_C(0), INT32_C(1172),
+        policy.show_seconds, false, policy.location_configured,
+        policy.latitude, policy.longitude,
+        exact_offset_clock, sizeof(exact_offset_clock), NULL));
+    CHECK(lsm_temporal_format_epoch_seconds(
+        INT64_C(0), false, false, true, text, sizeof(text)));
+    CHECK(strcmp(text, exact_offset_clock) == 0);
+    CHECK(setenv("TZ", "UTC", 1) == 0);
+    tzset();
+    /*
      * French decimal time must not retain a 60-second minute. 86 SI seconds
      * is decimal second 99; at 87 SI seconds the duration crosses into
      * decimal minute 01 and resets the seconds field to 00.

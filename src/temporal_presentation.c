@@ -12,6 +12,7 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
+#define _DEFAULT_SOURCE 1
 #define _POSIX_C_SOURCE 200809L
 #include "temporal_presentation.h"
 #include <infiltratr/arithmetic.h>
@@ -76,28 +77,20 @@ static bool local_time_for_epoch(int64_t epoch_seconds, struct tm *local)
     if (local == NULL || (int64_t)stamp != epoch_seconds) return false;
     return localtime_r(&stamp, local) != NULL;
 }
-static bool parse_numeric_utc_offset(const struct tm *local, int32_t *offset)
+/*
+ * POSIX %z preserves only hours and minutes, even where the historical zone
+ * offset includes seconds (for example a local-mean-time offset of +00:19:32).
+ * GLIBC's localtime_r() exposes the actual signed offset in tm_gmtoff; use
+ * that native Linux value instead of silently losing sub-minute precision.
+ * Common retains ownership of clock interpretation; this adapter supplies
+ * only the native civil offset for the already-resolved Unix instant.
+ */
+static bool local_utc_offset_seconds(const struct tm *local, int32_t *offset)
 {
-    char text[16];
-    const char *cursor;
-    int sign, hours, minutes;
     if (local == NULL || offset == NULL ||
-        strftime(text, sizeof(text), "%z", local) == 0U) return false;
-    cursor = text;
-    if (*cursor == '+') sign = 1;
-    else if (*cursor == '-') sign = -1;
-    else return false;
-    cursor++;
-    if (!infiltratr_ascii_is_digit((unsigned char)cursor[0]) ||
-        !infiltratr_ascii_is_digit((unsigned char)cursor[1])) return false;
-    hours = (cursor[0] - '0') * 10 + cursor[1] - '0';
-    cursor += 2;
-    if (*cursor == ':') cursor++;
-    if (!infiltratr_ascii_is_digit((unsigned char)cursor[0]) ||
-        !infiltratr_ascii_is_digit((unsigned char)cursor[1]) || cursor[2] != '\0') return false;
-    minutes = (cursor[0] - '0') * 10 + cursor[1] - '0';
-    if (hours > 23 || minutes > 59) return false;
-    *offset = (int32_t)(sign * (hours * 3600 + minutes * 60));
+        local->tm_gmtoff < INT32_MIN || local->tm_gmtoff > INT32_MAX)
+        return false;
+    *offset = (int32_t)local->tm_gmtoff;
     return true;
 }
 /*
@@ -179,7 +172,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
         return native_format(&local, include_date, include_zone,
                              authority ? policy.show_seconds : native_show_seconds,
                              buffer, capacity);
-    if (!parse_numeric_utc_offset(&local, &utc_offset_seconds)) return false;
+    if (!local_utc_offset_seconds(&local, &utc_offset_seconds)) return false;
     if (!infiltratr_temporal_format_clock_mode(
             policy.clock_mode, unix_microseconds, utc_offset_seconds,
             policy.show_seconds, false, policy.location_configured,
