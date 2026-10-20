@@ -44,6 +44,16 @@ This protects the Linux native-time adapter and the installed Common clock-resou
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.
 
+## Process recording collision safety
+
+The asynchronous recording smoke creates a previous CSV fixture, attempts to
+open that exact destination through the production recorder, requires EEXIST,
+and byte-verifies that its original content survives. The same suite then
+opens a fresh destination and verifies queued samples drain in order. Filename
+suffix selection remains with the GTK process-action owner and is bounded;
+only an existing-name collision is retried. Permission and I/O failures are
+reported rather than reclassified as collisions.
+
 ## Background scan coalescing and upgrade recovery
 
 The `scanner-coalescing-smoke` fixture blocks a synthetic backend scan, changes

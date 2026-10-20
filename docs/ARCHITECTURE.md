@@ -82,6 +82,18 @@ timestamp callers share one bounded presentation capacity; its minimum
 against Common's combined module maxima is checked at compile time, so a
 valid resource is not silently lost to an undersized UI string.
 
+## Process recording ownership
+
+CSV recording is deliberately asynchronous, but opening the destination is a
+synchronous, exclusive operation. The recorder owns the atomic create-if-absent
+boundary and rejects existing names or symlinks with EEXIST; it must never
+truncate an earlier session. UI action policy owns the readable filename and
+chooses a bounded numeric suffix on collision, retrying only EEXIST rather than
+hiding permission, capacity or filesystem failures. Once created, the detached
+recorder worker owns bounded queuing, ordered flush and its lifetime across
+shutdown. A successful start therefore proves a distinct destination was
+reserved without exposing an earlier recording to modification.
+
 ## Common
 
 `src/infiltratr-common` is pinned by the parent repository gitlink to an exact Libraries commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.

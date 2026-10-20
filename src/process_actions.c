@@ -144,6 +144,7 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
         lsm_process_record_stop(app);
         return;
     }
+    if (app->process.recorder) return;
     if (app->process.selected_pid <= 1 ||
         app->process.selected_instance_id == 0U) {
         if (app->details.process_record_menu_item)
@@ -179,34 +180,49 @@ void lsm_process_record_set(LsmApp *app, gboolean active)
 
     gchar *name = selected_process_name(app);
     if (!name) name = g_strdup("process");
-    for (char *p = name; *p; p++)
-        if (!lsm_ascii_is_alnum((unsigned char)*p) && *p != '-' && *p != '_') *p = '_';
-    time_t now = time(NULL);
+    for (char *cursor = name; *cursor; cursor++)
+        if (!lsm_ascii_is_alnum((unsigned char)*cursor) &&
+            *cursor != '-' && *cursor != '_')
+            *cursor = '_';
+
+    const time_t now = time(NULL);
     struct tm local;
-    localtime_r(&now, &local);
     char timestamp[32];
-    strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", &local);
-    char filename[256];
-    snprintf(filename, sizeof(filename), "%.160s-%llu-%s.csv", name,
-             (unsigned long long)app->process.selected_pid, timestamp);
-    if (!lsm_join_path(app->process.record_path,
-                       sizeof(app->process.record_path),
-                       directory, filename)) {
-        g_free(name);
-        lsm_ui_show_error(GTK_WINDOW(app->shell.window),
-                          "Unable to start recording", "%s",
-                          g_strerror(ENAMETOOLONG));
-        if (app->details.process_record_menu_item)
-            gtk_check_menu_item_set_active(
-                GTK_CHECK_MENU_ITEM(app->details.process_record_menu_item),
-                FALSE);
-        return;
+    int recorder_error = 0;
+    if (now == (time_t)-1 || localtime_r(&now, &local) == NULL ||
+        strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S",
+                 &local) == 0U) {
+        recorder_error = EOVERFLOW;
+    } else {
+        /* Keep UI naming policy here, and let the recorder own atomic
+         * exclusive creation. Only EEXIST permits trying a new suffix;
+         * every other I/O failure is reported rather than masked. */
+        recorder_error = EEXIST;
+        for (unsigned suffix = 0U; suffix < 1000U; suffix++) {
+            char filename[256];
+            const int length = suffix == 0U
+                ? snprintf(filename, sizeof(filename),
+                           "%.160s-%llu-%s.csv", name,
+                           (unsigned long long)app->process.selected_pid,
+                           timestamp)
+                : snprintf(filename, sizeof(filename),
+                           "%.160s-%llu-%s-%u.csv", name,
+                           (unsigned long long)app->process.selected_pid,
+                           timestamp, suffix);
+            if (length < 0 || (size_t)length >= sizeof(filename) ||
+                !lsm_join_path(app->process.record_path,
+                               sizeof(app->process.record_path),
+                               directory, filename)) {
+                recorder_error = ENAMETOOLONG;
+                break;
+            }
+            app->process.recorder = lsm_process_recorder_create(
+                app->process.record_path, &recorder_error);
+            if (app->process.recorder || recorder_error != EEXIST)
+                break;
+        }
     }
     g_free(name);
-
-    int recorder_error = 0;
-    app->process.recorder = lsm_process_recorder_create(
-        app->process.record_path, &recorder_error);
     if (!app->process.recorder) {
         lsm_ui_show_error(GTK_WINDOW(app->shell.window),
                           "Unable to start recording", "%s",

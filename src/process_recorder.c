@@ -187,7 +187,9 @@ LsmProcessRecorder *lsm_process_recorder_create(const char *path,
         return NULL;
     }
 
-    recorder->file = fopen(path, "w");
+    /* Exclusive creation is atomic: a repeated session must not truncate an
+     * earlier recording, and a symlink at the chosen path is not followed. */
+    recorder->file = fopen(path, "wx");
     if (!recorder->file) {
         const int failure = errno ? errno : EIO;
         (void)pthread_cond_destroy(&recorder->condition);

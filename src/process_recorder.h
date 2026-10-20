@@ -17,10 +17,12 @@
 typedef struct LsmProcessRecorder LsmProcessRecorder;
 
 /**
- * Open a CSV recording and start its background writer.
+ * Exclusively create a new CSV recording and start its background writer.
  *
- * The header is validated before success is returned. Recurring row writes and
- * flushes then occur only on the recorder worker.
+ * An existing path is never overwritten or opened through a symlink: EEXIST
+ * is returned so the UI can choose a distinct recording name. The header is
+ * validated before success is returned. Recurring row writes and flushes
+ * then occur only on the recorder worker.
  *
  * @param [in] path Destination path.
  * @param [out] error_code errno-compatible failure value when creation fails.

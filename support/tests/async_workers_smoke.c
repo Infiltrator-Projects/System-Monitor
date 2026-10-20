@@ -159,9 +159,35 @@ int main(void)
         fputs("Unable to create recording fixture path.\n", stderr);
         return EXIT_FAILURE;
     }
-    (void)close(descriptor);
+    static const char original[] = "Earlier recording must remain intact\n";
+    if (write(descriptor, original, sizeof(original) - 1U) !=
+            (ssize_t)(sizeof(original) - 1U) ||
+        close(descriptor) != 0) {
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
 
     int failure = 0;
+    LsmProcessRecorder *collision =
+        lsm_process_recorder_create(path, &failure);
+    if (collision != NULL || failure != EEXIST) {
+        if (collision) lsm_process_recorder_stop(collision);
+        fputs("Recorder did not reject an existing recording.\n", stderr);
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+    FILE *original_file = fopen(path, "rb");
+    char preserved[sizeof(original)] = { 0 };
+    const bool intact = original_file != NULL &&
+        fread(preserved, 1U, sizeof(original) - 1U, original_file) ==
+            sizeof(original) - 1U &&
+        strcmp(preserved, original) == 0;
+    if (original_file != NULL) (void)fclose(original_file);
+    if (!intact || unlink(path) != 0) {
+        fputs("Recorder damaged an earlier recording.\n", stderr);
+        return EXIT_FAILURE;
+    }
+    failure = 0;
     LsmProcessRecorder *recorder =
         lsm_process_recorder_create(path, &failure);
     if (!recorder) {

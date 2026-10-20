@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.224 - 2026-10-20
+
+- Prevent process recording from silently overwriting a previous CSV with the same PID/name/second-resolution timestamp. Exclusive creation remains the recorder's atomic filesystem boundary; the process UI selects a bounded, human-readable suffix for collisions without swallowing other errors.
+- Check civil-time conversion and filename bounds before opening recording destinations and avoid replacing an already-active recorder instance.
+- Add a regression proving an existing recording is preserved byte-for-byte, while a new recording still queues and persists normally. Document ownership, failure and recovery semantics.
+
+
 ## 1.0.223 - 2026-10-20
 
 - Introduce one presentation capacity across History, Users and system snapshots so valid long installed-calendar results are not misreported as unavailable by 64–256-byte UI buffers.
