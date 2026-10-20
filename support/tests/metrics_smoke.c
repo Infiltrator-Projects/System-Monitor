@@ -1117,6 +1117,36 @@ int main(void)
         fabs(policy.fault_c - 95.0) > 0.01)
         return 6;
 
+    /* A valid sensor critical limit at the input floor must never
+     * collapse the warning and fault thresholds into the same value. */
+    memset(&cpu, 0, sizeof(cpu));
+    cpu.temperature_critical_available = true;
+    cpu.temperature_critical_c = 50.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 45.0) > 0.01 ||
+        fabs(policy.fault_c - 50.0) > 0.01)
+        return 9;
+
+    cpu.temperature_warning_available = true;
+    cpu.temperature_warning_c = 50.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 45.0) > 0.01 ||
+        fabs(policy.fault_c - 50.0) > 0.01)
+        return 10;
+
+    /* At the upper sensor bound the derived fault saturates; retain an
+     * earlier warning rather than publishing coincident limits. */
+    memset(&cpu, 0, sizeof(cpu));
+    cpu.temperature_warning_available = true;
+    cpu.temperature_warning_c = 150.0;
+    if (!lsm_cpu_thermal_policy(&cpu, &policy) ||
+        policy.source != LSM_THERMAL_POLICY_SENSOR ||
+        fabs(policy.warning_c - 145.0) > 0.01 ||
+        fabs(policy.fault_c - 150.0) > 0.01)
+        return 11;
+
     return 0;
 }
 #undef main

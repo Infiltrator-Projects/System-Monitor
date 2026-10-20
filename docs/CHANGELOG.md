@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.234 - 2026-10-20
+
+- Preserve distinct CPU thermal warning and critical temperatures when a native critical point is at the 50 C sensor-acceptance floor; derive the warning below that floor rather than publishing equal thresholds.
+- Cover critical-only, equal sensor limits and maximum warning-sensor saturation in the canonical metrics regression suite.
+- Clarify that one available native limit determines the other by policy, rather than mixing partial sensor data with a model-table limit.
+
 ## 1.0.233 - 2026-10-20
 
 - Close Debian package staging streams and descriptors independently of earlier read, write or permission errors. Preserve the originating failure code so cleanup cannot replace a useful diagnostic with an unrelated close result.

@@ -8,7 +8,7 @@ This document records hardware-specific rules not already defined by [Architectu
 
 Linux memory `kB` quantities use 1024 bytes per KB.
 
-CPU thermal policy prefers native CPU/package warning and critical points. A manufacturer-documented Tjmax may be used when native limits are unavailable; otherwise the project fallback is 80 °C warning / 95 °C fault. Overview and CPU Performance use the same resolved policy.
+CPU thermal policy prefers native CPU/package warning and critical points. A manufacturer-documented Tjmax may be used when native limits are unavailable; otherwise the project fallback is 80 °C warning / 95 °C fault. Overview and CPU Performance use the same resolved policy. Sensor thresholds are accepted between 50 and 150 °C; derived warnings may fall below 50 °C when the sensor reports a critical point at that lower input bound, preserving the strict warning-before-fault ordering.
 
 ## Storage and network
 

@@ -33,9 +33,11 @@ typedef struct {
 /**
  * Resolve CPU thermal thresholds.
  *
- * Kernel-provided warning/critical thresholds win. Missing sensor limits are
- * filled from the internal processor table. Unknown processors retain the
- * conservative legacy 80/95 C fallback.
+ * Valid kernel sensor limits override the model-table and generic fallbacks.
+ * When only one sensor limit exists, the other is derived from that limit;
+ * different threshold sources are not combined. Output warning remains below
+ * fault even when a valid critical sensor reports the minimum accepted input
+ * temperature. Unknown processors without sensors use the 80/95 C fallback.
  *
  * @param [in] cpu Current processor identity and optional sensor limits.
  * @param [out] policy Receives a complete warning/fault policy.

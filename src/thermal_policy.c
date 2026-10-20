@@ -106,10 +106,12 @@ bool lsm_cpu_thermal_policy(const LsmCpuInfo *cpu, LsmThermalPolicy *policy)
         source = LSM_THERMAL_POLICY_SENSOR;
     }
 
-    if (warning >= fault)
-        warning = fault - 5.0;
+    /* Input validation's lower bound is not an output floor: a valid
+     * critical point at 50 C still requires an earlier warning threshold. */
     if (warning < LSM_THERMAL_MIN_LIMIT_C)
         warning = LSM_THERMAL_MIN_LIMIT_C;
+    if (warning >= fault)
+        warning = fault - 5.0;
 
     policy->warning_c = warning;
     policy->fault_c = fault;
