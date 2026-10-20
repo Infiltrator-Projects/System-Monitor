@@ -5,7 +5,7 @@
 ## 1.0.225 - 2026-10-20
 
 - Make native locale timestamp formatting transactional: libc strftime renders privately, and System Monitor publishes text only after complete output fits. Prevent a failed short-buffer conversion from replacing "N/A" with partial or undefined contents.
-- Converge native Gregorian date and date/time paths onto one validated locale-formatting helper, retaining existing OS locale choices and exact Common .so boundaries.
+- Share one all-or-nothing output-commit helper for native Gregorian date and date/time paths while keeping literal strftime format strings, strict compiler diagnostics, OS locale choices and Common .so boundaries.
 - Test both provider-absent fallback and explicit Standard/Gregorian selection with insufficient destination capacity, full-width success and a write-bound sentinel.
 
 

@@ -176,14 +176,11 @@ static bool local_utc_offset_seconds(const struct tm *local, int32_t *offset)
  * Render into a bounded private buffer first so all callers retain their
  * initialized unavailable value until the entire locale representation fits.
  */
-static bool native_strftime(const struct tm *local, const char *format,
-                            char *buffer, size_t capacity)
+static bool native_commit_formatted(const char *formatted, size_t length,
+                                    char *buffer, size_t capacity)
 {
-    char formatted[LSM_TEMPORAL_PRESENTATION_CAPACITY];
-    if (local == NULL || format == NULL || buffer == NULL || capacity == 0U)
-        return false;
-    const size_t length = strftime(formatted, sizeof(formatted), format, local);
-    if (length == 0U || length >= capacity) return false;
+    if (formatted == NULL || buffer == NULL ||
+        length == 0U || length >= capacity) return false;
     memcpy(buffer, formatted, length + 1U);
     return true;
 }
@@ -192,17 +189,33 @@ static bool native_format(const struct tm *local, bool include_date,
                           bool include_zone, bool show_seconds,
                           char *buffer, size_t capacity)
 {
-    const char *format;
-    if (include_date) {
-        format = include_zone
-            ? (show_seconds ? "%x %X %z" : "%x %H:%M %z")
-            : (show_seconds ? "%x %X" : "%x %H:%M");
-    } else {
-        format = include_zone
-            ? (show_seconds ? "%X %z" : "%H:%M %z")
-            : (show_seconds ? "%X" : "%H:%M");
-    }
-    return native_strftime(local, format, buffer, capacity);
+    char formatted[LSM_TEMPORAL_PRESENTATION_CAPACITY];
+    size_t length;
+    if (local == NULL) return false;
+    /* Deliberate compile-time literal format branches retain -Wformat=2.
+     * No libc output is published until the complete result fits. */
+    if (include_date && include_zone)
+        length = strftime(formatted, sizeof(formatted),
+                          show_seconds ? "%x %X %z" : "%x %H:%M %z", local);
+    else if (include_date)
+        length = strftime(formatted, sizeof(formatted),
+                          show_seconds ? "%x %X" : "%x %H:%M", local);
+    else if (include_zone)
+        length = strftime(formatted, sizeof(formatted),
+                          show_seconds ? "%X %z" : "%H:%M %z", local);
+    else
+        length = strftime(formatted, sizeof(formatted),
+                          show_seconds ? "%X" : "%H:%M", local);
+    return native_commit_formatted(formatted, length, buffer, capacity);
+}
+
+static bool native_date_format(const struct tm *local,
+                               char *buffer, size_t capacity)
+{
+    char formatted[INFILTRATR_TEMPORAL_DATE_CAPACITY];
+    if (local == NULL) return false;
+    const size_t length = strftime(formatted, sizeof(formatted), "%x", local);
+    return native_commit_formatted(formatted, length, buffer, capacity);
 }
 /*
  * Emit the exact offset only for the project's explicit clock projection;
@@ -285,7 +298,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                              show_seconds, buffer, capacity);
     if (include_date) {
         if (native_calendar) {
-            if (!native_strftime(&local, "%x", date_text, sizeof(date_text)))
+            if (!native_date_format(&local, date_text, sizeof(date_text)))
                 return false;
         } else if (!format_selected_calendar(
                        &policy, &local, date_text, sizeof(date_text))) {
