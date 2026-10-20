@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.235 - 2026-10-20
+
+- Refuse incomplete, oversized or embedded-NUL Linux device-manager cache records rather than publishing truncated filesystem identities; reject overlong recognized properties without clipping their names.
+- Close the metadata stream and check its result independently of read success, preserving failure-atomic label publication.
+- Extend storage regressions for missing record terminators, long unknown records following valid properties and oversized filesystem type values; correct close handling in the storage test fixtures.
+
 ## 1.0.234 - 2026-10-20
 
 - Preserve distinct CPU thermal warning and critical temperatures when a native critical point is at the 50 C sensor-acceptance floor; derive the warning below that floor rather than publishing equal thresholds.

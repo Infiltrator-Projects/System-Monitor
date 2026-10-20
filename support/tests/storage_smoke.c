@@ -45,9 +45,9 @@ static bool write_fixture(const char *path)
         "52 25 0:42 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse "
         "gvfsd-fuse rw,user_id=1000\n",
         stream);
-    const bool ok = written >= 0 && fclose(stream) == 0;
-    if (!ok) (void)fclose(stream);
-    return ok;
+    const bool write_ok = written >= 0;
+    const bool close_ok = fclose(stream) == 0;
+    return write_ok && close_ok;
 }
 
 typedef struct {
@@ -184,8 +184,9 @@ static bool write_record(const char *root, unsigned int major_number,
     if (written < 0 || (size_t)written >= sizeof(path)) return false;
     FILE *file = fopen(path, "w");
     if (!file) return false;
-    const bool ok = fputs(contents, file) >= 0 && fclose(file) == 0;
-    return ok;
+    const bool write_ok = fputs(contents, file) >= 0;
+    const bool close_ok = fclose(file) == 0;
+    return write_ok && close_ok;
 }
 
 static bool expect_label(const char *root, unsigned int minor_number,
@@ -233,6 +234,25 @@ int main(void)
         !expect_label(root, 8U, "ext4"))
         return 3;
 
+    /* A complete first property cannot license a truncated later record.
+     * A long identity must not be published under a clipped name. */
+    char oversized[600] = "E:ID_FS_TYPE=ext4\nE:IGNORED=";
+    const size_t prefix = strlen(oversized);
+    memset(oversized + prefix, 'x', sizeof(oversized) - prefix - 2U);
+    oversized[sizeof(oversized) - 2U] = '\n';
+    oversized[sizeof(oversized) - 1U] = '\0';
+
+    char long_type[128] = "E:ID_FS_TYPE=";
+    const size_t type_prefix = strlen(long_type);
+    memset(long_type + type_prefix, 'x', 80U);
+    long_type[type_prefix + 80U] = '\n';
+    long_type[type_prefix + 81U] = '\0';
+
+    if (!write_record(root, 8U, 9U, "E:ID_FS_TYPE=ext4") ||
+        !write_record(root, 8U, 10U, oversized) ||
+        !write_record(root, 8U, 11U, long_type))
+        return 8;
+
     char label[64] = "stale";
     if (lsm_storage_metadata_type_label(root, 8U, 7U,
                                         label, sizeof(label)) || label[0])
@@ -243,8 +263,15 @@ int main(void)
                                         label, sizeof(label)) || label[0])
         return 5;
     if (lsm_storage_metadata_type_label(root, 8U, 1U, NULL, 0U)) return 6;
+    for (unsigned int minor = 9U; minor <= 11U; minor++) {
+        label[0] = 'x';
+        label[1] = '\0';
+        if (lsm_storage_metadata_type_label(root, 8U, minor,
+                                            label, sizeof(label)) || label[0])
+            return 9;
+    }
 
-    for (unsigned int minor_number = 1U; minor_number <= 8U; minor_number++) {
+    for (unsigned int minor_number = 1U; minor_number <= 11U; minor_number++) {
         char path[512];
         const int written = snprintf(path, sizeof(path), "%s/b8:%u",
                                      root, minor_number);

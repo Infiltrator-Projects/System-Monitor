@@ -51,16 +51,20 @@ static const PartitionRole gpt_partition_roles[] = {
     {"48465300-0000-11aa-aa11-00306543ecac", "Apple HFS+"}
 };
 
-static void capture_property(char *destination, size_t destination_size,
+static bool capture_property(char *destination, size_t destination_size,
                              const char *value)
 {
-    if (!destination || destination_size == 0U || !value) return;
-    char clean[128];
-    lsm_copy_string(clean, sizeof(clean), value);
-    lsm_trim_line_end(clean);
-    char *embedded_line_end = strpbrk(clean, "\r\n");
-    if (embedded_line_end) *embedded_line_end = '\0';
-    if (clean[0]) lsm_copy_string(destination, destination_size, clean);
+    if (!destination || destination_size == 0U || !value) return false;
+    const char *end = strpbrk(value, "\r\n");
+    const size_t length = end ? (size_t)(end - value) : strlen(value);
+    /* A partial property is not a valid device identity. Empty properties
+     * leave an earlier complete value intact. */
+    if (length >= destination_size) return false;
+    if (length > 0U) {
+        memcpy(destination, value, length);
+        destination[length] = '\0';
+    }
+    return true;
 }
 
 static bool read_metadata(const char *data_root,
@@ -82,23 +86,33 @@ static bool read_metadata(const char *data_root,
     static const char filesystem_prefix[] = "E:ID_FS_TYPE=";
     static const char version_prefix[] = "E:ID_FS_VERSION=";
     static const char partition_type_prefix[] = "E:ID_PART_ENTRY_TYPE=";
+    bool read_ok = true;
     char line[512];
     while (fgets(line, sizeof(line), file)) {
-        if (lsm_string_starts_with(line, filesystem_prefix)) {
-            capture_property(metadata->filesystem,
-                             sizeof(metadata->filesystem),
-                             line + sizeof(filesystem_prefix) - 1U);
-        } else if (lsm_string_starts_with(line, version_prefix)) {
-            capture_property(metadata->version, sizeof(metadata->version),
-                             line + sizeof(version_prefix) - 1U);
-        } else if (lsm_string_starts_with(line, partition_type_prefix)) {
-            capture_property(metadata->partition_type,
-                             sizeof(metadata->partition_type),
-                             line + sizeof(partition_type_prefix) - 1U);
+        /* An unterminated, oversized or NUL-bearing record cannot be
+         * interpreted as a complete device-manager cache property. */
+        const size_t length = strlen(line);
+        if (length == 0U || line[length - 1U] != '\n') {
+            read_ok = false;
+            break;
         }
+        if (lsm_string_starts_with(line, filesystem_prefix)) {
+            read_ok = capture_property(metadata->filesystem,
+                                       sizeof(metadata->filesystem),
+                                       line + sizeof(filesystem_prefix) - 1U);
+        } else if (lsm_string_starts_with(line, version_prefix)) {
+            read_ok = capture_property(metadata->version,
+                                       sizeof(metadata->version),
+                                       line + sizeof(version_prefix) - 1U);
+        } else if (lsm_string_starts_with(line, partition_type_prefix)) {
+            read_ok = capture_property(metadata->partition_type,
+                                       sizeof(metadata->partition_type),
+                                       line + sizeof(partition_type_prefix) - 1U);
+        }
+        if (!read_ok) break;
     }
-    const bool read_ok = !ferror(file);
-    fclose(file);
+    if (ferror(file)) read_ok = false;
+    if (fclose(file) != 0) read_ok = false;
     return read_ok;
 }
 

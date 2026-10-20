@@ -34,6 +34,10 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Cached storage metadata completeness
+
+The storage regression requires newline-terminated device-manager records and complete recognized property values. An unterminated record, oversized unrelated record after a valid prefix, or filesystem type exceeding its representation limit must reject the cache file and clear the output label. The reader checks both read and close results; test fixtures also close their streams on write failure.
+
 ## Thermal warning/fault boundary
 
 The metrics regression checks that independently reported sensor warning and critical limits never collapse to equal thresholds at the accepted 50 C critical-input floor, including critical-only and equal-pair inputs. It separately verifies the 150 C warning-only saturation case. The input acceptance floor is not an output floor for a derived warning; a valid critical point at that floor must remain distinguishable from the earlier warning point.
