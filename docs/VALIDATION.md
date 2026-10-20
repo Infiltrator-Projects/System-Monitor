@@ -59,6 +59,16 @@ This protects the Linux native-time adapter and the installed Common clock-resou
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.
 
+## XDG startup precedence and write containment
+
+The startup backend smoke uses isolated XDG user/system autostart directories.
+It verifies that a malformed higher-priority desktop entry masks a valid
+system entry, a valid user Hidden override remains authoritative, an absent
+user override reveals the system entry, and disabling a system entry writes
+only a user-owned override. Invalid desktop IDs and mismatched source/origin
+basenames must not result in writes or create paths outside autostart. The
+regression runs as part of the canonical Make verification graph.
+
 ## Unified process export selection
 
 The selected-process regression exercises the same exported membership and

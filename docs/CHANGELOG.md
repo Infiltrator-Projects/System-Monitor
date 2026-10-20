@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.229 - 2026-10-20
+
+- Fix XDG autostart precedence: a higher-priority desktop filename masks lower-priority entries even when its contents are malformed; scanning no longer treats parsed rows as the sole source of identity authority.
+- Reject invalid or mismatched desktop-file IDs at the per-user override boundary, preventing path traversal and writes under an unrelated desktop-file name.
+- Add isolated user/system autostart and override regression coverage to the canonical verification suite, and document filename priority separately from desktop-entry parsing.
+
+
 ## 1.0.228 - 2026-10-20
 
 - Reject incomplete or malformed Linux mountinfo snapshots instead of silently omitting the affected mount and claiming a successful filesystem inventory.

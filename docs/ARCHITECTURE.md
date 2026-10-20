@@ -94,6 +94,17 @@ libc renders into a bounded private buffer before a complete result is
 published to its caller. In particular, a failed strftime cannot corrupt
 the preinitialised unavailable presentation.
 
+## XDG startup precedence and mutation ownership
+
+On Linux the startup backend resolves XDG autostart directories in descending
+priority. The scan owns a set of encountered desktop-file basenames independent
+of parsing success: a malformed higher-priority user file must not resurrect a
+lower-priority system file with the same name. Parsed entries alone cannot
+serve as that precedence authority. Mutation remains a per-user atomic
+replacement, requires one basename matching the source and origin identities,
+and never writes to the system directories or to a path selected through a
+parent-directory component. GTK merely displays the resulting effective list.
+
 ## Process selection and export ownership
 
 The plain-C process export domain owns one authoritative membership predicate

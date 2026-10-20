@@ -292,7 +292,7 @@ check: docs-check installer-check build-check
 	@echo "All source, documentation, packaging, backend and feature checks passed."
 
 build-check: check-deps strict-check portability-check \
-	core-suite-smoke presentation-smoke backend-smoke monitor-platform-smoke peripheral-suite-smoke \
+	core-suite-smoke presentation-smoke backend-smoke startup-backend-smoke monitor-platform-smoke peripheral-suite-smoke \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke scanner-coalescing-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
@@ -505,6 +505,14 @@ monitor-platform-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -std=c17 $(STRICT_WARNINGS) support/tests/monitor_platform_smoke.c \
 		src/monitor.c $(INFILTRATR_COMMON_ARCHIVE) -o $(BUILD_DIR)/monitor-platform-smoke
 	./$(BUILD_DIR)/monitor-platform-smoke
+
+.PHONY: startup-backend-smoke
+startup-backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) \
+		support/tests/startup_backend_smoke.c src/startup_backend_linux.c \
+		$(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -pthread -lm \
+		-o $(BUILD_DIR)/startup-backend-smoke
+	./$(BUILD_DIR)/startup-backend-smoke
 
 backend-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -D_DEFAULT_SOURCE -std=c17 $(STRICT_WARNINGS) \

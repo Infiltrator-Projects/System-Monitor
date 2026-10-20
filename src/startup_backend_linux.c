@@ -180,14 +180,6 @@ static gboolean load_startup_entry(const char *path, const char *id,
     return TRUE;
 }
 
-static ssize_t find_entry(LsmStartupEntry *entries, size_t count,
-                          const char *id)
-{
-    for (size_t index = 0U; index < count; index++)
-        if (strcmp(entries[index].id, id) == 0) return (ssize_t)index;
-    return -1;
-}
-
 static gboolean append_entry(LsmStartupEntry **entries, size_t *count,
                              size_t *capacity,
                              const LsmStartupEntry *entry)
@@ -201,8 +193,8 @@ static gboolean append_entry(LsmStartupEntry **entries, size_t *count,
 }
 
 static gboolean scan_directory(const char *directory, gboolean user_entry,
-                                LsmStartupEntry **entries, size_t *count,
-                                size_t *capacity)
+                                GHashTable *seen, LsmStartupEntry **entries,
+                                size_t *count, size_t *capacity)
 {
     DIR *dir = opendir(directory);
     if (!dir) return errno == ENOENT;
@@ -219,7 +211,12 @@ static gboolean scan_directory(const char *directory, gboolean user_entry,
         if (strlen(item->d_name) <= sizeof(".desktop") - 1U ||
             !lsm_string_ends_with(item->d_name, ".desktop"))
             continue;
-        if (find_entry(*entries, *count, item->d_name) >= 0) continue;
+        if (g_hash_table_contains(seen, item->d_name)) continue;
+
+        /* Filename precedence applies to the physical entry, not to whether
+         * its contents could be parsed. A broken user override must never
+         * resurrect the lower-priority system file with the same ID. */
+        g_hash_table_add(seen, g_strdup(item->d_name));
 
         char path[LSM_PATH_LEN];
         if (!lsm_join_path(path, sizeof(path), directory, item->d_name)) {
@@ -248,12 +245,17 @@ bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
     LsmStartupEntry *entries = NULL;
     size_t count = 0U;
     size_t capacity = 0U;
+    GHashTable *seen = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, NULL);
+    if (!seen) return false;
     char user_directory[LSM_PATH_LEN];
     char config_home[LSM_PATH_LEN];
     if (!lsm_xdg_config_home(config_home, sizeof(config_home)) ||
         !lsm_join_path(user_directory, sizeof(user_directory),
                        config_home, "autostart") ||
-        !scan_directory(user_directory, TRUE, &entries, &count, &capacity)) {
+        !scan_directory(user_directory, TRUE, seen,
+                        &entries, &count, &capacity)) {
+        g_hash_table_destroy(seen);
         free(entries);
         return false;
     }
@@ -262,6 +264,7 @@ bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
     if (!xdg_dirs || !xdg_dirs[0]) xdg_dirs = "/etc/xdg";
     char *copy = strdup(xdg_dirs);
     if (!copy) {
+        g_hash_table_destroy(seen);
         free(entries);
         return false;
     }
@@ -270,13 +273,16 @@ bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
          dir = strtok_r(NULL, ":", &save)) {
         char path[LSM_PATH_LEN];
         if (!lsm_join_path(path, sizeof(path), dir, "autostart") ||
-            !scan_directory(path, FALSE, &entries, &count, &capacity)) {
+            !scan_directory(path, FALSE, seen,
+                            &entries, &count, &capacity)) {
             free(copy);
+            g_hash_table_destroy(seen);
             free(entries);
             return false;
         }
     }
     free(copy);
+    g_hash_table_destroy(seen);
 
     *out_entries = entries;
     *out_count = count;
@@ -348,10 +354,22 @@ bool lsm_startup_backend_set_enabled(const char *id,
                                      bool enabled,
                                      GError **error)
 {
-    if (!id || !id[0] || !source_identity || !source_identity[0])
-        return false;
     const char *source =
         origin_identity && origin_identity[0] ? origin_identity : source_identity;
+    /* The destination must be one basename inside the user autostart folder.
+     * The source and destination must represent the same desktop-file ID:
+     * callers must not turn an arbitrary path into a chosen autostart file. */
+    if (!id || !id[0] || strlen(id) >= LSM_NAME_LEN ||
+        !lsm_string_ends_with(id, ".desktop") ||
+        strlen(id) <= sizeof(".desktop") - 1U ||
+        strchr(id, '/') || strchr(id, '\\') ||
+        !source_identity || !source_identity[0] || !source || !source[0] ||
+        strcmp(lsm_path_basename(source_identity), id) != 0 ||
+        strcmp(lsm_path_basename(source), id) != 0) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Invalid startup desktop-file identity");
+        return false;
+    }
     return write_startup_override(source, id, enabled ? TRUE : FALSE, error);
 }
 

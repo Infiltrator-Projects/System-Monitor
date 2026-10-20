@@ -44,7 +44,7 @@ bool lsm_startup_backend_collect(LsmStartupEntry **out_entries,
 /**
  * Change one startup entry using the platform's reversible override semantics.
  *
- * @param [in] id Stable startup-entry identity.
+ * @param [in] id Basename of a .desktop file, matched to both source identities.
  * @param [in] source_identity Opaque source token returned by the backend.
  * @param [in] origin_identity Opaque origin token returned by the backend.
  * @param [in] enabled Desired effective state.
