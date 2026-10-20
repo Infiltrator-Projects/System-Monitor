@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.239 - 2026-10-20
+
+- Reject duplicate Linux PSI measurement keys and repeated `some` or `full` records rather than silently replacing earlier kernel telemetry.
+- Reject malformed and ambiguous PSI tokens while preserving well-formed unknown extension fields; recognize tab-separated records and fail atomically on incomplete known records.
+- Expand the existing metrics regression with malformed, duplicate, extension and failure-atomic PSI fixtures.
+
 ## 1.0.238 - 2026-10-20
 
 - Resolve Linux XDG application catalogue overrides by desktop-file basename before parsing; hidden, malformed and non-application higher-priority entries now suppress lower-priority copies rather than resurrecting obsolete identities.

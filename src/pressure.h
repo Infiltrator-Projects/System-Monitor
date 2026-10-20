@@ -24,7 +24,8 @@
  *
  * The mandatory "some" line must contain avg10, avg60, avg300 and total.
  * The optional "full" line uses the same grammar. Unknown future key/value
- * fields are ignored, while malformed known fields reject their line.
+ * fields are ignored, but malformed tokens, duplicate keys and duplicate
+ * record kinds reject the entire snapshot rather than overwriting evidence.
  *
  * @param [in] text NUL-terminated procfs PSI contents.
  * @param [out] pressure Parsed pressure snapshot, cleared on failure.

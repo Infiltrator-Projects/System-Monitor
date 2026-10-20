@@ -393,6 +393,33 @@ int main(void)
         pressure.full_total_us != 84U)
         return fail("full-pressure values were not preserved");
 
+    static const char *invalid_records[] = {
+        "some avg10=1 avg10=2 avg60=3 avg300=4 total=5\n",
+        "some avg10=1 avg60=2 avg300=3 total=4 total=5\n",
+        "some avg10=1 avg60=2 avg300=3 total=4 broken\n",
+        "some avg10=1 avg60=2 avg300=3 total=4 future=\n",
+        "some avg10=1 avg60=2 avg300=3 total=4 future=1=2\n",
+        "some avg10=1 avg60=2 avg300=3 total=4\n"
+        "some avg10=5 avg60=6 avg300=7 total=8\n",
+        "some avg10=1 avg60=2 avg300=3 total=4\n"
+        "full avg10=5 avg60=6 avg300=7 total=8\n"
+        "full avg10=9 avg60=10 avg300=11 total=12\n",
+        "some avg10=1 avg60=2 avg300=3 total=4\n"
+        "full\n",
+    };
+    for (size_t i = 0U; i < sizeof(invalid_records) / sizeof(invalid_records[0]); ++i) {
+        pressure.available = true;
+        pressure.full_available = true;
+        if (lsm_pressure_parse(invalid_records[i], &pressure) ||
+            pressure.available || pressure.full_available)
+            return fail("ambiguous or malformed pressure record was accepted");
+    }
+
+    if (!lsm_pressure_parse(
+            "some\tavg10=1 avg60=2 avg300=3 total=4 future=7\n",
+            &pressure) || !pressure.available || pressure.full_available)
+        return fail("valid tab-separated extension record did not parse");
+
     pressure.available = true;
     if (lsm_pressure_parse(
             "some avg10=-1 avg60=2 avg300=3 total=4\n", &pressure) ||

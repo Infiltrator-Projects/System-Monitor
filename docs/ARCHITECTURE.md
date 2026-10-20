@@ -52,6 +52,12 @@ Every Common advancement is also a dependency review. The previous and proposed 
 - Optional telemetry fails independently unless its contract requires rejecting the whole inventory.
 - Malformed or incomplete external data is rejected rather than published as complete.
 
+Linux Pressure Stall Information parsing treats each `some`/`full` record and
+its four required measurements as single-authority data. Duplicate keys,
+repeated record kinds and malformed tokens invalidate the entire snapshot;
+well-formed unknown key/value extensions remain forward-compatible. Failure
+publishes no partial telemetry, including when an earlier record was valid.
+
 Linux mountinfo parsing honours this contract at the namespace boundary.
 Every kernel record must be complete and structurally valid; malformed,
 truncated or ambiguously escaped mount identities fail the entire read

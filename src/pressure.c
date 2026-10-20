@@ -37,29 +37,35 @@ static bool parse_pressure_line(char *line, const char *kind,
 
     while ((token = strtok_r(NULL, " \t", &save))) {
         char *equals = strchr(token, '=');
-        if (!equals || equals == token || !equals[1]) continue;
+        // A malformed token cannot be silently ignored as an extension.
+        if (!equals || equals == token || !equals[1] ||
+            strchr(equals + 1, '=') != NULL) return false;
         *equals = '\0';
         const char *value = equals + 1;
 
         if (strcmp(token, "avg10") == 0) {
+            if (parsed->have_avg10) return false;
             double number = 0.0;
             if (!infiltratr_parse_double_range(value, 0.0, 100.0, &number))
                 return false;
             parsed->avg10 = number;
             parsed->have_avg10 = true;
         } else if (strcmp(token, "avg60") == 0) {
+            if (parsed->have_avg60) return false;
             double number = 0.0;
             if (!infiltratr_parse_double_range(value, 0.0, 100.0, &number))
                 return false;
             parsed->avg60 = number;
             parsed->have_avg60 = true;
         } else if (strcmp(token, "avg300") == 0) {
+            if (parsed->have_avg300) return false;
             double number = 0.0;
             if (!infiltratr_parse_double_range(value, 0.0, 100.0, &number))
                 return false;
             parsed->avg300 = number;
             parsed->have_avg300 = true;
         } else if (strcmp(token, "total") == 0) {
+            if (parsed->have_total) return false;
             uint64_t total = 0U;
             if (!infiltratr_parse_u64(value, 10U, &total)) return false;
             parsed->total_us = total;
@@ -90,8 +96,10 @@ bool lsm_pressure_parse(const char *text, LsmPressureInfo *pressure)
         if (!*line) continue;
 
         PressureLine parsed = {0};
-        if (lsm_string_starts_with(line, "some ")) {
-            if (!parse_pressure_line(line, "some", &parsed)) {
+        if (lsm_string_starts_with(line, "some ") ||
+            lsm_string_starts_with(line, "some\t") ||
+            strcmp(line, "some") == 0) {
+            if (have_some || !parse_pressure_line(line, "some", &parsed)) {
                 free(copy);
                 return false;
             }
@@ -100,8 +108,10 @@ bool lsm_pressure_parse(const char *text, LsmPressureInfo *pressure)
             result.some_avg300 = parsed.avg300;
             result.some_total_us = parsed.total_us;
             have_some = true;
-        } else if (lsm_string_starts_with(line, "full ")) {
-            if (!parse_pressure_line(line, "full", &parsed)) {
+        } else if (lsm_string_starts_with(line, "full ") ||
+                   lsm_string_starts_with(line, "full\t") ||
+                   strcmp(line, "full") == 0) {
+            if (have_full || !parse_pressure_line(line, "full", &parsed)) {
                 free(copy);
                 return false;
             }
