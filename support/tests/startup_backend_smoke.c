@@ -11,7 +11,6 @@
  * @copyright Copyright (c) 2000-2026 Shannon Smith
  * @license GPL-3.0-or-later
  */
-#define _DEFAULT_SOURCE
 #include "startup_backend.h"
 
 #include <glib.h>
