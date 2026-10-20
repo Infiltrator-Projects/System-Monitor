@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static gboolean desktop_boolean(GKeyFile *file, const char *key,
@@ -98,29 +99,38 @@ static gboolean desktop_environment_allows(GKeyFile *file)
     return TRUE;
 }
 
+static gboolean executable_file(const char *path)
+{
+    struct stat info;
+    /* Execute/search permission on a directory does not make it an
+     * executable TryExec target. Follow symlinks to the actual file. */
+    return path && stat(path, &info) == 0 &&
+           S_ISREG(info.st_mode) && access(path, X_OK) == 0;
+}
+
 static gboolean executable_in_path(const char *name)
 {
     if (!name || !name[0]) return FALSE;
-    if (strchr(name, '/')) return access(name, X_OK) == 0;
+    if (strchr(name, '/')) return executable_file(name);
 
     const char *path = getenv("PATH");
-    if (!path || !path[0]) return FALSE;
-    char *copy = strdup(path);
-    if (!copy) return FALSE;
+    if (!path) return FALSE;
+    /* Unlike strtok_r, g_strsplit retains empty PATH components. POSIX
+     * executable lookup interprets these as the current directory. */
+    gchar **directories = g_strsplit(path, ":", -1);
+    if (!directories) return FALSE;
 
     gboolean found = FALSE;
-    char *save = NULL;
-    for (char *directory = strtok_r(copy, ":", &save); directory;
-         directory = strtok_r(NULL, ":", &save)) {
-        const char *base = directory[0] ? directory : ".";
+    for (gchar **item = directories; *item; item++) {
+        const char *base = (*item)[0] ? *item : ".";
         char candidate[LSM_PATH_LEN];
         if (lsm_join_path(candidate, sizeof(candidate), base, name) &&
-            access(candidate, X_OK) == 0) {
+            executable_file(candidate)) {
             found = TRUE;
             break;
         }
     }
-    free(copy);
+    g_strfreev(directories);
     return found;
 }
 

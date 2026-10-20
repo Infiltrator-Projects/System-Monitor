@@ -77,6 +77,15 @@ This protects the Linux native-time adapter and the installed Common clock-resou
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.
 
+## XDG TryExec lookup semantics
+
+The isolated startup regression checks the native executable-availability
+predicate against a real executable reachable only through a trailing empty
+PATH component (current working directory). It also verifies that a directory
+with search permission is not accepted as TryExec, without executing either
+candidate. The backend owns this interpretation; GTK receives only the
+resulting enabled state.
+
 ## XDG startup precedence and write containment
 
 The startup backend smoke uses isolated XDG user/system autostart directories.

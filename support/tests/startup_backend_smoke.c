@@ -54,6 +54,17 @@ static bool expect_entries(size_t count_expected, bool alpha_visible,
     return valid;
 }
 
+static bool expect_tryexec(const char *id, bool enabled)
+{
+    LsmStartupEntry *entries = NULL;
+    size_t count = 0U;
+    if (!lsm_startup_backend_collect(&entries, &count)) return false;
+    const LsmStartupEntry *entry = find_entry(entries, count, id);
+    const bool valid = entry && entry->enabled == enabled;
+    lsm_startup_backend_free(entries);
+    return valid;
+}
+
 int main(void)
 {
     GError *error = NULL;
@@ -130,6 +141,53 @@ int main(void)
         !g_file_test(user_beta, G_FILE_TEST_EXISTS) ||
         !expect_entries(2U, true, true, false, false)) {
         status = 8;
+        goto cleanup;
+    }
+
+    /* TryExec follows executable-file lookup, including empty PATH segments
+     * for the working directory. Directory search permission is insufficient
+     * for an executable target. Never execute the fixtures. */
+    char *saved_directory = g_get_current_dir();
+    char *saved_path = g_strdup(g_getenv("PATH"));
+    char *tool = g_build_filename(root, "lsm-tryexec-probe", NULL);
+    char *folder = g_build_filename(root, "lsm-tryexec-folder", NULL);
+    char *gamma = g_build_filename(system_autostart, "gamma.desktop", NULL);
+    static const char gamma_file[] =
+        "[Desktop Entry]\nType=Application\nName=TryExec Probe\n"
+        "Exec=/bin/true\nTryExec=lsm-tryexec-probe\n";
+    static const char gamma_directory[] =
+        "[Desktop Entry]\nType=Application\nName=TryExec Directory\n"
+        "Exec=/bin/true\nTryExec=lsm-tryexec-folder\n";
+
+    bool tryexec_ok = saved_directory != NULL &&
+        g_file_set_contents(tool, "#!/bin/sh\nexit 0\n", -1, NULL) &&
+        g_chmod(tool, 0700) == 0 &&
+        g_mkdir(folder, 0700) == 0 &&
+        write_desktop(system_autostart, "gamma.desktop", gamma_file) &&
+        g_chdir(root) == 0 &&
+        g_setenv("PATH", "/nonexistent:", TRUE) &&
+        expect_tryexec("gamma.desktop", true) &&
+        write_desktop(system_autostart, "gamma.desktop", gamma_directory) &&
+        g_setenv("PATH", root, TRUE) &&
+        expect_tryexec("gamma.desktop", false);
+
+    if (saved_directory && g_chdir(saved_directory) != 0)
+        tryexec_ok = false;
+    if (saved_path) {
+        if (!g_setenv("PATH", saved_path, TRUE)) tryexec_ok = false;
+    } else {
+        g_unsetenv("PATH");
+    }
+    (void)g_remove(gamma);
+    (void)g_remove(tool);
+    (void)g_rmdir(folder);
+    g_free(gamma);
+    g_free(folder);
+    g_free(tool);
+    g_free(saved_path);
+    g_free(saved_directory);
+    if (!tryexec_ok) {
+        status = 9;
         goto cleanup;
     }
 
