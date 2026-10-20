@@ -316,12 +316,19 @@ static void update_disks(LsmMonitor *monitor, double elapsed)
             .in_progress_operations=in_progress,.io_ms=io_ms,.weighted_io_ms=weighted_ms
         };
     }
-    const bool complete=!ferror(file) && fclose(file)==0;
-    for(size_t index=0U;index<monitor->disk_count;index++){
-        LsmLinuxDiskState *state=find_disk_state(monitor,monitor->disks[index].name);
-        if(state) lsm_disk_accounting_update(
-            &monitor->disks[index],&state->accounting,
-            complete&&sampled[index]?&snapshots[index]:NULL,elapsed);
+    /* Do not short-circuit fclose on a read failure: a failed sample still
+     * owns the stream and must invalidate every incomplete counter baseline. */
+    const bool read_ok = ferror(file) == 0;
+    const bool close_ok = fclose(file) == 0;
+    const bool complete = read_ok && close_ok;
+    for (size_t index = 0U; index < monitor->disk_count; index++) {
+        LsmLinuxDiskState *state =
+            find_disk_state(monitor, monitor->disks[index].name);
+        if (state)
+            lsm_disk_accounting_update(
+                &monitor->disks[index], &state->accounting,
+                complete && sampled[index] ? &snapshots[index] : NULL,
+                elapsed);
     }
 }
 

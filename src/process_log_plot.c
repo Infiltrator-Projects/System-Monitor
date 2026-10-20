@@ -177,8 +177,8 @@ static void process_log_plot_complete(GObject *source_object,
     GtkWidget *legend = gtk_label_new(NULL);
     char legend_markup[128];
     snprintf(legend_markup, sizeof(legend_markup),
-             "<b>CPU %%</b> and <b>Memory %%</b> — most recent %d samples",
-             LSM_HISTORY_LENGTH);
+             "<b>CPU %%</b> and <b>Memory %%</b> — most recent %zu %s",
+             result->count, result->count == 1U ? "sample" : "samples");
     gtk_label_set_markup(GTK_LABEL(legend), legend_markup);
     gtk_widget_set_halign(legend, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);

@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 1.0.231 - 2026-10-20
+
+- Close the Linux diskstats stream on both successful and failed reads. A short-circuited stream close previously leaked a descriptor when procfs reported a read error; incomplete samples continue to invalidate rate baselines without publishing partial measurements.
+- Show the actual number of retained samples in recorded-process graph captions, including the singular case, rather than always claiming a full history window.
+
 ## 1.0.230 - 2026-10-20
 
 - Correct recorded-process graph fidelity for CPU use above one logical core. The playback plot now grows its vertical maximum in 100% increments rather than clipping all samples at 100%, while retaining a minimum 100% range for the memory trace.
