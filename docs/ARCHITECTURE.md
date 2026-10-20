@@ -81,6 +81,10 @@ not the UTC day, is passed into the selected chronology. Human-readable
 timestamp callers share one bounded presentation capacity; its minimum
 against Common's combined module maxima is checked at compile time, so a
 valid resource is not silently lost to an undersized UI string.
+Native Gregorian formatting follows the same all-or-unavailable commit rule:
+libc renders into a bounded private buffer before a complete result is
+published to its caller. In particular, a failed strftime cannot corrupt
+the preinitialised unavailable presentation.
 
 ## Process recording ownership
 

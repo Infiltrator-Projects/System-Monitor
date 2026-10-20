@@ -322,5 +322,32 @@ int main(void)
     CHECK(lsm_temporal_format_remaining_seconds(
         UINT64_C(3661), text, sizeof(text)));
     CHECK(strcmp(text, "1h 01m") == 0);
+
+    /* libc may modify its destination on an insufficient strftime buffer.
+     * Locale date/time output is committed only if the complete result fits,
+     * both with System Settings' native selection and with no provider. */
+    char small[16];
+    memset(small, '!', sizeof(small));
+    CHECK(!lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), true, true, true, small, 8U));
+    CHECK(strcmp(small, "N/A") == 0);
+    CHECK(small[8] == '!');
+    CHECK(lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), true, true, true, text, sizeof(text)));
+    CHECK(strcmp(text, "N/A") != 0);
+
+    CHECK(write_provider(provider) == 0);
+    infiltratr_copy_string(policy.clock_mode, sizeof(policy.clock_mode), "standard");
+    infiltratr_copy_string(policy.calendar, sizeof(policy.calendar), "gregorian");
+    CHECK(infiltratr_temporal_posix_policy_save(&policy) == 0);
+    lsm_temporal_presentation_reset_cache_for_test();
+    memset(small, '!', sizeof(small));
+    CHECK(!lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), true, true, true, small, 8U));
+    CHECK(strcmp(small, "N/A") == 0);
+    CHECK(small[8] == '!');
+    CHECK(lsm_temporal_format_epoch_seconds(
+        INT64_C(43200), true, true, true, text, sizeof(text)));
+    CHECK(strcmp(text, "N/A") != 0);
     return 0;
 }

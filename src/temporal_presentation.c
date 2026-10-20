@@ -171,29 +171,38 @@ static bool local_utc_offset_seconds(const struct tm *local, int32_t *offset)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-y2k"
 #endif
+/*
+ * POSIX strftime leaves the destination unspecified when output does not fit.
+ * Render into a bounded private buffer first so all callers retain their
+ * initialized unavailable value until the entire locale representation fits.
+ */
+static bool native_strftime(const struct tm *local, const char *format,
+                            char *buffer, size_t capacity)
+{
+    char formatted[LSM_TEMPORAL_PRESENTATION_CAPACITY];
+    if (local == NULL || format == NULL || buffer == NULL || capacity == 0U)
+        return false;
+    const size_t length = strftime(formatted, sizeof(formatted), format, local);
+    if (length == 0U || length >= capacity) return false;
+    memcpy(buffer, formatted, length + 1U);
+    return true;
+}
+
 static bool native_format(const struct tm *local, bool include_date,
                           bool include_zone, bool show_seconds,
                           char *buffer, size_t capacity)
 {
-    if (buffer == NULL || capacity == 0U || local == NULL) return false;
+    const char *format;
     if (include_date) {
-        if (include_zone) {
-            return strftime(buffer, capacity,
-                            show_seconds ? "%x %X %z" : "%x %H:%M %z",
-                            local) != 0U;
-        }
-        return strftime(buffer, capacity,
-                        show_seconds ? "%x %X" : "%x %H:%M",
-                        local) != 0U;
+        format = include_zone
+            ? (show_seconds ? "%x %X %z" : "%x %H:%M %z")
+            : (show_seconds ? "%x %X" : "%x %H:%M");
+    } else {
+        format = include_zone
+            ? (show_seconds ? "%X %z" : "%H:%M %z")
+            : (show_seconds ? "%X" : "%H:%M");
     }
-    if (include_zone) {
-        return strftime(buffer, capacity,
-                        show_seconds ? "%X %z" : "%H:%M %z",
-                        local) != 0U;
-    }
-    return strftime(buffer, capacity,
-                    show_seconds ? "%X" : "%H:%M",
-                    local) != 0U;
+    return native_strftime(local, format, buffer, capacity);
 }
 /*
  * Emit the exact offset only for the project's explicit clock projection;
@@ -240,14 +249,6 @@ static bool combine_presentation(const char *date_text, const char *clock_text,
     memcpy(buffer, combined, (size_t)written + 1U);
     return true;
 }
-/* Native Gregorian display follows libc locale policy; the suppression for
- * its potentially two-digit %x year is intentionally scoped to this adapter. */
-static bool native_date_format(const struct tm *local,
-                               char *buffer, size_t capacity)
-{
-    return local != NULL && buffer != NULL && capacity != 0U &&
-        strftime(buffer, capacity, "%x", local) != 0U;
-}
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
@@ -284,7 +285,7 @@ bool lsm_temporal_format_epoch_microseconds(int64_t unix_microseconds,
                              show_seconds, buffer, capacity);
     if (include_date) {
         if (native_calendar) {
-            if (!native_date_format(&local, date_text, sizeof(date_text)))
+            if (!native_strftime(&local, "%x", date_text, sizeof(date_text)))
                 return false;
         } else if (!format_selected_calendar(
                        &policy, &local, date_text, sizeof(date_text))) {

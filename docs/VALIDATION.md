@@ -14,7 +14,11 @@ time-only output. The regression tests cover civil-date rollover across a
 deterministic UTC+10 zone and insufficient destination capacity without
 truncated output. The application's shared timestamp capacity is statically
 checked against Common's resource ABI maxima. The ordinary source smoke
-independently exercises absent resources. The authoritative documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
+independently exercises absent resources. Native Gregorian fallback and
+System Settings' explicit Standard/Gregorian selection are both exercised
+with undersized output buffers: failed libc formatting must leave "N/A"
+intact and must not write beyond the supplied capacity. The authoritative
+documentation gate fails closed if Clang or Doxygen is unavailable. Unsupported or inaccessible telemetry remains unavailable rather than being inferred from an untested environment.
 
 Dependency preparation is outside verification. Git checkouts must already contain the parent-pinned Common revision, normally through recursive checkout or an explicit `make common-bootstrap`; Make and CMake validate that revision without performing hidden network or source-tree mutation.
 

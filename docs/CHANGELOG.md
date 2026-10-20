@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.225 - 2026-10-20
+
+- Make native locale timestamp formatting transactional: libc strftime renders privately, and System Monitor publishes text only after complete output fits. Prevent a failed short-buffer conversion from replacing "N/A" with partial or undefined contents.
+- Converge native Gregorian date and date/time paths onto one validated locale-formatting helper, retaining existing OS locale choices and exact Common .so boundaries.
+- Test both provider-absent fallback and explicit Standard/Gregorian selection with insufficient destination capacity, full-width success and a write-bound sentinel.
+
+
 ## 1.0.224 - 2026-10-20
 
 - Prevent process recording from silently overwriting a previous CSV with the same PID/name/second-resolution timestamp. Exclusive creation remains the recorder's atomic filesystem boundary; the process UI selects a bounded, human-readable suffix for collisions without swallowing other errors.
