@@ -115,8 +115,11 @@ static gboolean executable_in_path(const char *name)
 
     const char *path = getenv("PATH");
     if (!path) return FALSE;
-    /* Unlike strtok_r, g_strsplit retains empty PATH components. POSIX
-     * executable lookup interprets these as the current directory. */
+    /* An entirely empty PATH is itself a current-directory component;
+     * g_strsplit deliberately emits no tokens for that special case. */
+    if (!path[0]) return executable_file(name);
+    /* Unlike strtok_r, g_strsplit preserves internal, leading and trailing
+     * empty components, which denote the current working directory. */
     gchar **directories = g_strsplit(path, ":", -1);
     if (!directories) return FALSE;
 

@@ -167,6 +167,8 @@ int main(void)
         g_chdir(root) == 0 &&
         g_setenv("PATH", "/nonexistent:", TRUE) &&
         expect_tryexec("gamma.desktop", true) &&
+        g_setenv("PATH", "", TRUE) &&
+        expect_tryexec("gamma.desktop", true) &&
         write_desktop(system_autostart, "gamma.desktop", gamma_directory) &&
         g_setenv("PATH", root, TRUE) &&
         expect_tryexec("gamma.desktop", false);

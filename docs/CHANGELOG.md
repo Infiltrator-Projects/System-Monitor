@@ -6,7 +6,7 @@
 
 - Match Linux TryExec path lookup to executable-file semantics: empty PATH entries denote the current working directory, and a searchable directory is not an executable target.
 - Preserve absolute and relative executable paths, including executable symlinks; retain all TryExec policy in the native startup backend.
-- Extend the isolated startup regression with real executable and directory fixtures to protect both boundaries without running the programs.
+- Extend the isolated startup regression with real executable and directory fixtures, including an entirely empty PATH, without running the programs.
 
 ## 1.0.235 - 2026-10-20
 

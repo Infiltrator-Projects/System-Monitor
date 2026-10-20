@@ -97,11 +97,10 @@ the preinitialised unavailable presentation.
 ## XDG startup precedence and mutation ownership
 
 Linux TryExec discovery follows native executable-file lookup: empty PATH
-components represent the working directory, while directory search permission
+components (including an entirely empty PATH) represent the working directory, while directory search permission
 alone cannot satisfy an executable requirement. It checks availability without
 launching a command. This remains native startup-backend policy and is not
 duplicated in presentation or Common.
-
 
 On Linux the startup backend resolves XDG autostart directories in descending
 priority. The scan owns a set of encountered desktop-file basenames independent

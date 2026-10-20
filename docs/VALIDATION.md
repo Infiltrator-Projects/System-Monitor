@@ -81,7 +81,7 @@ release. Common remains the authority for nonstandard clock semantics.
 
 The isolated startup regression checks the native executable-availability
 predicate against a real executable reachable only through a trailing empty
-PATH component (current working directory). It also verifies that a directory
+PATH component and an entirely empty PATH (current working directory). It also verifies that a directory
 with search permission is not accepted as TryExec, without executing either
 candidate. The backend owns this interpretation; GTK receives only the
 resulting enabled state.
