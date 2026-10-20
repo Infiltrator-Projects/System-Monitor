@@ -43,8 +43,7 @@ static bool write_fixture(const char *path)
         "/dev/disk/by-label/My\\040Disk rw,errors=remount-ro\n"
         "41 36 259:4 /Documents /home/user/Documents rw - ext4 /dev/nvme0n1p4 rw\n"
         "52 25 0:42 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse "
-        "gvfsd-fuse rw,user_id=1000\n"
-        "this record is deliberately malformed\n",
+        "gvfsd-fuse rw,user_id=1000\n",
         stream);
     const bool ok = written >= 0 && fclose(stream) == 0;
     if (!ok) (void)fclose(stream);
@@ -96,7 +95,6 @@ int main(void)
     size_t partial_count = 0U;
     const bool completed = lsm_mountinfo_visit_file_checked(
         path, collect_one_mount, &partial, &partial_count);
-    unlink(path);
     if (completed || partial_count != 1U || partial.count != 1U) return 10;
     if (collector.entries[0].major_number != 259 ||
         collector.entries[0].minor_number != 4) return 4;
@@ -106,6 +104,45 @@ int main(void)
     if (strcmp(collector.entries[1].target, "/home/user/Documents") != 0) return 8;
     if (collector.entries[2].major_number != 0 ||
         collector.entries[2].minor_number != 42) return 9;
+
+    /* One bad record cannot silently turn a complete mount namespace into
+     * a plausible partial inventory. Previously visited records are reported
+     * to the caller for cleanup, not silently committed as success. */
+    static const char *const malformed_rows[] = {
+        "this record is deliberately malformed\n",
+        "52 25 8:1 / / rw shared:7 ext4 /dev/sda rw\n",
+        "52 25 8:1 / /bad\\999 rw - ext4 /dev/sda rw\n",
+        "52 25 8:1 / /bad\\000X rw - ext4 /dev/sda rw\n",
+        "52 25 18446744073709551616:1 / / rw - ext4 /dev/sda rw\n",
+        "not-a-number 25 8:1 / / rw - ext4 /dev/sda rw\n",
+        "52 25 8:1 / / rw - ext4 /dev/sda rw extra\n",
+        "52 25 8:1 / / rw - ext4 /dev/sda rw"
+    };
+    for (size_t index = 0U; index < sizeof(malformed_rows) /
+                                      sizeof(malformed_rows[0]); index++) {
+        FILE *fixture = fopen(path, "wb");
+        if (!fixture) return 11;
+        const bool written =
+            fputs("51 25 8:1 / / rw - ext4 /dev/sda rw\n", fixture) >= 0 &&
+            fputs(malformed_rows[index], fixture) >= 0;
+        const int closed = fclose(fixture);
+        if (!written || closed != 0) return 12;
+        MountCollector prefix = {0};
+        size_t prefix_count = 0U;
+        if (lsm_mountinfo_visit_file_checked(
+                path, collect_mount, &prefix, &prefix_count) ||
+            prefix_count != 1U || prefix.count != 1U)
+            return 13;
+    }
+
+    FILE *empty = fopen(path, "wb");
+    if (!empty || fclose(empty) != 0) return 14;
+    MountCollector valid_empty = {0};
+    size_t empty_count = 99U;
+    if (!lsm_mountinfo_visit_file_checked(
+            path, collect_mount, &valid_empty, &empty_count) ||
+        valid_empty.count != 0U || empty_count != 0U) return 15;
+    if (unlink(path) != 0) return 16;
 
     printf("Native mountinfo parser passed (%zu records).\n", visited);
     return 0;
@@ -292,6 +329,17 @@ int main(void)
         }
     }
     lsm_filesystem_inventory_free(items);
+
+    /* A valid prefix followed by corruption must not appear as a complete
+     * filesystem snapshot even when statvfs worked for the earlier mount. */
+    stream = fopen(mountinfo, "a");
+    if (!stream) return 10;
+    if (fputs("broken mountinfo record\n", stream) < 0 ||
+        fclose(stream) != 0) return 11;
+    items = NULL;
+    count = 99U;
+    if (lsm_filesystem_inventory_collect(&items, &count) ||
+        items != NULL || count != 0U) return 12;
     unlink(mountinfo);
 
     items = NULL;

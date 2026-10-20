@@ -52,6 +52,14 @@ Every Common advancement is also a dependency review. The previous and proposed 
 - Optional telemetry fails independently unless its contract requires rejecting the whole inventory.
 - Malformed or incomplete external data is rejected rather than published as complete.
 
+Linux mountinfo parsing honours this contract at the namespace boundary.
+Every kernel record must be complete and structurally valid; malformed,
+truncated or ambiguously escaped mount identities fail the entire read
+rather than silently removing mounts from a reported-successful inventory.
+An empty namespace is a valid distinct state. The parser may have visited
+a valid prefix before detecting corruption; the filesystem inventory owns
+transactional publication and discards that prefix when collection fails.
+
 Startup favours first paint. Persistent models do not depend on a page being opened, and page-specific slow work runs only while needed unless continuous sampling is part of the model.
 
 ## Native boundaries

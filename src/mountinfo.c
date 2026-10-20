@@ -14,6 +14,7 @@
 #include "mountinfo.h"
 #include "common.h"
 
+#include <infiltratr/core.h>
 #include <infiltratr/token.h>
 
 #include <ctype.h>
@@ -69,14 +70,22 @@ static bool decode_mount_field(const char *encoded, char *decoded, size_t decode
     size_t output = 0;
     for (size_t input = 0; encoded[input]; input++) {
         unsigned char value = (unsigned char)encoded[input];
-        if (value == '\\' && encoded[input + 1] && encoded[input + 2] &&
-            encoded[input + 3] &&
-            encoded[input + 1] >= '0' && encoded[input + 1] <= '7' &&
-            encoded[input + 2] >= '0' && encoded[input + 2] <= '7' &&
-            encoded[input + 3] >= '0' && encoded[input + 3] <= '7') {
-            value = (unsigned char)(((encoded[input + 1] - '0') << 6) |
-                                    ((encoded[input + 2] - '0') << 3) |
-                                    (encoded[input + 3] - '0'));
+        if (value == '\\') {
+            /* Kernel mountinfo quotes a backslash using three octal digits.
+             * A malformed sequence or embedded NUL cannot be represented
+             * faithfully as a mount identity in a C string. */
+            if (!encoded[input + 1] || !encoded[input + 2] ||
+                !encoded[input + 3] ||
+                encoded[input + 1] < '0' || encoded[input + 1] > '7' ||
+                encoded[input + 2] < '0' || encoded[input + 2] > '7' ||
+                encoded[input + 3] < '0' || encoded[input + 3] > '7')
+                return false;
+            const unsigned octal =
+                ((unsigned)(encoded[input + 1] - '0') << 6) |
+                ((unsigned)(encoded[input + 2] - '0') << 3) |
+                (unsigned)(encoded[input + 3] - '0');
+            if (octal == 0U || octal > UCHAR_MAX) return false;
+            value = (unsigned char)octal;
             input += 3;
         }
         if (output + 1 >= decoded_size) {
@@ -100,8 +109,12 @@ static bool parse_mount_line(char *line, LsmMountInfoEntry *entry)
     const char *root = next_field(&cursor);
     const char *target = next_field(&cursor);
     const char *mount_options = next_field(&cursor);
+    uint64_t validated_id = 0U;
     if (!mount_id || !parent_id || !device_number || !root || !target ||
-        !mount_options)
+        !mount_options ||
+        !infiltratr_parse_u64(mount_id, 10U, &validated_id) ||
+        !infiltratr_parse_u64(parent_id, 10U, &validated_id) ||
+        root[0] != '/' || target[0] != '/')
         return false;
 
     const char *separator = NULL;
@@ -116,7 +129,8 @@ static bool parse_mount_line(char *line, LsmMountInfoEntry *entry)
     const char *filesystem = next_field(&cursor);
     const char *source = next_field(&cursor);
     const char *super_options = next_field(&cursor);
-    if (!filesystem || !source || !super_options) return false;
+    if (!filesystem || !source || !super_options ||
+        next_field(&cursor) != NULL) return false;
 
     LsmMountInfoEntry parsed = {0};
     if (!parse_device_number(device_number, &parsed.major_number,
@@ -147,9 +161,18 @@ bool lsm_mountinfo_visit_file_checked(const char *path,
     bool stopped_early = false;
     char *line = NULL;
     size_t line_capacity = 0U;
-    while (getline(&line, &line_capacity, stream) >= 0) {
+    bool malformed = false;
+    ssize_t length;
+    while ((length = getline(&line, &line_capacity, stream)) >= 0) {
+        /* /proc emits complete newline-terminated records. A malformed
+         * record makes the inventory incomplete, not merely one row absent. */
         LsmMountInfoEntry entry = {0};
-        if (!parse_mount_line(line, &entry)) continue;
+        if (length == 0 || line[length - 1] != '\n' ||
+            !parse_mount_line(line, &entry)) {
+            malformed = true;
+            errno = EINVAL;
+            break;
+        }
         count++;
         if (!visitor(&entry, user_data)) {
             stopped_early = true;
@@ -161,6 +184,6 @@ bool lsm_mountinfo_visit_file_checked(const char *path,
     free(line);
     const bool close_ok = fclose(stream) == 0;
     *out_count = count;
-    return read_ok && close_ok && !stopped_early;
+    return read_ok && close_ok && !stopped_early && !malformed;
 }
 

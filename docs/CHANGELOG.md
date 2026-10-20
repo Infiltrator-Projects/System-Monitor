@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.228 - 2026-10-20
+
+- Reject incomplete or malformed Linux mountinfo snapshots instead of silently omitting the affected mount and claiming a successful filesystem inventory.
+- Validate complete records and decoded mount identities, reject embedded NUL and invalid octal escaping, and preserve legitimate optional mount propagation fields.
+- Extend storage regressions for invalid mount records, partial-read rollback and valid empty namespaces; document the parser/collector publication boundary.
+
+
 ## 1.0.227 - 2026-10-20
 
 - Make the process-log graph read the exact CSV schema emitted by the asynchronous process recorder instead of using locale-dependent sscanf and narrowing 64-bit process identities to signed int.

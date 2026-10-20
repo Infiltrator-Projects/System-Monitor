@@ -34,6 +34,17 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Linux mountinfo completeness
+
+The storage regression validates optional propagation fields and kernel
+escaped paths, then checks corrupt IDs, device numbers, incomplete or
+unrecognised octal escapes, embedded NUL, unexpected trailing fields, missing
+the required separator and truncated final records. Valid prefixes followed
+by malformed records must fail the visitor contract; the filesystem
+collector must discard the prefix and reset its outputs. A valid empty file
+is separately distinguished from incomplete input and a failed file read.
+Independent statvfs failures continue to invalidate only their capacity.
+
 ## Maintained documentation updates
 
 The already-published version guard compares executable and release-affecting source, while allowing standalone README and `docs/**` maintenance without fabricating a new binary version. Workflow-only fixes also remain exempt. All application source, build configuration, packaging and other non-documentation changes still require an advanced `support/VERSION` after publication. These exclusions must stay narrow; a document or build file must not be used to smuggle altered release assets under an old version.

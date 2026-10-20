@@ -27,7 +27,7 @@ typedef struct {
     char filesystem[64];                /**< Filesystem type. */
 } LsmMountInfoEntry;
 
-/** Visitor invoked once for each valid mountinfo record. */
+/** Visitor invoked once for each fully validated mountinfo record. */
 typedef bool (*LsmMountInfoVisitor)(const LsmMountInfoEntry *entry, void *user_data);
 
 /**
@@ -38,8 +38,10 @@ typedef bool (*LsmMountInfoVisitor)(const LsmMountInfoEntry *entry, void *user_d
  * @param [in] visitor Callback invoked once for each valid record.
  * @param [in,out] user_data Opaque value forwarded to @p visitor.
  * @param [out] out_count Number of valid records delivered to the visitor.
- * @return true when the file was opened and read to completion; false on
- *         stream, close, or argument failure.
+ * @return true only after a complete validated read. False on malformed
+ *         or truncated records, visitor refusal, I/O or invalid arguments.
+ *         Already visited records are not rolled back; consumers publishing
+ *         inventories must discard partial accumulators on failure.
  */
 bool lsm_mountinfo_visit_file_checked(const char *path,
                                       LsmMountInfoVisitor visitor,
