@@ -56,6 +56,71 @@ static bool verify_terminated_process_worker_unavailable(void)
     return unavailable && cleaned;
 }
 
+static bool wait_for_process_snapshot(LsmWindowsProcessRuntime *runtime)
+{
+    const ULONGLONG started = GetTickCount64();
+    while (GetTickCount64() - started < 15000ULL) {
+        LsmProcessInfo *processes = NULL;
+        size_t count = 0U;
+        if (lsm_windows_process_runtime_take(runtime, &processes, &count)) {
+            const bool complete = processes != NULL;
+            lsm_process_list_free(processes);
+            return complete;
+        }
+        if (!lsm_windows_process_runtime_available(runtime)) return false;
+        Sleep(20U);
+    }
+    return false;
+}
+
+/* A dead worker retains a valid HANDLE. The public start contract must
+ * reap it before constructing a replacement, not mistake it for a live
+ * backend. Keep test storage alive if native cancellation times out. */
+static bool verify_terminated_process_worker_restart(void)
+{
+    LsmWindowsProcessRuntime *runtime = calloc(1U, sizeof(*runtime));
+    if (!runtime) return false;
+    InitializeCriticalSection(&runtime->process_lock);
+    runtime->process_lock_initialised = true;
+    runtime->process_thread = CreateThread(
+        NULL, 0U, exited_process_worker, NULL, 0U, NULL);
+    if (!runtime->process_thread) {
+        DeleteCriticalSection(&runtime->process_lock);
+        free(runtime);
+        return false;
+    }
+
+    const bool exited =
+        WaitForSingleObject(runtime->process_thread, 2000U) == WAIT_OBJECT_0;
+    const bool restarted = exited &&
+        lsm_windows_process_runtime_start(runtime) &&
+        wait_for_process_snapshot(runtime);
+    const bool stopped = lsm_windows_process_runtime_stop(runtime);
+    if (stopped) free(runtime);
+    return restarted && stopped;
+}
+
+/* A successful stop is not terminal: the same runtime must be able to
+ * initialise a new worker and publish another complete snapshot. Allocate
+ * separately so a timed-out cancellation cannot leave a worker using stack
+ * storage after this test returns. */
+static bool verify_process_worker_restart(void)
+{
+    LsmWindowsProcessRuntime *runtime = calloc(1U, sizeof(*runtime));
+    if (!runtime) return false;
+
+    const bool first = lsm_windows_process_runtime_start(runtime) &&
+                       wait_for_process_snapshot(runtime);
+    if (!lsm_windows_process_runtime_stop(runtime)) return false;
+
+    const bool second = first &&
+                        lsm_windows_process_runtime_start(runtime) &&
+                        wait_for_process_snapshot(runtime);
+    const bool stopped = lsm_windows_process_runtime_stop(runtime);
+    if (stopped) free(runtime);
+    return first && second && stopped;
+}
+
 int main(void)
 {
     printf("System Monitor experimental Windows backend probe\n\n");
@@ -63,6 +128,16 @@ int main(void)
     if (!verify_terminated_process_worker_unavailable()) {
         fprintf(stderr,
                 "Terminated process worker remained available to the UI.\n");
+        return EXIT_FAILURE;
+    }
+    if (!verify_terminated_process_worker_restart()) {
+        fprintf(stderr,
+                "Terminated process worker failed to recover on start.\n");
+        return EXIT_FAILURE;
+    }
+    if (!verify_process_worker_restart()) {
+        fprintf(stderr,
+                "Process worker failed to restart after a clean stop.\n");
         return EXIT_FAILURE;
     }
 

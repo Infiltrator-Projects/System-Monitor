@@ -64,7 +64,13 @@ static DWORD WINAPI process_worker_main(LPVOID user_data)
 bool lsm_windows_process_runtime_start(LsmWindowsProcessRuntime *state)
 {
     if (!state) return false;
-    if (state->process_thread) return true;
+    if (state->process_thread) {
+        if (state->process_worker_abandoned) return false;
+        if (lsm_windows_process_runtime_available(state)) return true;
+        /* A terminated worker still has a valid thread handle. Reap its
+         * synchronization state before retrying backend initialization. */
+        if (!lsm_windows_process_runtime_stop(state)) return false;
+    }
 
     InitializeCriticalSection(&state->process_lock);
     state->process_lock_initialised = true;
@@ -75,6 +81,11 @@ bool lsm_windows_process_runtime_start(LsmWindowsProcessRuntime *state)
         return false;
     }
 
+    /* stop() intentionally leaves this flag set until the next start.
+     * Reinitialising the lock and event alone would make the replacement
+     * worker exit before processing its first request. */
+    state->process_stop_requested = false;
+    state->process_worker_abandoned = false;
     state->process_request_pending = true;
     state->process_requested_flags = LSM_PROCESS_SCAN_NONE;
     state->process_thread = CreateThread(
@@ -169,8 +180,8 @@ bool lsm_windows_process_runtime_stop(LsmWindowsProcessRuntime *state)
 bool lsm_windows_process_runtime_available(
     const LsmWindowsProcessRuntime *runtime)
 {
-    if (!runtime || !runtime->process_thread ||
-        !runtime->process_lock_initialised)
+    if (!runtime || runtime->process_stop_requested ||
+        !runtime->process_thread || !runtime->process_lock_initialised)
         return false;
 
     /*

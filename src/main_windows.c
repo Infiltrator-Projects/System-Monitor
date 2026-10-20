@@ -89,7 +89,8 @@ typedef struct {
     bool startup_smoke;
     bool monitor_initialised;
     bool monitor_ready;
-    bool process_backend_attempted;
+    /* UI-thread retry deadline; worker and native backend remain runtime-owned. */
+    ULONGLONG process_retry_after_ms;
     LsmWindowsProcessRuntime process_runtime;
     LsmProcessInfo *processes;
     size_t process_count;
@@ -2554,10 +2555,22 @@ static void initialise_monitor_backend(LsmWindowsUiState *state)
 
 static void initialise_process_backend(LsmWindowsUiState *state)
 {
-    if (!state || state->process_backend_attempted) return;
+    if (!state) return;
+    LsmWindowsProcessRuntime *runtime = &state->process_runtime;
+    if (lsm_windows_process_runtime_available(runtime)) return;
 
-    state->process_backend_attempted = true;
-    if (!lsm_windows_process_runtime_start(&state->process_runtime))
+    /* A worker that outlived bounded cancellation still owns its storage.
+     * Never attempt to reuse it; ordinary startup and worker-exit failures
+     * may be retried on the UI timer without blocking the presentation. */
+    if (lsm_windows_process_runtime_abandoned(runtime)) {
+        set_status(state, L"Processes backend unavailable");
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    if (now < state->process_retry_after_ms) return;
+    state->process_retry_after_ms = now + 5000ULL;
+    if (!lsm_windows_process_runtime_start(runtime))
         set_status(state, L"Processes backend unavailable");
 }
 

@@ -68,6 +68,18 @@ transactional publication and discards that prefix when collection fails.
 
 Startup favours first paint. Persistent models do not depend on a page being opened, and page-specific slow work runs only while needed unless continuous sampling is part of the model.
 
+The Win32 process worker has a reusable start/stop contract. A completed stop
+releases its thread handle, event and lock; a subsequent start clears the
+previous stop request before launching the replacement worker. A thread handle
+whose worker has already exited is not evidence of availability: startup reaps
+that worker and retries native backend construction. The Win32 shell checks
+live worker availability on each relevant page refresh rather than latching
+one lifetime attempt. Failed starts and terminated workers are retried after
+a five-second monotonic delay, while an abandoned worker is never
+restarted. If a native query cannot be cancelled during shutdown, the worker
+and its containing storage remain
+owned until process exit rather than being freed or restarted unsafely.
+
 ## Native boundaries
 
 Prefer direct procfs, sysfs, ioctl, D-Bus, Win32, kernel, driver or documented in-process interfaces over parsing external command output when they provide the stronger contract.

@@ -34,6 +34,18 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Windows process-worker restart
+
+The native Windows backend probe exercises two complete worker
+start/snapshot/stop cycles on the same runtime, verifying that a clean stop
+does not poison the next worker with a stale stop request. It also checks
+that an already-terminated worker handle is unavailable and that start()
+reaps and replaces that terminated worker. The Win32 shell retries a failed
+or terminated backend from its UI timer after a five-second monotonic delay
+rather than retaining a permanent attempted flag. If cancellation
+cannot finish within the bounded shutdown wait, the probe retains the
+worker-owned allocation until process exit instead of risking use-after-free.
+
 ## Linux pressure telemetry integrity
 
 The metrics regression rejects duplicate PSI keys and repeated `some`/`full`
