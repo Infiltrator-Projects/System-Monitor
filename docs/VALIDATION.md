@@ -34,6 +34,16 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Recorded-process graph fidelity
+
+The GTK graph-scale smoke verifies the existing renderer's real maximum-axis
+contract under Xvfb. A dual-series plot starts at 100% for ordinary memory
+percentages but must expand to represent a single process using more than one
+logical core; the scale is quantised in 100-point increments. This test is
+part of `make check`, not an alternative production renderer or a
+source-spelling assertion. Recording format and parser validation remain
+owned by the asynchronous-worker suite.
+
 ## Linux mountinfo completeness
 
 The storage regression validates optional propagation fields and kernel

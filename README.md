@@ -26,7 +26,7 @@ System Monitor is an original clean-sheet implementation designed and written fr
 ## Build and test
 
 ```bash
-sudo apt install build-essential clang doxygen git pkg-config libgtk-3-dev
+sudo apt install build-essential clang doxygen git pkg-config libgtk-3-dev xauth xvfb
 git clone --recurse-submodules https://github.com/Infiltrator-Projects/System-Monitor.git
 cd System-Monitor
 make

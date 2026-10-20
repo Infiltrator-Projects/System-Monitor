@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.230 - 2026-10-20
+
+- Correct recorded-process graph fidelity for CPU use above one logical core. The playback plot now grows its vertical maximum in 100% increments rather than clipping all samples at 100%, while retaining a minimum 100% range for the memory trace.
+- Use the existing GTK graph-scale contract rather than introducing another axis implementation; report graph allocation failure instead of dereferencing an unavailable graph.
+- Add a GTK/Xvfb regression to canonical `make check` and document the recorder-versus-renderer responsibility boundary.
+
 ## 1.0.229 - 2026-10-20
 
 - Fix XDG autostart precedence: a higher-priority desktop filename masks lower-priority entries even when its contents are malformed; scanning no longer treats parsed rows as the sole source of identity authority.

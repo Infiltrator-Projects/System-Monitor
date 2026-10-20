@@ -296,7 +296,7 @@ build-check: check-deps strict-check portability-check \
 	metrics-suite-smoke storage-suite-smoke process-suite-smoke \
 	ui-suite-smoke accelerator-suite-smoke scanner-coalescing-smoke \
 	battery-smoke glibc-abi-smoke nvml-smoke application-catalog-smoke \
-	system-snapshot-smoke process-export-smoke history-retention-smoke temporal-presentation-smoke \
+	system-snapshot-smoke process-export-smoke graph-scale-smoke history-retention-smoke temporal-presentation-smoke \
 	async-workers-smoke runtime-stability-smoke \
 	native-command-audit analyzer-check coverage-check
 	@echo "All application source, backend and feature checks passed."
@@ -328,6 +328,17 @@ core-suite-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/core_smoke.c src/project_info.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -lm -o $(BUILD_DIR)/core-suite-smoke
 	./$(BUILD_DIR)/core-suite-smoke
+
+.PHONY: graph-scale-smoke
+
+# Recorded-process CPU can exceed one logical core. Verify the actual graph
+# scaling mechanism with GTK, not an approximation of its implementation.
+graph-scale-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
+		support/tests/graph_scale_smoke.c src/graph.c src/sample_history.c \
+		src/ui_helpers.c $(INFILTRATR_COMMON_ARCHIVE) $(GTK_LIBS) -lm \
+		-o $(BUILD_DIR)/graph-scale-smoke
+	xvfb-run -a ./$(BUILD_DIR)/graph-scale-smoke
 
 presentation-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -Isupport/tests/compat -std=c17 $(STRICT_WARNINGS) \

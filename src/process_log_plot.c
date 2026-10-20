@@ -147,7 +147,17 @@ static void process_log_plot_complete(GObject *source_object,
         return;
     }
 
-    LsmGraph *graph = lsm_graph_new(TRUE, TRUE, 100.0, -1, 390);
+    /* A single process can consume several logical cores, so recorded CPU
+     * percentages legitimately exceed 100. Preserve a 100% minimum for the
+     * memory trace, then grow the shared axis in complete 100% increments. */
+    LsmGraph *graph = lsm_graph_new(TRUE, FALSE, 0.0, -1, 390);
+    if (!graph) {
+        lsm_ui_show_error(GTK_WINDOW(parent), "Unable to plot process log",
+                          "Unable to allocate the process graph.");
+        process_log_plot_result_free(result);
+        return;
+    }
+    lsm_graph_set_dynamic_scale(graph, 100.0, 100.0);
     const size_t first = result->count == LSM_HISTORY_LENGTH
         ? result->next : 0U;
     for (size_t offset = 0U; offset < result->count; offset++) {

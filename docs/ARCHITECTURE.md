@@ -136,6 +136,13 @@ interrupted or overlong physical CSV rows are ignored in full; unsupported
 headers or recordings containing no valid samples report an explicit error
 instead of displaying an apparently successful but empty graph.
 
+Recorded-process playback uses the same graph widget as live monitoring, but
+its CPU values can exceed 100% because they account for multiple logical
+cores. Its shared CPU/memory plot therefore starts at a 100% vertical ceiling
+and expands in 100-point increments when necessary. The renderer's existing
+dynamic-scale contract owns axis calculation; recording remains responsible
+only for supplying validated measurements.
+
 ## Common
 
 `src/infiltratr-common` is pinned by the parent repository gitlink to an exact Libraries commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.
