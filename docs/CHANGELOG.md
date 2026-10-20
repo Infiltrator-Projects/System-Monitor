@@ -11,6 +11,7 @@
 - Reject unterminated, malformed and wrong-type Win32 registry strings rather than exposing uninitialised GPU driver metadata; exercise the production reader against volatile registry fixtures.
 - Complete the new registry-reader header's required Doxygen provenance declarations so the canonical source-style gate accepts the Windows correction.
 - Distinguish Win32 GetMessageW errors from WM_QUIT, return failure instead of reading an invalid quit code, and synchronously destroy the live window to release worker-owned resources.
+- Prevent a GTK process-export use-after-free by reacquiring the current snapshot/selection after the modal save chooser closes, rather than serializing pointers borrowed before its nested event loop.
 
 ## 1.0.239 - 2026-10-20
 

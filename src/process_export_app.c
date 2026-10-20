@@ -138,13 +138,21 @@ void lsm_process_export_selected_dialog(LsmApp *app)
     gtk_file_filter_set_name(filter, "CSV table");
     gtk_file_filter_add_pattern(filter, "*.csv");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
-    if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
-        char *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+    const gint response = gtk_dialog_run(GTK_DIALOG(chooser));
+    char *path = response == GTK_RESPONSE_ACCEPT
+        ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gtk_widget_destroy(chooser);
+
+    /*
+     * gtk_dialog_run() nests the main loop: a completed process scan may
+     * replace and free the snapshot originally borrowed for selection checks.
+     * Reacquire it only after the chooser returns and is destroyed, then
+     * serialize synchronously without crossing another event-loop boundary.
+     */
+    if (path) {
         char error[256];
-        if (path && !lsm_process_export_write_view(
-                        &view, path, error, sizeof(error)))
+        if (!lsm_process_export_selected_csv(app, path, error, sizeof(error)))
             lsm_ui_show_error(parent, "Export failed", "%s", error);
         g_free(path);
     }
-    gtk_widget_destroy(chooser);
 }

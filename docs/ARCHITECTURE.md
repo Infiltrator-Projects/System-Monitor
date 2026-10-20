@@ -159,6 +159,11 @@ projection consume it; the UI never reimplements selection semantics. Explicit
 group members are independent of the currently highlighted representative PID,
 and malformed or stale selections resolve to no matching rows. The GTK adapter
 owns only application-state translation, user interaction and clipboard lifetime.
+A GTK save chooser runs a nested event loop while process refreshes can retire
+the borrowed snapshot. The adapter therefore uses the initial selection only
+to decide whether to open the chooser, then reacquires current process and
+selection state after it closes before serializing. No borrowed snapshot
+survives across modal GTK reentrancy.
 This prevents exports from disagreeing about selected processes after navigation,
 group selection or PID reuse.
 

@@ -151,6 +151,18 @@ single-process identity matching, missing instance identity and incomplete
 process/selection arrays. Empty or malformed selection never becomes a
 plausible successful export; no GTK code owns another membership predicate.
 
+## GTK process export reentrancy
+
+The CSV save chooser runs a nested GTK event loop. A background scanner can
+publish a replacement snapshot while the chooser is open, invalidating
+previously borrowed process rows and group identities. Export must use the
+current process selection only after the chooser closes; a selection withdrawn
+during the dialog must fail explicitly rather than exporting stale data.
+The plain-C export regression verifies PID/instance identity and CSV semantics,
+but does not itself exercise GTK modal-event reentrancy. An interactive Xvfb
+regression for that boundary remains additional coverage, not an existing
+qualification claim.
+
 ## Process recording collision safety
 
 The asynchronous recording smoke creates a previous CSV fixture, attempts to
