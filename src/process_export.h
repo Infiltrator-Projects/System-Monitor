@@ -29,6 +29,19 @@ typedef struct {
 } LsmProcessExportView;
 
 /**
+ * Test whether a completed row is selected by exact (PID, instance) identity.
+ *
+ * Explicit group membership is authoritative even without a highlighted
+ * representative PID. Missing identities or incomplete group arrays select
+ * nothing. Shared by both clipboard and CSV projection.
+ */
+bool lsm_process_export_contains(const LsmProcessExportView *view,
+                                 const LsmProcessInfo *process);
+
+/** Count matching completed rows, or zero for an invalid/incomplete view. */
+size_t lsm_process_export_selection_count(const LsmProcessExportView *view);
+
+/**
  * Write selected process rows atomically as UTF-8 CSV from plain process data.
  *
  * This data-only API deliberately knows nothing about LsmApp or GTK ownership.

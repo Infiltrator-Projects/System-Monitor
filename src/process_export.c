@@ -30,28 +30,40 @@ static void set_error(char *error, size_t size, const char *message)
     lsm_copy_string(error, size, message ? message : "Unknown error");
 }
 
-static bool process_selected(const LsmProcessExportView *view,
-                             const LsmProcessInfo *process)
+/*
+ * Selection identity is independent of presentation and export transport.
+ * An explicit group owns its own members; it must not depend on a currently
+ * highlighted representative PID. An incomplete or stale identity fails
+ * closed rather than selecting another process after PID reuse.
+ */
+bool lsm_process_export_contains(const LsmProcessExportView *view,
+                                 const LsmProcessInfo *process)
 {
-    if (!view || !process) return false;
-    if (view->selected_group_count == 0U)
-        return process->pid == view->selected_pid &&
-            process->instance_id == view->selected_instance_id;
-    if (!view->selected_group_pids || !view->selected_group_instance_ids)
+    if (view == NULL || process == NULL ||
+        process->pid == 0U || process->instance_id == 0U)
         return false;
-    for (size_t index = 0U; index < view->selected_group_count; index++)
+    if (view->selected_group_count == 0U)
+        return view->selected_pid != 0U &&
+               view->selected_instance_id != 0U &&
+               process->pid == view->selected_pid &&
+               process->instance_id == view->selected_instance_id;
+    if (view->selected_group_pids == NULL ||
+        view->selected_group_instance_ids == NULL)
+        return false;
+    for (size_t index = 0U; index < view->selected_group_count; index++) {
         if (view->selected_group_pids[index] == process->pid &&
             view->selected_group_instance_ids[index] == process->instance_id)
             return true;
+    }
     return false;
 }
 
-static size_t selected_count(const LsmProcessExportView *view)
+size_t lsm_process_export_selection_count(const LsmProcessExportView *view)
 {
-    if (!view || view->selected_pid <= 0) return 0U;
+    if (view == NULL || view->processes == NULL) return 0U;
     size_t count = 0U;
     for (size_t index = 0U; index < view->process_count; index++)
-        if (process_selected(view, &view->processes[index]))
+        if (lsm_process_export_contains(view, &view->processes[index]))
             count++;
     return count;
 }
@@ -148,7 +160,7 @@ static bool write_process_export(FILE *file, const void *user_data)
           file);
     for (size_t index = 0U; index < view->process_count; index++) {
         const LsmProcessInfo *process = &view->processes[index];
-        if (process_selected(view, process) && !csv_row(file, process))
+        if (lsm_process_export_contains(view, process) && !csv_row(file, process))
             return false;
     }
     return ferror(file) == 0;
@@ -163,7 +175,7 @@ bool lsm_process_export_write_view(const LsmProcessExportView *view,
         set_error(error, error_size, "No destination file was selected.");
         return false;
     }
-    if (selected_count(view) == 0U) {
+    if (lsm_process_export_selection_count(view) == 0U) {
         set_error(error, error_size,
                   "Select a process or application group first.");
         return false;

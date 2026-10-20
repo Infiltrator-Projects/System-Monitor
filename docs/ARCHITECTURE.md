@@ -86,6 +86,17 @@ libc renders into a bounded private buffer before a complete result is
 published to its caller. In particular, a failed strftime cannot corrupt
 the preinitialised unavailable presentation.
 
+## Process selection and export ownership
+
+The plain-C process export domain owns one authoritative membership predicate
+for exact (PID, instance) identities. Both CSV serialization and GTK clipboard
+projection consume it; the UI never reimplements selection semantics. Explicit
+group members are independent of the currently highlighted representative PID,
+and malformed or stale selections resolve to no matching rows. The GTK adapter
+owns only application-state translation, user interaction and clipboard lifetime.
+This prevents exports from disagreeing about selected processes after navigation,
+group selection or PID reuse.
+
 ## Process recording ownership
 
 CSV recording is deliberately asynchronous, but opening the destination is a

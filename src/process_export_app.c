@@ -38,32 +38,6 @@ static bool export_view_from_app(const LsmApp *app, LsmProcessExportView *view)
     return true;
 }
 
-static bool process_selected(const LsmProcessExportView *view,
-                             const LsmProcessInfo *process)
-{
-    if (!view || !process) return false;
-    if (view->selected_group_count == 0U)
-        return process->pid == view->selected_pid &&
-            process->instance_id == view->selected_instance_id;
-    if (!view->selected_group_pids || !view->selected_group_instance_ids)
-        return false;
-    for (size_t index = 0U; index < view->selected_group_count; index++)
-        if (view->selected_group_pids[index] == process->pid &&
-            view->selected_group_instance_ids[index] == process->instance_id)
-            return true;
-    return false;
-}
-
-static size_t selected_count(const LsmProcessExportView *view)
-{
-    if (!view || view->selected_pid <= 0) return 0U;
-    size_t count = 0U;
-    for (size_t index = 0U; index < view->process_count; index++)
-        if (process_selected(view, &view->processes[index]))
-            count++;
-    return count;
-}
-
 static bool spreadsheet_needs_formula_escape(const char *text)
 {
     if (!text) return false;
@@ -106,7 +80,7 @@ bool lsm_process_export_selected_csv(const LsmApp *app, const char *path,
 void lsm_process_export_copy_selected(const LsmApp *app)
 {
     LsmProcessExportView view;
-    if (!export_view_from_app(app, &view) || selected_count(&view) == 0U)
+    if (!export_view_from_app(app, &view) || lsm_process_export_selection_count(&view) == 0U)
         return;
 
     GString *text = g_string_new(
@@ -114,7 +88,7 @@ void lsm_process_export_copy_selected(const LsmApp *app)
     if (!text) return;
     for (size_t index = 0U; index < view.process_count; index++) {
         const LsmProcessInfo *process = &view.processes[index];
-        if (!process_selected(&view, process)) continue;
+        if (!lsm_process_export_contains(&view, process)) continue;
         char memory[64];
         char gpu[32];
         lsm_format_bytes(process->rss_bytes, memory, sizeof(memory));
@@ -145,7 +119,7 @@ void lsm_process_export_selected_dialog(LsmApp *app)
     LsmProcessExportView view;
     GtkWidget *window = lsm_app_presentation_window(app);
     GtkWindow *parent = window ? GTK_WINDOW(window) : NULL;
-    if (!export_view_from_app(app, &view) || selected_count(&view) == 0U) {
+    if (!export_view_from_app(app, &view) || lsm_process_export_selection_count(&view) == 0U) {
         if (app)
             lsm_ui_show_error(
                 parent, "Nothing selected",

@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.226 - 2026-10-20
+
+- Eliminate duplicate process-selection predicates and counts from GTK clipboard copying and plain-C CSV export. One export-domain authority now decides exact PID and process-instance membership for both outputs.
+- Correct group-only selection: explicitly selected group identities are valid without a highlighted representative PID. Reject stale, zero or structurally incomplete identities without choosing a different process.
+- Extend CSV/export regression coverage for group-only, single-instance, stale and malformed selections, and document the domain/UI ownership boundary.
+
+
 ## 1.0.225 - 2026-10-20
 
 - Make native locale timestamp formatting transactional: libc strftime renders privately, and System Monitor publishes text only after complete output fits. Prevent a failed short-buffer conversion from replacing "N/A" with partial or undefined contents.

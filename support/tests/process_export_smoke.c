@@ -57,6 +57,16 @@ int main(void)
         .selected_group_count = 2U
     };
 
+    /* An explicit group remains valid without a highlighted representative;
+     * both clipboard and CSV must use this one identity authority. */
+    assert(lsm_process_export_selection_count(&view) == 2U);
+    assert(lsm_process_export_contains(&view, &processes[0]));
+    assert(lsm_process_export_contains(&view, &processes[1]));
+    assert(!lsm_process_export_contains(&view, &processes[2]));
+    view.selected_pid = 0U;
+    view.selected_instance_id = 0U;
+    assert(lsm_process_export_selection_count(&view) == 2U);
+
     char path[] = "/tmp/lsm-process-export-XXXXXX";
     const int descriptor = mkstemp(path);
     assert(descriptor >= 0);
@@ -94,6 +104,24 @@ int main(void)
     assert(strstr(contents, "\"one, process\""));
     assert(!strstr(contents, "\"'=two\",11"));
     unlink(path);
+
+    view.selected_group_count = 0U;
+    assert(lsm_process_export_selection_count(&view) == 0U);
+    assert(!lsm_process_export_contains(&view, &processes[0]));
+    view.selected_pid = 10U;
+    view.selected_instance_id = 100U;
+    assert(lsm_process_export_selection_count(&view) == 1U);
+    view.selected_instance_id = 999U;
+    assert(lsm_process_export_selection_count(&view) == 0U);
+
+    view.selected_group_count = 2U;
+    view.selected_group_instance_ids = NULL;
+    assert(lsm_process_export_selection_count(&view) == 0U);
+    view.selected_group_instance_ids = group_instances;
+    view.processes = NULL;
+    assert(lsm_process_export_selection_count(&view) == 0U);
+    assert(lsm_process_export_selection_count(NULL) == 0U);
+    assert(!lsm_process_export_contains(NULL, &processes[0]));
     puts("Selected process CSV identity, group export and spreadsheet escaping passed.");
     return 0;
 }

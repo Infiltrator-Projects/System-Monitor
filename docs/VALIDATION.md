@@ -48,6 +48,15 @@ This protects the Linux native-time adapter and the installed Common clock-resou
 of `strftime("%z")` without coupling the test to a distribution's tzdata
 release. Common remains the authority for nonstandard clock semantics.
 
+## Unified process export selection
+
+The selected-process regression exercises the same exported membership and
+count functions consumed by both CSV and clipboard projection. It covers an
+explicit group without a highlighted representative PID, a stale group member,
+single-process identity matching, missing instance identity and incomplete
+process/selection arrays. Empty or malformed selection never becomes a
+plausible successful export; no GTK code owns another membership predicate.
+
 ## Process recording collision safety
 
 The asynchronous recording smoke creates a previous CSV fixture, attempts to
