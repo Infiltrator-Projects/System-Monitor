@@ -15,6 +15,7 @@
 #include "monitor_platform.h"
 #include "process_backend.h"
 #include "windows_process_runtime.h"
+#include "windows_registry_string.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
@@ -121,9 +122,86 @@ static bool verify_process_worker_restart(void)
     return first && second && stopped;
 }
 
+
+/* A volatile, uniquely named HKCU key exercises the real Win32 registry
+ * boundary without relying on machine GPU drivers or persistent test state.
+ * Every path closes the key and removes the test entry. */
+static bool verify_registry_string_boundary(void)
+{
+    char subkey[160];
+    const int written = snprintf(
+        subkey, sizeof(subkey),
+        "Software\\Classes\\InfiltratorSystemMonitorRegistryProbe-%lu-%llu",
+        (unsigned long)GetCurrentProcessId(),
+        (unsigned long long)GetTickCount64());
+    if (written < 0 || (size_t)written >= sizeof(subkey)) return false;
+
+    HKEY key = NULL;
+    DWORD disposition = 0U;
+    if (RegCreateKeyExA(
+            HKEY_CURRENT_USER, subkey, 0U, NULL, REG_OPTION_VOLATILE,
+            KEY_READ | KEY_WRITE, NULL, &key, &disposition) != ERROR_SUCCESS)
+        return false;
+
+    bool passed = disposition == REG_CREATED_NEW_KEY;
+    static const BYTE terminated[] = {'A', 'B', 'C', '\0'};
+    static const BYTE unterminated[] = {'A', 'B', 'C'};
+    static const BYTE extra_nul[] = {'A', 'B', 'C', '\0', '\0'};
+    static const BYTE embedded_nul[] = {'A', '\0', 'B', '\0'};
+    static const BYTE empty[] = {'\0'};
+    static const BYTE expandable[] = {'%', 'T', 'E', 'M', 'P', '%', '\0'};
+    static const struct {
+        DWORD type;
+        const BYTE *value;
+        DWORD bytes;
+        size_t capacity;
+        bool accepted;
+        const char *expected;
+    } cases[] = {
+        {REG_SZ, terminated, (DWORD)sizeof(terminated), 64U, true, "ABC"},
+        {REG_SZ, unterminated, (DWORD)sizeof(unterminated), 64U, false, ""},
+        {REG_SZ, extra_nul, (DWORD)sizeof(extra_nul), 64U, true, "ABC"},
+        {REG_SZ, embedded_nul, (DWORD)sizeof(embedded_nul), 64U, false, ""},
+        {REG_SZ, empty, (DWORD)sizeof(empty), 64U, false, ""},
+        {REG_EXPAND_SZ, expandable, (DWORD)sizeof(expandable),
+         64U, true, "%TEMP%"},
+        {REG_BINARY, terminated, (DWORD)sizeof(terminated), 64U, false, ""},
+        {REG_SZ, terminated, (DWORD)sizeof(terminated), 3U, false, ""}
+    };
+
+    for (size_t index = 0U;
+         passed && index < sizeof(cases) / sizeof(cases[0]); index++) {
+        if (RegSetValueExA(
+                key, "Probe", 0U, cases[index].type,
+                cases[index].value, cases[index].bytes) != ERROR_SUCCESS) {
+            passed = false;
+            break;
+        }
+
+        char destination[64];
+        memset(destination, 0x7f, sizeof(destination));
+        const bool accepted = lsm_windows_registry_read_string(
+            key, "Probe", destination, cases[index].capacity);
+        if (accepted != cases[index].accepted ||
+            strcmp(destination, cases[index].expected) != 0)
+            passed = false;
+    }
+
+    if (RegCloseKey(key) != ERROR_SUCCESS) passed = false;
+    if (disposition == REG_CREATED_NEW_KEY &&
+        RegDeleteKeyA(HKEY_CURRENT_USER, subkey) != ERROR_SUCCESS)
+        passed = false;
+    return passed;
+}
+
 int main(void)
 {
     printf("System Monitor experimental Windows backend probe\n\n");
+
+    if (!verify_registry_string_boundary()) {
+        fprintf(stderr, "Windows registry string boundary failed.\n");
+        return EXIT_FAILURE;
+    }
 
     if (!verify_terminated_process_worker_unavailable()) {
         fprintf(stderr,

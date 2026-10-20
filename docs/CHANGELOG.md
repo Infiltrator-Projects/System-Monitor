@@ -8,6 +8,7 @@
 - Treat a terminated worker's retained thread handle as unavailable; reap its resources before attempting a fresh backend startup, without restarting an abandoned worker.
 - Extend the native Windows backend probe with two complete snapshot/stop cycles, terminated-worker recovery, and document ownership and recovery semantics.
 - Retry failed or exited Windows process workers from the shell after a bounded five-second delay rather than permanently suppressing recovery after the first attempt.
+- Reject unterminated, malformed and wrong-type Win32 registry strings rather than exposing uninitialised GPU driver metadata; exercise the production reader against volatile registry fixtures.
 
 ## 1.0.239 - 2026-10-20
 

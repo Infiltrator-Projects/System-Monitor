@@ -14,6 +14,7 @@
  * @license GPL-3.0-or-later
  */
 #include "monitor_platform.h"
+#include "windows_registry_string.h"
 
 #include <infiltratr/core.h>
 
@@ -2180,29 +2181,6 @@ static bool multi_string_contains_identity(
     return false;
 }
 
-static bool query_registry_string(
-    HKEY key, const char *name, char *destination,
-    size_t destination_size)
-{
-    if (!key || !name || !destination || destination_size == 0U ||
-        destination_size > (size_t)MAXDWORD)
-        return false;
-
-    destination[0] = '\0';
-    DWORD type = 0U;
-    DWORD bytes = (DWORD)destination_size;
-    const LSTATUS status = RegQueryValueExA(
-        key, name, NULL, &type, (BYTE *)destination, &bytes);
-    if (status != ERROR_SUCCESS ||
-        (type != REG_SZ && type != REG_EXPAND_SZ)) {
-        destination[0] = '\0';
-        return false;
-    }
-
-    destination[destination_size - 1U] = '\0';
-    return destination[0] != '\0';
-}
-
 static void populate_gpu_setupapi_metadata(LsmMonitor *monitor)
 {
     if (!monitor || monitor->gpu_count == 0U)
@@ -2265,14 +2243,14 @@ static void populate_gpu_setupapi_metadata(LsmMonitor *monitor)
                 char version[96];
                 provider[0] = '\0';
                 version[0] = '\0';
-                if (!query_registry_string(
+                if (!lsm_windows_registry_read_string(
                         driver_key, "ProviderName",
                         provider, sizeof(provider))) {
-                    (void)query_registry_string(
+                    (void)lsm_windows_registry_read_string(
                         driver_key, "DriverDesc",
                         provider, sizeof(provider));
                 }
-                (void)query_registry_string(
+                (void)lsm_windows_registry_read_string(
                     driver_key, "DriverVersion",
                     version, sizeof(version));
                 if (provider[0])

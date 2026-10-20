@@ -88,6 +88,13 @@ GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/comm
 
 Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or `/dev`. Project-owned declarations may cover narrow stable native ABIs; substantial external semantics remain dependencies unless independently replaced.
 
+Windows GPU SetupAPI driver metadata is an untrusted native registry boundary.
+The private Win32 registry reader validates the returned byte count, type and
+actual NUL termination; it rejects unterminated, empty and ambiguously
+embedded strings rather than manufacturing a terminator beyond the returned
+data. Extra trailing NUL bytes are harmless. Failed reads publish no driver
+metadata and never expose stale destination bytes.
+
 ## Clock resource integration
 
 Canonical Unix instants and duration measurements remain System Monitor state. System Settings owns the selected clock ID, and Common owns the validated native resource ABI. Explicit clock faces render only through the installed `/System/Resources/Clocks` provider for that stable ID; a missing resource is unavailable rather than an invitation to reimplement its notation. The Linux presentation adapter caches one validated Common clock presentation handle for the selected ID, and serialises selection replacement and invocation through the policy mutex so a module cannot be unloaded during formatting. Changing the selection replaces that handle; installing system clock modules is visible on the next application start. Canonical duration projection remains independent of installed clock faces.

@@ -34,6 +34,15 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Windows registry metadata integrity
+
+The native Windows backend probe uses a uniquely named volatile HKCU test key
+and the production registry reader to exercise terminated and unterminated
+REG_SZ, redundant trailing NULs, embedded NULs, empty values, REG_EXPAND_SZ,
+wrong types and insufficient destination capacity. Invalid values clear the
+destination; the test key is closed and removed on every result. No physical
+GPU or administrator access is required.
+
 ## Windows process-worker restart
 
 The native Windows backend probe exercises two complete worker
