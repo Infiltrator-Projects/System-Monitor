@@ -67,6 +67,15 @@ suffix selection remains with the GTK process-action owner and is bounded;
 only an existing-name collision is retried. Permission and I/O failures are
 reported rather than reclassified as collisions.
 
+The same production asynchronous-worker smoke now verifies the recorder's
+real emitted header and sample rows using the graph import parser. It checks
+a PID exceeding 32-bit signed range, CPU usage exceeding one core, ASCII
+decimal conversion independent of libc scanf locale, LF/CRLF records and
+failure-atomic rejection of missing fields, excess columns, unterminated
+rows, comma decimals, negative/NaN percentages, out-of-range memory and
+integer overflow. The importer separately discards oversized physical
+lines in full, refusing to reinterpret their fragments as new samples.
+
 ## Background scan coalescing and upgrade recovery
 
 The `scanner-coalescing-smoke` fixture blocks a synthetic backend scan, changes

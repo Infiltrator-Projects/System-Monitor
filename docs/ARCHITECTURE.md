@@ -109,6 +109,14 @@ recorder worker owns bounded queuing, ordered flush and its lifetime across
 shutdown. A successful start therefore proves a distinct destination was
 reserved without exposing an earlier recording to modification.
 
+The recorder owns its eight-column CSV schema and validates the same schema
+for asynchronous graph import. Numeric fields use Common's locale-independent
+ASCII parsing (matching Common's fixed-ASCII writer), with a full-width
+unsigned process identity rather than a scanner-local signed int. Invalid,
+interrupted or overlong physical CSV rows are ignored in full; unsupported
+headers or recordings containing no valid samples report an explicit error
+instead of displaying an apparently successful but empty graph.
+
 ## Common
 
 `src/infiltratr-common` is pinned by the parent repository gitlink to an exact Libraries commit. Generic mechanisms may move to Common; monitoring policy, hardware interpretation and product presentation remain local. Common owns validation of its versioned shared design records; native adapters retain only host-specific constraints and projection.

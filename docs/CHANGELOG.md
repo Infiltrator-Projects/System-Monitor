@@ -2,6 +2,13 @@
 
 # Changelog
 
+## 1.0.227 - 2026-10-20
+
+- Make the process-log graph read the exact CSV schema emitted by the asynchronous process recorder instead of using locale-dependent sscanf and narrowing 64-bit process identities to signed int.
+- Centralise schema validation and full-row finite ASCII numeric parsing at the recorder boundary using Common's authoritative conversion helpers; reject interrupted/malformed data and fail visibly when a file has no usable samples.
+- Add regression coverage for actual writer output, PIDs above INT_MAX, per-core CPU percentages, locale-independent decimals, CRLF, invalid columns, numeric overflow and output preservation on failure.
+
+
 ## 1.0.226 - 2026-10-20
 
 - Eliminate duplicate process-selection predicates and counts from GTK clipboard copying and plain-C CSV export. One export-domain authority now decides exact PID and process-instance membership for both outputs.

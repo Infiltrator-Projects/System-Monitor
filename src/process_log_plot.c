@@ -16,12 +16,14 @@
 #include "app_runtime_context.h"
 #include "common.h"
 #include "graph.h"
+#include "process_recorder.h"
 #include "ui_helpers.h"
 
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void graph_window_destroy(GtkWidget *widget, gpointer user_data)
 {
@@ -83,21 +85,36 @@ static void process_log_plot_worker(GTask *task, gpointer source_object,
     while (fgets(line, sizeof(line), file)) {
         if (header) {
             header = false;
+            if (!lsm_process_recorder_header_matches(line)) {
+                result->error_message =
+                    g_strdup("Not a supported System Monitor process recording.");
+                break;
+            }
+            continue;
+        }
+        if (strchr(line, '\n') == NULL) {
+            /* Discard a long/interrupted physical record in full. Its later
+             * fgets fragments must never become independent graph samples. */
+            while (fgets(line, sizeof(line), file) &&
+                   strchr(line, '\n') == NULL) {}
             continue;
         }
         double cpu = 0.0;
         double memory = 0.0;
-        /* The graph contract uses only CPU and memory from the recorder CSV. */
-        if (sscanf(line, "%*95[^,],%*d,%lf,%lf", &cpu, &memory) != 2)
+        if (!lsm_process_recorder_parse_metrics(line, &cpu, &memory))
             continue;
         result->cpu[result->next] = cpu;
         result->memory[result->next] = memory;
         result->next = (result->next + 1U) % LSM_HISTORY_LENGTH;
         if (result->count < LSM_HISTORY_LENGTH) result->count++;
     }
-    if (ferror(file))
+    if (ferror(file) && !result->error_message)
         result->error_message = g_strdup(g_strerror(errno ? errno : EIO));
-    (void)fclose(file);
+    if (fclose(file) != 0 && !result->error_message)
+        result->error_message = g_strdup(g_strerror(errno ? errno : EIO));
+    if (result->count == 0U && !result->error_message)
+        result->error_message =
+            g_strdup("The process recording contains no valid samples.");
     g_task_return_pointer(task, result, process_log_plot_result_free);
 }
 

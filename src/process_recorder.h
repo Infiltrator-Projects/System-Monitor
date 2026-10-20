@@ -17,6 +17,31 @@
 typedef struct LsmProcessRecorder LsmProcessRecorder;
 
 /**
+ * Validate the exact header emitted by the recording writer.
+ *
+ * @param [in] line Complete first line, including LF or CRLF terminator.
+ * @return true only for the canonical eight-column CSV recording schema.
+ */
+bool lsm_process_recorder_header_matches(const char *line);
+
+/**
+ * Decode CPU/memory percentages from a complete recorded CSV row.
+ *
+ * The writer schema, 64-bit PID and finite ASCII decimal representation are
+ * validated without consulting the process locale. All remaining columns
+ * must be valid unsigned decimals. Interrupted or malformed rows fail
+ * without changing either caller-owned output.
+ *
+ * @param [in] line Complete LF/CRLF-terminated recording row.
+ * @param [out] cpu_percent Decoded nonnegative finite CPU percentage.
+ * @param [out] memory_percent Decoded finite memory percentage (0..100).
+ * @return true only when all eight recording columns validate.
+ */
+bool lsm_process_recorder_parse_metrics(const char *line,
+                                        double *cpu_percent,
+                                        double *memory_percent);
+
+/**
  * Exclusively create a new CSV recording and start its background writer.
  *
  * An existing path is never overwritten or opened through a symlink: EEXIST

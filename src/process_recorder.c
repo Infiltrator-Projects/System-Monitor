@@ -10,13 +10,17 @@
 #include "process_recorder.h"
 #include "common.h"
 
+#include <infiltratr/core.h>
 #include <infiltratr/format.h>
 
 #include <errno.h>
+#include <float.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 typedef struct RecordNode {
@@ -30,6 +34,12 @@ typedef struct RecordNode {
     unsigned threads;
     struct RecordNode *next;
 } RecordNode;
+
+/* Recorder-owned on-disk schema. The writer and plot importer must not drift
+ * into different column layouts or locale-dependent numeric conventions. */
+static const char recorder_csv_header[] =
+    "timestamp,pid,cpu_percent,memory_percent,rss_bytes,"
+    "read_bytes,write_bytes,threads";
 
 #define LSM_PROCESS_RECORDER_MAX_QUEUED 4096U
 #define LSM_PROCESS_RECORDER_SHUTDOWN_WAIT_MS 250U
@@ -46,6 +56,85 @@ struct LsmProcessRecorder {
     int failure;
     bool stop_requested;
 };
+
+bool lsm_process_recorder_header_matches(const char *line)
+{
+    if (!line) return false;
+    const size_t header_length = sizeof(recorder_csv_header) - 1U;
+    if (strncmp(line, recorder_csv_header, header_length) != 0)
+        return false;
+    return strcmp(line + header_length, "\n") == 0 ||
+           strcmp(line + header_length, "\r\n") == 0;
+}
+
+/* Common owns exact, finite, locale-independent numeric parsing. Copying a
+ * bounded field avoids sscanf's locale dependence and narrowed PID conversion.
+ * All validation is completed before either output parameter is committed. */
+static bool recorder_field(const char *start, const char *end,
+                           char *text, size_t capacity)
+{
+    if (!start || !end || !text || end <= start) return false;
+    const size_t length = (size_t)(end - start);
+    if (length >= capacity) return false;
+    memcpy(text, start, length);
+    text[length] = '\0';
+    return true;
+}
+
+bool lsm_process_recorder_parse_metrics(const char *line,
+                                        double *cpu_percent,
+                                        double *memory_percent)
+{
+    if (!line || !cpu_percent || !memory_percent) return false;
+    const size_t length = strlen(line);
+    if (length < 2U || line[length - 1U] != '\n') return false;
+    const char *end = line + length - 1U;
+    if (end > line && end[-1] == '\r') end--;
+
+    const char *fields[8];
+    const char *field_ends[8];
+    const char *cursor = line;
+    for (size_t index = 0U; index < 7U; index++) {
+        const char *comma = memchr(cursor, ',', (size_t)(end - cursor));
+        if (!comma) return false;
+        fields[index] = cursor;
+        field_ends[index] = comma;
+        cursor = comma + 1;
+    }
+    fields[7] = cursor;
+    field_ends[7] = end;
+    if (memchr(cursor, ',', (size_t)(end - cursor)) ||
+        fields[0] == field_ends[0] ||
+        (size_t)(field_ends[0] - fields[0]) > 64U)
+        return false;
+
+    char value_text[64];
+    uint64_t integer_value = 0U;
+    const size_t integral_fields[] = {1U, 4U, 5U, 6U, 7U};
+    for (size_t index = 0U; index <
+            sizeof(integral_fields) / sizeof(integral_fields[0]); index++) {
+        const size_t column = integral_fields[index];
+        if (!recorder_field(fields[column], field_ends[column],
+                            value_text, sizeof(value_text)) ||
+            !infiltratr_parse_u64(value_text, 10U, &integer_value))
+            return false;
+        if (column == 1U && integer_value == 0U) return false;
+        if (column == 7U && integer_value > UINT_MAX) return false;
+    }
+
+    double cpu = 0.0;
+    double memory = 0.0;
+    if (!recorder_field(fields[2], field_ends[2],
+                        value_text, sizeof(value_text)) ||
+        !infiltratr_parse_double_range(value_text, 0.0, DBL_MAX, &cpu) ||
+        !recorder_field(fields[3], field_ends[3],
+                        value_text, sizeof(value_text)) ||
+        !infiltratr_parse_double_range(value_text, 0.0, 100.0, &memory))
+        return false;
+    *cpu_percent = cpu;
+    *memory_percent = memory;
+    return true;
+}
 
 static void free_nodes(RecordNode *node)
 {
@@ -201,7 +290,7 @@ LsmProcessRecorder *lsm_process_recorder_create(const char *path,
     errno = 0;
     const int header = fprintf(
         recorder->file,
-        "timestamp,pid,cpu_percent,memory_percent,rss_bytes,read_bytes,write_bytes,threads\n");
+        "%s\n", recorder_csv_header);
     if (header < 0 || fflush(recorder->file) != 0) {
         const int failure = errno ? errno : EIO;
         (void)fclose(recorder->file);

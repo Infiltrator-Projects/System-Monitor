@@ -244,6 +244,68 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    /* Validate the production writer's actual schema and second data row. */
+    const char *first_end = strchr(recorded_contents, '\n');
+    const char *second_end = first_end ? strchr(first_end + 1, '\n') : NULL;
+    if (!first_end || !second_end) {
+        fputs("Missing process-recording CSV lines.\n", stderr);
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+    char header_line[128];
+    const size_t header_length = (size_t)(first_end - recorded_contents) + 1U;
+    if (header_length >= sizeof(header_line)) {
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+    memcpy(header_line, recorded_contents, header_length);
+    header_line[header_length] = '\0';
+    double cpu = -1.0, memory = -1.0;
+    if (!lsm_process_recorder_header_matches(header_line) ||
+        !lsm_process_recorder_parse_metrics(second_end + 1, &cpu, &memory) ||
+        cpu != 12.5 || memory != 3.25) {
+        fputs("Recorder and graph reader disagree on CSV format.\n", stderr);
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+
+    static const char valid_large_pid[] =
+        "2026-10-20T12:30:00+1100,4294967297,207.250,3.250,"
+        "67108864,1000,2000,7\r\n";
+    if (!lsm_process_recorder_parse_metrics(
+            valid_large_pid, &cpu, &memory) ||
+        cpu != 207.25 || memory != 3.25) {
+        fputs("Large PID or ASCII decimal process log parsing failed.\n", stderr);
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+    static const char *invalid_rows[] = {
+        "2026-10-20T12:30:00+1100,4294967297,12,500,3.250,64,1,2,7\n",
+        "2026-10-20T12:30:00+1100,4294967297,NaN,3.250,64,1,2,7\n",
+        "2026-10-20T12:30:00+1100,4294967297,-1.0,3.250,64,1,2,7\n",
+        "2026-10-20T12:30:00+1100,4294967297,12.500,101,64,1,2,7\n",
+        "2026-10-20T12:30:00+1100,18446744073709551616,12.500,3.250,64,1,2,7\n",
+        "2026-10-20T12:30:00+1100,1,12.500,3.250,64,1,2\n",
+        "2026-10-20T12:30:00+1100,1,12.500,3.250,64,1,2,7",
+        "2026-10-20T12:30:00+1100,1,12.500,3.250,64,1,2,7,99\n"
+    };
+    for (size_t index = 0U; index <
+            sizeof(invalid_rows) / sizeof(invalid_rows[0]); index++) {
+        cpu = 55.0;
+        memory = 66.0;
+        if (lsm_process_recorder_parse_metrics(
+                invalid_rows[index], &cpu, &memory) ||
+            cpu != 55.0 || memory != 66.0) {
+            fputs("Malformed recorder row accepted or output corrupted.\n", stderr);
+            (void)unlink(path);
+            return EXIT_FAILURE;
+        }
+    }
+    if (lsm_process_recorder_header_matches("timestamp,pid\n")) {
+        (void)unlink(path);
+        return EXIT_FAILURE;
+    }
+
     if (unlink(path) != 0) {
         fputs("Unable to remove process recorder fixture.\n", stderr);
         return EXIT_FAILURE;
