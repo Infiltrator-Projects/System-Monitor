@@ -366,8 +366,8 @@ bool lsm_startup_backend_set_enabled(const char *id,
         !source_identity || !source_identity[0] || !source || !source[0] ||
         strcmp(lsm_path_basename(source_identity), id) != 0 ||
         strcmp(lsm_path_basename(source), id) != 0) {
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-                            "Invalid startup desktop-file identity");
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(EINVAL),
+                    "%s", "Invalid startup desktop-file identity");
         return false;
     }
     return write_startup_override(source, id, enabled ? TRUE : FALSE, error);
