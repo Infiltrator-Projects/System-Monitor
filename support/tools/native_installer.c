@@ -316,8 +316,15 @@ static void write_probe_source(const char *path)
 {
     FILE *file = fopen(path, "w");
     if (!file) fail_errno("fopen", path);
-    if (fputs("int main(void) { return 0; }\n", file) == EOF || fclose(file) != 0)
+    int failure = 0;
+    if (fputs("int main(void) { return 0; }\n", file) == EOF)
+        failure = errno ? errno : EIO;
+    if (fclose(file) != 0 && failure == 0)
+        failure = errno ? errno : EIO;
+    if (failure != 0) {
+        errno = failure;
         fail_errno("write", path);
+    }
 }
 
 static bool probe_compiler(const char *compiler, const char *const flags[],
@@ -361,8 +368,11 @@ static void write_text_file(const char *path, mode_t mode, const char *text)
     size_t offset = 0U;
     while (offset < length) {
         const ssize_t written = write(descriptor, text + offset, length - offset);
-        if (written < 0) {
-            close(descriptor);
+        if (written <= 0) {
+            if (written < 0 && errno == EINTR) continue;
+            const int failure = written == 0 ? EIO : errno;
+            (void)close(descriptor);
+            errno = failure;
             fail_errno("write", path);
         }
         offset += (size_t)written;
@@ -377,11 +387,9 @@ static bool read_source_line(const char *source_root, const char *relative_path,
     if (!join_path(path, sizeof(path), source_root, relative_path)) return false;
     FILE *file = fopen(path, "r");
     if (!file) return false;
-    if (!fgets(text, (int)text_size, file)) {
-        fclose(file);
-        return false;
-    }
-    fclose(file);
+    const bool read_ok = fgets(text, (int)text_size, file) != NULL;
+    const bool close_ok = fclose(file) == 0;
+    if (!read_ok || !close_ok) return false;
     text[strcspn(text, "\r\n\t ")] = '\0';
     return text[0] != '\0';
 }

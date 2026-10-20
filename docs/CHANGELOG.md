@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.233 - 2026-10-20
+
+- Close Debian package staging streams and descriptors independently of earlier read, write or permission errors. Preserve the originating failure code so cleanup cannot replace a useful diagnostic with an unrelated close result.
+- Reject zero-byte writes in package copying and native-installer file publication instead of permitting non-advancing loops; retry interrupted native writes.
+- Make the native installer's compiler probe and source-line reader close their streams even on I/O failures, preserving their explicit success/failure contract.
+
 ## 1.0.232 - 2026-10-20
 
 - Close the Linux meminfo stream even when a read fails, eliminating the second confirmed short-circuit descriptor leak in the native accounting collectors.

@@ -197,8 +197,9 @@ static void copy_file(const char *source, const char *destination, mode_t mode)
     const int output = open(destination, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
                             mode);
     if (output < 0) {
-        close(input);
-        fail("create %s: %s", destination, strerror(errno));
+        const int failure = errno;
+        (void)close(input);
+        fail("create %s: %s", destination, strerror(failure));
     }
     unsigned char buffer[LSM_DEB_BUFFER];
     for (;;) {
@@ -206,25 +207,35 @@ static void copy_file(const char *source, const char *destination, mode_t mode)
         if (received == 0) break;
         if (received < 0) {
             if (errno == EINTR) continue;
-            close(input);
-            close(output);
-            fail("read %s: %s", source, strerror(errno));
+            const int failure = errno;
+            (void)close(input);
+            (void)close(output);
+            fail("read %s: %s", source, strerror(failure));
         }
         ssize_t offset = 0;
         while (offset < received) {
             const ssize_t written = write(output, buffer + offset,
                                           (size_t)(received - offset));
-            if (written < 0) {
-                if (errno == EINTR) continue;
-                close(input);
-                close(output);
-                fail("write %s: %s", destination, strerror(errno));
+            if (written <= 0) {
+                if (written < 0 && errno == EINTR) continue;
+                const int failure = written == 0 ? EIO : errno;
+                (void)close(input);
+                (void)close(output);
+                fail("write %s: %s", destination, strerror(failure));
             }
             offset += written;
         }
     }
-    if (close(input) != 0 || fchmod(output, mode) != 0 || close(output) != 0)
-        fail("finalise %s: %s", destination, strerror(errno));
+    /* Finalisation has three independent ownership obligations. Even when
+     * one fails, both descriptors must be closed and the first fault kept. */
+    int failure = 0;
+    if (close(input) != 0) failure = errno ? errno : EIO;
+    if (fchmod(output, mode) != 0 && failure == 0)
+        failure = errno ? errno : EIO;
+    if (close(output) != 0 && failure == 0)
+        failure = errno ? errno : EIO;
+    if (failure != 0)
+        fail("finalise %s: %s", destination, strerror(failure));
 }
 
 static void write_text(const char *destination, mode_t mode, const char *text)
@@ -234,9 +245,17 @@ static void write_text(const char *destination, mode_t mode, const char *text)
     make_directories(parent, 0755);
     FILE *file = fopen(destination, "wx");
     if (!file) fail("create %s: %s", destination, strerror(errno));
-    if (fputs(text, file) == EOF || fflush(file) != 0 ||
-        fchmod(fileno(file), mode) != 0 || fclose(file) != 0)
-        fail("write %s: %s", destination, strerror(errno));
+    int failure = 0;
+    if (fputs(text, file) == EOF)
+        failure = errno ? errno : EIO;
+    if (failure == 0 && fflush(file) != 0)
+        failure = errno ? errno : EIO;
+    if (failure == 0 && fchmod(fileno(file), mode) != 0)
+        failure = errno ? errno : EIO;
+    if (fclose(file) != 0 && failure == 0)
+        failure = errno ? errno : EIO;
+    if (failure != 0)
+        fail("write %s: %s", destination, strerror(failure));
 }
 
 static bool executable_file(const char *path)
