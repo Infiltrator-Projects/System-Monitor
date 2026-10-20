@@ -6,6 +6,10 @@
  * The higher-priority directory wins by desktop-file basename, including when
  * the winning file is invalid. Mutations must remain contained in the user's
  * autostart directory and cannot change another desktop identity.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
  */
 #define _DEFAULT_SOURCE
 #include "startup_backend.h"
