@@ -2,6 +2,11 @@
 
 # Changelog
 
+## 1.0.232 - 2026-10-20
+
+- Close the Linux meminfo stream even when a read fails, eliminating the second confirmed short-circuit descriptor leak in the native accounting collectors.
+- Preserve failure-atomic memory publication: only fully read and closed source data can update the caller's memory model.
+
 ## 1.0.231 - 2026-10-20
 
 - Close the Linux diskstats stream on both successful and failed reads. A short-circuited stream close previously leaked a descriptor when procfs reported a read error; incomplete samples continue to invalidate rate baselines without publishing partial measurements.

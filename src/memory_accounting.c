@@ -96,7 +96,11 @@ bool lsm_memory_accounting_read(const char *path, LsmMemoryInfo *memory,
             have_corrupted = true;
         }
     }
-    const bool complete = !ferror(file) && fclose(file) == 0;
+    /* Reading and closing are independent obligations. A failed read must
+     * not retain the descriptor or publish any partially parsed metrics. */
+    const bool read_ok = ferror(file) == 0;
+    const bool close_ok = fclose(file) == 0;
+    const bool complete = read_ok && close_ok;
     if (!complete || !have_available)
         return false;
 
