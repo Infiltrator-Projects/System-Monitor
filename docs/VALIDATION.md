@@ -34,6 +34,14 @@ Generated build trees, package outputs and qualification scratch state are local
 
 Optimized qualification retains executable checks in the desktop/presentation regression paths. These checks report a failing expression and terminate unsuccessfully independently of `NDEBUG`; Release compilation cannot silently turn the suite into a successful no-op.
 
+## Windows message-loop termination
+
+The Win32 shell must use a WM_QUIT payload only when GetMessageW returns zero.
+An API error (-1) must return failure and synchronously destroy any live main
+window so worker shutdown follows the same WM_DESTROY ownership path.
+The native GUI startup smoke exercises normal window creation and destruction;
+error-return injection remains outside automated Windows qualification.
+
 ## Windows registry metadata integrity
 
 The native Windows backend probe uses a uniquely named volatile HKCU test key

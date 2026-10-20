@@ -8,6 +8,10 @@
  * publish uninitialised buffer contents as GPU driver metadata. The native
  * adapter therefore accepts only complete, nonempty string values, permits
  * redundant trailing NULs and rejects nonzero data after the first NUL.
+ *
+ * @author Shannon Smith
+ * @copyright Copyright (c) 2000-2026 Shannon Smith
+ * @license GPL-3.0-or-later
  */
 #ifndef SYSTEM_MONITOR_WINDOWS_REGISTRY_STRING_H
 #define SYSTEM_MONITOR_WINDOWS_REGISTRY_STRING_H

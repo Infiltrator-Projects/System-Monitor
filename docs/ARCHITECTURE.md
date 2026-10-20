@@ -88,6 +88,10 @@ GTK/GLib/GIO form the Linux desktop boundary. Windows uses native Win32/GDI/comm
 
 Platform-neutral code does not hard-code Linux roots such as `/proc`, `/sys` or `/dev`. Project-owned declarations may cover narrow stable native ABIs; substantial external semantics remain dependencies unless independently replaced.
 
+Win32 message-loop termination distinguishes a retrieved WM_QUIT code from
+GetMessageW failure. On failure, the shell destroys its live window to invoke
+its existing WM_DESTROY cleanup before returning a nonzero exit status.
+
 Windows GPU SetupAPI driver metadata is an untrusted native registry boundary.
 The private Win32 registry reader validates the returned byte count, type and
 actual NUL termination; it rejects unterminated, empty and ambiguously

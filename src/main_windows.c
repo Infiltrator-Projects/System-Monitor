@@ -3362,12 +3362,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance,
         window, LSM_WINDOWS_MESSAGE_START_BACKEND, 0U, 0);
 
     MSG message;
-    while (GetMessageW(&message, NULL, 0U, 0U) > 0) {
+    BOOL result;
+    while ((result = GetMessageW(&message, NULL, 0U, 0U)) > 0) {
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
 
-    const int status = (int)message.wParam;
+    /* A failed GetMessageW does not supply a valid quit code. Tear down the
+     * window synchronously so its WM_DESTROY path stops owned workers. */
+    if (result == -1 && IsWindow(window))
+        DestroyWindow(window);
+    const int status = result == -1 ? EXIT_FAILURE : (int)message.wParam;
     /*
      * A process worker that ignored cancellation still owns process-related
      * members of this state until process termination. Intentionally leave
