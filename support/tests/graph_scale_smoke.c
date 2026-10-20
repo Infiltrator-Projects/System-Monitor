@@ -19,7 +19,7 @@
 
 #define CHECK(condition) do { \
     if (!(condition)) { \
-        fprintf(stderr, "%s:%d: check failed: %s\\n", \
+        fprintf(stderr, "%s:%d: check failed: %s\n", \
                 __FILE__, __LINE__, #condition); \
         exit(EXIT_FAILURE); \
     } \
