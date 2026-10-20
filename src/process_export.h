@@ -34,11 +34,20 @@ typedef struct {
  * Explicit group membership is authoritative even without a highlighted
  * representative PID. Missing identities or incomplete group arrays select
  * nothing. Shared by both clipboard and CSV projection.
+ *
+ * @param [in] view Completed process rows and selection identities.
+ * @param [in] process Candidate completed process row.
+ * @return true only for an exact selected PID and process-instance identity.
  */
 bool lsm_process_export_contains(const LsmProcessExportView *view,
                                  const LsmProcessInfo *process);
 
-/** Count matching completed rows, or zero for an invalid/incomplete view. */
+/**
+ * Count matching completed rows under the shared selection policy.
+ *
+ * @param [in] view Completed process rows and selection identities.
+ * @return Number of selected completed rows; zero for invalid/incomplete input.
+ */
 size_t lsm_process_export_selection_count(const LsmProcessExportView *view);
 
 /**
