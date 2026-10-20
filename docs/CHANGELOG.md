@@ -5,7 +5,7 @@
 ## 1.0.235 - 2026-10-20
 
 - Refuse incomplete, oversized or embedded-NUL Linux device-manager cache records rather than publishing truncated filesystem identities; reject overlong recognized properties without clipping their names.
-- Close the metadata stream and check its result independently of read success, preserving failure-atomic label publication.
+- Close the metadata stream and check its result independently of read success, preserving failure-atomic label publication. Reject caller output buffers too small to hold a complete label instead of claiming success with a shortened name.
 - Extend storage regressions for missing record terminators, long unknown records following valid properties and oversized filesystem type values; correct close handling in the storage test fixtures.
 
 ## 1.0.234 - 2026-10-20

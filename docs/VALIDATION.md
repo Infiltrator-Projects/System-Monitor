@@ -36,7 +36,7 @@ Optimized qualification retains executable checks in the desktop/presentation re
 
 ## Cached storage metadata completeness
 
-The storage regression requires newline-terminated device-manager records and complete recognized property values. An unterminated record, oversized unrelated record after a valid prefix, or filesystem type exceeding its representation limit must reject the cache file and clear the output label. The reader checks both read and close results; test fixtures also close their streams on write failure.
+The storage regression requires newline-terminated device-manager records and complete recognized property values. An unterminated record, oversized unrelated record after a valid prefix, or filesystem type exceeding its representation limit must reject the cache file and clear the output label. The reader checks both read and close results, and short caller buffers must fail without publishing a partial label; exact-fit buffers succeed. Test fixtures also close their streams on write failure.
 
 ## Thermal warning/fault boundary
 

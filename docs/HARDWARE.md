@@ -12,7 +12,7 @@ CPU thermal policy prefers native CPU/package warning and critical points. A man
 
 ## Storage and network
 
-Cached block metadata supplies labels only after an entire newline-delimited device-manager record has been read successfully. Overlong properties or incomplete records invalidate the cache read rather than creating plausible partial filesystem identities.
+Cached block metadata supplies labels only after an entire newline-delimited device-manager record has been read successfully. Overlong properties, incomplete records and insufficient output capacity invalidate the result rather than creating plausible partial filesystem identities.
 
 Linux diskstats sector accounting uses 512-byte sectors regardless of device block size. Missing filesystem or hardware metadata remains unavailable.
 

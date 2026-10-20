@@ -263,6 +263,16 @@ int main(void)
                                         label, sizeof(label)) || label[0])
         return 5;
     if (lsm_storage_metadata_type_label(root, 8U, 1U, NULL, 0U)) return 6;
+    char undersized[4] = "old";
+    if (lsm_storage_metadata_type_label(root, 8U, 4U,
+                                        undersized, sizeof(undersized)) ||
+        undersized[0] != '\0')
+        return 10;
+    char exact_size[5];
+    if (!lsm_storage_metadata_type_label(root, 8U, 4U,
+                                         exact_size, sizeof(exact_size)) ||
+        strcmp(exact_size, "ntfs") != 0)
+        return 11;
     for (unsigned int minor = 9U; minor <= 11U; minor++) {
         label[0] = 'x';
         label[1] = '\0';

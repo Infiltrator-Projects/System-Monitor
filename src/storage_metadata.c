@@ -152,15 +152,16 @@ bool lsm_storage_metadata_type_label(const char *data_root,
     if (!read_metadata(data_root, major_number, minor_number, &metadata))
         return false;
 
+    const char *resolved = NULL;
     if (metadata.filesystem[0]) {
         const char *variant = fat_variant(&metadata);
-        lsm_copy_string(label, label_size,
-                        variant ? variant : metadata.filesystem);
-        return true;
+        resolved = variant ? variant : metadata.filesystem;
+    } else {
+        resolved = partition_role(metadata.partition_type);
     }
-
-    const char *role = partition_role(metadata.partition_type);
-    if (!role) return false;
-    lsm_copy_string(label, label_size, role);
+    if (!resolved) return false;
+    const size_t length = strlen(resolved);
+    if (length >= label_size) return false;
+    memcpy(label, resolved, length + 1U);
     return true;
 }
