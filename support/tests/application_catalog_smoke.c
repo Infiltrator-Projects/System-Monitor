@@ -45,8 +45,9 @@ static bool write_text(const char *path, const char *text)
     if (!make_directories(parent)) return false;
     FILE *file = fopen(path, "w");
     if (!file) return false;
-    const bool okay = fputs(text, file) >= 0 && fclose(file) == 0;
-    return okay;
+    const bool written = fputs(text, file) >= 0;
+    const bool closed = fclose(file) == 0;
+    return written && closed;
 }
 
 static bool join_path(char *destination, size_t size, const char *directory,
@@ -133,6 +134,55 @@ int main(void)
             "Exec=flatpak run org.example.Writer %U\n"))
         return 7;
 
+    /* File identity, not Exec identity, owns XDG precedence. A withdrawn
+     * user entry must mask its system counterpart even if it cannot parse. */
+    if (!join_path(path, sizeof(path), user,
+                   "/applications/withdrawn.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\nHidden=true\n"
+            "Exec=user-withdrawn\n"))
+        return 10;
+    if (!join_path(path, sizeof(path), system,
+                   "/applications/withdrawn.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\n"
+            "Name=Resurrected\nExec=system-withdrawn\n"))
+        return 11;
+    if (!join_path(path, sizeof(path), user,
+                   "/applications/broken.desktop") ||
+        !write_text(path, "not a desktop entry\n"))
+        return 12;
+    if (!join_path(path, sizeof(path), system,
+                   "/applications/broken.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\n"
+            "Name=Fallback\nExec=system-broken\n"))
+        return 13;
+    if (!join_path(path, sizeof(path), user,
+                   "/applications/changed.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\n"
+            "Name=Replacement\nExec=user-changed\n"))
+        return 14;
+    if (!join_path(path, sizeof(path), system,
+                   "/applications/changed.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\n"
+            "Name=Obsolete\nExec=system-changed\n"))
+        return 15;
+    if (!join_path(path, sizeof(path), user,
+                   "/applications/nonapp.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Link\n"
+            "Name=Nonapplication\nExec=user-nonapp\n"))
+        return 16;
+    if (!join_path(path, sizeof(path), system,
+                   "/applications/nonapp.desktop") ||
+        !write_text(path,
+            "[Desktop Entry]\nType=Application\n"
+            "Name=Incorrect Fallback\nExec=system-nonapp\n"))
+        return 17;
+
     LsmApplicationCatalog *catalog = lsm_application_catalog_create();
     if (!catalog) return 8;
     const LsmApplicationEntry *browser =
@@ -156,7 +206,14 @@ int main(void)
             catalog,
             "/user.slice/user-1000.slice/user@1000.service/app.slice/"
             "app-gnome-org.example.Writer-a1b2c3.scope");
+    const LsmApplicationEntry *replacement =
+        lsm_application_catalog_lookup(catalog, "user-changed", "");
     const bool okay =
+        replacement && strcmp(replacement->name, "Replacement") == 0 &&
+        lsm_application_catalog_lookup(catalog, "system-withdrawn", "") == NULL &&
+        lsm_application_catalog_lookup(catalog, "system-broken", "") == NULL &&
+        lsm_application_catalog_lookup(catalog, "system-changed", "") == NULL &&
+        lsm_application_catalog_lookup(catalog, "system-nonapp", "") == NULL &&
         browser && strcmp(browser->name, "Friendly Browser") == 0 &&
         strcmp(browser->icon, "browser-icon") == 0 &&
         window == browser &&

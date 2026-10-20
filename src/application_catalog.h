@@ -29,11 +29,13 @@ typedef struct LsmApplicationCatalog LsmApplicationCatalog;
 /**
  * Scan the current user's XDG application directories.
  *
- * Per-user desktop files take precedence over system entries with the same
- * executable identity. Invalid, hidden and non-application entries are
- * ignored.
+ * Desktop-file basenames are resolved in XDG directory priority order before
+ * parsing. A higher-priority file masks lower-priority files of the same name
+ * even when hidden, malformed, or not an application; only effective entries
+ * contribute executable, desktop-ID and window-class aliases.
  *
- * @return Newly allocated catalogue, or NULL on allocation failure.
+ * @return Newly allocated catalogue, or NULL when discovery is incomplete
+ *         or allocation fails.
  */
 LsmApplicationCatalog *lsm_application_catalog_create(void);
 

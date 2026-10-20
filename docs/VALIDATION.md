@@ -96,6 +96,15 @@ only a user-owned override. Invalid desktop IDs and mismatched source/origin
 basenames must not result in writes or create paths outside autostart. The
 regression runs as part of the canonical Make verification graph.
 
+## XDG application catalogue precedence
+
+The isolated catalogue regression verifies user-versus-system desktop-file
+basename precedence independently of executable names. Hidden, malformed and
+non-application user entries must suppress valid lower-priority files; a
+user entry changing Exec must not retain the superseded system executable
+alias. Ordinary executable, window-class and cgroup lookups must continue to
+resolve only effective entries. Discovery never executes desktop commands.
+
 ## Unified process export selection
 
 The selected-process regression exercises the same exported membership and

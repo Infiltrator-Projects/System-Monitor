@@ -226,7 +226,8 @@ static void load_desktop_file(LsmApplicationCatalog *catalog,
 }
 
 static void scan_application_directory(LsmApplicationCatalog *catalog,
-                                       const char *directory)
+                                       const char *directory,
+                                       GHashTable *seen_filenames)
 {
     errno = 0;
     DIR *stream = opendir(directory);
@@ -246,6 +247,12 @@ static void scan_application_directory(LsmApplicationCatalog *catalog,
         if (length <= 8U ||
             strcmp(item->d_name + length - 8U, ".desktop") != 0)
             continue;
+        /* Desktop-file identity is the basename, not its parsed Exec.
+         * Even an invalid or Hidden higher-priority file masks lower
+         * directories; otherwise a withdrawn application is resurrected. */
+        if (g_hash_table_contains(seen_filenames, item->d_name))
+            continue;
+        g_hash_table_add(seen_filenames, g_strdup(item->d_name));
         char path[LSM_PATH_LEN];
         if (!lsm_join_path(path, sizeof(path), directory, item->d_name)) {
             catalog->complete = false;
@@ -269,12 +276,19 @@ LsmApplicationCatalog *lsm_application_catalog_create(void)
         return NULL;
     }
 
+    GHashTable *seen_filenames = g_hash_table_new_full(
+        g_str_hash, g_str_equal, g_free, NULL);
+    if (!seen_filenames) {
+        lsm_application_catalog_destroy(catalog);
+        return NULL;
+    }
+
     char user_directory[LSM_PATH_LEN];
     char data_home[LSM_PATH_LEN];
     if (lsm_xdg_data_home(data_home, sizeof(data_home)) &&
         lsm_join_path(user_directory, sizeof(user_directory),
                       data_home, "applications"))
-        scan_application_directory(catalog, user_directory);
+        scan_application_directory(catalog, user_directory, seen_filenames);
 
     const char *data_dirs = getenv("XDG_DATA_DIRS");
     if (!data_dirs || !*data_dirs)
@@ -287,12 +301,13 @@ LsmApplicationCatalog *lsm_application_catalog_create(void)
              directory = strtok_r(NULL, ":", &save)) {
             char path[LSM_PATH_LEN];
             if (lsm_join_path(path, sizeof(path), directory, "applications"))
-                scan_application_directory(catalog, path);
+                scan_application_directory(catalog, path, seen_filenames);
         }
         free(copy);
     } else {
         catalog->complete = false;
     }
+    g_hash_table_destroy(seen_filenames);
     if (!catalog->complete) {
         lsm_application_catalog_destroy(catalog);
         errno = errno != 0 ? errno : ENOMEM;

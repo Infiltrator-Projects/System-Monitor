@@ -111,6 +111,17 @@ replacement, requires one basename matching the source and origin identities,
 and never writes to the system directories or to a path selected through a
 parent-directory component. GTK merely displays the resulting effective list.
 
+## XDG application identity precedence
+
+The process application catalogue resolves desktop-file basenames across the
+user data directory and ordered XDG system data directories before parsing
+metadata. A higher-priority basename masks all lower-priority copies even if
+the selected file is hidden, malformed, or not an application. Executable,
+desktop-ID and window-class aliases are registered only for effective
+application entries. Otherwise a withdrawn user override can silently
+resurrect a system entry or map a process to obsolete metadata. Exec is parsed
+as inert identity metadata and is never launched by discovery.
+
 ## Process selection and export ownership
 
 The plain-C process export domain owns one authoritative membership predicate

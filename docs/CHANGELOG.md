@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.238 - 2026-10-20
+
+- Resolve Linux XDG application catalogue overrides by desktop-file basename before parsing; hidden, malformed and non-application higher-priority entries now suppress lower-priority copies rather than resurrecting obsolete identities.
+- Prevent a system desktop entry with a superseded Exec from leaking its executable alias after a user override changes the command; retain Common-owned generic helpers and native product-owned XDG discovery.
+- Extend isolated catalogue regression coverage for hidden, malformed, changed-Exec and non-application overrides, and close test fixture streams independently on write failure.
+
 ## 1.0.237 - 2026-10-20
 
 - Validate recorded-process CSV timestamps before graph import rather than accepting an arbitrary short first field as a valid recording date.
