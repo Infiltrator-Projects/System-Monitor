@@ -81,6 +81,59 @@ static bool recorder_field(const char *start, const char *end,
     return true;
 }
 
+
+/* Recorded timestamps use a fixed-width local Gregorian civil time followed
+ * by a numeric UTC offset. The optional offset seconds preserve historical
+ * zones without introducing locale-dependent date parsing. */
+static bool recorder_pair(const char *digits, unsigned *value)
+{
+    if (digits[0] < '0' || digits[0] > '9' ||
+        digits[1] < '0' || digits[1] > '9')
+        return false;
+    *value = (unsigned)(digits[0] - '0') * 10U +
+             (unsigned)(digits[1] - '0');
+    return true;
+}
+
+static bool recorder_timestamp_valid(const char *start, const char *end)
+{
+    const size_t length = (size_t)(end - start);
+    if ((length != 24U && length != 26U) ||
+        start[4] != '-' || start[7] != '-' || start[10] != 'T' ||
+        start[13] != ':' || start[16] != ':' ||
+        (start[19] != '+' && start[19] != '-'))
+        return false;
+
+    unsigned century, year_tail, month, day, hour, minute, second;
+    unsigned zone_hour, zone_minute, zone_second = 0U;
+    if (!recorder_pair(start, &century) ||
+        !recorder_pair(start + 2, &year_tail) ||
+        !recorder_pair(start + 5, &month) ||
+        !recorder_pair(start + 8, &day) ||
+        !recorder_pair(start + 11, &hour) ||
+        !recorder_pair(start + 14, &minute) ||
+        !recorder_pair(start + 17, &second) ||
+        !recorder_pair(start + 20, &zone_hour) ||
+        !recorder_pair(start + 22, &zone_minute) ||
+        (length == 26U && !recorder_pair(start + 24, &zone_second)))
+        return false;
+
+    const unsigned year = century * 100U + year_tail;
+    if (year == 0U || month == 0U || month > 12U ||
+        hour > 23U || minute > 59U || second > 59U ||
+        zone_hour > 23U || zone_minute > 59U || zone_second > 59U)
+        return false;
+    static const unsigned char month_days[] = {
+        31U, 28U, 31U, 30U, 31U, 30U,
+        31U, 31U, 30U, 31U, 30U, 31U
+    };
+    const bool leap = year % 4U == 0U &&
+        (year % 100U != 0U || year % 400U == 0U);
+    const unsigned maximum = month_days[month - 1U] +
+        (month == 2U && leap ? 1U : 0U);
+    return day > 0U && day <= maximum;
+}
+
 bool lsm_process_recorder_parse_metrics(const char *line,
                                         double *cpu_percent,
                                         double *memory_percent)
@@ -104,8 +157,7 @@ bool lsm_process_recorder_parse_metrics(const char *line,
     fields[7] = cursor;
     field_ends[7] = end;
     if (memchr(cursor, ',', (size_t)(end - cursor)) ||
-        fields[0] == field_ends[0] ||
-        (size_t)(field_ends[0] - fields[0]) > 64U)
+        !recorder_timestamp_valid(fields[0], field_ends[0]))
         return false;
 
     char value_text[64];

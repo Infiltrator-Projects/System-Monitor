@@ -29,7 +29,8 @@ bool lsm_process_recorder_header_matches(const char *line);
  *
  * The writer schema, 64-bit PID and finite ASCII decimal representation are
  * validated without consulting the process locale. All remaining columns
- * must be valid unsigned decimals. Interrupted or malformed rows fail
+ * must be valid unsigned decimals. The local timestamp must contain a
+ * valid Gregorian date, time and numeric UTC offset. Malformed rows fail
  * without changing either caller-owned output.
  *
  * @param [in] line Complete LF/CRLF-terminated recording row.

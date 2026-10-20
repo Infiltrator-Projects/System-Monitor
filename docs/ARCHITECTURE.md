@@ -137,7 +137,9 @@ reserved without exposing an earlier recording to modification.
 The recorder owns its eight-column CSV schema and validates the same schema
 for asynchronous graph import. Numeric fields use Common's locale-independent
 ASCII parsing (matching Common's fixed-ASCII writer), with a full-width
-unsigned process identity rather than a scanner-local signed int. Invalid,
+unsigned process identity rather than a scanner-local signed int. The timestamp is a complete Gregorian local civil date-time with a numeric
+UTC offset, including seconds where historical offsets require them. Invalid
+calendar days, clock values or offset components reject that row. Invalid,
 interrupted or overlong physical CSV rows are ignored in full; unsupported
 headers or recordings containing no valid samples report an explicit error
 instead of displaying an apparently successful but empty graph.

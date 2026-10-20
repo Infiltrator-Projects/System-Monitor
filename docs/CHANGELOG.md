@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.237 - 2026-10-20
+
+- Validate recorded-process CSV timestamps before graph import rather than accepting an arbitrary short first field as a valid recording date.
+- Reject impossible Gregorian dates, invalid local clock/UTC-offset components and trailing timestamp data while accepting historical offsets containing seconds.
+- Extend the existing recorder/reader regression with leap-day and historical-offset acceptance and malformed timestamp rejection; preserve failure-atomic metric outputs.
+
 ## 1.0.236 - 2026-10-20
 
 - Match Linux TryExec path lookup to executable-file semantics: empty PATH entries denote the current working directory, and a searchable directory is not an executable target.

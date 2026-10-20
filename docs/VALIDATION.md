@@ -122,7 +122,10 @@ decimal conversion independent of libc scanf locale, LF/CRLF records and
 failure-atomic rejection of missing fields, excess columns, unterminated
 rows, comma decimals, negative/NaN percentages, out-of-range memory and
 integer overflow. The importer separately discards oversized physical
-lines in full, refusing to reinterpret their fragments as new samples.
+lines in full, refusing to reinterpret their fragments as new samples. Its
+schema regression also rejects malformed local timestamps, impossible
+Gregorian days, invalid clock/offset components and trailing timestamp data,
+while accepting leap days and seconds-bearing historical UTC offsets.
 
 ## Background scan coalescing and upgrade recovery
 
