@@ -641,7 +641,25 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
 	bash -n $(INSTALL_BOOTSTRAP)
-	bash support/tests/bootstrap_prerequisites_smoke.sh $(INSTALL_BOOTSTRAP)
+	@set -eu; fixture=$(mktemp -d); trap 'rm -rf "$fixture"' EXIT; \
+		ln -s /usr/bin/dirname "$fixture/dirname"; \
+		for tool in cc make pkg-config dpkg dpkg-deb; do ln -s /usr/bin/true "$fixture/$tool"; done; \
+		if full=$(PATH="$fixture" CC=cc /bin/bash $(INSTALL_BOOTSTRAP) --dry-run 2>&1); then \
+			echo "Bootstrap accepted missing full-verification tools." >&2; exit 1; \
+		fi; \
+		for tool in cmake c++ clang doxygen xvfb-run xauth; do \
+			printf '%s\n' "$full" | grep -Fq "$tool" || exit 1; \
+		done; \
+		if limited=$(PATH="$fixture" CC=cc /bin/bash $(INSTALL_BOOTSTRAP) --dry-run --skip-tests 2>&1); then \
+			echo "Bootstrap accepted missing package-build CMake." >&2; exit 1; \
+		fi; \
+		printf '%s\n' "$limited" | grep -Fq cmake; \
+		for tool in c++ clang doxygen xvfb-run xauth; do \
+			if printf '%s\n' "$limited" | grep -Fq "$tool"; then \
+				echo "Package-only bootstrap requested test tool: $tool" >&2; exit 1; \
+			fi; \
+		done; \
+		echo "Bootstrap prerequisite boundaries passed."
 	./$(INSTALL_BOOTSTRAP) --help >/dev/null
 	./$(NATIVE_INSTALLER) --help >/dev/null
 	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER_TEST)

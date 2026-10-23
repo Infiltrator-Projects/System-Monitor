@@ -29,14 +29,10 @@ for argument in "$@"; do
 done
 
 find_compiler() {
-    local candidate path
+    local candidate
     for candidate in "${CC:-}" cc gcc clang; do
         [[ -n "$candidate" ]] || continue
-        path=$(command -v -- "$candidate" 2>/dev/null || true)
-        if [[ -n "$path" ]]; then
-            printf '%s\n' "$path"
-            return 0
-        fi
+        command -v -- "$candidate" 2>/dev/null && return 0
     done
     return 1
 }
@@ -45,15 +41,8 @@ compiler=$(find_compiler || true)
 missing=()
 packages=()
 
-make_missing=0
-command -v make >/dev/null 2>&1 || make_missing=1
-if [[ -z "$compiler" ]]; then
-    missing+=("C compiler")
-fi
-if ((make_missing)); then
-    missing+=("make")
-fi
-if [[ -z "$compiler" ]] || ((make_missing)); then
+if [[ -z "$compiler" ]] || ! command -v make >/dev/null 2>&1; then
+    missing+=("C compiler or make")
     packages+=(build-essential)
 fi
 
@@ -64,43 +53,26 @@ if [[ -z "$pkg_config" ]] ||
     packages+=(pkg-config libgtk-3-dev)
 fi
 
-dpkg_missing=0
-command -v dpkg >/dev/null 2>&1 || dpkg_missing=1
-command -v dpkg-deb >/dev/null 2>&1 || dpkg_missing=1
-if ((dpkg_missing)); then
+if ! command -v dpkg >/dev/null 2>&1 ||
+   ! command -v dpkg-deb >/dev/null 2>&1; then
     missing+=("Debian packaging tools")
     packages+=(dpkg)
 fi
 
-# The package build always invokes CMake for verified font preparation.
-# The optional local qualification path additionally executes documentation
-# gates, C++ source audits and graphical regressions under Xvfb.
-if ! command -v cmake >/dev/null 2>&1; then
-    missing+=("CMake")
-    packages+=(cmake)
-fi
+# The package build needs CMake; full qualification also needs test tools.
+required=(cmake)
 if ((run_tests)); then
-    if ! command -v c++ >/dev/null 2>&1; then
-        missing+=("C++ compiler")
-        packages+=(g++)
-    fi
-    if ! command -v clang >/dev/null 2>&1; then
-        missing+=("Clang")
-        packages+=(clang)
-    fi
-    if ! command -v doxygen >/dev/null 2>&1; then
-        missing+=("Doxygen")
-        packages+=(doxygen)
-    fi
-    if ! command -v xvfb-run >/dev/null 2>&1; then
-        missing+=("Xvfb")
-        packages+=(xvfb)
-    fi
-    if ! command -v xauth >/dev/null 2>&1; then
-        missing+=("xauth")
-        packages+=(xauth)
-    fi
+    required+=(c++ clang doxygen xvfb-run xauth)
 fi
+for tool in "${required[@]}"; do
+    command -v "$tool" >/dev/null 2>&1 && continue
+    missing+=("$tool")
+    case "$tool" in
+        c++) packages+=(g++) ;;
+        xvfb-run) packages+=(xvfb) ;;
+        *) packages+=("$tool") ;;
+    esac
+done
 
 if ((${#missing[@]})); then
     printf 'Missing build requirements.\n' >&2
@@ -127,13 +99,11 @@ if ((${#missing[@]})); then
     printf '\nUpdating packages...\n'
     if ((system_package_mode)); then
         "$apt_get" -o DPkg::Lock::Timeout=300 update
-    else
-        "$sudo_path" -- "$apt_get" update
-    fi
-    printf '\nInstalling build requirements...\n'
-    if ((system_package_mode)); then
+        printf '\nInstalling build requirements...\n'
         "$apt_get" -o DPkg::Lock::Timeout=300 install -y "${packages[@]}"
     else
+        "$sudo_path" -- "$apt_get" update
+        printf '\nInstalling build requirements...\n'
         "$sudo_path" -- "$apt_get" install -y "${packages[@]}"
     fi
     export LSM_BOOTSTRAP_PASS=1
@@ -156,7 +126,5 @@ export LSM_BOOTSTRAP_CC="$compiler"
 export LSM_BOOTSTRAP_BINARY="$builder"
 trap - EXIT
 
-# The production installer has one build policy: native CPU tuning, LTO and
-# trained two-pass PGO. Append the internal engine selector last so historical
-# caller arguments cannot weaken that policy.
+# Append the mandatory production profile last so caller options cannot weaken it.
 exec "$builder" "$@" --profile aggressive
