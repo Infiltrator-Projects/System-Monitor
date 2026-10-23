@@ -21,8 +21,11 @@ if ((EUID != 0 && system_package_mode != 0)); then
 fi
 
 dry_run=0
+run_tests=1
+if ((system_package_mode)); then run_tests=0; fi
 for argument in "$@"; do
     [[ "$argument" == --dry-run ]] && dry_run=1
+    [[ "$argument" == --skip-tests ]] && run_tests=0
 done
 
 find_compiler() {
@@ -69,7 +72,37 @@ if ((dpkg_missing)); then
     packages+=(dpkg)
 fi
 
-if ((${#missing[@]})); then
+# The package build always invokes CMake for verified font preparation.
+# The optional local qualification path additionally executes documentation
+# gates, C++ source audits and graphical regressions under Xvfb.
+if ! command -v cmake >/dev/null 2>&1; then
+    missing+=("CMake")
+    packages+=(cmake)
+fi
+if ((run_tests)); then
+    if ! command -v c++ >/dev/null 2>&1; then
+        missing+=("C++ compiler")
+        packages+=(g++)
+    fi
+    if ! command -v clang >/dev/null 2>&1; then
+        missing+=("Clang")
+        packages+=(clang)
+    fi
+    if ! command -v doxygen >/dev/null 2>&1; then
+        missing+=("Doxygen")
+        packages+=(doxygen)
+    fi
+    if ! command -v xvfb-run >/dev/null 2>&1; then
+        missing+=("Xvfb")
+        packages+=(xvfb)
+    fi
+    if ! command -v xauth >/dev/null 2>&1; then
+        missing+=("xauth")
+        packages+=(xauth)
+    fi
+fi
+
+if ((#{missing[@]})); then
     printf 'Missing build requirements.\n' >&2
     if ((dry_run)); then
         printf '\nDry run: nothing was installed or changed.\n' >&2

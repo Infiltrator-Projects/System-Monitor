@@ -406,6 +406,9 @@ int main(void)
         "full avg10=9 avg60=10 avg300=11 total=12\n",
         "some avg10=1 avg60=2 avg300=3 total=4\n"
         "full\n",
+        "some avg10=1 avg60=2 avg300=3 total=4",
+        "some avg10=1 avg60=2 avg300=3 total=4\n"
+        "full avg10=5 avg60=6 avg300=7 total=8",
     };
     for (size_t i = 0U; i < sizeof(invalid_records) / sizeof(invalid_records[0]); ++i) {
         pressure.available = true;

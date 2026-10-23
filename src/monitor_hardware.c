@@ -564,8 +564,11 @@ static double read_active_dpm_clock(const char *path)
             break;
         }
     }
-    const bool complete = ferror(file) == 0 && fclose(file) == 0;
-    return complete ? clock : NAN;
+    /* Read failure must not skip closing the descriptor. Both results are
+     * independently necessary before publishing a sampled clock value. */
+    const bool read_ok = ferror(file) == 0;
+    const bool close_ok = fclose(file) == 0;
+    return read_ok && close_ok ? clock : NAN;
 }
 
 static bool read_gpu_engine_busy(const LsmGpuTelemetryCache *cache,

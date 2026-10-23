@@ -641,6 +641,7 @@ sanitizer-check: check-deps $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	$(NATIVE_INSTALLER) $(NATIVE_INSTALLER_TEST)
 	bash -n $(INSTALL_BOOTSTRAP)
+	bash support/tests/bootstrap_prerequisites_smoke.sh $(INSTALL_BOOTSTRAP)
 	./$(INSTALL_BOOTSTRAP) --help >/dev/null
 	./$(NATIVE_INSTALLER) --help >/dev/null
 	./$(NATIVE_SAFETY_CHECKER) ./$(NATIVE_INSTALLER_TEST)

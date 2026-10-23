@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 1.0.241 - 2026-10-23
+
+- Fix the native installer prerequisite contract: provision CMake for all native builds and C++/Clang/Doxygen/Xvfb/xauth for the optional full verification path, while preserving privileged system-package and explicit skip-tests boundaries.
+- Add an isolated-PATH dry-run regression proving the bootstrap detects missing production and test-only build tools without invoking a package manager.
+- Close GPU DPM clock streams independently of read success so failed telemetry never leaks a file descriptor.
+- Reject unterminated Linux PSI snapshots, including a fully parsed `some` record followed by an incomplete final `full` record; extend failure-atomic parser regression coverage.
+- Review and advance the pinned Common dependency from 1.19.68 to 1.19.75, restoring the maintained five-release freshness requirement and adopting resource-provider corrections without introducing product-local calendar/clock algorithms.
+
 ## 1.0.240 - 2026-10-20
 
 - Restore the Win32 process worker's start/stop/restart lifecycle: a clean stop no longer leaves a stale stop request that immediately terminates its replacement.

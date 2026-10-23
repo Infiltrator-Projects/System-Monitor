@@ -26,6 +26,14 @@ Three offline build-time fonts must match the exact Common SHA-256 manifest; the
 
 Linux release qualification builds the installable artifacts once. Its artifact bundle also carries the authoritative `support/VERSION` and verified typography assets needed by downstream qualification, so clean-host installer testing and release sealing consume the qualified installer and typography artifacts. The source-download installer fetches System Monitor and Common at their embedded exact commit identities; clean-host qualification exercises those real HTTPS downloads, compilation and package installation before publication.
 
+The bootstrap prerequisite regression executes the real bootstrap with an isolated
+command PATH and no package-manager changes. It verifies that the ordinary
+qualification path requests CMake, C++ compilation, Clang, Doxygen, Xvfb and
+xauth while the explicit skip-tests path does not require test-only tools.
+The installed package build retains CMake as a non-optional prerequisite.
+The GPU active-clock reader independently closes its stream after read errors;
+both the read status and close status must succeed before publishing data.
+
 The production native installer has one optimisation policy: CPU-native tuning, LTO and trained two-pass PGO. The bootstrap fixes that policy for every production invocation, so caller options cannot select a weaker build; `--system-package-mode` changes only the privilege handoff used by managed installation and does not change optimisation.
 
 Publish consumes only the sealed Verify bundle. New releases are staged as mutable drafts, their remote assets are byte-compared with the qualified bundle before publication, and an interrupted draft can restore those expected assets in place from the same sealed bundle without deleting repository state. Published releases identify the exact tested revision and remain immutable; publication and idempotent reruns both byte-compare every remote binary with the qualified bundle before succeeding. If a qualified current `main` carries a version whose tag already identifies another commit, publication is a no-op only when the intervening changes are confined to release-workflow maintenance; product-source reuse of an existing version is an error and must advance `support/VERSION`.
@@ -66,7 +74,8 @@ worker-owned allocation until process exit instead of risking use-after-free.
 ## Linux pressure telemetry integrity
 
 The metrics regression rejects duplicate PSI keys and repeated `some`/`full`
-records, malformed tokens and incomplete known records. It verifies that
+records, malformed tokens, incomplete known records and an unterminated final
+record (including a valid `some` record followed by truncated `full`). It verifies that
 well-formed unknown extension fields and tab-separated records still parse,
 and that rejected snapshots leave both availability flags cleared. The parser
 owns native PSI semantics; generic numeric parsing remains Common-owned.

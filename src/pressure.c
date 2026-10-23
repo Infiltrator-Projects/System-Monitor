@@ -83,6 +83,12 @@ bool lsm_pressure_parse(const char *text, LsmPressureInfo *pressure)
     *pressure = (LsmPressureInfo){0};
     if (!text || !*text) return false;
 
+    /* procfs PSI consists of newline-terminated records. An EOF fragment
+     * may contain every recognised token while still representing a torn
+     * kernel snapshot; never publish such a fragment as valid telemetry. */
+    const size_t length = strlen(text);
+    if (text[length - 1U] != '\n') return false;
+
     char *copy = strdup(text);
     if (!copy) return false;
 
