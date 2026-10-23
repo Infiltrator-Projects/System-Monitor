@@ -34,7 +34,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
