@@ -102,7 +102,7 @@ if ((run_tests)); then
     fi
 fi
 
-if ((#{missing[@]})); then
+if ((${#missing[@]})); then
     printf 'Missing build requirements.\n' >&2
     if ((dry_run)); then
         printf '\nDry run: nothing was installed or changed.\n' >&2
