@@ -75,7 +75,7 @@ for tool in "${required[@]}"; do
 done
 
 if ((${#missing[@]})); then
-    printf 'Missing build requirements.\n' >&2
+    printf 'Missing: %s\n' "${missing[*]}" >&2
     if ((dry_run)); then
         printf '\nDry run: nothing was installed or changed.\n' >&2
         exit 1
