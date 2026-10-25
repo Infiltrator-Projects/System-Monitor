@@ -582,6 +582,8 @@ int main(int argc, char **argv)
     /* The desktop and package share one canonical icon name. Linux Mint
      * Software Manager also reads the app-install icon owned by this package. */
     copy_staged("support/resources/icons/system-monitor.png",
+                "System/Resources/Icons/system-monitor.png", 0644);
+    copy_staged("support/resources/icons/system-monitor.png",
                 "usr/share/icons/hicolor/96x96/apps/system-monitor.png",
                 0644);
     copy_staged("support/resources/icons/system-monitor.png",
