@@ -226,22 +226,36 @@ jobs:
       - name: Build GTK typography and chrome behaviour probe
         run: make build/gtk-typography-chrome
 
-      - name: Qualify installed Common clock resource boundary
+      - name: Qualify independently released clock and calendar resources
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          make -C src/infiltratr-common/resources/temporal \
-            'build/clock-resources/French Revolutionary Decimal Clock.so'
-          sudo install -d -m 0755 /System/Resources/Clocks
-          sudo install -m 0644 \
-            'src/infiltratr-common/resources/temporal/build/clock-resources/French Revolutionary Decimal Clock.so' \
-            '/System/Resources/Clocks/French Revolutionary Decimal Clock.so'
-          make -C src/infiltratr-common/resources/temporal \
-            'build/calendar-resources/Hebrew Calendar.so'
-          sudo install -d -m 0755 /System/Resources/Calendars
-          sudo install -m 0644 \
-            'src/infiltratr-common/resources/temporal/build/calendar-resources/Hebrew Calendar.so' \
-            '/System/Resources/Calendars/Hebrew Calendar.so'
+          python3 - <<'PROVIDERS'
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, urllib.request
+          for repository in ("Clock-Decimal", "Calendar-Hebrew"):
+              headers = {"User-Agent": "System-Monitor-independent-provider-test", "Authorization": "Bearer " + os.environ["GITHUB_TOKEN"]}
+              api = "https://api.github.com/repos/Infiltrator-Projects/" + repository + "/releases/latest"
+              with urllib.request.urlopen(urllib.request.Request(api, headers=headers), timeout=60) as response:
+                  release = json.load(response)
+              tag = release["tag_name"]
+              assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag)
+              filename = "infiltrator-" + repository.lower() + "_" + tag[1:] + "_amd64.deb"
+              asset = next(x for x in release["assets"] if x["name"] == filename)
+              expected = "https://github.com/Infiltrator-Projects/" + repository + "/releases/download/" + tag + "/" + filename
+              assert asset["browser_download_url"] == expected
+              assert re.fullmatch(r"sha256:[0-9a-f]{64}", asset["digest"])
+              with urllib.request.urlopen(expected, timeout=60) as response:
+                  data = response.read()
+              assert len(data) == asset["size"] and hashlib.sha256(data).hexdigest() == asset["digest"][7:]
+              with tempfile.TemporaryDirectory() as temporary:
+                  package = pathlib.Path(temporary) / filename
+                  package.write_bytes(data)
+                  package.chmod(0o644)
+                  os.chmod(temporary, 0o755)
+                  subprocess.run(["sudo", "dpkg", "--install", str(package)], check=True)
+          PROVIDERS
           LSM_TEST_REQUIRE_DECIMAL_RESOURCE=1 LSM_TEST_REQUIRE_HEBREW_RESOURCE=1 \
             make temporal-presentation-smoke
 
