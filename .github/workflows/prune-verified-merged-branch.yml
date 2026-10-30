@@ -23,7 +23,10 @@ jobs:
           branch='fix/native-icon-in-system-resources-20261025'
           git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
           git rev-parse --verify "refs/remotes/origin/$branch"
-          git diff --exit-code "refs/remotes/origin/main" "refs/remotes/origin/$branch" --
+          # This branch was reviewed: its only change is the icon packaging file.
+          changed="$(git diff --name-only "$(git merge-base refs/remotes/origin/main "refs/remotes/origin/$branch")" "refs/remotes/origin/$branch")"
+          test "$changed" = "support/tools/build_deb_package.c"
+          git diff --exit-code "refs/remotes/origin/main" "refs/remotes/origin/$branch" -- support/tools/build_deb_package.c
           # Safety: never delete a branch associated with an open pull request.
           if gh pr list --state open --json headRefName --jq '.[].headRefName' | grep -Fxq "$branch"; then
             echo "Branch has an open PR; refusing to delete."
