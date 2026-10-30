@@ -1,0 +1,33 @@
+name: Prune verified merged branch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Remove only exact-content redundant branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='fix/native-icon-in-system-resources-20261025'
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          git rev-parse --verify "refs/remotes/origin/$branch"
+          git diff --exit-code "refs/remotes/origin/main" "refs/remotes/origin/$branch" --
+          # Safety: never delete a branch associated with an open pull request.
+          if gh pr list --state open --json headRefName --jq '.[].headRefName' | grep -Fxq "$branch"; then
+            echo "Branch has an open PR; refusing to delete."
+            exit 1
+          fi
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+          echo "Removed redundant branch $branch"
