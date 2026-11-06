@@ -445,6 +445,7 @@ static void usage(const char *version)
     puts("  --skip-tests");
     puts("  --no-strip");
     puts("  --dry-run");
+    puts("  --build-only --output DIRECTORY");
     puts("  --system-package-mode");
     puts("  -h, --help");
 }
@@ -563,6 +564,8 @@ int main(int argc, char **argv)
     bool run_tests = !system_package_mode;
     bool strip_binary = true;
     bool dry_run = false;
+    bool build_only = false;
+    const char *output_directory = NULL;
 
     for (int index = 1; index < argc; index++) {
         const char *argument = argv[index];
@@ -589,6 +592,11 @@ int main(int argc, char **argv)
             strip_binary = false;
         } else if (strcmp(argument, "--dry-run") == 0) {
             dry_run = true;
+        } else if (strcmp(argument, "--build-only") == 0) {
+            build_only = true;
+        } else if (strcmp(argument, "--output") == 0) {
+            if (++index >= argc) fail("--output requires DIRECTORY");
+            output_directory = argv[index];
         } else if (strcmp(argument, "--system-package-mode") == 0) {
             system_package_mode = true;
         } else if (strcmp(argument, "-h") == 0 || strcmp(argument, "--help") == 0) {
@@ -602,6 +610,10 @@ int main(int argc, char **argv)
     if (strcmp(profile, "native") != 0 && strcmp(profile, "aggressive") != 0 &&
         strcmp(profile, "portable") != 0)
         fail("profile must be native, aggressive, or portable");
+    if (build_only != (output_directory != NULL && output_directory[0] != '\0'))
+        fail("--build-only requires --output DIRECTORY, and --output requires --build-only");
+    if (build_only && dry_run)
+        fail("--build-only and --dry-run cannot be combined");
     if (system_package_mode && geteuid() != 0)
         fail("--system-package-mode requires root");
     const bool root_system_mode = system_package_mode && geteuid() == 0;
@@ -891,6 +903,21 @@ int main(int argc, char **argv)
     run_required(source_root, package_arguments);
 
     puts("\nCompilation and package creation passed.");
+    if (build_only) {
+        char destination[LSM_BUILDER_PATH_LEN];
+        written = snprintf(destination, sizeof(destination),
+                           "%s/system-monitor_%s_%s.deb",
+                           output_directory, version, package_architecture);
+        if (written < 0 || (size_t)written >= sizeof(destination))
+            fail("native output directory is too long");
+        const char *const copy_arguments[] = {
+            "/usr/bin/install", "-D", "-m", "0644",
+            package_path, destination, NULL
+        };
+        run_required(NULL, copy_arguments);
+        printf("Built native System Monitor Debian package: %s\n", destination);
+        return EXIT_SUCCESS;
+    }
     puts("Administrator permission is now required to replace the installed package.");
 
     if (root_system_mode) {

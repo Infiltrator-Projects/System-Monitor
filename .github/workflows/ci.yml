@@ -297,7 +297,12 @@ jobs:
           test "${#installers[@]}" -eq 1
           installer="${installers[0]}"
           chmod +x "$installer"
-          sudo ./"$installer" --profile aggressive --system-package-mode
+          mkdir -p "$RUNNER_TEMP/system-monitor-build-only"
+          sudo ./"$installer" --profile aggressive --system-package-mode --build-only --output "$RUNNER_TEMP/system-monitor-build-only"
+          native_deb="$RUNNER_TEMP/system-monitor-build-only/system-monitor_${version}_amd64.deb"
+          test "$(dpkg-deb -f "$native_deb" Package)" = system-monitor
+          test "$(dpkg-deb -f "$native_deb" Version)" = "$version"
+          sudo dpkg --install "$native_deb"
           test "$(dpkg-query -W -f='${Status}' system-monitor)" = "install ok installed"
           test "$(dpkg-query -W -f='${Version}' system-monitor)" = "$version"
           test -x /Programs/system-monitor
