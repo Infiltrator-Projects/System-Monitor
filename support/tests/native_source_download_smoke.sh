@@ -13,7 +13,7 @@ printf '1.19-fixture\n' > "$work/common/Libraries-fixture/VERSION"
 cat > "$work/project/System-Monitor-fixture/support/installer/bootstrap.sh" <<'BOOTSTRAP'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-test -s "$LSM_SOURCE_ROOT/src/infiltratr-common/VERSION"
+test -s "$(cd "$(dirname "$0")/../.." && pwd)/src/infiltratr-common/VERSION"
 printf 'bootstrapped\n' >> "$SMOKE_BOOTSTRAP_MARKER"
 BOOTSTRAP
 chmod 0755 "$work/project/System-Monitor-fixture/support/installer/bootstrap.sh"
