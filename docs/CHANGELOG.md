@@ -4,6 +4,7 @@
 
 ## 1.0.243 — Resilient pinned Common archive acquisition
 
+- Replace the network-fragile inline Python clock/calendar release check with a bounded-retry C++17 HTTPS verifier that enforces exact release URL, package size and SHA-256 before installing the fixtures.
 - The native `.run` now retries GitHub archive failures through a separate codeload route for the exact application and Libraries/Common commit identities.
 - Reject invalid or truncated archives before extraction. The generated installer passes shell syntax and static fallback-route contract checks.
 

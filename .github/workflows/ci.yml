@@ -164,7 +164,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake doxygen git libgtk-3-dev libicu-dev pkg-config xauth xvfb
+            build-essential cmake doxygen git libgtk-3-dev libicu-dev pkg-config xauth xvfb \
+            libcurl4-openssl-dev libjson-c-dev libssl-dev
 
       - name: Race-check asynchronous process worker ownership
         shell: bash
@@ -232,30 +233,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PROVIDERS'
-          import hashlib, json, os, pathlib, re, subprocess, tempfile, urllib.request
-          for repository in ("Clock-Decimal", "Calendar-Hebrew"):
-              headers = {"User-Agent": "System-Monitor-independent-provider-test", "Authorization": "Bearer " + os.environ["GITHUB_TOKEN"]}
-              api = "https://api.github.com/repos/Infiltrator-Projects/" + repository + "/releases/latest"
-              with urllib.request.urlopen(urllib.request.Request(api, headers=headers), timeout=60) as response:
-                  release = json.load(response)
-              tag = release["tag_name"]
-              assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag)
-              filename = "infiltrator-" + repository.lower() + "_" + tag[1:] + "_amd64.deb"
-              asset = next(x for x in release["assets"] if x["name"] == filename)
-              expected = "https://github.com/Infiltrator-Projects/" + repository + "/releases/download/" + tag + "/" + filename
-              assert asset["browser_download_url"] == expected
-              assert re.fullmatch(r"sha256:[0-9a-f]{64}", asset["digest"])
-              with urllib.request.urlopen(expected, timeout=60) as response:
-                  data = response.read()
-              assert len(data) == asset["size"] and hashlib.sha256(data).hexdigest() == asset["digest"][7:]
-              with tempfile.TemporaryDirectory() as temporary:
-                  package = pathlib.Path(temporary) / filename
-                  package.write_bytes(data)
-                  package.chmod(0o644)
-                  os.chmod(temporary, 0o755)
-                  subprocess.run(["sudo", "dpkg", "--install", str(package)], check=True)
-          PROVIDERS
+          # The release qualification is a native C++17 program. It verifies
+          # immutable release asset digests and retries external 502/504 faults.
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -Wpedantic -pthread \
+            $(pkg-config --cflags libcurl json-c openssl) \
+            support/tests/qualify_temporal_resources.cpp \
+            -o "$RUNNER_TEMP/qualify-temporal-resources" \
+            $(pkg-config --libs libcurl json-c openssl)
+          "$RUNNER_TEMP/qualify-temporal-resources"
           LSM_TEST_REQUIRE_DECIMAL_RESOURCE=1 LSM_TEST_REQUIRE_HEBREW_RESOURCE=1 \
             make temporal-presentation-smoke
 
