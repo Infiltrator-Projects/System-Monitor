@@ -20,6 +20,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fcntl.h>
 #include <memory>
@@ -29,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <thread>
+#include <utility>
 #include <unistd.h>
 #include <vector>
 
@@ -195,7 +198,7 @@ void qualify(const std::string &repository)
     if (!json_object_is_type(assets, json_type_array))
         throw std::runtime_error("Release assets are not an array");
     json_object *asset = nullptr;
-    for (int i = 0; i < json_object_array_length(assets); ++i) {
+    for (size_t i = 0; i < json_object_array_length(assets); ++i) {
         json_object *candidate = json_object_array_get_idx(assets, i);
         if (string_field(candidate, "name") == filename) {
             if (asset) throw std::runtime_error("Duplicate published provider package");
