@@ -93,6 +93,9 @@ static const char installer_body[] =
     "    return 1\n"
     "}\n"
     "\n"
+    "";
+
+static const char installer_body_tail[] =
     "work=$(mktemp -d \"${TMPDIR:-/tmp}/lsm-source-download-XXXXXX\")\n"
     "cleanup() { rm -rf -- \"$work\"; }\n"
     "trap cleanup EXIT\n"
@@ -206,7 +209,9 @@ int main(int argc, char **argv)
         version, source_revision, common_revision);
     const bool body_ok = header >= 0 &&
         fwrite(installer_body, 1U, sizeof(installer_body) - 1U, output) ==
-        sizeof(installer_body) - 1U;
+        sizeof(installer_body) - 1U &&
+        fwrite(installer_body_tail, 1U, sizeof(installer_body_tail) - 1U, output) ==
+        sizeof(installer_body_tail) - 1U;
     const int close_result = fclose(output);
     if (!body_ok || close_result != 0)
         fail("Unable to write the source-download installer.");
