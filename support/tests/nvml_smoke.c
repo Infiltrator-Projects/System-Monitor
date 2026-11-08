@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void assert_first_device(const LsmGpuInfo *gpu)
@@ -42,51 +43,55 @@ int main(void)
     LsmNvmlContext *second = lsm_nvml_create();
     assert(first && second);
 
-    LsmMonitor monitor = {0};
-    monitor.gpu_count = 2;
+    /* Large hardware inventories must not consume the default process stack. */
+    LsmMonitor *monitor = calloc(1U, sizeof(*monitor));
+    LsmMonitor *independent = calloc(1U, sizeof(*independent));
+    assert(monitor && independent);
+    monitor->gpu_count = 2;
 
     /* Deliberately reverse DRM order. PCI identity, not enumeration order,
      * must select the destination for each NVML sample. */
-    snprintf(monitor.gpus[0].driver, sizeof(monitor.gpus[0].driver), "nvidia");
-    snprintf(monitor.gpus[0].display_identifier, sizeof(monitor.gpus[0].display_identifier), "card1");
-    snprintf(monitor.gpus[0].platform_identity,
-             sizeof(monitor.gpus[0].platform_identity),
+    snprintf(monitor->gpus[0].driver, sizeof(monitor->gpus[0].driver), "nvidia");
+    snprintf(monitor->gpus[0].display_identifier, sizeof(monitor->gpus[0].display_identifier), "card1");
+    snprintf(monitor->gpus[0].platform_identity,
+             sizeof(monitor->gpus[0].platform_identity),
              "/sys/devices/pci0000:00/0000:02:00.0");
-    snprintf(monitor.gpus[1].driver, sizeof(monitor.gpus[1].driver), "nvidia");
-    snprintf(monitor.gpus[1].display_identifier, sizeof(monitor.gpus[1].display_identifier), "card0");
-    snprintf(monitor.gpus[1].platform_identity,
-             sizeof(monitor.gpus[1].platform_identity),
+    snprintf(monitor->gpus[1].driver, sizeof(monitor->gpus[1].driver), "nvidia");
+    snprintf(monitor->gpus[1].display_identifier, sizeof(monitor->gpus[1].display_identifier), "card0");
+    snprintf(monitor->gpus[1].platform_identity,
+             sizeof(monitor->gpus[1].platform_identity),
              "/sys/devices/pci0000:00/0000:01:00.0");
 
-    lsm_nvml_refresh(first, &monitor);
-    assert_first_device(&monitor.gpus[1]);
-    assert(strcmp(monitor.gpus[0].name, "Mock NVIDIA GPU 1") == 0);
-    assert(fabs(monitor.gpus[0].utilization_percent - 84.0) < 0.01);
-    assert(monitor.gpu_count == 2);
+    lsm_nvml_refresh(first, monitor);
+    assert_first_device(&monitor->gpus[1]);
+    assert(strcmp(monitor->gpus[0].name, "Mock NVIDIA GPU 1") == 0);
+    assert(fabs(monitor->gpus[0].utilization_percent - 84.0) < 0.01);
+    assert(monitor->gpu_count == 2);
 
     /* A valid but currently unmatched PCI device must remain stable and must
      * never be attached to an unrelated GPU by ordinal position. */
-    memset(&monitor, 0, sizeof(monitor));
-    lsm_nvml_refresh(first, &monitor);
-    assert(monitor.gpu_count == 2);
-    assert(strcmp(monitor.gpus[0].display_identifier,
+    memset(monitor, 0, sizeof(*monitor));
+    lsm_nvml_refresh(first, monitor);
+    assert(monitor->gpu_count == 2);
+    assert(strcmp(monitor->gpus[0].display_identifier,
                   "nvml-00000000:01:00.0") == 0);
-    assert(strcmp(monitor.gpus[1].display_identifier,
+    assert(strcmp(monitor->gpus[1].display_identifier,
                   "nvml-00000000:02:00.0") == 0);
-    lsm_nvml_refresh(first, &monitor);
-    assert(monitor.gpu_count == 2);
+    lsm_nvml_refresh(first, monitor);
+    assert(monitor->gpu_count == 2);
 
-    LsmMonitor independent = {0};
-    lsm_nvml_refresh(second, &independent);
-    assert(independent.gpu_count == 2);
+    lsm_nvml_refresh(second, independent);
+    assert(independent->gpu_count == 2);
     lsm_nvml_destroy(first);
     first = NULL;
-    memset(&independent, 0, sizeof(independent));
-    lsm_nvml_refresh(second, &independent);
-    assert(independent.gpu_count == 2);
-    assert_first_device(&independent.gpus[0]);
+    memset(independent, 0, sizeof(*independent));
+    lsm_nvml_refresh(second, independent);
+    assert(independent->gpu_count == 2);
+    assert_first_device(&independent->gpus[0]);
 
     lsm_nvml_destroy(second);
+    free(independent);
+    free(monitor);
     puts("NVML adapter PCI-identity and independent-lifetime smoke test passed.");
     return 0;
 }

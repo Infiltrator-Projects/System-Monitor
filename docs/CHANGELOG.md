@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 1.0.244 — Repair native NVML smoke on default Linux stacks
+
+- Allocate the two large test monitoring inventories on the heap instead of a normal 8 MiB process stack.
+- Run the diagnostic under an explicit 8 MiB stack limit, including CI, so the elevated GitHub runner stack cannot hide the failure.
+- No change to production NVML acquisition, Libraries or the independent clock/calendar implementations.
+
 ## 1.0.243 — Resilient pinned Common archive acquisition
 
 - Replace the network-fragile inline Python clock/calendar release check with a bounded-retry C++17 HTTPS verifier that enforces exact release URL, package size and SHA-256 before installing the fixtures.

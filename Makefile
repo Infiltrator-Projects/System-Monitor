@@ -573,7 +573,7 @@ nvml-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 		support/tests/nvml_smoke.c src/nvml.c \
 		$(INFILTRATR_COMMON_ARCHIVE) -ldl -lm -o $(BUILD_DIR)/nvml-smoke
 	LSM_NVML_LIBRARY=$(CURDIR)/$(BUILD_DIR)/libnvidia-ml-test.so \
-		./$(BUILD_DIR)/nvml-smoke
+		/bin/sh -c 'ulimit -s 8192; exec ./$(BUILD_DIR)/nvml-smoke'
 
 runtime-stability-smoke: $(INFILTRATR_COMMON_ARCHIVE) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(GTK_CFLAGS) -std=c17 $(STRICT_WARNINGS) \
