@@ -352,6 +352,14 @@ jobs:
     runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 5
     steps:
+      - name: Reset release staging on the reused self-hosted runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          for directory in candidate-linux candidate-windows release; do
+            test ! -L "$directory" || { echo "Refusing symlink staging: $directory" >&2; exit 1; }
+            rm -rf -- "$directory"
+          done
       - name: Download exact Linux candidate
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -373,6 +381,9 @@ jobs:
           mapfile -t debs < <(find candidate-linux -maxdepth 1 -type f -name '*.deb' -printf '%f\n' | sort)
           mapfile -t installers < <(find candidate-linux -maxdepth 1 -type f -name '*.run' -printf '%f\n' | sort)
           mapfile -t windows_apps < <(find candidate-windows -maxdepth 1 -type f -name '*.exe' -printf '%f\n' | sort)
+          printf 'Release candidate DEBs: %s\n' "${debs[*]}"
+          printf 'Release candidate RUNs: %s\n' "${installers[*]}"
+          printf 'Release candidate EXEs: %s\n' "${windows_apps[*]}"
           test "${#debs[@]}" -eq 1
           test "${#installers[@]}" -eq 1
           test "${#windows_apps[@]}" -eq 1
