@@ -1,11 +1,11 @@
-## 1.0.243 — Resilient pinned Common archive acquisition
-
-- The native `.run` now retries GitHub archive failures through a separate codeload route for the exact application and Libraries/Common commit identities.
-- Reject invalid or truncated archives before extraction. Offline smoke tests simulate 502 gateway errors, bad response bodies and both-source failure.
-
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
 # Changelog
+
+## 1.0.243 — Resilient pinned Common archive acquisition
+
+- The native `.run` now retries GitHub archive failures through a separate codeload route for the exact application and Libraries/Common commit identities.
+- Reject invalid or truncated archives before extraction. The generated installer passes shell syntax and static fallback-route contract checks.
 
 ## 1.0.241 - 2026-10-23
 
