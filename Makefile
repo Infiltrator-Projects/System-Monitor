@@ -672,6 +672,7 @@ installer-check: $(NATIVE_SAFETY_CHECKER) $(NATIVE_INSTALLER_BUILDER) \
 	bash -n $(BUILD_DIR)/native-installer-smoke-a.run
 	@test "$$(wc -c < $(BUILD_DIR)/native-installer-smoke-a.run)" -lt 16384
 	PATH=/nonexistent /bin/bash $(BUILD_DIR)/native-installer-smoke-a.run --help >/dev/null
+	bash support/tests/native_source_download_smoke.sh $(BUILD_DIR)/native-installer-smoke-a.run
 	rm -f $(BUILD_DIR)/native-installer-smoke-a.run \
 		$(BUILD_DIR)/native-installer-smoke-b.run
 	@! grep -Eq 'cp[[:space:]]+-a[[:space:]].*/\.[[:space:]]+/' $(INSTALL_BOOTSTRAP)
